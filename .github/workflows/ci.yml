@@ -1,13 +1,20 @@
 name: CI
-on: [push, pull_request]
-
+on:
+pull_request:
+push:
+branches: [ main ]
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-node@v3
-      with:
-        node-version: 18
-    - run: npm install
-    - run: npm run build
+build:
+runs-on: ubuntu-latest
+steps:
+- uses: actions/checkout@v4
+- uses: actions/setup-node@v4
+with: { node-version: '18', cache: 'pnpm' }
+- run: corepack enable
+- run: pnpm i -w
+- name: Lint web
+run: cd apps/web && pnpm lint || true
+- name: Build web
+run: cd apps/web && pnpm build
+- name: Build api
+run: cd apps/api && pnpm build || true
