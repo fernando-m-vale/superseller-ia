@@ -18,3 +18,18 @@ run: cd apps/web && pnpm lint || true
 run: cd apps/web && pnpm build
 - name: Build api
 run: cd apps/api && pnpm build || true
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::234642166969:role/superseller-github-oidc-dev
+          aws-region: us-east-2

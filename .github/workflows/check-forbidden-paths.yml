@@ -1,0 +1,23 @@
+name: Check forbidden paths
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check-forbidden-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect forbidden paths
+        run: |
+          echo "🔍 Checking for forbidden paths..."
+          forbidden=$(git ls-files | grep -E '\.terraform/')
+          if [ -n "$forbidden" ]; then
+            echo "🚫 Forbidden Terraform cache files found:"
+            echo "$forbidden"
+            echo "Please remove .terraform/ folders and re-commit."
+            exit 1
+          fi
+          echo "✅ No forbidden paths found."
