@@ -13,11 +13,11 @@ jobs:
       - name: Detect forbidden paths
         run: |
           echo "🔍 Checking for forbidden paths..."
-          forbidden=$(git ls-files | grep -E '\.terraform/')
-          if [ -n "$forbidden" ]; then
+          if git ls-files | grep -qE '\.terraform/'; then
             echo "🚫 Forbidden Terraform cache files found:"
-            echo "$forbidden"
+            git ls-files | grep -E '\.terraform/'
             echo "Please remove .terraform/ folders and re-commit."
             exit 1
+          else
+            echo "✅ No forbidden paths found."
           fi
-          echo "✅ No forbidden paths found."
