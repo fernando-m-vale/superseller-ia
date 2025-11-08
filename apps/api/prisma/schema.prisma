@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  owner
+  manager
+  operator
+}
+
+enum Marketplace {
+  shopee
+  mercadolivre
+  amazon
+  magalu
+}
+
+enum ConnectionStatus {
+  active
+  expired
+  revoked
+}
+
+enum ListingStatus {
+  active
+  paused
+  deleted
+}
+
+// Models
+model Tenant {
+  id         String   @id @default(uuid())
+  name       String
+  created_at DateTime @default(now())
+
+  users                   User[]
+  marketplace_connections MarketplaceConnection[]
+  listings                Listing[]
+  listing_metrics_daily   ListingMetricsDaily[]
+
+  @@map("tenants")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  tenant_id  String
+  email      String   @unique
+  role       UserRole
+  created_at DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@map("users")
+}
+
+model MarketplaceConnection {
+  id            String           @id @default(uuid())
+  tenant_id     String
+  type          Marketplace
+  access_token  String
+  refresh_token String?
+  expires_at    DateTime?
+  status        ConnectionStatus
+  created_at    DateTime         @default(now())
+  updated_at    DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, type])
+  @@map("marketplace_connections")
+}
+
+model Listing {
+  id              String        @id @default(uuid())
+  tenant_id       String
+  marketplace     Marketplace
+  listing_id_ext  String
+  title           String
+  price           Decimal       @db.Decimal(10, 2)
+  stock           Int
+  status          ListingStatus
+  category        String?
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  tenant                Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing_metrics_daily ListingMetricsDaily[]
+
+  @@unique([tenant_id, marketplace, listing_id_ext])
+  @@index([tenant_id])
+  @@index([tenant_id, marketplace])
+  @@index([tenant_id, status])
+  @@map("listings")
+}
+
+model ListingMetricsDaily {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  listing_id  String
+  date        DateTime @db.Date
+  impressions Int
+  clicks      Int
+  ctr         Decimal  @db.Decimal(5, 4)
+  visits      Int
+  conversion  Decimal  @db.Decimal(5, 4)
+  orders      Int
+  gmv         Decimal  @db.Decimal(10, 2)
+  created_at  DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, listing_id, date])
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([date])
+  @@map("listing_metrics_daily")
+}
