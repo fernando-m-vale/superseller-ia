@@ -42,6 +42,9 @@ importers:
       prisma:
         specifier: ^6.19.0
         version: 6.19.0(typescript@5.9.3)
+      tsx:
+        specifier: ^4.20.6
+        version: 4.20.6
 
   apps/web:
     dependencies:
@@ -3338,7 +3341,6 @@ snapshots:
       '@esbuild/win32-arm64': 0.25.12
       '@esbuild/win32-ia32': 0.25.12
       '@esbuild/win32-x64': 0.25.12
-    optional: true
 
   escalade@3.2.0: {}
 
@@ -4666,7 +4668,6 @@ snapshots:
       get-tsconfig: 4.13.0
     optionalDependencies:
       fsevents: 2.3.3
-    optional: true
 
   type-check@0.4.0:
     dependencies:
