@@ -1,5 +1,6 @@
 {
   "name": "@superseller/api",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,21 +9,39 @@
     "start": "node dist/server.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc --noEmit",
+<<<<<<< HEAD
+=======
+    "db:generate": "prisma generate",
+>>>>>>> f575506380ed720d88019f2e2f5dbc2c153baa9b
     "db:dev": "prisma migrate dev",
     "db:up": "prisma migrate deploy",
-    "db:reset": "prisma migrate reset --force",
+    "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio"
   },
   "dependencies": {
+<<<<<<< HEAD
+=======
+    "@prisma/client": "^6.19.0",
+    "@superseller/core": "workspace:*",
+    "fastify": "^4.27.0",
+>>>>>>> f575506380ed720d88019f2e2f5dbc2c153baa9b
     "@fastify/cors": "^9.0.1",
     "@prisma/client": "5.22.0",
     "fastify": "^4.27.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+<<<<<<< HEAD
     "@types/node": "^20.11.30",
     "prisma": "^5.20.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.3"
+=======
+    "dotenv": "^17.2.3",
+    "prisma": "^6.19.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.6.3",
+    "@types/node": "^20.11.30"
+>>>>>>> f575506380ed720d88019f2e2f5dbc2c153baa9b
   }
 }
