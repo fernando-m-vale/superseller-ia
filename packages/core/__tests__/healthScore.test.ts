@@ -161,7 +161,7 @@ describe('healthScore', () => {
   });
 
   it('edge case: undefined metrics returns null', () => {
-    const score = healthScore(undefined as any);
+    const score = healthScore(undefined as unknown as ListingDailyMetric[]);
     expect(score).toBeNull();
   });
 
