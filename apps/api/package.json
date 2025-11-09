@@ -1,9 +1,6 @@
 {
-  "name": "api",
-  "version": "0.1.0",
-  "private": true,
-
   "name": "@superseller/api",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,30 +15,18 @@
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio"
   },
-  "devDependencies": {
-    "dotenv": "^17.2.3",
-    "prisma": "^6.19.0",
-    "tsx": "^4.20.6"
-  },
   "dependencies": {
     "@prisma/client": "^6.19.0",
-    "@superseller/core": "workspace:*"
-    "dev": "tsx src/server.ts",
-    "build": "tsc -b",
-    "db:dev": "prisma migrate dev",
-    "db:up": "prisma migrate deploy",
-    "db:reset": "prisma migrate reset --force",
-    "db:studio": "prisma studio"
-  },
-  "dependencies": {
+    "@superseller/core": "workspace:*",
     "fastify": "^4.27.0",
     "@fastify/cors": "^9.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "dotenv": "^17.2.3",
+    "prisma": "^6.19.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.6.3",
-    "tsx": "^4.19.0",
-    "@types/node": "^20.11.30",
-    "prisma": "^5.20.0"
+    "@types/node": "^20.11.30"
   }
 }
