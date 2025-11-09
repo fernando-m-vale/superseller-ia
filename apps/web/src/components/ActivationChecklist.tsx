@@ -43,7 +43,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Habilite sugestões inteligentes para otimizar seus anúncios',
     cta: {
       label: 'Ver recomendações',
-      href: '/',
+      href: '/recommendations',
     },
   },
 ]
