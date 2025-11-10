@@ -1,1 +1,1 @@
-{"root":["./src/schemas.ts","./src/server.ts","./src/plugins/tenant.ts","./src/routes/actions.ts","./src/routes/listings.ts"],"version":"5.9.3"}
+{"root":["./src/schemas.ts","./src/server.ts","./src/__tests__/metrics.test.ts","./src/plugins/tenant.ts","./src/routes/actions.ts","./src/routes/listings.ts","./src/routes/metrics.ts"],"version":"5.9.3"}

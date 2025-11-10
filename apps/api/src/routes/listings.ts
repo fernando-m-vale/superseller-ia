@@ -55,7 +55,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
       ]);
 
       return {
-        items: items.map((item) => ({
+        items: items.map((item: typeof items[0]) => ({
           id: item.id,
           title: item.title,
           marketplace: item.marketplace,
