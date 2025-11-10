@@ -36,6 +36,9 @@ enum ListingStatus {
   deleted
 }
 
+enum RuleStatus {
+  active
+  inactive
 enum ActionType {
   title_optimization
   image_audit
@@ -54,6 +57,7 @@ model Tenant {
   marketplace_connections MarketplaceConnection[]
   listings                Listing[]
   listing_metrics_daily   ListingMetricsDaily[]
+  auto_approve_rules      AutoApproveRule[]
   listing_action_outcomes ListingActionOutcome[]
 
   @@map("tenants")
@@ -139,6 +143,24 @@ model ListingMetricsDaily {
   @@map("listing_metrics_daily")
 }
 
+model AutoApproveRule {
+  id                   String     @id @default(uuid())
+  tenant_id            String
+  name                 String
+  description          String?
+  status               RuleStatus @default(active)
+  ctr_threshold        Decimal?   @db.Decimal(5, 4)
+  cvr_threshold        Decimal?   @db.Decimal(5, 4)
+  revenue_impact_min   Decimal?   @db.Decimal(10, 2)
+  dry_run              Boolean    @default(true)
+  created_at           DateTime   @default(now())
+  updated_at           DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([status])
+  @@map("auto_approve_rules")
 model ListingActionOutcome {
   id                  String     @id @default(uuid())
   tenant_id           String
