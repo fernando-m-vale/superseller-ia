@@ -36,6 +36,10 @@ enum ListingStatus {
   deleted
 }
 
+enum QualityStatus {
+  pass
+  warning
+  critical
 enum JobStatus {
   success
   error
@@ -70,6 +74,7 @@ model Tenant {
   marketplace_connections MarketplaceConnection[]
   listings                Listing[]
   listing_metrics_daily   ListingMetricsDaily[]
+  data_quality_checks     DataQualityCheck[]
   job_logs                JobLog[]
   auto_approve_rules      AutoApproveRule[]
   listing_action_outcomes ListingActionOutcome[]
@@ -157,6 +162,25 @@ model ListingMetricsDaily {
   @@map("listing_metrics_daily")
 }
 
+model DataQualityCheck {
+  id                String        @id @default(uuid())
+  tenant_id         String
+  check_date        DateTime      @db.Date
+  status            QualityStatus
+  missing_days      Int           @default(0)
+  outlier_count     Int           @default(0)
+  total_listings    Int
+  listings_checked  Int
+  issues_found      Json?
+  created_at        DateTime      @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, check_date])
+  @@index([tenant_id])
+  @@index([check_date])
+  @@index([status])
+  @@map("data_quality_checks")
 model JobLog {
   id              String    @id @default(uuid())
   tenant_id       String
