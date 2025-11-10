@@ -36,6 +36,19 @@ enum ListingStatus {
   deleted
 }
 
+enum JobStatus {
+  success
+  error
+  running
+}
+
+enum JobType {
+  shopee_sync
+  mercadolivre_sync
+  amazon_sync
+  magalu_sync
+  metrics_aggregation
+  data_quality_check
 enum RuleStatus {
   active
   inactive
@@ -57,6 +70,7 @@ model Tenant {
   marketplace_connections MarketplaceConnection[]
   listings                Listing[]
   listing_metrics_daily   ListingMetricsDaily[]
+  job_logs                JobLog[]
   auto_approve_rules      AutoApproveRule[]
   listing_action_outcomes ListingActionOutcome[]
 
@@ -143,6 +157,18 @@ model ListingMetricsDaily {
   @@map("listing_metrics_daily")
 }
 
+model JobLog {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  job_type        JobType
+  status          JobStatus
+  started_at      DateTime
+  completed_at    DateTime?
+  duration_ms     Int?
+  records_processed Int?
+  error_message   String?
+  metadata        Json?
+  created_at      DateTime  @default(now())
 model AutoApproveRule {
   id                   String     @id @default(uuid())
   tenant_id            String
@@ -159,6 +185,10 @@ model AutoApproveRule {
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id])
+  @@index([job_type])
+  @@index([status])
+  @@index([started_at])
+  @@map("job_logs")
   @@index([status])
   @@map("auto_approve_rules")
 model ListingActionOutcome {
