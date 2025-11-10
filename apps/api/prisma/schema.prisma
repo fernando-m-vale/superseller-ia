@@ -51,11 +51,12 @@ model Tenant {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  tenant_id  String
-  email      String   @unique
-  role       UserRole
-  created_at DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenant_id     String
+  email         String   @unique
+  password_hash String
+  role          UserRole
+  created_at    DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
