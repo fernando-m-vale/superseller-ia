@@ -20,9 +20,11 @@
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.927.0",
     "@fastify/cors": "^9.0.1",
     "@prisma/client": "5.22.0",
     "@superseller/core": "workspace:*",
+    "axios": "^1.13.2",
     "fastify": "^4.27.0",
     "zod": "^3.23.8"
   },
