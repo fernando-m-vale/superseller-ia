@@ -40,6 +40,8 @@ enum QualityStatus {
   pass
   warning
   critical
+}
+
 enum JobStatus {
   success
   error
@@ -53,9 +55,13 @@ enum JobType {
   magalu_sync
   metrics_aggregation
   data_quality_check
+}
+
 enum RuleStatus {
   active
   inactive
+}
+
 enum ActionType {
   title_optimization
   image_audit
@@ -175,6 +181,15 @@ model AiModelMetric {
   features_used   String[]
   metadata        Json?
   created_at      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([model_version])
+  @@index([training_date])
+  @@map("ai_model_metrics")
+}
+
 model DataQualityCheck {
   id                String        @id @default(uuid())
   tenant_id         String
@@ -194,6 +209,8 @@ model DataQualityCheck {
   @@index([check_date])
   @@index([status])
   @@map("data_quality_checks")
+}
+
 model JobLog {
   id              String    @id @default(uuid())
   tenant_id       String
@@ -206,6 +223,16 @@ model JobLog {
   error_message   String?
   metadata        Json?
   created_at      DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([job_type])
+  @@index([status])
+  @@index([started_at])
+  @@map("job_logs")
+}
+
 model AutoApproveRule {
   id                   String     @id @default(uuid())
   tenant_id            String
@@ -222,15 +249,10 @@ model AutoApproveRule {
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id])
-  @@index([model_version])
-  @@index([training_date])
-  @@map("ai_model_metrics")
-  @@index([job_type])
-  @@index([status])
-  @@index([started_at])
-  @@map("job_logs")
   @@index([status])
   @@map("auto_approve_rules")
+}
+
 model ListingActionOutcome {
   id                  String     @id @default(uuid())
   tenant_id           String
