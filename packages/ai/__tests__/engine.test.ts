@@ -340,6 +340,7 @@ describe('trainMockModel', () => {
     expect(model.layers.length).toBeGreaterThan(0);
     
     const testInputTensor = tf.tensor2d([[0.05, 0.02, 100, 2]]);
+    const prediction = model.predict(testInputTensor) as tf.Tensor;
     const prediction = model.predict(testInputTensor) as any;
     
     expect(prediction).toBeDefined();

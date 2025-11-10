@@ -4,6 +4,8 @@ import {
   RecommendedAction,
   RecommendationScore,
   RecommendationInput,
+} from './types';
+import { calculateMetricScore } from './normalize';
   ActionType,
 } from './types';
 import { minMaxNormalize, calculateMetricScore } from './normalize';
@@ -226,6 +228,7 @@ export function recommendActions(
   const groupedMetrics = groupMetricsByListing(filteredMetrics);
   const allActions: RecommendedAction[] = [];
   
+  for (const [, listingMetrics] of groupedMetrics) {
   for (const [listingId, listingMetrics] of groupedMetrics) {
     if (listingMetrics.length < minDays) continue;
     
