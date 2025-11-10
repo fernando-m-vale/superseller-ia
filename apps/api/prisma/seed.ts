@@ -27,6 +27,7 @@ async function main() {
     create: {
       tenant_id: tenant.id,
       email: 'owner@demo.com',
+      password_hash: '$2a$10$YourHashedPasswordHere',
       role: 'owner',
     },
   });
