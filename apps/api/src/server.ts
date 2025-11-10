@@ -9,6 +9,7 @@ import { metricsRoutes } from './routes/metrics';
 import { mercadolivreRoutes } from './routes/mercadolivre';
 import { shopeeRoutes } from './routes/shopee';
 import { aiRoutes } from './routes/ai';
+import { aiActionsRoutes } from './routes/ai-actions';
 
 
 const app = Fastify({ logger: true });
@@ -24,6 +25,7 @@ app.register(metricsRoutes, { prefix: '/api/v1' });
 app.register(mercadolivreRoutes, { prefix: '/api/v1' });
 app.register(shopeeRoutes, { prefix: '/api/v1' });
 app.register(aiRoutes, { prefix: '/api/v1' });
+app.register(aiActionsRoutes, { prefix: '/api/v1' });
 
 
 app.get('/health', async () => ({ status: 'ok' }));
