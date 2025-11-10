@@ -6,6 +6,7 @@ import { authRoutes } from './routes/auth';
 import { listingsRoutes } from './routes/listings';
 import { actionsRoutes } from './routes/actions';
 import { metricsRoutes } from './routes/metrics';
+import { shopeeRoutes } from './routes/shopee';
 
 
 const app = Fastify({ logger: true });
@@ -18,6 +19,7 @@ app.register(authRoutes, { prefix: '/api/v1' });
 app.register(listingsRoutes, { prefix: '/api/v1' });
 app.register(actionsRoutes, { prefix: '/api/v1' });
 app.register(metricsRoutes, { prefix: '/api/v1' });
+app.register(shopeeRoutes, { prefix: '/api/v1' });
 
 
 app.get('/health', async () => ({ status: 'ok' }));
