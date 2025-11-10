@@ -6,6 +6,9 @@ import {
   RecommendationInput,
 } from './types';
 import { calculateMetricScore } from './normalize';
+  ActionType,
+} from './types';
+import { minMaxNormalize, calculateMetricScore } from './normalize';
 
 const DEFAULT_WEIGHTS = {
   ctr: 0.3,
@@ -226,6 +229,7 @@ export function recommendActions(
   const allActions: RecommendedAction[] = [];
   
   for (const [, listingMetrics] of groupedMetrics) {
+  for (const [listingId, listingMetrics] of groupedMetrics) {
     if (listingMetrics.length < minDays) continue;
     
     const score = calculateRecommendationScores(listingMetrics);
