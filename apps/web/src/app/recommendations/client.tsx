@@ -1,0 +1,321 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import { useRecommendations } from '@/hooks/use-recommendations'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { AlertCircle } from 'lucide-react'
+import type { Marketplace, ActionRecommendation, Impact, Effort } from '@/types/recommendations'
+
+function getImpactVariant(impact: Impact): 'destructive' | 'default' | 'secondary' {
+  switch (impact) {
+    case 'high':
+      return 'destructive'
+    case 'medium':
+      return 'default'
+    case 'low':
+      return 'secondary'
+  }
+}
+
+function getEffortColor(effort: Effort): string {
+  switch (effort) {
+    case 'low':
+      return 'bg-green-100 text-green-800 border-green-200'
+    case 'medium':
+      return 'bg-gray-100 text-gray-800 border-gray-200'
+    case 'high':
+      return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+  }
+}
+
+function formatActionType(action: string): string {
+  const actionMap: Record<string, string> = {
+    increase_ad_spend: 'Aumentar investimento em anúncios',
+    optimize_photos: 'Otimizar fotos',
+    improve_title: 'Melhorar título',
+    adjust_price: 'Ajustar preço',
+    restock: 'Repor estoque',
+  }
+  return actionMap[action] || action
+}
+
+function formatMarketplace(marketplace: Marketplace): string {
+  return marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'
+}
+
+function formatDate(dateString: string): string {
+  const date = new Date(dateString)
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+export default function RecommendationsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
+  const [marketplace, setMarketplace] = useState<Marketplace | ''>('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [pageSize, setPageSize] = useState(20)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  useEffect(() => {
+    const marketplaceParam = searchParams.get('marketplace') as Marketplace | null
+    const qParam = searchParams.get('q')
+    const pageParam = searchParams.get('page')
+    const pageSizeParam = searchParams.get('pageSize')
+
+    if (marketplaceParam) setMarketplace(marketplaceParam)
+    if (qParam) {
+      setSearchQuery(qParam)
+      setDebouncedSearch(qParam)
+    }
+    if (pageParam) setCurrentPage(parseInt(pageParam, 10))
+    if (pageSizeParam) setPageSize(parseInt(pageSizeParam, 10))
+  }, [searchParams])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  const filters = {
+    marketplace: marketplace || undefined,
+    q: debouncedSearch || undefined,
+    page: currentPage,
+    pageSize,
+  }
+
+  const { data, isLoading, isError, error, refetch } = useRecommendations(filters)
+
+  const updateURL = () => {
+    const params = new URLSearchParams()
+    if (marketplace) params.set('marketplace', marketplace)
+    if (debouncedSearch) params.set('q', debouncedSearch)
+    params.set('page', currentPage.toString())
+    params.set('pageSize', pageSize.toString())
+    
+    router.push(`/recommendations?${params.toString()}`)
+  }
+
+  useEffect(() => {
+    updateURL()
+  }, [marketplace, debouncedSearch, currentPage, pageSize])
+
+  const handleApplyFilters = () => {
+    setCurrentPage(1)
+    updateURL()
+  }
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1)
+    }
+  }
+
+  const handleNextPage = () => {
+    if (data && currentPage < Math.ceil(data.total / data.pageSize)) {
+      setCurrentPage(currentPage + 1)
+    }
+  }
+
+  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">Ações Sugeridas</h2>
+        <p className="text-muted-foreground">
+          Recomendações inteligentes para otimizar seus anúncios
+        </p>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+          <CardDescription>
+            Refine sua busca por marketplace, palavra-chave ou tamanho de página
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Marketplace</label>
+              <select
+                value={marketplace}
+                onChange={(e) => setMarketplace(e.target.value as Marketplace | '')}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Todos</option>
+                <option value="shopee">Shopee</option>
+                <option value="mercadolivre">Mercado Livre</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Buscar</label>
+              <Input
+                placeholder="Ex: iPhone, notebook..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Itens por página</label>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(parseInt(e.target.value, 10))
+                  setCurrentPage(1)
+                }}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50">50</option>
+              </select>
+            </div>
+
+            <div className="space-y-2 flex items-end">
+              <Button onClick={handleApplyFilters} className="w-full">
+                Aplicar
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Erro ao carregar recomendações</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>{error instanceof Error ? error.message : 'Erro desconhecido'}</span>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Tentar novamente
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-4">
+              <div className="h-10 bg-muted animate-pulse rounded" />
+              <div className="h-10 bg-muted animate-pulse rounded" />
+              <div className="h-10 bg-muted animate-pulse rounded" />
+              <div className="h-10 bg-muted animate-pulse rounded" />
+              <div className="h-10 bg-muted animate-pulse rounded" />
+            </div>
+          ) : data && data.items.length === 0 ? (
+            <div className="p-12 text-center">
+              <p className="text-muted-foreground mb-4">
+                Nenhuma recomendação encontrada para os filtros selecionados.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMarketplace('')
+                  setSearchQuery('')
+                  setDebouncedSearch('')
+                  setCurrentPage(1)
+                }}
+              >
+                Limpar filtros
+              </Button>
+            </div>
+          ) : data ? (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Título</TableHead>
+                    <TableHead>Marketplace</TableHead>
+                    <TableHead>Ação</TableHead>
+                    <TableHead>Motivo</TableHead>
+                    <TableHead>Impacto</TableHead>
+                    <TableHead>Esforço</TableHead>
+                    <TableHead>Health Score</TableHead>
+                    <TableHead>Data</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.items.map((recommendation: ActionRecommendation) => (
+                    <TableRow key={recommendation.id}>
+                      <TableCell className="font-medium max-w-xs truncate" title={recommendation.listingTitle}>
+                        {recommendation.listingTitle}
+                      </TableCell>
+                      <TableCell>{formatMarketplace(recommendation.marketplace)}</TableCell>
+                      <TableCell>{formatActionType(recommendation.action)}</TableCell>
+                      <TableCell className="max-w-sm truncate" title={recommendation.reason}>
+                        {recommendation.reason}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getImpactVariant(recommendation.impact)}>
+                          {recommendation.impact}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getEffortColor(recommendation.effort)}>
+                          {recommendation.effort}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {recommendation.healthScore != null
+                          ? recommendation.healthScore.toFixed(2)
+                          : '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(recommendation.createdAt)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <div className="flex items-center justify-between p-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Página {currentPage} de {totalPages} ({data.total} recomendações)
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleNextPage}
+                    disabled={currentPage >= totalPages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
