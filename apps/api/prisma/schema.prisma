@@ -36,6 +36,21 @@ enum ListingStatus {
   deleted
 }
 
+enum JobStatus {
+  success
+  error
+  running
+}
+
+enum JobType {
+  shopee_sync
+  mercadolivre_sync
+  amazon_sync
+  magalu_sync
+  metrics_aggregation
+  data_quality_check
+}
+
 // Models
 model Tenant {
   id         String   @id @default(uuid())
@@ -46,6 +61,7 @@ model Tenant {
   marketplace_connections MarketplaceConnection[]
   listings                Listing[]
   listing_metrics_daily   ListingMetricsDaily[]
+  job_logs                JobLog[]
 
   @@map("tenants")
 }
@@ -127,4 +143,26 @@ model ListingMetricsDaily {
   @@index([listing_id])
   @@index([date])
   @@map("listing_metrics_daily")
+}
+
+model JobLog {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  job_type        JobType
+  status          JobStatus
+  started_at      DateTime
+  completed_at    DateTime?
+  duration_ms     Int?
+  records_processed Int?
+  error_message   String?
+  metadata        Json?
+  created_at      DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([job_type])
+  @@index([status])
+  @@index([started_at])
+  @@map("job_logs")
 }
