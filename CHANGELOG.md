@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0-beta] – 2025-11-10
+
+### Added
+
+#### Authentication System (US-090)
+- **Multi-tenant authentication** with JWT and refresh tokens
+  - POST /api/v1/auth/register - User registration with automatic tenant creation
+  - POST /api/v1/auth/login - Login with JWT access token (7-day expiration) and refresh token (30-day expiration)
+  - GET /api/v1/auth/me - Get current user information with JWT validation
+- **Auth middleware** (authGuard) for protected routes
+- **Password security** with bcrypt hashing (salt rounds 10)
+- **Web authentication pages**:
+  - /login page with React Hook Form + zod validation
+  - /register page with tenant creation flow
+  - Token storage in localStorage (accessToken, refreshToken)
+  - Auto-redirect to /overview after successful login
+- **Database migration**: Added password_hash field to users table
+- **Dependencies**: bcryptjs, jsonwebtoken, react-hook-form, zod, @hookform/resolvers
+
+#### Shopee Connector (US-100)
+- **OAuth 2.0 integration** with Shopee marketplace
+  - GET /api/v1/auth/shopee/authorize - Initiate OAuth flow with state parameter for CSRF protection
+  - GET /api/v1/auth/shopee/callback - Handle OAuth callback and exchange code for tokens
+  - GET /api/v1/shopee/sync - Import listings from Shopee API to database
+- **HMAC-SHA256 signature generation** for Shopee API authentication
+- **Token management**: Store access_token, refresh_token, expires_at in marketplace_connections table
+- **AWS Secrets Manager integration** with environment variable fallback for development
+- **Dependencies**: @aws-sdk/client-secrets-manager, axios
+
+#### Mercado Livre Connector (US-110)
+- **OAuth 2.0 integration** with Mercado Livre marketplace
+  - GET /api/v1/auth/mercadolivre/authorize - Initiate OAuth flow with state parameter for CSRF protection
+  - GET /api/v1/auth/mercadolivre/callback - Handle OAuth callback and exchange code for tokens
+  - GET /api/v1/mercadolivre/sync - Import listings from Mercado Livre API to database
+- **Automatic token refresh** for expired credentials
+- **Token management**: Store access_token, refresh_token, expires_at in marketplace_connections table
+- **AWS Secrets Manager integration** with environment variable fallback for development
+
+#### Infrastructure
+- **Secrets management utility** (apps/api/src/lib/secrets.ts)
+  - getShopeeCredentials() - Fetch Shopee OAuth credentials from AWS Secrets Manager or env vars
+  - getMercadoLivreCredentials() - Fetch Mercado Livre OAuth credentials from AWS Secrets Manager or env vars
+  - In-memory caching for secret values
+  - Automatic fallback to environment variables in development
+
+### Changed
+
+- **API server**: Registered auth, shopee, and mercadolivre routes
+- **User schema**: Added required password_hash field for authentication
+- **Seed script**: Updated to include password hashes for demo users
+- **Core package**: Fixed TypeScript configuration (moduleResolution: node) for proper dist file generation
+
+### Fixed
+
+- **Core package build**: Updated tsconfig.json to generate proper JavaScript and declaration files
+- **Seed script**: Added password_hash field to user creation (fixes validation error)
+- **Module resolution**: Fixed @superseller/core imports in API routes
+
+### Security
+
+- **Password hashing**: All passwords stored as bcrypt hashes (never plaintext)
+- **JWT tokens**: Signed with secret key, include userId and tenantId claims
+- **OAuth state parameter**: CSRF protection in marketplace OAuth flows
+- **AWS Secrets Manager**: Production credentials stored securely (not in code or env files)
+- **Multi-tenant isolation**: All data scoped by tenant_id
+
+---
+
+## Sprint 3 Summary
+
+**Total Deliverables**: 3 User Stories  
+**PRs Merged**: 3 (US-090 #17, US-100 #18, US-110 #19)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 15 files changed, 2490 insertions(+), 17 deletions(-)  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-090: Auth API + Web Login (JWT + Refresh Tokens)
+- US-100: Shopee Connector (OAuth 2.0 + Listing Sync)
+- US-110: Mercado Livre Connector (OAuth 2.0 + Listing Sync + Token Refresh)
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 Authentication and marketplace connectors validated  
+
+---
+
 ## [v1.0.0-beta] – 2025-11-10
 
 ### Added
@@ -159,10 +246,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Links
 
 - **Repository**: https://github.com/fernando-m-vale/superseller-ia
-- **Release**: https://github.com/fernando-m-vale/superseller-ia/releases/tag/v1.0.0-beta
-- **Milestone**: Sprint 1 — MVP Foundation
-- **Devin Session**: https://app.devin.ai/sessions/fe686698835a4f41bb432ce01ffeeb32
+- **Sprint 3 Release**: https://github.com/fernando-m-vale/superseller-ia/releases/tag/v1.2.0-beta
+- **Sprint 1 Release**: https://github.com/fernando-m-vale/superseller-ia/releases/tag/v1.0.0-beta
+- **Milestone Sprint 3**: Sprint 3 — Connections & Auth
+- **Milestone Sprint 1**: Sprint 1 — MVP Foundation
+- **Devin Session (Sprint 3)**: https://app.devin.ai/sessions/b1560b2cc5a14fe4a23cf5bf7702b7c8
+- **Devin Session (Sprint 1)**: https://app.devin.ai/sessions/fe686698835a4f41bb432ce01ffeeb32
 
 ---
 
+[v1.2.0-beta]: https://github.com/fernando-m-vale/superseller-ia/compare/v1.0.0-beta...v1.2.0-beta
 [v1.0.0-beta]: https://github.com/fernando-m-vale/superseller-ia/compare/7e714bd...v1.0.0-beta
