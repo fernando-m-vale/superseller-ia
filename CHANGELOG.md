@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.3.0-beta] – 2025-11-10
+
+### Added
+
+#### AI Recommendation Engine (US-120)
+- **@superseller/ai package** with hybrid recommendation algorithm
+  - `recommendActions()` function analyzing CTR, CVR, revenue, and orders metrics
+  - Min-max normalization with 0.5 default when all values equal
+  - 5 recommendation types: title, image, price, attributes, stock
+  - TensorFlow.js integration for mock linear regression model
+  - Default weights: CTR 30%, CVR 30%, revenue 25%, orders 15%
+  - Temporal windowing support (last N days, default 7, minimum 3)
+- **28 unit tests** with Vitest (100% passing)
+- TypeScript interfaces: RecommendedAction, RecommendationScore, ListingDailyMetric
+
+#### API AI Recommendations Endpoint (US-130)
+- **GET /api/v1/ai/recommendations** endpoint
+  - Query parameters: marketplace (optional), days (1-90, default 7)
+  - Response format: { tenantId, generatedAt, items, modelVersion, inferenceTime }
+  - Integration with @superseller/ai package for real recommendations
+  - Queries ListingMetricsDaily table with Prisma
+- **Redis caching** with 5-minute TTL for performance optimization
+- **Pino structured logging** with inference time tracking
+- **Zod validation** for query parameters
+- **Graceful degradation** when Prisma or Redis unavailable
+- **8 integration tests** validating functionality and performance < 200ms
+- **POST /api/v1/ai/actions** endpoint for logging user actions (approve/reject/execute)
+
+#### Web AI Recommendations Page (US-140)
+- **New /ai route** with recommendations dashboard
+  - RecommendationsTable component displaying listing actions
+  - ImpactChart component with Recharts visualization
+  - Status badges: pending, approved, rejected, executed
+  - Impact and effort indicators
+- **Action workflow**: Approve → Execute buttons with state management
+- **localStorage persistence** for action approvals (SSR-safe)
+- **Backend synchronization** via POST /api/v1/ai/actions
+- **Recharts integration** showing recommendations count, avg score, avg priority by type
+- **E2E test structure** with placeholders
+
+#### Dependencies
+- `@tensorflow/tfjs-node` ^4.15.0 (AI package)
+- `ioredis` ^5.8.2 (API caching)
+- `pino` ^10.1.0 (API logging)
+- `pino-pretty` ^13.1.2 (API dev logging)
+- `recharts` ^3.4.1 (Web charts - already existed)
+
+### Changed
+
+- **API server**: Registered aiRoutes and aiActionsRoutes
+- **Monorepo structure**: Added packages/ai workspace
+- **Core package**: Fixed unused imports in AI engine
+
+### Fixed
+
+- **Lint errors**: Removed unused imports (ActionType, minMaxNormalize) and variables (listingId, actionTypes)
+- **TypeScript errors**: Changed `any` to `tf.Tensor` in test predictions
+
+---
+
+## Sprint 4 Summary
+
+**Total Deliverables**: 3 User Stories  
+**PRs Merged**: 3 (US-120 #21, US-130 #22, US-140 #23)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 20 files changed, 2427 insertions(+), 13 deletions(-)  
+**Test Coverage**: 36/36 tests passing (100%)  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-120: AI Recommendation Engine v1 (@superseller/ai package)
+- US-130: API /ai/recommendations (Redis cache + pino logs)
+- US-140: Web /ai Recommendations Page (Recharts + localStorage)
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 AI Engine → API → Web validated  
+
+---
+
 ## [v1.2.0-beta] – 2025-11-10
 
 ### Added
