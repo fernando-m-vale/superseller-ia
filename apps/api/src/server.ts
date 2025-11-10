@@ -11,6 +11,8 @@ import { shopeeRoutes } from './routes/shopee';
 import { aiRoutes } from './routes/ai';
 import { aiActionsRoutes } from './routes/ai-actions';
 import { jobsRoutes } from './routes/jobs';
+import { automationRoutes } from './routes/automation';
+import { outcomesRoutes } from './routes/outcomes';
 
 
 const app = Fastify({ logger: true });
@@ -28,6 +30,8 @@ app.register(shopeeRoutes, { prefix: '/api/v1' });
 app.register(aiRoutes, { prefix: '/api/v1' });
 app.register(aiActionsRoutes, { prefix: '/api/v1' });
 app.register(jobsRoutes, { prefix: '/api/v1' });
+app.register(automationRoutes, { prefix: '/api/v1' });
+app.register(outcomesRoutes, { prefix: '/api/v1' });
 
 
 app.get('/health', async () => ({ status: 'ok' }));
