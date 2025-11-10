@@ -40,6 +40,28 @@ enum QualityStatus {
   pass
   warning
   critical
+enum JobStatus {
+  success
+  error
+  running
+}
+
+enum JobType {
+  shopee_sync
+  mercadolivre_sync
+  amazon_sync
+  magalu_sync
+  metrics_aggregation
+  data_quality_check
+enum RuleStatus {
+  active
+  inactive
+enum ActionType {
+  title_optimization
+  image_audit
+  attribute_completion
+  price_adjustment
+  stock_update
 }
 
 // Models
@@ -53,6 +75,9 @@ model Tenant {
   listings                Listing[]
   listing_metrics_daily   ListingMetricsDaily[]
   data_quality_checks     DataQualityCheck[]
+  job_logs                JobLog[]
+  auto_approve_rules      AutoApproveRule[]
+  listing_action_outcomes ListingActionOutcome[]
 
   @@map("tenants")
 }
@@ -102,8 +127,9 @@ model Listing {
   created_at      DateTime      @default(now())
   updated_at      DateTime      @updatedAt
 
-  tenant                Tenant                @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
-  listing_metrics_daily ListingMetricsDaily[]
+  tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing_metrics_daily   ListingMetricsDaily[]
+  listing_action_outcomes ListingActionOutcome[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -155,4 +181,63 @@ model DataQualityCheck {
   @@index([check_date])
   @@index([status])
   @@map("data_quality_checks")
+model JobLog {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  job_type        JobType
+  status          JobStatus
+  started_at      DateTime
+  completed_at    DateTime?
+  duration_ms     Int?
+  records_processed Int?
+  error_message   String?
+  metadata        Json?
+  created_at      DateTime  @default(now())
+model AutoApproveRule {
+  id                   String     @id @default(uuid())
+  tenant_id            String
+  name                 String
+  description          String?
+  status               RuleStatus @default(active)
+  ctr_threshold        Decimal?   @db.Decimal(5, 4)
+  cvr_threshold        Decimal?   @db.Decimal(5, 4)
+  revenue_impact_min   Decimal?   @db.Decimal(10, 2)
+  dry_run              Boolean    @default(true)
+  created_at           DateTime   @default(now())
+  updated_at           DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([job_type])
+  @@index([status])
+  @@index([started_at])
+  @@map("job_logs")
+  @@index([status])
+  @@map("auto_approve_rules")
+model ListingActionOutcome {
+  id                  String     @id @default(uuid())
+  tenant_id           String
+  listing_id          String
+  action_id           String
+  action_type         ActionType
+  executed_at         DateTime
+  ctr_before          Decimal?   @db.Decimal(5, 4)
+  ctr_after           Decimal?   @db.Decimal(5, 4)
+  cvr_before          Decimal?   @db.Decimal(5, 4)
+  cvr_after           Decimal?   @db.Decimal(5, 4)
+  revenue_before      Decimal?   @db.Decimal(10, 2)
+  revenue_after       Decimal?   @db.Decimal(10, 2)
+  effectiveness_score Decimal?   @db.Decimal(5, 2)
+  created_at          DateTime   @default(now())
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, action_id])
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([action_type])
+  @@index([executed_at])
+  @@map("listing_action_outcomes")
 }
