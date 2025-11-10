@@ -7,6 +7,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.4.0-beta] – 2025-11-10
+
+### Added
+
+#### AI Outcomes Tracking (US-150)
+- **ListingActionOutcome model** for tracking action results
+  - Fields: listing_id, action_type, executed_at, ctr_before/after, cvr_before/after, revenue_before/after
+  - Automatic effectiveness_score calculation (0-100) based on improvements
+  - Formula: (ctr_improvement * 0.3) + (cvr_improvement * 0.3) + (revenue_improvement * 0.4) * 100
+- **POST /api/v1/ai/outcomes** endpoint for registering action results
+- **Integration with healthScore()** for action prioritization based on historical effectiveness
+- **Migration**: 20251110190324_add_listing_action_outcomes
+
+#### Auto-Approve Policy Engine (US-160)
+- **AutoApproveRule model** with configurable approval criteria
+  - Thresholds: min/max CTR, CVR, revenue impact per action type
+  - Dry-run mode for testing without execution
+  - Per-tenant configuration with enable/disable flag
+- **Automation endpoints**:
+  - GET /api/v1/automation/rules - List auto-approval rules
+  - POST /api/v1/automation/rules - Create new rule
+  - PUT /api/v1/automation/rules/:id - Update rule
+  - DELETE /api/v1/automation/rules/:id - Remove rule
+  - POST /api/v1/automation/evaluate - Evaluate if action should be auto-approved
+- **Policy evaluation logic** with threshold validation and reason tracking
+- **Migration**: 20251110191006_add_auto_approve_rules
+
+#### Job & Sync Monitor (US-170)
+- **JobLog model** for tracking sync operations
+  - Job types: shopee_sync, mercadolivre_sync, amazon_sync, magalu_sync, metrics_aggregation, data_quality_check
+  - Status tracking: success, error, running
+  - Performance metrics: duration_ms, records_processed
+  - Error logging with metadata support
+- **Job monitoring endpoints**:
+  - GET /api/v1/jobs/status - List jobs with summary and filtering
+  - POST /api/v1/jobs/log - Register job execution
+  - GET /api/v1/jobs/stats - Aggregated statistics and recent errors
+- **Metrics calculation**: Average duration, success rate, last successful execution
+- **Migration**: 20251110191445_add_job_logs
+
+#### Data Quality Checks (US-180)
+- **DataQualityCheck model** for automated data validation
+  - Quality status: pass, warning, critical
+  - Metrics: missing_days, outlier_count, total_listings, listings_checked
+  - Issues tracking in JSON format with details
+- **Quality validation logic**:
+  - Missing data detection (> 7 days without metrics in last 30 days)
+  - Outlier detection (CTR > 50%, CVR > 50%, GMV > 100k)
+  - Status calculation: critical (missing > 50 OR outliers > 20), warning (missing > 20 OR outliers > 10)
+- **Data quality endpoints**:
+  - GET /api/v1/data/quality - List quality checks with summary
+  - POST /api/v1/data/quality/check - Execute quality validation
+  - POST /api/v1/data/quality/log - Register quality check result
+- **Migration**: 20251110192630_add_data_quality_checks
+
+#### AI Model Metrics v1.1 (US-190)
+- **AiModelMetric model** for tracking ML model performance
+  - Metrics: MAE (Mean Absolute Error), RMSE (Root Mean Squared Error), R² (coefficient of determination)
+  - Model versioning with default v1.1
+  - Training metadata: training_date, samples_count, features_used array
+- **AI metrics endpoints**:
+  - GET /api/v1/ai/metrics - List model metrics with averages
+  - POST /api/v1/ai/metrics - Record model training metrics
+  - GET /api/v1/ai/health - AI health status with score calculation
+- **Health score calculation**:
+  - Excellent (95): R² ≥ 0.8, MAE < 0.1, RMSE < 0.15
+  - Good (75): R² ≥ 0.6, MAE < 0.2, RMSE < 0.25
+  - Fair (55): R² ≥ 0.4, MAE < 0.3, RMSE < 0.35
+  - Poor (30): Below thresholds
+- **Recommendations**: Retrain if model > 30 days old or performance poor
+- **Migration**: 20251110193000_add_ai_model_metrics
+
+#### Documentation
+- **docs/sprint5-design.md**: Comprehensive Sprint 5 design documentation
+  - Architecture overview and database schema details
+  - API endpoint reference with examples
+  - Implementation details for all 5 user stories
+  - Performance, security, and scalability considerations
+
+### Changed
+
+- **API server**: Registered aiMetricsRoutes for model metrics tracking
+- **Prisma schema**: Added 5 new models with appropriate indexes and relationships
+- **Multi-tenant support**: All new tables include tenant_id with CASCADE delete
+
+### Fixed
+
+- **Lint errors**: Removed duplicate imports and unused variables in AI package
+  - Fixed duplicate ActionType and minMaxNormalize imports in engine.ts
+  - Removed unused actionTypes variable in engine.test.ts
+  - Fixed duplicate prediction variable declaration in tests
+
+---
+
+## Sprint 5 Summary
+
+**Total Deliverables**: 5 User Stories  
+**PRs Created**: 5 (US-150 #25, US-160 #26, US-170 #27, US-180 #28, US-190 #29)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 5 migrations, 15+ new endpoints, 5 new database models  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-150: AI Outcomes Tracking (effectiveness scoring)
+- US-160: Auto-Approve Policy Engine (configurable automation)
+- US-170: Job & Sync Monitor (observability)
+- US-180: Data Quality Checks (validation & alerts)
+- US-190: AI Model Metrics v1.1 (ML performance tracking)
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 Outcomes → Automation → Monitoring → Quality → AI Metrics validated  
+
+---
+
 ## [v1.3.0-beta] – 2025-11-10
 
 ### Added
