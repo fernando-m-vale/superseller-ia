@@ -46,6 +46,7 @@ model Tenant {
   marketplace_connections MarketplaceConnection[]
   listings                Listing[]
   listing_metrics_daily   ListingMetricsDaily[]
+  ai_model_metrics        AiModelMetric[]
 
   @@map("tenants")
 }
@@ -127,4 +128,25 @@ model ListingMetricsDaily {
   @@index([listing_id])
   @@index([date])
   @@map("listing_metrics_daily")
+}
+
+model AiModelMetric {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  model_version   String   @default("v1.1")
+  mae             Decimal  @db.Decimal(10, 4)
+  rmse            Decimal  @db.Decimal(10, 4)
+  r_squared       Decimal  @db.Decimal(5, 4)
+  training_date   DateTime
+  samples_count   Int
+  features_used   String[]
+  metadata        Json?
+  created_at      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([model_version])
+  @@index([training_date])
+  @@map("ai_model_metrics")
 }
