@@ -2,9 +2,12 @@ import type { Metadata } from 'next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const metadata: Metadata = {
-  title: 'Termos de Uso - Super Seller IA',
-  description: 'Termos de Uso da SuperSeller IA - Condições para utilização da plataforma',
+  title: 'Termos de Uso | SuperSeller IA',
+  description: 'Leia os Termos de Uso da plataforma SuperSeller IA.',
   robots: 'index, follow',
+  alternates: {
+    canonical: 'https://app.superselleria.com.br/legal/terms',
+  },
 }
 
 export default function TermsPage() {

@@ -16,8 +16,32 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "SuperSeller IA",
+    "url": "https://app.superselleria.com.br",
+    "sameAs": [
+      "https://superselleria.com.br"
+    ],
+    "contactPoint": [{
+      "@type": "ContactPoint",
+      "email": "suporte@superselleria.com.br",
+      "contactType": "customer support",
+      "availableLanguage": "Portuguese"
+    }]
+  };
+
   return (
     <html lang="pt-BR">
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData),
+          }}
+        />
+      </head>
       <body className={inter.className}>
         <Providers>
           <div className="min-h-screen bg-background flex flex-col">
