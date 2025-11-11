@@ -2,9 +2,12 @@ import type { Metadata } from 'next'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export const metadata: Metadata = {
-  title: 'Política de Privacidade - Super Seller IA',
-  description: 'Política de Privacidade da SuperSeller IA - Como coletamos, utilizamos e protegemos seus dados pessoais',
+  title: 'Política de Privacidade | SuperSeller IA',
+  description: 'Saiba como tratamos e protegemos seus dados conforme a LGPD.',
   robots: 'index, follow',
+  alternates: {
+    canonical: 'https://app.superselleria.com.br/legal/privacy',
+  },
 }
 
 export default function PrivacyPage() {
