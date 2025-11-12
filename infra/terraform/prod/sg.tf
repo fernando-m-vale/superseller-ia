@@ -1,11 +1,11 @@
 
 resource "aws_security_group" "alb" {
-  name_description = "superseller-prod-alb-sg"
-  description      = "Security group for Application Load Balancer"
-  vpc_id           = var.vpc_id
+  name        = "superseller-prod-alb-sg"
+  description = "ALB security group"
+  vpc_id      = var.vpc_id
 
   ingress {
-    description = "HTTP from anywhere"
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -13,7 +13,7 @@ resource "aws_security_group" "alb" {
   }
 
   ingress {
-    description = "HTTPS from anywhere"
+    description = "HTTPS"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -21,7 +21,7 @@ resource "aws_security_group" "alb" {
   }
 
   egress {
-    description = "Allow all outbound"
+    description = "All egress"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -34,28 +34,28 @@ resource "aws_security_group" "alb" {
 }
 
 resource "aws_security_group" "ecs" {
-  name_description = "superseller-prod-ecs-sg"
-  description      = "Security group for ECS tasks"
-  vpc_id           = var.vpc_id
+  name        = "superseller-prod-ecs-sg"
+  description = "ECS services security group"
+  vpc_id      = var.vpc_id
 
   ingress {
-    description     = "API port from ALB"
-    from_port       = var.api_container_port
-    to_port         = var.api_container_port
+    description     = "Web (3000) from ALB"
+    from_port       = 3000
+    to_port         = 3000
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
 
   ingress {
-    description     = "Web port from ALB"
-    from_port       = var.web_container_port
-    to_port         = var.web_container_port
+    description     = "API (3001) from ALB"
+    from_port       = 3001
+    to_port         = 3001
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
 
   egress {
-    description = "Allow all outbound"
+    description = "All egress"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -70,12 +70,12 @@ resource "aws_security_group" "ecs" {
 resource "aws_security_group" "rds" {
   count = var.enable_rds ? 1 : 0
 
-  name_description = "superseller-prod-rds-sg"
-  description      = "Security group for RDS PostgreSQL"
-  vpc_id           = var.vpc_id
+  name        = "superseller-prod-rds-sg"
+  description = "RDS security group"
+  vpc_id      = var.vpc_id
 
   ingress {
-    description     = "PostgreSQL from ECS"
+    description     = "Postgres from ECS"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
@@ -83,7 +83,7 @@ resource "aws_security_group" "rds" {
   }
 
   egress {
-    description = "Allow all outbound"
+    description = "All egress"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
