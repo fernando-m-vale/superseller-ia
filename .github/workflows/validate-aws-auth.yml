@@ -1,0 +1,39 @@
+name: Validate AWS Auth
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  whoami:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # OIDC (comente este bloco se estiver usando Access Keys)
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Access Keys (descomente este bloco se NÃO usar OIDC)
+      # - name: Configure AWS credentials (Keys)
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ vars.AWS_REGION }}
+
+      - name: STS GetCallerIdentity
+        run: aws sts get-caller-identity
+
+      - name: List ECR repos
+        run: aws ecr describe-repositories --region ${{ vars.AWS_REGION }} || true
+
+      - name: ECS sanity (cluster)
+        run: aws ecs describe-clusters --clusters "${{ vars.ECS_CLUSTER_NAME }}" --region ${{ vars.AWS_REGION }} || true
