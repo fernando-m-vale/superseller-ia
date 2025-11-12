@@ -66,7 +66,7 @@ Configure these in GitHub: **Settings → Secrets and variables → Actions → 
 |--------------|-------|-------------|
 | `AWS_ACCOUNT_ID` | `234642166969` | AWS account ID |
 | `AWS_REGION` | `us-east-2` | AWS region for resources |
-| `GITHUB_OIDC_ROLE` | `superseller-github-oidc-dev` | IAM role name to assume |
+| `OIDC_ROLE` | `superseller-github-oidc-dev` | IAM role name to assume |
 | `ECS_CLUSTER_NAME` | `superseller-prod-cluster` | ECS cluster name |
 | `ECS_SERVICE_API_NAME` | `superseller-api-svc` | ECS service name for API |
 | `ECS_SERVICE_WEB_NAME` | `superseller-web-svc` | ECS service name for WEB |
@@ -85,10 +85,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate required variables
+        run: |
+          test -n "${{ vars.OIDC_ROLE }}" || (echo "ERROR: Repository variable OIDC_ROLE is not defined"; exit 1)
+          test -n "${{ vars.AWS_ACCOUNT_ID }}" || (echo "ERROR: AWS_ACCOUNT_ID missing"; exit 1)
+          test -n "${{ vars.AWS_REGION }}" || (echo "ERROR: AWS_REGION missing"; exit 1)
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.GITHUB_OIDC_ROLE }}
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}
           aws-region: ${{ vars.AWS_REGION }}
 ```
 
