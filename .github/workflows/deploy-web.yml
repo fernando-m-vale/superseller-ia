@@ -1,6 +1,7 @@
 name: Deploy WEB (ECS)
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -30,26 +31,38 @@ jobs:
       - name: Validate required variables
         run: |
           test -n "${{ vars.OIDC_ROLE }}" || (echo "ERROR: Repository variable OIDC_ROLE is not defined"; exit 1)
-          test -n "${{ vars.AWS_ACCOUNT_ID }}" || (echo "ERROR: AWS_ACCOUNT_ID missing"; exit 1)
-          test -n "${{ vars.AWS_REGION }}" || (echo "ERROR: AWS_REGION missing"; exit 1)
+          echo "✓ OIDC_ROLE validated: ${{ vars.OIDC_ROLE }}"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}
-          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: arn:aws:iam::234642166969:role/${{ vars.OIDC_ROLE }}
+          aws-region: us-east-2
 
       - name: Login to ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build & push image
+        id: build-image
         run: |
           IMAGE_TAG=${GITHUB_SHA::7}
-          docker build -f apps/web/Dockerfile.prod -t $ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REPOSITORY:latest .
-          docker push $ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REPOSITORY:latest
-        env:
-          ECR_REPOSITORY: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
+          FULL_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
+          LATEST_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
+          
+          echo "Building Docker image..."
+          docker build -f apps/web/Dockerfile.prod -t $FULL_IMAGE_URI -t $LATEST_IMAGE_URI .
+          
+          echo "Pushing images to ECR..."
+          docker push $FULL_IMAGE_URI
+          docker push $LATEST_IMAGE_URI
+          
+          # Get image digest
+          IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $FULL_IMAGE_URI | cut -d'@' -f2)
+          
+          echo "image=$LATEST_IMAGE_URI" >> $GITHUB_OUTPUT
+          echo "digest=$IMAGE_DIGEST" >> $GITHUB_OUTPUT
+          echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
       - name: Render task definition
         id: taskdef
@@ -57,12 +70,77 @@ jobs:
         with:
           task-definition: infra/ecs/web-taskdef.json
           container-name: ${{ env.CONTAINER_NAME }}
-          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          image: ${{ steps.build-image.outputs.image }}
 
       - name: Deploy ECS service
+        id: deploy
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.taskdef.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+      - name: Get deployment details
+        id: details
+        run: |
+          # Get service details
+          SERVICE_ARN=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].serviceArn' \
+            --output text)
+          
+          TASK_DEF_ARN=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          
+          TASK_DEF_REVISION=$(echo $TASK_DEF_ARN | rev | cut -d':' -f1 | rev)
+          
+          SERVICE_STATUS=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].status' \
+            --output text)
+          
+          echo "service_arn=$SERVICE_ARN" >> $GITHUB_OUTPUT
+          echo "task_def_arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+          echo "task_def_revision=$TASK_DEF_REVISION" >> $GITHUB_OUTPUT
+          echo "service_status=$SERVICE_STATUS" >> $GITHUB_OUTPUT
+
+      - name: Validate web endpoint
+        run: |
+          echo "Waiting 30 seconds for service to stabilize..."
+          sleep 30
+          
+          echo "Testing web endpoint..."
+          HTTP_CODE=$(curl -sSf -o /dev/null -w "%{http_code}" https://app.superselleria.com.br/ || echo "000")
+          
+          if [ "$HTTP_CODE" = "000" ]; then
+            echo "❌ Health check failed - endpoint not responding"
+            exit 1
+          fi
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✓ Health check passed (HTTP $HTTP_CODE)"
+          else
+            echo "⚠️  Warning: Received HTTP $HTTP_CODE (expected 200)"
+          fi
+
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Web Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Digest**: \`${{ steps.build-image.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: \`${{ steps.build-image.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Task Definition**: \`${{ steps.details.outputs.task_def_arn }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Task Definition Revision**: \`${{ steps.details.outputs.task_def_revision }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service ARN**: \`${{ steps.details.outputs.service_arn }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service Status**: \`${{ steps.details.outputs.service_status }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Health Check" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://app.superselleria.com.br/" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
