@@ -1,0 +1,249 @@
+name: Pre-Deploy Readiness Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  check-readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.GITHUB_OIDC_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS Authentication
+        run: |
+          echo "=== AWS Authentication ==="
+          aws sts get-caller-identity
+          echo ""
+
+      - name: Check ECR Repositories
+        id: ecr
+        run: |
+          echo "=== Checking ECR Repositories ==="
+          
+          # Check API repository
+          if aws ecr describe-repositories --repository-names "${{ vars.ECR_API_REPO }}" --region ${{ vars.AWS_REGION }} &>/dev/null; then
+            echo "✅ ECR Repository exists: ${{ vars.ECR_API_REPO }}"
+            echo "api_repo=OK" >> $GITHUB_OUTPUT
+          else
+            echo "❌ ECR Repository MISSING: ${{ vars.ECR_API_REPO }}"
+            echo "api_repo=MISSING" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check WEB repository
+          if aws ecr describe-repositories --repository-names "${{ vars.ECR_WEB_REPO }}" --region ${{ vars.AWS_REGION }} &>/dev/null; then
+            echo "✅ ECR Repository exists: ${{ vars.ECR_WEB_REPO }}"
+            echo "web_repo=OK" >> $GITHUB_OUTPUT
+          else
+            echo "❌ ECR Repository MISSING: ${{ vars.ECR_WEB_REPO }}"
+            echo "web_repo=MISSING" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check ECS Cluster
+        id: ecs_cluster
+        run: |
+          echo "=== Checking ECS Cluster ==="
+          
+          CLUSTER_STATUS=$(aws ecs describe-clusters \
+            --clusters "${{ vars.ECS_CLUSTER_NAME }}" \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'clusters[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+          
+          if [[ "$CLUSTER_STATUS" == "ACTIVE" ]]; then
+            echo "✅ ECS Cluster exists and is ACTIVE: ${{ vars.ECS_CLUSTER_NAME }}"
+            echo "cluster=OK" >> $GITHUB_OUTPUT
+          elif [[ "$CLUSTER_STATUS" == "MISSING" ]]; then
+            echo "❌ ECS Cluster MISSING: ${{ vars.ECS_CLUSTER_NAME }}"
+            echo "cluster=MISSING" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  ECS Cluster exists but status is: $CLUSTER_STATUS"
+            echo "cluster=INACTIVE" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check ECS Services
+        id: ecs_services
+        run: |
+          echo "=== Checking ECS Services ==="
+          
+          # Check API service
+          API_SERVICE_STATUS=$(aws ecs describe-services \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --services "${{ vars.ECS_SERVICE_API_NAME }}" \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+          
+          if [[ "$API_SERVICE_STATUS" == "ACTIVE" ]]; then
+            echo "✅ ECS Service exists and is ACTIVE: ${{ vars.ECS_SERVICE_API_NAME }}"
+            echo "api_service=OK" >> $GITHUB_OUTPUT
+          elif [[ "$API_SERVICE_STATUS" == "MISSING" ]]; then
+            echo "⚠️  ECS Service MISSING: ${{ vars.ECS_SERVICE_API_NAME }} (OK for first deploy)"
+            echo "api_service=MISSING" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  ECS Service exists but status is: $API_SERVICE_STATUS"
+            echo "api_service=INACTIVE" >> $GITHUB_OUTPUT
+          fi
+          
+          # Check WEB service
+          WEB_SERVICE_STATUS=$(aws ecs describe-services \
+            --cluster "${{ vars.ECS_CLUSTER_NAME }}" \
+            --services "${{ vars.ECS_SERVICE_WEB_NAME }}" \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+          
+          if [[ "$WEB_SERVICE_STATUS" == "ACTIVE" ]]; then
+            echo "✅ ECS Service exists and is ACTIVE: ${{ vars.ECS_SERVICE_WEB_NAME }}"
+            echo "web_service=OK" >> $GITHUB_OUTPUT
+          elif [[ "$WEB_SERVICE_STATUS" == "MISSING" ]]; then
+            echo "⚠️  ECS Service MISSING: ${{ vars.ECS_SERVICE_WEB_NAME }} (OK for first deploy)"
+            echo "web_service=MISSING" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  ECS Service exists but status is: $WEB_SERVICE_STATUS"
+            echo "web_service=INACTIVE" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check CloudWatch Log Groups
+        id: logs
+        run: |
+          echo "=== Checking CloudWatch Log Groups ==="
+          
+          LOG_GROUPS=$(aws logs describe-log-groups \
+            --log-group-name-prefix "/ecs/superseller" \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'logGroups[].logGroupName' \
+            --output text 2>/dev/null || echo "")
+          
+          if [[ -n "$LOG_GROUPS" ]]; then
+            echo "✅ CloudWatch Log Groups found:"
+            echo "$LOG_GROUPS" | tr '\t' '\n' | sed 's/^/  - /'
+            echo "logs=OK" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  No CloudWatch Log Groups found with prefix /ecs/superseller (will be created on first deploy)"
+            echo "logs=MISSING" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check ACM Certificates
+        id: acm
+        run: |
+          echo "=== Checking ACM Certificates ==="
+          
+          CERTS=$(aws acm list-certificates \
+            --certificate-statuses ISSUED \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'CertificateSummaryList[].DomainName' \
+            --output text 2>/dev/null || echo "")
+          
+          if [[ -n "$CERTS" ]]; then
+            echo "✅ ACM Certificates found (ISSUED):"
+            echo "$CERTS" | tr '\t' '\n' | sed 's/^/  - /'
+            
+            # Check for specific domains
+            if echo "$CERTS" | grep -q "api.superselleria.com.br"; then
+              echo "  ✅ Certificate for api.superselleria.com.br found"
+            else
+              echo "  ⚠️  Certificate for api.superselleria.com.br NOT found"
+            fi
+            
+            if echo "$CERTS" | grep -q "app.superselleria.com.br"; then
+              echo "  ✅ Certificate for app.superselleria.com.br found"
+            else
+              echo "  ⚠️  Certificate for app.superselleria.com.br NOT found"
+            fi
+            
+            echo "acm=OK" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  No ACM Certificates found (will need to be created for HTTPS)"
+            echo "acm=MISSING" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check Route53 Hosted Zone
+        id: route53
+        run: |
+          echo "=== Checking Route53 Hosted Zone ==="
+          
+          HOSTED_ZONE=$(aws route53 list-hosted-zones-by-name \
+            --dns-name superselleria.com.br \
+            --query 'HostedZones[?Name==`superselleria.com.br.`].{Id:Id,Name:Name}' \
+            --output text 2>/dev/null || echo "")
+          
+          if [[ -n "$HOSTED_ZONE" ]]; then
+            echo "✅ Route53 Hosted Zone found:"
+            echo "$HOSTED_ZONE"
+            echo "route53=OK" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Route53 Hosted Zone MISSING for superselleria.com.br"
+            echo "route53=MISSING" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Check Secrets Manager
+        id: secrets
+        run: |
+          echo "=== Checking AWS Secrets Manager ==="
+          
+          SECRETS=$(aws secretsmanager list-secrets \
+            --region ${{ vars.AWS_REGION }} \
+            --query 'SecretList[?contains(Name, `superseller`)].Name' \
+            --output text 2>/dev/null || echo "")
+          
+          if [[ -n "$SECRETS" ]]; then
+            echo "✅ Secrets Manager secrets found:"
+            echo "$SECRETS" | tr '\t' '\n' | sed 's/^/  - /'
+            echo "secrets=OK" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  No Secrets Manager secrets found with 'superseller' in name"
+            echo "secrets=MISSING" >> $GITHUB_OUTPUT
+          fi
+          echo ""
+
+      - name: Generate Readiness Report
+        if: always()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "    PRE-DEPLOY READINESS REPORT"
+          echo "=========================================="
+          echo ""
+          echo "AWS Account: ${{ vars.AWS_ACCOUNT_ID }}"
+          echo "Region: ${{ vars.AWS_REGION }}"
+          echo ""
+          echo "Component Status:"
+          echo "  ECR API Repository:     ${{ steps.ecr.outputs.api_repo || 'UNKNOWN' }}"
+          echo "  ECR WEB Repository:     ${{ steps.ecr.outputs.web_repo || 'UNKNOWN' }}"
+          echo "  ECS Cluster:            ${{ steps.ecs_cluster.outputs.cluster || 'UNKNOWN' }}"
+          echo "  ECS API Service:        ${{ steps.ecs_services.outputs.api_service || 'UNKNOWN' }}"
+          echo "  ECS WEB Service:        ${{ steps.ecs_services.outputs.web_service || 'UNKNOWN' }}"
+          echo "  CloudWatch Logs:        ${{ steps.logs.outputs.logs || 'UNKNOWN' }}"
+          echo "  ACM Certificates:       ${{ steps.acm.outputs.acm || 'UNKNOWN' }}"
+          echo "  Route53 Hosted Zone:    ${{ steps.route53.outputs.route53 || 'UNKNOWN' }}"
+          echo "  Secrets Manager:        ${{ steps.secrets.outputs.secrets || 'UNKNOWN' }}"
+          echo ""
+          echo "Legend:"
+          echo "  ✅ OK       - Resource exists and is ready"
+          echo "  ⚠️  MISSING - Resource doesn't exist (may be created during deploy)"
+          echo "  ❌ MISSING - Resource is required but doesn't exist"
+          echo ""
+          echo "Next Steps:"
+          echo "1. Review the status of each component above"
+          echo "2. Create missing REQUIRED resources (ECR, ECS Cluster, Route53)"
+          echo "3. Optional resources (Services, Logs) will be created on first deploy"
+          echo "4. Ensure ACM certificates are requested for your domains"
+          echo "5. Configure ALB with HTTPS listeners using ACM certificates"
+          echo ""
