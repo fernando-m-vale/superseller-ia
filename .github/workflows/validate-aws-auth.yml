@@ -2,9 +2,6 @@ name: Validate AWS Auth (OIDC)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-  pull_request:
 
 permissions:
   id-token: write
@@ -47,10 +44,29 @@ jobs:
           echo "The IAM role trust policy must include this sub pattern in StringLike condition."
           echo "See iam/trust-policy-restrictive.json or iam/trust-policy-permissive.json"
 
+      - name: Resolve IAM Role Name
+        run: |
+          echo "=== Resolving IAM Role Name ==="
+          ROLE_NAME="${{ vars.GITHUB_OIDC_ROLE }}"
+          if [ -z "$ROLE_NAME" ]; then
+            echo "GITHUB_OIDC_ROLE is not set, trying OIDC_ROLE..."
+            ROLE_NAME="${{ vars.OIDC_ROLE }}"
+          fi
+          
+          if [ -z "$ROLE_NAME" ]; then
+            echo "❌ ERROR: Neither GITHUB_OIDC_ROLE nor OIDC_ROLE is set in GitHub Variables."
+            echo "Please set one of these variables in: Settings → Secrets and variables → Actions → Variables"
+            echo "Recommended value: superseller-github-oidc-dev"
+            exit 1
+          fi
+          
+          echo "✅ Using IAM Role: $ROLE_NAME"
+          echo "ROLE_NAME=$ROLE_NAME" >> $GITHUB_ENV
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.GITHUB_OIDC_ROLE }}
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ env.ROLE_NAME }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Verify AWS Authentication
