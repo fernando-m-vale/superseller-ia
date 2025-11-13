@@ -132,15 +132,15 @@
   "Effect": "Allow",
   "Action": [
     "iam:CreateRole",
-    "iam:GetRole",
     "iam:DeleteRole",
-    "iam:TagRole",
-    "iam:UntagRole",
+    "iam:GetRole",
     "iam:AttachRolePolicy",
     "iam:DetachRolePolicy",
+    "iam:PassRole",
+    "iam:ListRolePolicies",
+    "iam:GetRolePolicy",
     "iam:PutRolePolicy",
-    "iam:DeleteRolePolicy",
-    "iam:ListRolePolicies"
+    "iam:DeleteRolePolicy"
   ],
   "Resource": [
     "arn:aws:iam::234642166969:role/superseller-ecs-execution-role",
