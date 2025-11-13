@@ -1,12 +1,20 @@
 # 1) Build
 FROM node:22-alpine AS build
 WORKDIR /app
+
+# Copy workspace configuration and package.json files for dependency installation
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/core/package.json packages/core/
-RUN corepack enable && pnpm i -w --frozen-lockfile
+
+# Install all dependencies with frozen lockfile
+RUN corepack enable && pnpm install --frozen-lockfile
+
+# Copy source code
 COPY packages ./packages
 COPY apps/web ./apps/web
+
+# Build packages in dependency order
 RUN pnpm --filter @superseller/core build
 RUN pnpm --filter web build
 

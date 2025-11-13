@@ -1,21 +1,43 @@
 # 1) Build
 FROM node:22-alpine AS build
 WORKDIR /app
+
+# Copy workspace configuration and package.json files for dependency installation
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY packages/core/package.json packages/core/
-RUN corepack enable && pnpm i -w --frozen-lockfile
+COPY packages/ai/package.json packages/ai/
+
+# Install all dependencies with frozen lockfile
+RUN corepack enable && pnpm install --frozen-lockfile
+
+# Copy source code
 COPY packages ./packages
 COPY apps/api ./apps/api
+
+# Generate Prisma Client before building
+RUN cd apps/api && pnpm exec prisma generate
+
+# Build packages in dependency order using pnpm filter
 RUN pnpm --filter @superseller/core build
+RUN pnpm --filter @superseller/ai build
 RUN pnpm --filter @superseller/api build
 
 # 2) Runtime
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+
+# Copy built artifacts and dependencies from build stage
 COPY --from=build /app/apps/api/dist ./dist
-COPY --from=build /app/apps/api/package.json ./
-RUN corepack enable && pnpm i --prod
+COPY --from=build /app/apps/api/package.json ./package.json
+COPY --from=build /app/apps/api/node_modules ./node_modules
+
+# Copy workspace packages that the API depends on
+COPY --from=build /app/packages/core/dist ./node_modules/@superseller/core/dist
+COPY --from=build /app/packages/core/package.json ./node_modules/@superseller/core/package.json
+COPY --from=build /app/packages/ai/dist ./node_modules/@superseller/ai/dist
+COPY --from=build /app/packages/ai/package.json ./node_modules/@superseller/ai/package.json
+
 EXPOSE 3001
 CMD ["node", "dist/server.js"]
