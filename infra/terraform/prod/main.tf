@@ -78,9 +78,12 @@ locals {
   }
 
   ecs_subnet_ids = [
-    for az, subnet_ids in local.private_subnets_by_az :
+    for az, subnet_ids in local.public_subnets_by_az :
     subnet_ids[0]
   ]
 
-  rds_subnet_ids = local.ecs_subnet_ids
+  rds_subnet_ids = [
+    for az, subnet_ids in local.private_subnets_by_az :
+    subnet_ids[0]
+  ]
 }
