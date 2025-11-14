@@ -1,3 +1,20 @@
+locals {
+  api_secret_bindings = {
+    DATABASE_URL         = "db_sselleria"
+    JWT_SECRET           = "jwt_secret"
+    ML_APP_ID            = "ml_app_id"
+    ML_APP_SECRET        = "ml_app_secret"
+    ML_REDIRECT_URI      = "ml_redirect_uri"
+    SHOPEE_CLIENT_ID     = "shopee_client_id"
+    SHOPEE_CLIENT_SECRET = "shopee_client_secret"
+    SHOPEE_REDIRECT_URI  = "shopee_redirect_uri"
+  }
+
+  web_secret_bindings = {
+    NEXT_PUBLIC_API_URL = "next_public_api_url"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "api" {
   name              = local.api_log_group
   retention_in_days = 7
@@ -52,14 +69,10 @@ resource "aws_ecs_task_definition" "api" {
     ]
 
     secrets = [
-      { name = "DATABASE_URL", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/DB_SSELLERIA-ynOID8" },
-      { name = "JWT_SECRET", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/JWT_SECRET-9zgVFT" },
-      { name = "ML_APP_ID", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/ML_APP_ID-2LEWTa" },
-      { name = "ML_APP_SECRET", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/ML_APP_SECRET-Centpx" },
-      { name = "ML_REDIRECT_URI", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/ML_REDIRECT_URI-lrPk9C" },
-      { name = "SHOPEE_CLIENT_ID", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/SHOPEE_CLIENT_ID-HeGSSP" },
-      { name = "SHOPEE_CLIENT_SECRET", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/SHOPEE_CLIENT_SECRET-TXPlBs" },
-      { name = "SHOPEE_REDIRECT_URI", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/SHOPEE_REDIRECT_URI-6cCu0H" }
+      for name, key in local.api_secret_bindings : {
+        name      = name
+        valueFrom = data.aws_secretsmanager_secret.prod[key].arn
+      }
     ]
 
     logConfiguration = {
@@ -110,7 +123,10 @@ resource "aws_ecs_task_definition" "web" {
     ]
 
     secrets = [
-      { name = "NEXT_PUBLIC_API_URL", valueFrom = "arn:aws:secretsmanager:${var.aws_region}:${var.aws_account_id}:secret:prod/NEXT_PUBLIC_API_URL-F3P2wT" }
+      for name, key in local.web_secret_bindings : {
+        name      = name
+        valueFrom = data.aws_secretsmanager_secret.prod[key].arn
+      }
     ]
 
     logConfiguration = {
