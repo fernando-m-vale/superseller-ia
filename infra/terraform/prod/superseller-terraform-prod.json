@@ -119,14 +119,16 @@
       "Resource": "*"
     },
     {
-      "Sid": "SecretsManager",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:DescribeSecret"
-      ],
-      "Resource": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/*"
-    },
+  "Sid": "SecretsManager",
+  "Effect": "Allow",
+  "Action": [
+    "secretsmanager:ListSecrets",
+    "secretsmanager:DescribeSecret",
+    "secretsmanager:GetSecretValue",
+    "secretsmanager:GetResourcePolicy"
+  ],
+  "Resource": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/*"
+},
     {
   "Sid": "TerraformIamRoles",
   "Effect": "Allow",
