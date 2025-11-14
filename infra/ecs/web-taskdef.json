@@ -17,7 +17,7 @@
         { "name": "PORT", "value": "3000" }
       ],
       "secrets": [
-        { "name": "NEXT_PUBLIC_API_URL", "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/NEXT_PUBLIC_API_URL-F3P2wT" }
+        { "name": "NEXT_PUBLIC_API_URL", "valueFrom": "prod/NEXT_PUBLIC_API_URL" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
