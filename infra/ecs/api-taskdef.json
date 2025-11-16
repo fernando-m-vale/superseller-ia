@@ -5,7 +5,7 @@
   "memory": "1024",
   "requiresCompatibilities": ["FARGATE"],
   "taskRoleArn": "arn:aws:iam::234642166969:role/superseller-task-role",
-  "executionRoleArn": "arn:aws:iam::234642166969:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::234642166969:role/superseller-ecs-execution-role",
   "containerDefinitions": [
     {
       "name": "api",
@@ -17,15 +17,39 @@
         { "name": "PORT", "value": "3001" }
       ],
       "secrets": [
-        { "name": "DATABASE_URL", "valueFrom": "prod/DB_SSELLERIA" },
-        { "name": "JWT_SECRET", "valueFrom": "prod/JWT_SECRET" },
-        { "name": "ML_APP_ID", "valueFrom": "prod/ML_APP_ID" },
-        { "name": "ML_APP_SECRET", "valueFrom": "prod/ML_APP_SECRET" },
-        { "name": "ML_REDIRECT_URI", "valueFrom": "prod/ML_REDIRECT_URI" },
-        { "name": "SHOPEE_CLIENT_ID", "valueFrom": "prod/SHOPEE_CLIENT_ID" },
-        { "name": "SHOPEE_CLIENT_SECRET", "valueFrom": "prod/SHOPEE_CLIENT_SECRET" },
-        { "name": "SHOPEE_REDIRECT_URI", "valueFrom": "prod/SHOPEE_REDIRECT_URI" }
-      ],
+  {
+    "name": "DB_SSELLERIA",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/DB_SSELLERIA-WUfCbz"
+  },
+  {
+    "name": "JWT_SECRET",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/JWT_SECRET-m3RyMM"
+  },
+  {
+    "name": "ML_APP_ID",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/ML_APP_ID-2LEWTa"
+  },
+  {
+    "name": "ML_APP_SECRET",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/ML_APP_SECRET-Centpx"
+  },
+  {
+    "name": "ML_REDIRECT_URI",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/ML_REDIRECT_URI-lrPk9C"
+  },
+  {
+    "name": "SHOPEE_CLIENT_ID",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/SHOPEE_CLIENT_ID-HeGSSP"
+  },
+  {
+    "name": "SHOPEE_CLIENT_SECRET",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/SHOPEE_CLIENT_SECRET-TXPlBs"
+  },
+  {
+    "name": "SHOPEE_REDIRECT_URI",
+    "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/SHOPEE_REDIRECT_URI-6cCu0H"
+  }
+],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
