@@ -1,3 +1,5 @@
+resource "aws_ecr_repository" "api" {
+  name                 = "superseller/api"
 
 resource "aws_ecr_repository" "api" {
   name                 = local.ecr_api_repo_name
@@ -7,6 +9,13 @@ resource "aws_ecr_repository" "api" {
     scan_on_push = true
   }
 
+  tags = {
+    Name = "superseller-prod-api-ecr"
+  }
+}
+
+resource "aws_ecr_repository" "web" {
+  name                 = "superseller/web"
   encryption_configuration {
     encryption_type = "AES256"
   }
@@ -25,6 +34,9 @@ resource "aws_ecr_repository" "web" {
     scan_on_push = true
   }
 
+  tags = {
+    Name = "superseller-prod-web-ecr"
+  }
   encryption_configuration {
     encryption_type = "AES256"
   }
