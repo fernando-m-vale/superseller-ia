@@ -1,6 +1,3 @@
-resource "aws_route53_record" "api" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = var.api_subdomain
 
 resource "aws_route53_record" "api" {
   zone_id = data.aws_route53_zone.main.zone_id
@@ -14,9 +11,6 @@ resource "aws_route53_record" "api" {
   }
 }
 
-resource "aws_route53_record" "app" {
-  zone_id = data.aws_route53_zone.main.zone_id
-  name    = var.app_subdomain
 resource "aws_route53_record" "api_ipv6" {
   zone_id = data.aws_route53_zone.main.zone_id
   name    = local.api_fqdn

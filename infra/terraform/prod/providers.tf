@@ -15,14 +15,6 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  
-  default_tags {
-    tags = {
-      Project    = "SuperSellerIA"
-      Env        = "prod"
-      Owner      = "fernando"
-      CostCenter = "super-seller"
-      ManagedBy  = "terraform"
 
   default_tags {
     tags = {
