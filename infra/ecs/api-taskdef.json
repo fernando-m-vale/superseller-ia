@@ -1,0 +1,46 @@
+{
+  "family": "superseller-api",
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "requiresCompatibilities": ["FARGATE"],
+  "taskRoleArn": "arn:aws:iam::234642166969:role/superseller-task-role",
+  "executionRoleArn": "arn:aws:iam::234642166969:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "234642166969.dkr.ecr.us-east-2.amazonaws.com/superseller/api:latest",
+      "portMappings": [{ "containerPort": 3001, "protocol": "tcp" }],
+      "essential": true,
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "PORT", "value": "3001" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL", "valueFrom": "prod/DB_SSELLERIA" },
+        { "name": "JWT_SECRET", "valueFrom": "prod/JWT_SECRET" },
+        { "name": "ML_APP_ID", "valueFrom": "prod/ML_APP_ID" },
+        { "name": "ML_APP_SECRET", "valueFrom": "prod/ML_APP_SECRET" },
+        { "name": "ML_REDIRECT_URI", "valueFrom": "prod/ML_REDIRECT_URI" },
+        { "name": "SHOPEE_CLIENT_ID", "valueFrom": "prod/SHOPEE_CLIENT_ID" },
+        { "name": "SHOPEE_CLIENT_SECRET", "valueFrom": "prod/SHOPEE_CLIENT_SECRET" },
+        { "name": "SHOPEE_REDIRECT_URI", "valueFrom": "prod/SHOPEE_REDIRECT_URI" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/superseller-api",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -fsS http://localhost:3001/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      }
+    }
+  ]
+}

@@ -1,0 +1,281 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  owner
+  manager
+  operator
+}
+
+enum Marketplace {
+  shopee
+  mercadolivre
+  amazon
+  magalu
+}
+
+enum ConnectionStatus {
+  active
+  expired
+  revoked
+}
+
+enum ListingStatus {
+  active
+  paused
+  deleted
+}
+
+enum QualityStatus {
+  pass
+  warning
+  critical
+}
+
+enum JobStatus {
+  success
+  error
+  running
+}
+
+enum JobType {
+  shopee_sync
+  mercadolivre_sync
+  amazon_sync
+  magalu_sync
+  metrics_aggregation
+  data_quality_check
+}
+
+enum RuleStatus {
+  active
+  inactive
+}
+
+enum ActionType {
+  title_optimization
+  image_audit
+  attribute_completion
+  price_adjustment
+  stock_update
+}
+
+// Models
+model Tenant {
+  id         String   @id @default(uuid())
+  name       String
+  created_at DateTime @default(now())
+
+  users                   User[]
+  marketplace_connections MarketplaceConnection[]
+  listings                Listing[]
+  listing_metrics_daily   ListingMetricsDaily[]
+  ai_model_metrics        AiModelMetric[]
+  data_quality_checks     DataQualityCheck[]
+  job_logs                JobLog[]
+  auto_approve_rules      AutoApproveRule[]
+  listing_action_outcomes ListingActionOutcome[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  tenant_id     String
+  email         String   @unique
+  password_hash String
+  role          UserRole
+  created_at    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@map("users")
+}
+
+model MarketplaceConnection {
+  id            String           @id @default(uuid())
+  tenant_id     String
+  type          Marketplace
+  access_token  String
+  refresh_token String?
+  expires_at    DateTime?
+  status        ConnectionStatus
+  created_at    DateTime         @default(now())
+  updated_at    DateTime         @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, type])
+  @@map("marketplace_connections")
+}
+
+model Listing {
+  id              String        @id @default(uuid())
+  tenant_id       String
+  marketplace     Marketplace
+  listing_id_ext  String
+  title           String
+  price           Decimal       @db.Decimal(10, 2)
+  stock           Int
+  status          ListingStatus
+  category        String?
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing_metrics_daily   ListingMetricsDaily[]
+  listing_action_outcomes ListingActionOutcome[]
+
+  @@unique([tenant_id, marketplace, listing_id_ext])
+  @@index([tenant_id])
+  @@index([tenant_id, marketplace])
+  @@index([tenant_id, status])
+  @@map("listings")
+}
+
+model ListingMetricsDaily {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  listing_id  String
+  date        DateTime @db.Date
+  impressions Int
+  clicks      Int
+  ctr         Decimal  @db.Decimal(5, 4)
+  visits      Int
+  conversion  Decimal  @db.Decimal(5, 4)
+  orders      Int
+  gmv         Decimal  @db.Decimal(10, 2)
+  created_at  DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, listing_id, date])
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([date])
+  @@map("listing_metrics_daily")
+}
+
+model AiModelMetric {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  model_version   String   @default("v1.1")
+  mae             Decimal  @db.Decimal(10, 4)
+  rmse            Decimal  @db.Decimal(10, 4)
+  r_squared       Decimal  @db.Decimal(5, 4)
+  training_date   DateTime
+  samples_count   Int
+  features_used   String[]
+  metadata        Json?
+  created_at      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([model_version])
+  @@index([training_date])
+  @@map("ai_model_metrics")
+}
+
+model DataQualityCheck {
+  id                String        @id @default(uuid())
+  tenant_id         String
+  check_date        DateTime      @db.Date
+  status            QualityStatus
+  missing_days      Int           @default(0)
+  outlier_count     Int           @default(0)
+  total_listings    Int
+  listings_checked  Int
+  issues_found      Json?
+  created_at        DateTime      @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, check_date])
+  @@index([tenant_id])
+  @@index([check_date])
+  @@index([status])
+  @@map("data_quality_checks")
+}
+
+model JobLog {
+  id              String    @id @default(uuid())
+  tenant_id       String
+  job_type        JobType
+  status          JobStatus
+  started_at      DateTime
+  completed_at    DateTime?
+  duration_ms     Int?
+  records_processed Int?
+  error_message   String?
+  metadata        Json?
+  created_at      DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([job_type])
+  @@index([status])
+  @@index([started_at])
+  @@map("job_logs")
+}
+
+model AutoApproveRule {
+  id                   String     @id @default(uuid())
+  tenant_id            String
+  name                 String
+  description          String?
+  status               RuleStatus @default(active)
+  ctr_threshold        Decimal?   @db.Decimal(5, 4)
+  cvr_threshold        Decimal?   @db.Decimal(5, 4)
+  revenue_impact_min   Decimal?   @db.Decimal(10, 2)
+  dry_run              Boolean    @default(true)
+  created_at           DateTime   @default(now())
+  updated_at           DateTime   @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([status])
+  @@map("auto_approve_rules")
+}
+
+model ListingActionOutcome {
+  id                  String     @id @default(uuid())
+  tenant_id           String
+  listing_id          String
+  action_id           String
+  action_type         ActionType
+  executed_at         DateTime
+  ctr_before          Decimal?   @db.Decimal(5, 4)
+  ctr_after           Decimal?   @db.Decimal(5, 4)
+  cvr_before          Decimal?   @db.Decimal(5, 4)
+  cvr_after           Decimal?   @db.Decimal(5, 4)
+  revenue_before      Decimal?   @db.Decimal(10, 2)
+  revenue_after       Decimal?   @db.Decimal(10, 2)
+  effectiveness_score Decimal?   @db.Decimal(5, 2)
+  created_at          DateTime   @default(now())
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, action_id])
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([action_type])
+  @@index([executed_at])
+  @@map("listing_action_outcomes")
+}

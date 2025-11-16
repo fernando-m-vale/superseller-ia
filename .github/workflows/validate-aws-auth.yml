@@ -1,0 +1,98 @@
+name: Validate AWS Auth (OIDC)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate-oidc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required variables
+        run: |
+          test -n "${{ vars.OIDC_ROLE }}" || (echo "ERROR: Repository variable OIDC_ROLE is not defined"; exit 1)
+          test -n "${{ vars.AWS_ACCOUNT_ID }}" || (echo "ERROR: AWS_ACCOUNT_ID missing"; exit 1)
+          test -n "${{ vars.AWS_REGION }}" || (echo "ERROR: AWS_REGION missing"; exit 1)
+
+      - name: Echo context
+        run: |
+          echo "repo=${GITHUB_REPOSITORY}"
+          echo "ref=${GITHUB_REF}"
+          echo "role_arn=arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}"
+
+      - name: Print GitHub Context for OIDC Debugging
+        run: |
+          echo "=== GitHub Context for OIDC Trust Policy ==="
+          echo "Repository: ${{ github.repository }}"
+          echo "Ref: ${{ github.ref }}"
+          echo "Ref Name: ${{ github.ref_name }}"
+          echo "Event Name: ${{ github.event_name }}"
+          echo "SHA: ${{ github.sha }}"
+          echo ""
+          echo "=== Expected OIDC 'sub' claim patterns ==="
+          echo "For main branch pushes:"
+          echo "  repo:fernando-m-vale/superseller-ia:ref:refs/heads/main"
+          echo ""
+          echo "For pull requests:"
+          echo "  repo:fernando-m-vale/superseller-ia:pull_request"
+          echo ""
+          echo "For tags:"
+          echo "  repo:fernando-m-vale/superseller-ia:ref:refs/tags/*"
+          echo ""
+          echo "For this workflow run, the expected sub is:"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "  repo:${{ github.repository }}:pull_request"
+          else
+            echo "  repo:${{ github.repository }}:ref:${{ github.ref }}"
+          fi
+          echo ""
+          echo "=== Trust Policy Requirements ==="
+          echo "The IAM role trust policy must include this sub pattern in StringLike condition."
+          echo "See iam/trust-policy-restrictive.json or iam/trust-policy-permissive.json"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Verify AWS Authentication
+        run: |
+          echo "=== AWS STS GetCallerIdentity ==="
+          aws sts get-caller-identity
+          echo ""
+          echo "✅ OIDC authentication successful!"
+
+      - name: List ECR Repositories
+        run: |
+          echo "=== ECR Repositories ==="
+          aws ecr describe-repositories --region ${{ vars.AWS_REGION }} || echo "⚠️  No ECR repositories found or insufficient permissions"
+
+      - name: Describe ECS Cluster
+        run: |
+          echo "=== ECS Cluster: ${{ vars.ECS_CLUSTER_NAME }} ==="
+          aws ecs describe-clusters --clusters "${{ vars.ECS_CLUSTER_NAME }}" --region ${{ vars.AWS_REGION }} || echo "⚠️  Cluster not found or insufficient permissions"
+
+      - name: Validation Summary
+        if: always()
+        run: |
+          echo ""
+          echo "=== Validation Summary ==="
+          echo "If you see this message and the 'Verify AWS Authentication' step succeeded,"
+          echo "then OIDC is configured correctly for this workflow trigger."
+          echo ""
+          echo "If authentication failed, check:"
+          echo "1. The IAM role exists: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}"
+          echo "2. The OIDC provider is configured: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com"
+          echo "3. The trust policy includes the correct 'sub' pattern (see output above)"
+          echo "4. GitHub Variables are set correctly:"
+          echo "   - AWS_ACCOUNT_ID=${{ vars.AWS_ACCOUNT_ID }}"
+          echo "   - OIDC_ROLE=${{ vars.OIDC_ROLE }}"
+          echo "   - AWS_REGION=${{ vars.AWS_REGION }}"
+          echo "   - ECS_CLUSTER_NAME=${{ vars.ECS_CLUSTER_NAME }}"

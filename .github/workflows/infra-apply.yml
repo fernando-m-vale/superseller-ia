@@ -1,0 +1,161 @@
+name: Infrastructure Apply (Terraform)
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Terraform action to perform'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: 'plan'
+      enable_rds:
+        description: 'Enable RDS PostgreSQL'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-2
+  TF_WORKING_DIR: infra/terraform/prod
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.TF_WORKING_DIR }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required variables
+        run: |
+          test -n "${{ vars.OIDC_ROLE }}" || (echo "ERROR: Repository variable OIDC_ROLE is not defined"; exit 1)
+          echo "✓ OIDC_ROLE validated: ${{ vars.OIDC_ROLE }}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::234642166969:role/${{ vars.OIDC_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.6"
+
+      - name: Terraform Init
+        id: init
+        run: |
+          echo "Initializing Terraform..."
+          terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: |
+          echo "Validating Terraform configuration..."
+          terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          echo "Running Terraform plan..."
+          terraform plan \
+            -var="enable_rds=${{ inputs.enable_rds }}" \
+            -out=tfplan \
+            -no-color
+        continue-on-error: true
+
+      - name: Save Plan Output
+        if: steps.plan.outcome == 'success'
+        run: |
+          terraform show -no-color tfplan > plan.txt
+          echo "Plan saved to plan.txt"
+
+      - name: Upload Plan Artifact
+        if: steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: ${{ env.TF_WORKING_DIR }}/plan.txt
+          retention-days: 30
+
+      - name: Plan Summary
+        if: steps.plan.outcome == 'success'
+        run: |
+          echo "## 📋 Terraform Plan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Action**: ${{ inputs.action }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Enable RDS**: ${{ inputs.enable_rds }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Plan Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          head -n 100 plan.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📎 Full plan available in artifacts" >> $GITHUB_STEP_SUMMARY
+
+      - name: Terraform Apply
+        if: inputs.action == 'apply' && steps.plan.outcome == 'success'
+        id: apply
+        run: |
+          echo "Applying Terraform changes..."
+          terraform apply -auto-approve tfplan
+
+      - name: Terraform Output
+        if: inputs.action == 'apply' && steps.apply.outcome == 'success'
+        id: output
+        run: |
+          echo "Retrieving Terraform outputs..."
+          terraform output -json > outputs.json
+          
+          # Extract key outputs
+          API_URL=$(terraform output -raw api_url || echo "N/A")
+          WEB_URL=$(terraform output -raw web_url || echo "N/A")
+          ALB_DNS=$(terraform output -raw alb_dns_name || echo "N/A")
+          CLUSTER_NAME=$(terraform output -raw ecs_cluster_name || echo "N/A")
+          
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          echo "web_url=$WEB_URL" >> $GITHUB_OUTPUT
+          echo "alb_dns=$ALB_DNS" >> $GITHUB_OUTPUT
+          echo "cluster_name=$CLUSTER_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload Outputs Artifact
+        if: inputs.action == 'apply' && steps.apply.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-outputs
+          path: ${{ env.TF_WORKING_DIR }}/outputs.json
+          retention-days: 90
+
+      - name: Apply Summary
+        if: inputs.action == 'apply' && steps.apply.outcome == 'success'
+        run: |
+          echo "## ✅ Terraform Apply Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Infrastructure Endpoints" >> $GITHUB_STEP_SUMMARY
+          echo "- **API URL**: ${{ steps.output.outputs.api_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Web URL**: ${{ steps.output.outputs.web_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **ALB DNS**: ${{ steps.output.outputs.alb_dns }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **ECS Cluster**: ${{ steps.output.outputs.cluster_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Deploy API: Run 'Deploy API (ECS)' workflow" >> $GITHUB_STEP_SUMMARY
+          echo "2. Deploy Web: Run 'Deploy WEB (ECS)' workflow" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify endpoints are accessible" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Plan Status
+        if: steps.plan.outcome != 'success'
+        run: |
+          echo "❌ Terraform plan failed"
+          exit 1

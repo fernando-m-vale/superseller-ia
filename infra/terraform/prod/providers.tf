@@ -1,6 +1,10 @@
 terraform {
   required_version = ">= 1.6.0"
   
+  backend "local" {
+    path = "terraform.tfstate"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -19,6 +23,14 @@ provider "aws" {
       Owner      = "fernando"
       CostCenter = "super-seller"
       ManagedBy  = "terraform"
+
+  default_tags {
+    tags = {
+      Project     = "SuperSellerIA"
+      Environment = "production"
+      ManagedBy   = "Terraform"
+      Owner       = "fernando"
+      CostCenter  = "super-seller"
     }
   }
 }

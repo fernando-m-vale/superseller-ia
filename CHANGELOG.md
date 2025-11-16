@@ -1,0 +1,454 @@
+# Changelog
+
+All notable changes to the SuperSeller IA project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [v1.4.0-beta] – 2025-11-10
+
+### Added
+
+#### AI Outcomes Tracking (US-150)
+- **ListingActionOutcome model** for tracking action results
+  - Fields: listing_id, action_type, executed_at, ctr_before/after, cvr_before/after, revenue_before/after
+  - Automatic effectiveness_score calculation (0-100) based on improvements
+  - Formula: (ctr_improvement * 0.3) + (cvr_improvement * 0.3) + (revenue_improvement * 0.4) * 100
+- **POST /api/v1/ai/outcomes** endpoint for registering action results
+- **Integration with healthScore()** for action prioritization based on historical effectiveness
+- **Migration**: 20251110190324_add_listing_action_outcomes
+
+#### Auto-Approve Policy Engine (US-160)
+- **AutoApproveRule model** with configurable approval criteria
+  - Thresholds: min/max CTR, CVR, revenue impact per action type
+  - Dry-run mode for testing without execution
+  - Per-tenant configuration with enable/disable flag
+- **Automation endpoints**:
+  - GET /api/v1/automation/rules - List auto-approval rules
+  - POST /api/v1/automation/rules - Create new rule
+  - PUT /api/v1/automation/rules/:id - Update rule
+  - DELETE /api/v1/automation/rules/:id - Remove rule
+  - POST /api/v1/automation/evaluate - Evaluate if action should be auto-approved
+- **Policy evaluation logic** with threshold validation and reason tracking
+- **Migration**: 20251110191006_add_auto_approve_rules
+
+#### Job & Sync Monitor (US-170)
+- **JobLog model** for tracking sync operations
+  - Job types: shopee_sync, mercadolivre_sync, amazon_sync, magalu_sync, metrics_aggregation, data_quality_check
+  - Status tracking: success, error, running
+  - Performance metrics: duration_ms, records_processed
+  - Error logging with metadata support
+- **Job monitoring endpoints**:
+  - GET /api/v1/jobs/status - List jobs with summary and filtering
+  - POST /api/v1/jobs/log - Register job execution
+  - GET /api/v1/jobs/stats - Aggregated statistics and recent errors
+- **Metrics calculation**: Average duration, success rate, last successful execution
+- **Migration**: 20251110191445_add_job_logs
+
+#### Data Quality Checks (US-180)
+- **DataQualityCheck model** for automated data validation
+  - Quality status: pass, warning, critical
+  - Metrics: missing_days, outlier_count, total_listings, listings_checked
+  - Issues tracking in JSON format with details
+- **Quality validation logic**:
+  - Missing data detection (> 7 days without metrics in last 30 days)
+  - Outlier detection (CTR > 50%, CVR > 50%, GMV > 100k)
+  - Status calculation: critical (missing > 50 OR outliers > 20), warning (missing > 20 OR outliers > 10)
+- **Data quality endpoints**:
+  - GET /api/v1/data/quality - List quality checks with summary
+  - POST /api/v1/data/quality/check - Execute quality validation
+  - POST /api/v1/data/quality/log - Register quality check result
+- **Migration**: 20251110192630_add_data_quality_checks
+
+#### AI Model Metrics v1.1 (US-190)
+- **AiModelMetric model** for tracking ML model performance
+  - Metrics: MAE (Mean Absolute Error), RMSE (Root Mean Squared Error), R² (coefficient of determination)
+  - Model versioning with default v1.1
+  - Training metadata: training_date, samples_count, features_used array
+- **AI metrics endpoints**:
+  - GET /api/v1/ai/metrics - List model metrics with averages
+  - POST /api/v1/ai/metrics - Record model training metrics
+  - GET /api/v1/ai/health - AI health status with score calculation
+- **Health score calculation**:
+  - Excellent (95): R² ≥ 0.8, MAE < 0.1, RMSE < 0.15
+  - Good (75): R² ≥ 0.6, MAE < 0.2, RMSE < 0.25
+  - Fair (55): R² ≥ 0.4, MAE < 0.3, RMSE < 0.35
+  - Poor (30): Below thresholds
+- **Recommendations**: Retrain if model > 30 days old or performance poor
+- **Migration**: 20251110193000_add_ai_model_metrics
+
+#### Documentation
+- **docs/sprint5-design.md**: Comprehensive Sprint 5 design documentation
+  - Architecture overview and database schema details
+  - API endpoint reference with examples
+  - Implementation details for all 5 user stories
+  - Performance, security, and scalability considerations
+
+### Changed
+
+- **API server**: Registered aiMetricsRoutes for model metrics tracking
+- **Prisma schema**: Added 5 new models with appropriate indexes and relationships
+- **Multi-tenant support**: All new tables include tenant_id with CASCADE delete
+
+### Fixed
+
+- **Lint errors**: Removed duplicate imports and unused variables in AI package
+  - Fixed duplicate ActionType and minMaxNormalize imports in engine.ts
+  - Removed unused actionTypes variable in engine.test.ts
+  - Fixed duplicate prediction variable declaration in tests
+
+---
+
+## Sprint 5 Summary
+
+**Total Deliverables**: 5 User Stories  
+**PRs Created**: 5 (US-150 #25, US-160 #26, US-170 #27, US-180 #28, US-190 #29)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 5 migrations, 15+ new endpoints, 5 new database models  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-150: AI Outcomes Tracking (effectiveness scoring)
+- US-160: Auto-Approve Policy Engine (configurable automation)
+- US-170: Job & Sync Monitor (observability)
+- US-180: Data Quality Checks (validation & alerts)
+- US-190: AI Model Metrics v1.1 (ML performance tracking)
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 Outcomes → Automation → Monitoring → Quality → AI Metrics validated  
+
+---
+
+## [v1.3.0-beta] – 2025-11-10
+
+### Added
+
+#### AI Recommendation Engine (US-120)
+- **@superseller/ai package** with hybrid recommendation algorithm
+  - `recommendActions()` function analyzing CTR, CVR, revenue, and orders metrics
+  - Min-max normalization with 0.5 default when all values equal
+  - 5 recommendation types: title, image, price, attributes, stock
+  - TensorFlow.js integration for mock linear regression model
+  - Default weights: CTR 30%, CVR 30%, revenue 25%, orders 15%
+  - Temporal windowing support (last N days, default 7, minimum 3)
+- **28 unit tests** with Vitest (100% passing)
+- TypeScript interfaces: RecommendedAction, RecommendationScore, ListingDailyMetric
+
+#### API AI Recommendations Endpoint (US-130)
+- **GET /api/v1/ai/recommendations** endpoint
+  - Query parameters: marketplace (optional), days (1-90, default 7)
+  - Response format: { tenantId, generatedAt, items, modelVersion, inferenceTime }
+  - Integration with @superseller/ai package for real recommendations
+  - Queries ListingMetricsDaily table with Prisma
+- **Redis caching** with 5-minute TTL for performance optimization
+- **Pino structured logging** with inference time tracking
+- **Zod validation** for query parameters
+- **Graceful degradation** when Prisma or Redis unavailable
+- **8 integration tests** validating functionality and performance < 200ms
+- **POST /api/v1/ai/actions** endpoint for logging user actions (approve/reject/execute)
+
+#### Web AI Recommendations Page (US-140)
+- **New /ai route** with recommendations dashboard
+  - RecommendationsTable component displaying listing actions
+  - ImpactChart component with Recharts visualization
+  - Status badges: pending, approved, rejected, executed
+  - Impact and effort indicators
+- **Action workflow**: Approve → Execute buttons with state management
+- **localStorage persistence** for action approvals (SSR-safe)
+- **Backend synchronization** via POST /api/v1/ai/actions
+- **Recharts integration** showing recommendations count, avg score, avg priority by type
+- **E2E test structure** with placeholders
+
+#### Dependencies
+- `@tensorflow/tfjs-node` ^4.15.0 (AI package)
+- `ioredis` ^5.8.2 (API caching)
+- `pino` ^10.1.0 (API logging)
+- `pino-pretty` ^13.1.2 (API dev logging)
+- `recharts` ^3.4.1 (Web charts - already existed)
+
+### Changed
+
+- **API server**: Registered aiRoutes and aiActionsRoutes
+- **Monorepo structure**: Added packages/ai workspace
+- **Core package**: Fixed unused imports in AI engine
+
+### Fixed
+
+- **Lint errors**: Removed unused imports (ActionType, minMaxNormalize) and variables (listingId, actionTypes)
+- **TypeScript errors**: Changed `any` to `tf.Tensor` in test predictions
+
+---
+
+## Sprint 4 Summary
+
+**Total Deliverables**: 3 User Stories  
+**PRs Merged**: 3 (US-120 #21, US-130 #22, US-140 #23)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 20 files changed, 2427 insertions(+), 13 deletions(-)  
+**Test Coverage**: 36/36 tests passing (100%)  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-120: AI Recommendation Engine v1 (@superseller/ai package)
+- US-130: API /ai/recommendations (Redis cache + pino logs)
+- US-140: Web /ai Recommendations Page (Recharts + localStorage)
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 AI Engine → API → Web validated  
+
+---
+
+## [v1.2.0-beta] – 2025-11-10
+
+### Added
+
+#### Authentication System (US-090)
+- **Multi-tenant authentication** with JWT and refresh tokens
+  - POST /api/v1/auth/register - User registration with automatic tenant creation
+  - POST /api/v1/auth/login - Login with JWT access token (7-day expiration) and refresh token (30-day expiration)
+  - GET /api/v1/auth/me - Get current user information with JWT validation
+- **Auth middleware** (authGuard) for protected routes
+- **Password security** with bcrypt hashing (salt rounds 10)
+- **Web authentication pages**:
+  - /login page with React Hook Form + zod validation
+  - /register page with tenant creation flow
+  - Token storage in localStorage (accessToken, refreshToken)
+  - Auto-redirect to /overview after successful login
+- **Database migration**: Added password_hash field to users table
+- **Dependencies**: bcryptjs, jsonwebtoken, react-hook-form, zod, @hookform/resolvers
+
+#### Shopee Connector (US-100)
+- **OAuth 2.0 integration** with Shopee marketplace
+  - GET /api/v1/auth/shopee/authorize - Initiate OAuth flow with state parameter for CSRF protection
+  - GET /api/v1/auth/shopee/callback - Handle OAuth callback and exchange code for tokens
+  - GET /api/v1/shopee/sync - Import listings from Shopee API to database
+- **HMAC-SHA256 signature generation** for Shopee API authentication
+- **Token management**: Store access_token, refresh_token, expires_at in marketplace_connections table
+- **AWS Secrets Manager integration** with environment variable fallback for development
+- **Dependencies**: @aws-sdk/client-secrets-manager, axios
+
+#### Mercado Livre Connector (US-110)
+- **OAuth 2.0 integration** with Mercado Livre marketplace
+  - GET /api/v1/auth/mercadolivre/authorize - Initiate OAuth flow with state parameter for CSRF protection
+  - GET /api/v1/auth/mercadolivre/callback - Handle OAuth callback and exchange code for tokens
+  - GET /api/v1/mercadolivre/sync - Import listings from Mercado Livre API to database
+- **Automatic token refresh** for expired credentials
+- **Token management**: Store access_token, refresh_token, expires_at in marketplace_connections table
+- **AWS Secrets Manager integration** with environment variable fallback for development
+
+#### Infrastructure
+- **Secrets management utility** (apps/api/src/lib/secrets.ts)
+  - getShopeeCredentials() - Fetch Shopee OAuth credentials from AWS Secrets Manager or env vars
+  - getMercadoLivreCredentials() - Fetch Mercado Livre OAuth credentials from AWS Secrets Manager or env vars
+  - In-memory caching for secret values
+  - Automatic fallback to environment variables in development
+
+### Changed
+
+- **API server**: Registered auth, shopee, and mercadolivre routes
+- **User schema**: Added required password_hash field for authentication
+- **Seed script**: Updated to include password hashes for demo users
+- **Core package**: Fixed TypeScript configuration (moduleResolution: node) for proper dist file generation
+
+### Fixed
+
+- **Core package build**: Updated tsconfig.json to generate proper JavaScript and declaration files
+- **Seed script**: Added password_hash field to user creation (fixes validation error)
+- **Module resolution**: Fixed @superseller/core imports in API routes
+
+### Security
+
+- **Password hashing**: All passwords stored as bcrypt hashes (never plaintext)
+- **JWT tokens**: Signed with secret key, include userId and tenantId claims
+- **OAuth state parameter**: CSRF protection in marketplace OAuth flows
+- **AWS Secrets Manager**: Production credentials stored securely (not in code or env files)
+- **Multi-tenant isolation**: All data scoped by tenant_id
+
+---
+
+## Sprint 3 Summary
+
+**Total Deliverables**: 3 User Stories  
+**PRs Merged**: 3 (US-090 #17, US-100 #18, US-110 #19)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 15 files changed, 2490 insertions(+), 17 deletions(-)  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-090: Auth API + Web Login (JWT + Refresh Tokens)
+- US-100: Shopee Connector (OAuth 2.0 + Listing Sync)
+- US-110: Mercado Livre Connector (OAuth 2.0 + Listing Sync + Token Refresh)
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 Authentication and marketplace connectors validated  
+
+---
+
+## [v1.0.0-beta] – 2025-11-10
+
+### Added
+
+#### Core Package (@superseller/core)
+- **healthScore() function** with min-max normalization algorithm
+  - Calculates listing health score (0-100) based on CTR, CVR, revenue, and orders
+  - Customizable weights (default: CTR 30%, CVR 30%, revenue 25%, orders 15%)
+  - Temporal window support (last N days, default 7 days, minimum 3 days)
+  - Handles edge cases: empty data, zeros, NaN, out-of-order dates
+  - Returns scores with 2 decimal places precision
+- **13 comprehensive unit tests** using Vitest (100% passing)
+- TypeScript declarations and build configuration
+- Test coverage reporting
+
+#### API (apps/api)
+- **Fastify server** with TypeScript and CORS support
+- **GET /health** endpoint for health checks
+- **GET /api/v1/listings** endpoint with Prisma DB integration
+  - Filters: tenantId, marketplace, search query (q), pagination (page, pageSize)
+  - Case-insensitive search on listing titles
+  - Ordered by creation date (most recent first)
+  - Zod validation for query parameters
+- **GET /api/v1/actions/recommendations** endpoint with mock data
+  - Integration with healthScore() from @superseller/core
+  - 5 heuristic rules: out_of_stock, low_ctr, low_cvr, low_health, high_performance
+  - 5 action types: optimize_photos, improve_title, adjust_price, restock, increase_ad_spend
+  - Filters: marketplace, search query, pagination
+  - Sorting by impact → effort → health score
+- **Prisma ORM** integration with PostgreSQL
+  - Schema with 5 tables: tenants, users, marketplace_connections, listings, listing_metrics_daily
+  - 4 enums: UserRole, Marketplace, ConnectionStatus, ListingStatus
+  - Multi-tenant design with tenant_id in all tables
+  - Foreign keys with CASCADE delete
+  - Optimized indexes for queries
+- **Database seed script** (apps/api/prisma/seed.ts)
+  - Creates demo tenant, owner user, 6 listings (3 Shopee, 3 Mercado Livre)
+  - Generates 7 days of metrics per listing (42 total records)
+  - Idempotent using upsert operations
+  - Protected against production execution
+- **Docker Compose** configuration for PostgreSQL 15
+- Database management scripts: db:dev, db:up, db:reset, db:studio, db:seed, db:generate
+
+#### Web (apps/web)
+- **Activation Checklist component** (ActivationChecklist.tsx)
+  - 4 onboarding steps with checkboxes
+  - Dynamic progress bar (0-100%)
+  - Action buttons: "Marcar tudo", "Limpar tudo", "Resetar progresso"
+  - localStorage persistence (key: ssia.activationChecklist.v1)
+  - SSR-safe with useEffect hydration
+  - Telemetry stubs (console.info) for user actions
+- **Recommendations page** (/recommendations)
+  - Table with 8 columns: Title, Marketplace, Action, Reason, Impact, Effort, Health Score, Date
+  - Filters: marketplace dropdown, search input (debounced 500ms), page size selector
+  - Pagination with Previous/Next buttons
+  - URL querystring synchronization (filters persist on reload)
+  - Loading state with skeleton placeholders
+  - Empty state with "Clear filters" button
+  - Error state with retry button
+  - React Query integration for API calls
+- **shadcn/ui components**:
+  - Card (CardHeader, CardTitle, CardDescription, CardContent, CardFooter)
+  - Progress bar (Radix UI)
+  - Checkbox (Radix UI)
+  - Badge (for Impact and Effort indicators)
+  - Alert (for error messages)
+  - Separator (visual divider)
+  - Table components
+- **Custom hooks**:
+  - useRecommendations: React Query hook for fetching recommendations
+- **Type definitions**:
+  - types/onboarding.ts: ChecklistState, INITIAL_CHECKLIST_STATE
+  - types/recommendations.ts: Recommendation, RecommendationsResponse
+- **Storage utilities** (lib/storage.ts):
+  - loadChecklistState(), saveChecklistState(), resetChecklistState()
+  - Versioned storage with timestamp tracking
+  - Error handling and validation
+
+#### Infrastructure
+- **GitHub Actions workflow** (check-forbidden-paths.yml)
+  - Validates that .env, .terraform/, node_modules/ are not committed
+  - Fixed to handle cases when grep finds no matches
+- **Environment configuration**:
+  - .env.example files for API
+  - NEXT_PUBLIC_API_URL support for Web
+- **Monorepo structure** with pnpm workspaces:
+  - packages/core: Shared business logic
+  - apps/api: Backend API
+  - apps/web: Frontend application
+
+### Changed
+
+- **Monorepo configuration**: Updated pnpm workspace settings
+- **Package scripts**: Consolidated build, dev, lint, typecheck scripts across workspaces
+- **TypeScript configuration**: Enabled composite builds for better performance
+- **ESLint configuration**: Updated to v8 compatibility
+- **Prisma Client generation**: Integrated into build pipeline
+
+### Fixed
+
+- **Merge conflict markers in main branch** (PR #12 - Hotfix)
+  - Removed conflict markers from apps/api/package.json
+  - Regenerated pnpm-lock.yaml (resolved 39 conflicts)
+  - Unified scripts and dependencies correctly
+  - Maintained Prisma 5.22.0 version (not upgraded to 6.x)
+  - Preserved @superseller/core workspace dependency
+- **Next.js build error - Suspense boundary** (PR #13)
+  - Split recommendations page into server wrapper (page.tsx) + client component (client.tsx)
+  - Added Suspense boundary with loading fallback
+  - Fixed useSearchParams() static generation requirement
+  - Maintained all original functionality
+- **TypeScript type errors**: Replaced `any` with `unknown` in healthScore tests
+- **CI workflow**: Fixed check-forbidden-paths to not fail when no matches found
+- **JSON syntax**: Fixed malformed package.json in API workspace
+- **Dependency issues**: Added missing tsx devDependency for API dev script
+
+### Security
+
+- **Production protection**: Seed script refuses to run in production environment
+- **Input validation**: All API endpoints use Zod schemas for request validation
+- **SQL injection prevention**: Prisma ORM parameterized queries
+- **Environment variables**: Sensitive data in .env files (gitignored)
+
+---
+
+## Sprint 1 Summary
+
+**Total Deliverables**: 7 User Stories  
+**PRs Merged**: 8 (including hotfix #12 and fix #13)  
+**Success Rate**: 100% CI passing  
+**Code Changes**: 16 files changed, 833 insertions(+), 542 deletions(-)  
+**Test Coverage**: 13/13 tests passing (100%)  
+**Build Status**: ✅ All workspaces building successfully  
+
+**User Stories Completed**:
+- US-001: API Bootstrap + /health + CORS
+- US-021: DB + Prisma + Migrations
+- US-030: Core — healthScore() + Unit Tests
+- US-040: API — /actions/recommendations (mock)
+- US-003: Web — Activation Checklist (localStorage)
+- US-050: Web — Recommendations Page
+- US-060: API — /listings from DB + Seed
+
+**System Health**: 🟢 All services operational  
+**Quality**: 🟢 100% CI passing  
+**Integration**: 🟢 Full stack validated  
+
+---
+
+## Links
+
+- **Repository**: https://github.com/fernando-m-vale/superseller-ia
+- **Sprint 3 Release**: https://github.com/fernando-m-vale/superseller-ia/releases/tag/v1.2.0-beta
+- **Sprint 1 Release**: https://github.com/fernando-m-vale/superseller-ia/releases/tag/v1.0.0-beta
+- **Milestone Sprint 3**: Sprint 3 — Connections & Auth
+- **Milestone Sprint 1**: Sprint 1 — MVP Foundation
+- **Devin Session (Sprint 3)**: https://app.devin.ai/sessions/b1560b2cc5a14fe4a23cf5bf7702b7c8
+- **Devin Session (Sprint 1)**: https://app.devin.ai/sessions/fe686698835a4f41bb432ce01ffeeb32
+
+---
+
+[v1.2.0-beta]: https://github.com/fernando-m-vale/superseller-ia/compare/v1.0.0-beta...v1.2.0-beta
+[v1.0.0-beta]: https://github.com/fernando-m-vale/superseller-ia/compare/7e714bd...v1.0.0-beta
