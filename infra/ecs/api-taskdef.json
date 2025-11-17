@@ -18,7 +18,7 @@
       ],
       "secrets": [
   {
-    "name": "DB_SSELLERIA",
+    "name": "DATABASE_URL",
     "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/DB_SSELLERIA-WUfCbz"
   },
   {
