@@ -2,7 +2,7 @@
   "name": "@superseller/api",
   "version": "0.1.0",
   "private": true,
-    "scripts": {
+  "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc -b",
     "start": "node dist/server.js",
@@ -27,7 +27,7 @@
     "@superseller/core": "workspace:*",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
-    "fastify": "^4.27.0",
+    "fastify": "^4.29.1",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "pino": "^10.1.0",

@@ -57,7 +57,7 @@ importers:
         specifier: ^3.0.3
         version: 3.0.3
       fastify:
-        specifier: ^4.27.0
+        specifier: ^4.29.1
         version: 4.29.1
       ioredis:
         specifier: ^5.8.2

@@ -1,43 +1,45 @@
-# 1) Build
-FROM node:22-alpine AS build
+# ---------- Base ----------
+FROM node:22-alpine AS base
 WORKDIR /app
 
-# Copy workspace configuration and package.json files for dependency installation
+# ---------- Build ----------
+FROM base AS build
+
+# Habilita corepack / pnpm
+RUN corepack enable
+
+# Copia manifests do monorepo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# Copia manifests das workspaces usadas pela API
 COPY apps/api/package.json apps/api/
 COPY packages/core/package.json packages/core/
 COPY packages/ai/package.json packages/ai/
 
-# Install all dependencies with frozen lockfile
-RUN corepack enable && pnpm install --frozen-lockfile
+# Instala TODAS as deps (dev+prod) com lockfile travado
+RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY packages ./packages
-COPY apps/api ./apps/api
+# Copia o restante do código
+COPY . .
 
-# Generate Prisma Client before building
-RUN cd apps/api && pnpm exec prisma generate
-
-# Build packages in dependency order using pnpm filter
-RUN pnpm --filter @superseller/core build
-RUN pnpm --filter @superseller/ai build
+# Build da API
 RUN pnpm --filter @superseller/api build
 
-# 2) Runtime
-FROM node:22-alpine
-WORKDIR /app
+# ---------- Runtime ----------
+FROM base AS runtime
+
 ENV NODE_ENV=production
+WORKDIR /app
 
-# Copy built artifacts and dependencies from build stage
+# Copia node_modules inteiro do build (já resolve fastify e cia)
+COPY --from=build /app/node_modules ./node_modules
+
+# Copia somente o dist da API
 COPY --from=build /app/apps/api/dist ./dist
-COPY --from=build /app/apps/api/package.json ./package.json
-COPY --from=build /app/apps/api/node_modules ./node_modules
 
-# Copy workspace packages that the API depends on
-COPY --from=build /app/packages/core/dist ./node_modules/@superseller/core/dist
-COPY --from=build /app/packages/core/package.json ./node_modules/@superseller/core/package.json
-COPY --from=build /app/packages/ai/dist ./node_modules/@superseller/ai/dist
-COPY --from=build /app/packages/ai/package.json ./node_modules/@superseller/ai/package.json
+# Copia package.json da API (opcional, mas bom ter)
+COPY apps/api/package.json ./package.json
 
 EXPOSE 3001
+
 CMD ["node", "dist/server.js"]
