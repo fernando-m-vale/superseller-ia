@@ -26,23 +26,22 @@ RUN pnpm install --frozen-lockfile
 COPY packages ./packages
 COPY apps/api ./apps/api
 
-# Build packages in dependency order (prebuild will run prisma generate)
+# Build packages in dependency order
 RUN pnpm --filter @superseller/core build
 RUN pnpm --filter @superseller/ai build
 RUN pnpm --filter @superseller/api build
 
 # ---------- Runtime ----------
 FROM base AS runtime
-
-ENV NODE_ENV=production
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy node_modules from build stage (includes all dependencies)
+# Copy node_modules
 COPY --from=build /app/node_modules ./node_modules
 
-# Copy Prisma engines and generated client
-COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
+# Copy Prisma engines & generated client (CRÍTICO)
+COPY --from=build /app/apps/api/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/apps/api/node_modules/@prisma ./node_modules/@prisma
 
 # Copy built packages
 COPY --from=build /app/packages/core/dist ./packages/core/dist
@@ -54,10 +53,7 @@ COPY --from=build /app/packages/ai/package.json ./packages/ai/
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 
-# Copy Prisma schema for runtime migrations
-COPY --from=build /app/apps/api/prisma ./apps/api/prisma
-
-# Copy root package.json for workspace resolution
+# Copy root package.json + workspace file
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
