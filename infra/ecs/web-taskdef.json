@@ -5,7 +5,7 @@
   "memory": "1024",
   "requiresCompatibilities": ["FARGATE"],
   "taskRoleArn": "arn:aws:iam::234642166969:role/superseller-task-role",
-  "executionRoleArn": "arn:aws:iam::234642166969:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::234642166969:role/superseller-ecs-execution-role",
   "containerDefinitions": [
     {
       "name": "web",
@@ -17,7 +17,7 @@
         { "name": "PORT", "value": "3000" }
       ],
       "secrets": [
-        { "name": "NEXT_PUBLIC_API_URL", "valueFrom": "prod/NEXT_PUBLIC_API_URL" }
+        { "name": "NEXT_PUBLIC_API_URL", "valueFrom": "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/NEXT_PUBLIC_API_URL-XXXXXX" }
       ],
       "logConfiguration": {
         "logDriver": "awslogs",

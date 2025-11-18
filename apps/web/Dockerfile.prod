@@ -1,14 +1,20 @@
-# 1) Build
-FROM node:22-alpine AS build
+# ---------- Build ----------
+FROM node:20-alpine AS build
 WORKDIR /app
 
-# Copy workspace configuration and package.json files for dependency installation
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Enable corepack and prepare pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+# Copy workspace configuration and package.json files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/core/package.json packages/core/
 
 # Install all dependencies with frozen lockfile
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY packages ./packages
@@ -18,14 +24,21 @@ COPY apps/web ./apps/web
 RUN pnpm --filter @superseller/core build
 RUN pnpm --filter web build
 
-# 2) Runtime (Next.js standalone, se configurado)
-FROM node:22-alpine
+# ---------- Runtime ----------
+FROM node:20-alpine AS runtime
 WORKDIR /app
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
 ENV NODE_ENV=production
-# Caso use output=standalone, ajuste os paths abaixo conforme .next/standalone
+ENV PORT=3000
+
+# Copy standalone Next.js output
 COPY --from=build /app/apps/web/.next/standalone ./
 COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=build /app/apps/web/public ./apps/web/public
-ENV PORT=3000
+
 EXPOSE 3000
+
 CMD ["node", "apps/web/server.js"]

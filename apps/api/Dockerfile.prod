@@ -1,28 +1,34 @@
 # ---------- Base ----------
-FROM node:22-alpine AS base
+FROM node:20-alpine AS base
 WORKDIR /app
+
+# Install system dependencies for Prisma and tfjs-node
+RUN apk add --no-cache libc6-compat openssl curl
 
 # ---------- Build ----------
 FROM base AS build
 
-# Habilita corepack / pnpm
-RUN corepack enable
+# Enable corepack and prepare pnpm
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Copia manifests do monorepo
+# Copy monorepo manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Copia manifests das workspaces usadas pela API
+# Copy workspace package.json files
 COPY apps/api/package.json apps/api/
 COPY packages/core/package.json packages/core/
 COPY packages/ai/package.json packages/ai/
 
-# Instala TODAS as deps (dev+prod) com lockfile travado
+# Install all dependencies (dev+prod) with frozen lockfile
 RUN pnpm install --frozen-lockfile
 
-# Copia o restante do código
-COPY . .
+# Copy source code
+COPY packages ./packages
+COPY apps/api ./apps/api
 
-# Build da API
+# Build packages in dependency order (prebuild will run prisma generate)
+RUN pnpm --filter @superseller/core build
+RUN pnpm --filter @superseller/ai build
 RUN pnpm --filter @superseller/api build
 
 # ---------- Runtime ----------
@@ -31,15 +37,30 @@ FROM base AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copia node_modules inteiro do build (já resolve fastify e cia)
+# Copy node_modules from build stage (includes all dependencies)
 COPY --from=build /app/node_modules ./node_modules
 
-# Copia somente o dist da API
-COPY --from=build /app/apps/api/dist ./dist
+# Copy Prisma engines and generated client
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 
-# Copia package.json da API (opcional, mas bom ter)
-COPY apps/api/package.json ./package.json
+# Copy built packages
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/package.json ./packages/core/
+COPY --from=build /app/packages/ai/dist ./packages/ai/dist
+COPY --from=build /app/packages/ai/package.json ./packages/ai/
+
+# Copy API dist and package.json
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/package.json ./apps/api/
+
+# Copy Prisma schema for runtime migrations
+COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+
+# Copy root package.json for workspace resolution
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 EXPOSE 3001
 
-CMD ["node", "dist/server.js"]
+CMD ["node", "apps/api/dist/server.js"]
