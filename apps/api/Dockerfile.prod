@@ -36,12 +36,8 @@ FROM base AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy node_modules
+# Copy node_modules from build stage (includes Prisma + engines)
 COPY --from=build /app/node_modules ./node_modules
-
-# Copy Prisma engines & generated client (CRÍTICO)
-COPY --from=build /app/apps/api/node_modules/.prisma ./node_modules/.prisma
-COPY --from=build /app/apps/api/node_modules/@prisma ./node_modules/@prisma
 
 # Copy built packages
 COPY --from=build /app/packages/core/dist ./packages/core/dist
@@ -60,3 +56,4 @@ COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 EXPOSE 3001
 
 CMD ["node", "apps/api/dist/server.js"]
+
