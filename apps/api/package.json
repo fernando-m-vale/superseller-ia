@@ -27,7 +27,7 @@
     "@superseller/core": "workspace:*",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
-    "fastify": "^4.28.1",
+    "fastify": "^4.27.0",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "pino": "^10.1.0",
