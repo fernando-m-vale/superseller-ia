@@ -1,4 +1,8 @@
 {
+  "name": "superseller-ia",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "lint": "eslint \"apps/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "pnpm -r run typecheck",

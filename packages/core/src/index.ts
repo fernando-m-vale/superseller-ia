@@ -1,2 +1,2 @@
-export { healthScore } from './healthScore.js';
-export type { ListingDailyMetric, HealthScoreOptions } from './healthScore.js';
+export { healthScore } from './healthScore';
+export type { ListingDailyMetric, HealthScoreOptions } from './healthScore';

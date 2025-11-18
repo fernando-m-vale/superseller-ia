@@ -28,6 +28,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Validate required variables
         run: |
           test -n "${{ vars.OIDC_ROLE }}" || (echo "ERROR: Repository variable OIDC_ROLE is not defined"; exit 1)
