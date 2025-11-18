@@ -1,7 +1,10 @@
 import { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { healthScore, type ListingDailyMetric } from '@superseller/core';
+import { healthScore } from '@superseller/core';
 import { MetricsSummaryQuerySchema } from '../schemas';
+
+type ListingDailyMetric = any;
+
 
 interface RequestWithTenant extends FastifyRequest {
   tenantId: string;

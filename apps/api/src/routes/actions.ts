@@ -1,7 +1,9 @@
 import { FastifyPluginCallback, FastifyRequest } from 'fastify';
-import { healthScore, ListingDailyMetric } from '@superseller/core';
+import { healthScore } from '@superseller/core';
 import { RecommendationFilterSchema } from '../schemas';
 import { randomUUID } from 'crypto';
+
+type ListingDailyMetric = any;
 
 interface RequestWithTenant extends FastifyRequest {
   tenantId: string;

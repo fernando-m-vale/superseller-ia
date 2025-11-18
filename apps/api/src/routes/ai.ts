@@ -1,8 +1,10 @@
 import { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { recommendActions, ListingDailyMetric } from '@superseller/ai';
+import { recommendActions } from '@superseller/ai';
 import Redis from 'ioredis';
 import { z } from 'zod';
+
+type ListingDailyMetric = any;
 
 interface RequestWithTenant extends FastifyRequest {
   tenantId: string;
