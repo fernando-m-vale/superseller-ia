@@ -2,9 +2,7 @@
   "name": "@superseller/api",
   "version": "0.1.0",
   "private": true,
-  "type": "commonjs",
-  "main": "dist/server.js",
-  "scripts": {
+    "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc -b",
     "start": "node dist/server.js",
