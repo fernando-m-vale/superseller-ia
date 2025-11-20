@@ -1,6 +1,8 @@
 {
   "name": "@superseller/api",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "main": "dist/server.js",
+  "type": "commonjs",
   "private": true,
   "scripts": {
     "dev": "tsx src/server.ts",
