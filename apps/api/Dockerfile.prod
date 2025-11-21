@@ -1,11 +1,13 @@
 # ==========================
 #       Base Image
 # ==========================
-FROM node:20-alpine AS base
+FROM node:20-bookworm-slim AS base
 WORKDIR /app
 
-# Dependências de sistema (Prisma, etc.)
-RUN apk add --no-cache libc6-compat openssl curl
+# Dependências de sistema (openssl, curl etc.)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl curl \
+  && rm -rf /var/lib/apt/lists/*
 
 # ==========================
 #       Build Stage
@@ -41,11 +43,7 @@ RUN pnpm prune --prod
 FROM base AS runtime
 WORKDIR /app
 
-# Copia TUDO que foi preparado no build (código + node_modules)
-# Aqui vão juntos:
-# - node_modules da raiz
-# - node_modules de apps/api e demais workspaces
-# - dist já buildado
+# Copia TUDO que foi preparado no build (código + node_modules + dist)
 COPY --from=build /app ./
 
 # Porta da API
