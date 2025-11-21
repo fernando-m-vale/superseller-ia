@@ -4,33 +4,36 @@
 FROM node:20-alpine AS base
 WORKDIR /app
 
+# Dependências de sistema (Prisma, etc.)
 RUN apk add --no-cache libc6-compat openssl curl
 
 
 # ==========================
-#       Builder Stage
+#       Build Stage
 # ==========================
 FROM base AS build
 
-# Instala pnpm via corepack
+# Habilita pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Copia arquivos do monorepo
+# Copia arquivos principais do monorepo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Copia códigos dos pacotes e apps
+# Copia código das apps e packages
 COPY apps ./apps
 COPY packages ./packages
 
-# Instala dependências (todas)
+# Instala TODAS as dependências (monorepo)
 RUN pnpm install --frozen-lockfile
 
-# Build de cada package/app
+# Build dos packages internos
 RUN pnpm --filter @superseller/core build
 RUN pnpm --filter @superseller/ai build
+
+# Build da API (roda também o "prebuild": "prisma generate")
 RUN pnpm --filter @superseller/api build
 
-# Remove devDependencies deixando somente deps de produção
+# Mantém apenas dependências de produção
 RUN pnpm prune --prod
 
 
@@ -40,25 +43,26 @@ RUN pnpm prune --prod
 FROM base AS runtime
 WORKDIR /app
 
-# Copia node_modules otimizados
+# Copia node_modules gerado no build (já só com deps de prod)
 COPY --from=build /app/node_modules ./node_modules
 
-# Copia código já buildado para a imagem final
+# Copia dist + package.json da API
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 
+# Copia dist + package.json dos packages usados pela API
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/
 
 COPY --from=build /app/packages/ai/dist ./packages/ai/dist
 COPY --from=build /app/packages/ai/package.json ./packages/ai/
 
-# Copia root manifests necessários para resolução de módulos
+# Copia manifests raiz (para resolução de workspaces se necessário)
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
 # Porta da API
 EXPOSE 3001
 
-# Comando final
+# Comando de entrada
 CMD ["node", "apps/api/dist/server.js"]
