@@ -1,59 +1,64 @@
-# ---------- Base ----------
+# ==========================
+#       Base Image
+# ==========================
 FROM node:20-alpine AS base
 WORKDIR /app
 
-# Install system dependencies for Prisma and tfjs-node
 RUN apk add --no-cache libc6-compat openssl curl
 
-# ---------- Build ----------
+
+# ==========================
+#       Builder Stage
+# ==========================
 FROM base AS build
 
-# Enable corepack and prepare pnpm
+# Instala pnpm via corepack
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 
-# Copy monorepo manifests
+# Copia arquivos do monorepo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
-# Copy workspace package.json files
-COPY apps/api/package.json apps/api/
-COPY packages/core/package.json packages/core/
-COPY packages/ai/package.json packages/ai/
+# Copia códigos dos pacotes e apps
+COPY apps ./apps
+COPY packages ./packages
 
-# Install all dependencies (dev+prod) with frozen lockfile
+# Instala dependências (todas)
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
-COPY packages ./packages
-COPY apps/api ./apps/api
-
-# Build packages in dependency order
+# Build de cada package/app
 RUN pnpm --filter @superseller/core build
 RUN pnpm --filter @superseller/ai build
 RUN pnpm --filter @superseller/api build
 
-# ---------- Runtime Sem Prisma ----------
+# Remove devDependencies deixando somente deps de produção
+RUN pnpm prune --prod
+
+
+# ==========================
+#       Runtime Stage
+# ==========================
 FROM base AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
 
-# Copy node_modules from build stage (includes Prisma + engines)
+# Copia node_modules otimizados
 COPY --from=build /app/node_modules ./node_modules
 
-# Copy built packages
-COPY --from=build /app/packages/core/dist ./packages/core/dist
-COPY --from=build /app/packages/core/package.json ./packages/core/
-COPY --from=build /app/packages/ai/dist ./packages/ai/dist
-COPY --from=build /app/packages/ai/package.json ./packages/ai/
-
-# Copy API dist and package.json
+# Copia código já buildado para a imagem final
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 
-# Copy root package.json + workspace file
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/package.json ./packages/core/
+
+COPY --from=build /app/packages/ai/dist ./packages/ai/dist
+COPY --from=build /app/packages/ai/package.json ./packages/ai/
+
+# Copia root manifests necessários para resolução de módulos
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
+# Porta da API
 EXPOSE 3001
 
+# Comando final
 CMD ["node", "apps/api/dist/server.js"]
-
