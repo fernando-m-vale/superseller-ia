@@ -4,10 +4,6 @@
 
 data "aws_caller_identity" "current" {}
 
-variable "aws_region" {
-  type    = string
-  default = "us-east-2"
-}
 
 ############################################
 # Empacotar código das Lambdas em .zip
@@ -108,7 +104,6 @@ resource "aws_lambda_function" "power_shutdown" {
 
   environment {
     variables = {
-      AWS_REGION   = var.aws_region
       CLUSTER_NAME = "superseller-prod-cluster"
       ECS_SERVICES = jsonencode([
         "superseller-api-svc",
@@ -135,7 +130,6 @@ resource "aws_lambda_function" "power_startup" {
 
   environment {
     variables = {
-      AWS_REGION   = var.aws_region
       CLUSTER_NAME = "superseller-prod-cluster"
       ECS_SERVICES = jsonencode([
         "superseller-api-svc",
