@@ -356,5 +356,190 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
+    app.get('/mercadolivre/orders/:orderId', async (req, reply) => {
+    try {
+      const { userId, tenantId } = req as RequestWithAuth;
+
+      if (!userId || !tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const { orderId } = req.params as { orderId: string };
+
+      const connection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: tenantId,
+          type: 'mercadolivre',
+          status: 'active',
+        },
+      });
+
+      if (!connection) {
+        return reply
+          .status(404)
+          .send({ error: 'Mercado Livre connection not found' });
+      }
+
+      let accessToken = connection.access_token;
+
+      if (connection.expires_at && connection.expires_at < new Date()) {
+        const credentials = await getMercadoLivreCredentials();
+
+        try {
+          const refreshResponse = await axios.post(
+            `${ML_API_BASE}/oauth/token`,
+            {
+              grant_type: 'refresh_token',
+              client_id: credentials.clientId,
+              client_secret: credentials.clientSecret,
+              refresh_token: connection.refresh_token,
+            },
+            {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+            },
+          );
+
+          const { access_token, refresh_token, expires_in } =
+            refreshResponse.data;
+          const newExpiresAt = new Date(Date.now() + expires_in * 1000);
+
+          await prisma.marketplaceConnection.update({
+            where: {
+              id: connection.id,
+            },
+            data: {
+              access_token,
+              refresh_token,
+              expires_at: newExpiresAt,
+              updated_at: new Date(),
+            },
+          });
+
+          accessToken = access_token;
+        } catch (refreshError) {
+          app.log.error(refreshError);
+          return reply.status(401).send({
+            error:
+              'Token expired and refresh failed, please reconnect Mercado Livre',
+          });
+        }
+      }
+
+      const orderResponse = await axios.get(
+        `${ML_API_BASE}/orders/${orderId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      return reply.send({
+        ok: true,
+        order: orderResponse.data,
+      });
+    } catch (error) {
+      app.log.error(error);
+      return reply
+        .status(500)
+        .send({ error: 'Failed to fetch Mercado Livre order' });
+    }
+  });
+
+  app.get('/mercadolivre/items/:itemId', async (req, reply) => {
+    try {
+      const { userId, tenantId } = req as RequestWithAuth;
+
+      if (!userId || !tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const { itemId } = req.params as { itemId: string };
+
+      const connection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: tenantId,
+          type: 'mercadolivre',
+          status: 'active',
+        },
+      });
+
+      if (!connection) {
+        return reply
+          .status(404)
+          .send({ error: 'Mercado Livre connection not found' });
+      }
+
+      let accessToken = connection.access_token;
+
+      if (connection.expires_at && connection.expires_at < new Date()) {
+        const credentials = await getMercadoLivreCredentials();
+
+        try {
+          const refreshResponse = await axios.post(
+            `${ML_API_BASE}/oauth/token`,
+            {
+              grant_type: 'refresh_token',
+              client_id: credentials.clientId,
+              client_secret: credentials.clientSecret,
+              refresh_token: connection.refresh_token,
+            },
+            {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+            },
+          );
+
+          const { access_token, refresh_token, expires_in } =
+            refreshResponse.data;
+          const newExpiresAt = new Date(Date.now() + expires_in * 1000);
+
+          await prisma.marketplaceConnection.update({
+            where: {
+              id: connection.id,
+            },
+            data: {
+              access_token,
+              refresh_token,
+              expires_at: newExpiresAt,
+              updated_at: new Date(),
+            },
+          });
+
+          accessToken = access_token;
+        } catch (refreshError) {
+          app.log.error(refreshError);
+          return reply.status(401).send({
+            error:
+              'Token expired and refresh failed, please reconnect Mercado Livre',
+          });
+        }
+      }
+
+      const itemResponse = await axios.get(
+        `${ML_API_BASE}/items/${itemId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      return reply.send({
+        ok: true,
+        item: itemResponse.data,
+      });
+    } catch (error) {
+      app.log.error(error);
+      return reply
+        .status(500)
+        .send({ error: 'Failed to fetch Mercado Livre item' });
+    }
+  });
+
+
   done();
 };

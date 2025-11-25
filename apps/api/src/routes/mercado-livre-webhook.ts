@@ -1,5 +1,12 @@
 // apps/api/src/routes/mercado-livre-webhook.ts
 
+
+import {
+  handleMercadoLivreWebhook,
+  type MercadoLivreWebhookEvent,
+} from '../services/mercado-livre-webhook-processor';
+
+
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 
 /**
@@ -80,8 +87,8 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
         application_id !== undefined ? Number(application_id) : undefined;
 
       // 🗂️ Estrutura normalizada (futuro: fila / worker)
-      const normalizedEvent = {
-        provider: "mercado-livre" as const,
+            const normalizedEvent: MercadoLivreWebhookEvent = {
+        provider: 'mercado-livre',
         topic,
         resource,
         userId: normalizedUserId,
@@ -95,11 +102,17 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
 
       app.log.debug(
         {
-          source: "mercado-livre-webhook",
+          source: 'mercado-livre-webhook',
           normalizedEvent,
         },
-        "Evento Mercado Livre normalizado para processamento interno",
+        'Evento Mercado Livre normalizado para processamento interno',
       );
+
+      // Chama o processador interno (sincrono por enquanto)
+      await handleMercadoLivreWebhook(app, normalizedEvent);
+
+      return reply.status(200).send({ ok: true });
+
 
       // TODO: Persistir em fila / banco e disparar processamento assíncrono
 
