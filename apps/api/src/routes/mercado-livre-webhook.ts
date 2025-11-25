@@ -32,8 +32,6 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
     "/api/v1/webhooks/mercadolivre",
     {
       schema: {
-        description:
-          "Endpoint para recebimento de notificações (webhooks) do Mercado Livre.",
         body: {
           type: "object",
           additionalProperties: true,
@@ -57,7 +55,6 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
             },
           },
         },
-        tags: ["mercado-livre", "webhooks"],
       },
     },
     async (request, reply) => {
@@ -100,9 +97,7 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
           "Payload de webhook do Mercado Livre sem campos mínimos (resource/topic/user_id)",
         );
 
-        // ⚠️ Importante:
         // Mesmo com payload inválido, retornamos 200 para evitar retries infinitos
-        // do Mercado Livre. Apenas registramos log para monitoramento.
         return reply.status(200).send({ ok: true });
       }
 
@@ -111,8 +106,7 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
       const normalizedApplicationId =
         application_id !== undefined ? Number(application_id) : undefined;
 
-      // 🗂️ TODO: Enfileirar esse evento para processamento assíncrono
-      // Exemplo de estrutura que você pode colocar em uma fila futuramente:
+      // 🗂️ Estrutura normalizada (futuro: fila / worker)
       const normalizedEvent = {
         provider: "mercado-livre" as const,
         topic,
@@ -134,14 +128,8 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
         "Evento Mercado Livre normalizado para processamento interno",
       );
 
-      // 🧠 FUTURO:
-      // - Persistir em uma fila (SQS, DynamoDB stream, etc.)
-      // - Disparar um worker/lambda para:
-      //   - Chamar a API do Mercado Livre usando `resource`
-      //   - Enriquecer dados (ex.: detalhes da ordem)
-      //   - Atualizar modelos internos de scoring / health score
+      // TODO: Persistir em fila / banco e disparar processamento assíncrono
 
-      // Por enquanto, apenas logamos e devolvemos 200 OK.
       return reply.status(200).send({ ok: true });
     },
   );
