@@ -1,0 +1,148 @@
+// apps/api/src/routes/mercado-livre-webhook.ts
+
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+
+/**
+ * Estrutura base do payload de webhook do Mercado Livre.
+ * Referência (simplificada) da documentação:
+ * https://developers.mercadolivre.com.br/en_us/products-receive-notifications
+ */
+interface MercadoLivreWebhookPayload {
+  resource?: string;       // Ex.: "/orders/1234567890"
+  user_id?: number | string;
+  topic?: string;          // Ex.: "orders_v2", "items", "questions"
+  application_id?: number | string;
+  attempts?: number;
+  sent?: string;           // ISO date
+  received?: string;       // ISO date
+}
+
+/**
+ * Plugin de rotas de webhook do Mercado Livre
+ *
+ * URL pública configurada no DevCenter:
+ *   https://api.superselleria.com.br/api/v1/webhooks/mercadolivre
+ */
+export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
+  app: FastifyInstance,
+) => {
+  app.post<{
+    Body: MercadoLivreWebhookPayload;
+  }>(
+    "/api/v1/webhooks/mercadolivre",
+    {
+      schema: {
+        description:
+          "Endpoint para recebimento de notificações (webhooks) do Mercado Livre.",
+        body: {
+          type: "object",
+          additionalProperties: true,
+          properties: {
+            resource: { type: "string" },
+            user_id: { anyOf: [{ type: "number" }, { type: "string" }] },
+            topic: { type: "string" },
+            application_id: {
+              anyOf: [{ type: "number" }, { type: "string" }],
+            },
+            attempts: { type: "number" },
+            sent: { type: "string" },
+            received: { type: "string" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              ok: { type: "boolean" },
+            },
+          },
+        },
+        tags: ["mercado-livre", "webhooks"],
+      },
+    },
+    async (request, reply) => {
+      const payload = request.body ?? {};
+      const {
+        resource,
+        topic,
+        user_id,
+        application_id,
+        attempts,
+        sent,
+        received,
+      } = payload;
+
+      // 🔎 Log estruturado do evento recebido
+      app.log.info(
+        {
+          source: "mercado-livre-webhook",
+          topic,
+          resource,
+          user_id,
+          application_id,
+          attempts,
+          sent,
+          received,
+          rawPayload: payload,
+        },
+        "Webhook do Mercado Livre recebido",
+      );
+
+      // ✅ Validação mínima de campos obrigatórios
+      if (!resource || !topic || !user_id) {
+        app.log.warn(
+          {
+            source: "mercado-livre-webhook",
+            resource,
+            topic,
+            user_id,
+          },
+          "Payload de webhook do Mercado Livre sem campos mínimos (resource/topic/user_id)",
+        );
+
+        // ⚠️ Importante:
+        // Mesmo com payload inválido, retornamos 200 para evitar retries infinitos
+        // do Mercado Livre. Apenas registramos log para monitoramento.
+        return reply.status(200).send({ ok: true });
+      }
+
+      // 🔄 Normalização de tipos
+      const normalizedUserId = Number(user_id);
+      const normalizedApplicationId =
+        application_id !== undefined ? Number(application_id) : undefined;
+
+      // 🗂️ TODO: Enfileirar esse evento para processamento assíncrono
+      // Exemplo de estrutura que você pode colocar em uma fila futuramente:
+      const normalizedEvent = {
+        provider: "mercado-livre" as const,
+        topic,
+        resource,
+        userId: normalizedUserId,
+        applicationId: normalizedApplicationId,
+        attempts: attempts ?? 1,
+        timestamps: {
+          sent,
+          received,
+        },
+      };
+
+      app.log.debug(
+        {
+          source: "mercado-livre-webhook",
+          normalizedEvent,
+        },
+        "Evento Mercado Livre normalizado para processamento interno",
+      );
+
+      // 🧠 FUTURO:
+      // - Persistir em uma fila (SQS, DynamoDB stream, etc.)
+      // - Disparar um worker/lambda para:
+      //   - Chamar a API do Mercado Livre usando `resource`
+      //   - Enriquecer dados (ex.: detalhes da ordem)
+      //   - Atualizar modelos internos de scoring / health score
+
+      // Por enquanto, apenas logamos e devolvemos 200 OK.
+      return reply.status(200).send({ ok: true });
+    },
+  );
+};
