@@ -30,33 +30,6 @@ export const mercadoLivreWebhookRoutes: FastifyPluginAsync = async (
     Body: MercadoLivreWebhookPayload;
   }>(
     "/api/v1/webhooks/mercadolivre",
-    {
-      schema: {
-        body: {
-          type: "object",
-          additionalProperties: true,
-          properties: {
-            resource: { type: "string" },
-            user_id: { anyOf: [{ type: "number" }, { type: "string" }] },
-            topic: { type: "string" },
-            application_id: {
-              anyOf: [{ type: "number" }, { type: "string" }],
-            },
-            attempts: { type: "number" },
-            sent: { type: "string" },
-            received: { type: "string" },
-          },
-        },
-        response: {
-          200: {
-            type: "object",
-            properties: {
-              ok: { type: "boolean" },
-            },
-          },
-        },
-      },
-    },
     async (request, reply) => {
       const payload = request.body ?? {};
       const {
