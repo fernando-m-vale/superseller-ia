@@ -12,6 +12,7 @@ interface ShopeeCredentials {
 interface MercadoLivreCredentials {
   clientId: string;
   clientSecret: string;
+  redirectUri: string;
 }
 
 const secretCache = new Map<string, Record<string, string>>();
@@ -57,16 +58,31 @@ export async function getShopeeCredentials(): Promise<ShopeeCredentials> {
 }
 
 export async function getMercadoLivreCredentials(): Promise<MercadoLivreCredentials> {
-  if (process.env.NODE_ENV === 'development' || !process.env.AWS_REGION) {
-    return {
-      clientId: process.env.MERCADOLIVRE_CLIENT_ID || 'dev-client-id',
-      clientSecret: process.env.MERCADOLIVRE_CLIENT_SECRET || 'dev-client-secret',
-    };
+  // Tentamos ler de várias envs possíveis para ser compatível com dev/prod
+  const clientId =
+    process.env.MERCADOLIVRE_CLIENT_ID ||
+    process.env.ML_APP_ID ||
+    '';
+
+  const clientSecret =
+    process.env.MERCADOLIVRE_CLIENT_SECRET ||
+    process.env.ML_APP_SECRET ||
+    '';
+
+  const redirectUri =
+    process.env.MERCADOLIVRE_REDIRECT_URI ||
+    process.env.ML_REDIRECT_URI ||
+    'http://localhost:3001/api/v1/auth/mercadolivre/callback';
+
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      'Mercado Livre credentials not configured. Check MERCADOLIVRE_CLIENT_ID / MERCADOLIVRE_CLIENT_SECRET or ML_APP_ID / ML_APP_SECRET.',
+    );
   }
 
-  const secret = await getSecret('superseller/mercadolivre/credentials');
   return {
-    clientId: secret.clientId,
-    clientSecret: secret.clientSecret,
+    clientId,
+    clientSecret,
+    redirectUri,
   };
 }

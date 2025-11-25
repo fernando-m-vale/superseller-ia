@@ -7,7 +7,6 @@ import { getMercadoLivreCredentials } from '../lib/secrets';
 const prisma = new PrismaClient();
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
-const REDIRECT_URI = process.env.MERCADOLIVRE_REDIRECT_URI || 'http://localhost:3001/api/v1/auth/mercadolivre/callback';
 
 interface RequestWithAuth {
   userId?: string;
@@ -16,33 +15,36 @@ interface RequestWithAuth {
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   app.get('/auth/mercadolivre/authorize', async (req, reply) => {
-    try {
-      const { userId, tenantId } = req as RequestWithAuth;
+  try {
+    const { userId, tenantId } = req as RequestWithAuth;
 
-      if (!userId || !tenantId) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-      }
-
-      const credentials = await getMercadoLivreCredentials();
-      const state = crypto.randomBytes(16).toString('hex');
-
-      const stateData = JSON.stringify({ tenantId, userId, nonce: state });
-      const encodedState = Buffer.from(stateData).toString('base64');
-
-      const authUrl = new URL(`${ML_API_BASE}/authorization`);
-      authUrl.searchParams.append('response_type', 'code');
-      authUrl.searchParams.append('client_id', credentials.clientId);
-      authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
-      authUrl.searchParams.append('state', encodedState);
-
-      return reply.send({ authUrl: authUrl.toString() });
-    } catch (error) {
-      app.log.error(error);
-      return reply.status(500).send({ error: 'Failed to initiate Mercado Livre authorization' });
+    if (!userId || !tenantId) {
+      return reply.status(401).send({ error: 'Unauthorized' });
     }
-  });
 
-  app.get('/auth/mercadolivre/callback', async (req, reply) => {
+    const credentials = await getMercadoLivreCredentials();
+    const state = crypto.randomBytes(16).toString('hex');
+
+    const stateData = JSON.stringify({ tenantId, userId, nonce: state });
+    const encodedState = Buffer.from(stateData).toString('base64');
+
+    const authUrl = new URL(`${ML_API_BASE}/authorization`);
+    authUrl.searchParams.append('response_type', 'code');
+    authUrl.searchParams.append('client_id', credentials.clientId);
+    authUrl.searchParams.append('redirect_uri', credentials.redirectUri);
+    authUrl.searchParams.append('state', encodedState);
+
+    return reply.send({ authUrl: authUrl.toString() });
+  } catch (error) {
+    app.log.error(error);
+    return reply
+      .status(500)
+      .send({ error: 'Failed to initiate Mercado Livre authorization' });
+  }
+});
+
+
+    app.get('/auth/mercadolivre/callback', async (req, reply) => {
     try {
       const { code, state } = req.query as {
         code?: string;
@@ -69,14 +71,17 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
           client_id: credentials.clientId,
           client_secret: credentials.clientSecret,
           code,
-          redirect_uri: REDIRECT_URI,
+          redirect_uri: credentials.redirectUri,
         },
         {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
-        }
+        },
       );
+
+      // ... (resto do código igual)
+
 
       const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
