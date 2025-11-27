@@ -1,5 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 
+export interface HealthIssue {
+  code: string
+  severity: 'warning' | 'critical'
+  message: string
+}
+
 export interface Listing {
   id: string
   title: string
@@ -8,6 +14,8 @@ export interface Listing {
   stock: number
   status: string
   category?: string
+  healthScore?: number
+  healthIssues?: HealthIssue[]
 }
 
 export interface ListingsResponse {
