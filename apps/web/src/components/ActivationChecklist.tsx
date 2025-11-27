@@ -6,8 +6,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import { loadChecklistState, saveChecklistState, resetChecklistState } from '@/lib/storage'
 import { ChecklistState, INITIAL_CHECKLIST_STATE } from '@/types/onboarding'
+import { getMercadoLivreAuthUrl, getMercadoLivreHealth } from '@/lib/marketplaces'
 
 type ChecklistItemKey = keyof ChecklistState['completed']
 
@@ -51,12 +53,70 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
 export function ActivationChecklist() {
   const [state, setState] = useState<ChecklistState>(INITIAL_CHECKLIST_STATE)
   const [isClient, setIsClient] = useState(false)
+  const [mlConnecting, setMlConnecting] = useState(false)
+  const [mlConnected, setMlConnected] = useState(false)
+  const [mlError, setMlError] = useState<string | null>(null)
+  const [mlNickname, setMlNickname] = useState<string | null>(null)
 
   useEffect(() => {
     setIsClient(true)
     const loadedState = loadChecklistState()
     setState(loadedState)
+
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get('mercadolivre') === 'connected') {
+      const newState: ChecklistState = {
+        ...loadedState,
+        completed: {
+          ...loadedState.completed,
+          connectMarketplace: true,
+        },
+      }
+      setState(newState)
+      saveChecklistState(newState)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    checkMercadoLivreConnection()
   }, [])
+
+  const checkMercadoLivreConnection = async () => {
+    try {
+      const health = await getMercadoLivreHealth()
+      if (health && health.ok) {
+        setMlConnected(true)
+        setMlNickname(health.nickname)
+        
+        const currentState = loadChecklistState()
+        if (!currentState.completed.connectMarketplace) {
+          const newState: ChecklistState = {
+            ...currentState,
+            completed: {
+              ...currentState.completed,
+              connectMarketplace: true,
+            },
+          }
+          setState(newState)
+          saveChecklistState(newState)
+        }
+      }
+    } catch {
+      setMlConnected(false)
+    }
+  }
+
+  const handleConnectMercadoLivre = async () => {
+    setMlConnecting(true)
+    setMlError(null)
+    
+    try {
+      const authUrl = await getMercadoLivreAuthUrl()
+      window.location.href = authUrl
+    } catch (error) {
+      setMlError(error instanceof Error ? error.message : 'Erro ao conectar Mercado Livre')
+      setMlConnecting(false)
+    }
+  }
 
   const calculateProgress = (): number => {
     const completed = Object.values(state.completed).filter(Boolean).length
@@ -186,6 +246,26 @@ export function ActivationChecklist() {
                   >
                     {item.cta.label}
                   </a>
+                )}
+                {item.key === 'connectMarketplace' && (
+                  <div className="mt-2 flex items-center gap-2">
+                    {mlConnected ? (
+                      <Badge variant="default" className="bg-green-600">
+                        Mercado Livre conectado{mlNickname ? `: ${mlNickname}` : ''}
+                      </Badge>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={handleConnectMercadoLivre}
+                        disabled={mlConnecting}
+                      >
+                        {mlConnecting ? 'Conectando...' : 'Conectar Mercado Livre'}
+                      </Button>
+                    )}
+                    {mlError && (
+                      <span className="text-xs text-red-500">{mlError}</span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
