@@ -1,6 +1,7 @@
 import { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { ListingFilterSchema } from '../schemas';
+import { calculateListingHealth } from '../services/listing-health';
 
 const prisma = new PrismaClient();
 
@@ -48,6 +49,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
             marketplace: true,
             status: true,
             price: true,
+            stock: true,
             listing_id_ext: true,
             created_at: true,
           },
@@ -55,15 +57,26 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
       ]);
 
       return {
-        items: items.map((item: typeof items[0]) => ({
-          id: item.id,
-          title: item.title,
-          marketplace: item.marketplace,
-          status: item.status,
-          price: Number(item.price),
-          sku: item.listing_id_ext,
-          createdAt: item.created_at.toISOString(),
-        })),
+        items: items.map((item: typeof items[0]) => {
+          const health = calculateListingHealth({
+            title: item.title,
+            status: item.status,
+            stock: item.stock,
+            price: item.price,
+          });
+          return {
+            id: item.id,
+            title: item.title,
+            marketplace: item.marketplace,
+            status: item.status,
+            price: Number(item.price),
+            stock: item.stock,
+            sku: item.listing_id_ext,
+            createdAt: item.created_at.toISOString(),
+            healthScore: health.score,
+            healthIssues: health.issues,
+          };
+        }),
         total,
         page: q.page,
         pageSize: q.pageSize,

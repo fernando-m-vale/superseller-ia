@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Loader2, Search, AlertCircle } from 'lucide-react'
+import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -98,7 +98,7 @@ export function ListingsTable() {
                   <TableHead>Preço</TableHead>
                   <TableHead>Estoque</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Categoria</TableHead>
+                  <TableHead>Health Score</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,7 +132,35 @@ export function ListingsTable() {
                           {listing.status}
                         </span>
                       </TableCell>
-                      <TableCell>{listing.category || '-'}</TableCell>
+                      <TableCell>
+                        {listing.healthScore !== undefined ? (
+                          <div 
+                            className="flex items-center gap-2 cursor-help"
+                            title={listing.healthIssues && listing.healthIssues.length > 0 
+                              ? listing.healthIssues.map(i => i.message).join('\n') 
+                              : 'Anúncio saudável'}
+                          >
+                            {listing.healthScore >= 80 ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            ) : listing.healthScore >= 50 ? (
+                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4 text-red-600" />
+                            )}
+                            <span className={`font-medium ${
+                              listing.healthScore >= 80 
+                                ? 'text-green-600' 
+                                : listing.healthScore >= 50 
+                                  ? 'text-yellow-600' 
+                                  : 'text-red-600'
+                            }`}>
+                              {listing.healthScore}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))
                 )}

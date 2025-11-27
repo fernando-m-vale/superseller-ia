@@ -1,20 +1,21 @@
-import { FastifyPluginCallback } from 'fastify';
+import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import crypto from 'crypto';
 import { getMercadoLivreCredentials } from '../lib/secrets';
+import { authGuard } from '../plugins/auth';
 
 const prisma = new PrismaClient();
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
-interface RequestWithAuth {
+interface RequestWithAuth extends FastifyRequest {
   userId?: string;
   tenantId?: string;
 }
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
-  app.get('/auth/mercadolivre/authorize', async (req, reply) => {
+  app.get('/auth/mercadolivre/authorize', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
   try {
     const { userId, tenantId } = req as RequestWithAuth;
 
@@ -126,7 +127,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  app.get('/mercadolivre/sync', async (req, reply) => {
+  app.get('/mercadolivre/sync', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
@@ -261,7 +262,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-    app.get('/mercadolivre/health', async (req, reply) => {
+    app.get('/mercadolivre/health', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
@@ -356,7 +357,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-    app.get('/mercadolivre/orders/:orderId', async (req, reply) => {
+    app.get('/mercadolivre/orders/:orderId', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
@@ -448,7 +449,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  app.get('/mercadolivre/items/:itemId', async (req, reply) => {
+  app.get('/mercadolivre/items/:itemId', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
