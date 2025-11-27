@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 import { AIRecommendation, ActionStatus, AIRecommendationsResponse } from '@/types/ai';
 import { RecommendationsTable } from './components/RecommendationsTable';
 import { ImpactChart } from './components/ImpactChart';
+import { AuthGuard } from '@/components/AuthGuard';
+import { getApiBaseUrl } from '@/lib/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_URL = getApiBaseUrl();
 
-export default function AIRecommendationsPage() {
+function AIRecommendationsContent() {
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,5 +195,13 @@ export default function AIRecommendationsPage() {
         onExecute={handleExecute}
       />
     </div>
+  );
+}
+
+export default function AIRecommendationsPage() {
+  return (
+    <AuthGuard>
+      <AIRecommendationsContent />
+    </AuthGuard>
   );
 }

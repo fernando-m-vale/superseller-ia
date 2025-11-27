@@ -71,6 +71,23 @@ CORS_ORIGIN=http://localhost:3000
 NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 ```
 
+### 3.1) Configuração de URL da API (Frontend)
+
+O frontend usa a variável `NEXT_PUBLIC_API_URL` para determinar a URL base da API. A configuração segue esta prioridade:
+
+1. **Variável de ambiente** (`NEXT_PUBLIC_API_URL`): Se definida, usa este valor
+2. **Produção** (`NODE_ENV=production`): Usa `https://api.superselleria.com.br/api/v1`
+3. **Desenvolvimento**: Usa `http://localhost:3001/api/v1`
+
+**URLs por ambiente:**
+
+| Ambiente | URL da API |
+|----------|------------|
+| Desenvolvimento local | `http://localhost:3001/api/v1` |
+| Produção | `https://api.superselleria.com.br/api/v1` |
+
+**Importante:** A variável `NEXT_PUBLIC_API_URL` deve ser definida em **tempo de build** para o Next.js, pois variáveis `NEXT_PUBLIC_*` são incorporadas no bundle do cliente durante a compilação. No deploy de produção, isso é feito automaticamente via AWS Secrets Manager no workflow de CI/CD.
+
 ### 4) Rodar localmente
 ```bash
 # API

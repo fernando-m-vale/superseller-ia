@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useMetricsSummary } from '@/hooks/use-metrics-summary';
+import { AuthGuard } from '@/components/AuthGuard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Eye, MousePointerClick, ShoppingCart, DollarSign, Target, Award } from 'lucide-react';
 
-export default function OverviewPage() {
+function OverviewContent() {
   const [periodDays, setPeriodDays] = useState<number>(7);
   const [mounted, setMounted] = useState(false);
 
@@ -319,5 +320,13 @@ export default function OverviewPage() {
         Última atualização: {new Date(data.updatedAt).toLocaleString('pt-BR')}
       </div>
     </div>
+  );
+}
+
+export default function OverviewPage() {
+  return (
+    <AuthGuard>
+      <OverviewContent />
+    </AuthGuard>
   );
 }

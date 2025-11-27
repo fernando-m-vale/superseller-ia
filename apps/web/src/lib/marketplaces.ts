@@ -1,6 +1,7 @@
 import { getAccessToken } from './auth';
+import { getApiBaseUrl } from './api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+const API_URL = getApiBaseUrl();
 
 export interface MercadoLivreAuthResponse {
   authUrl: string;
