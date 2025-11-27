@@ -120,7 +120,7 @@ resource "aws_ecs_task_definition" "web" {
     environment = [
       { name = "NODE_ENV", value = "production" },
       { name = "PORT", value = tostring(var.web_container_port) },
-      {name  = "HOSTNAME" value = "0.0.0.0"}
+      { name = "HOSTNAME", value = "0.0.0.0"}
     ]
 
     secrets = [
@@ -140,12 +140,13 @@ resource "aws_ecs_task_definition" "web" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -fsS http://localhost:${var.web_container_port}/health || exit 1"]
-      interval    = 30
-      timeout     = 5
-      retries     = 3
-      startPeriod = 60
+     command     = ["CMD-SHELL", "curl -fsS http://$HOSTNAME:${var.web_container_port}/health || exit 1"]
+     interval    = 30
+     timeout     = 5
+     retries     = 3
+     startPeriod = 60
     }
+  
   }])
 
   tags = merge(local.common_tags, {
