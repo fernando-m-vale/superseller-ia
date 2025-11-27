@@ -119,7 +119,8 @@ resource "aws_ecs_task_definition" "web" {
 
     environment = [
       { name = "NODE_ENV", value = "production" },
-      { name = "PORT", value = tostring(var.web_container_port) }
+      { name = "PORT", value = tostring(var.web_container_port) },
+      {name  = "HOSTNAME" value = "0.0.0.0"}
     ]
 
     secrets = [
@@ -143,7 +144,7 @@ resource "aws_ecs_task_definition" "web" {
       interval    = 30
       timeout     = 5
       retries     = 3
-      startPeriod = 30
+      startPeriod = 60
     }
   }])
 

@@ -48,15 +48,13 @@ resource "aws_lb_target_group" "web" {
   target_type = "ip"
 
   health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-    path                = "/"
-    protocol            = "HTTP"
-    matcher             = "200"
-  }
+  path                = "/health"
+  matcher             = "200"
+  interval            = 30
+  timeout             = 5
+  healthy_threshold   = 2
+  unhealthy_threshold = 3
+}
 
   deregistration_delay = 30
 
