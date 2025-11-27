@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { getApiBaseUrl } from '@/lib/api'
 
 export interface HealthIssue {
   code: string
@@ -34,7 +35,7 @@ export interface ListingsFilters {
 }
 
 async function fetchListings(filters: ListingsFilters = {}): Promise<ListingsResponse> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+  const apiUrl = getApiBaseUrl()
   
   const params = new URLSearchParams()
   if (filters.q) params.append('q', filters.q)

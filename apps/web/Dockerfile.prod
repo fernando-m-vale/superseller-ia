@@ -20,6 +20,11 @@ RUN pnpm install --frozen-lockfile
 COPY packages ./packages
 COPY apps/web ./apps/web
 
+# Build argument for API URL (baked into client bundle at build time)
+# If not provided, the app will use the production default from lib/api.ts
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
 # Build packages in dependency order
 RUN pnpm --filter @superseller/core build
 RUN pnpm --filter web build

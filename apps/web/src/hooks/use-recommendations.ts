@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import type { RecommendationsResponse, RecommendationsFilters } from '@/types/recommendations'
+import { getApiBaseUrl } from '@/lib/api'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1'
+const API_URL = getApiBaseUrl()
 
 async function fetchRecommendations(filters: RecommendationsFilters): Promise<RecommendationsResponse> {
   const params = new URLSearchParams()

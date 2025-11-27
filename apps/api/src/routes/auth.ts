@@ -10,11 +10,24 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const JWT_EXPIRES_IN = '7d';
 const REFRESH_TOKEN_EXPIRES_IN = '30d';
 
-const RegisterSchema = z.object({
+// Accept either tenantName or storeName for flexibility
+// The UI shows "Store Name" but the API field is tenantName
+const RawRegisterSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  tenantName: z.string().min(1),
+  tenantName: z.string().min(1).optional(),
+  storeName: z.string().min(1).optional(),
+}).refine((data) => data.tenantName || data.storeName, {
+  message: 'tenantName or storeName is required',
+  path: ['tenantName'],
 });
+
+// Transform to normalize the field name
+const RegisterSchema = RawRegisterSchema.transform((data) => ({
+  email: data.email,
+  password: data.password,
+  tenantName: data.tenantName ?? data.storeName!,
+}));
 
 const LoginSchema = z.object({
   email: z.string().email(),

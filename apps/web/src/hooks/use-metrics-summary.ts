@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { getApiBaseUrl } from '@/lib/api';
 
 export interface MetricsSummary {
   tenantId: string;
@@ -34,7 +35,7 @@ export function useMetricsSummary(options: UseMetricsSummaryOptions = {}) {
         params.set('marketplace', marketplace);
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+      const apiUrl = getApiBaseUrl();
       const response = await fetch(`${apiUrl}/metrics/summary?${params}`, {
         headers: {
           'x-tenant-id': 'demo-tenant',

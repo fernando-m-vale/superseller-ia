@@ -48,6 +48,24 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Fetch API URL from Secrets Manager
+        id: secrets
+        run: |
+          # Fetch NEXT_PUBLIC_API_URL from AWS Secrets Manager
+          # This is needed at build time because Next.js inlines NEXT_PUBLIC_* vars into the client bundle
+          API_URL=$(aws secretsmanager get-secret-value \
+            --secret-id prod/NEXT_PUBLIC_API_URL \
+            --query SecretString \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -n "$API_URL" ]; then
+            echo "NEXT_PUBLIC_API_URL=$API_URL" >> "$GITHUB_OUTPUT"
+            echo "Found NEXT_PUBLIC_API_URL in Secrets Manager"
+          else
+            echo "NEXT_PUBLIC_API_URL not found in Secrets Manager, using default"
+            echo "NEXT_PUBLIC_API_URL=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build & push image
         id: build-image
         run: |
@@ -56,7 +74,10 @@ jobs:
           LATEST_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:latest
           
           echo "Building Docker image..."
-          docker build -f apps/web/Dockerfile.prod -t "$FULL_IMAGE_URI" -t "$LATEST_IMAGE_URI" .
+          # Pass NEXT_PUBLIC_API_URL as build arg (if empty, the app uses production default from lib/api.ts)
+          docker build -f apps/web/Dockerfile.prod \
+            --build-arg NEXT_PUBLIC_API_URL="${{ steps.secrets.outputs.NEXT_PUBLIC_API_URL }}" \
+            -t "$FULL_IMAGE_URI" -t "$LATEST_IMAGE_URI" .
           
           echo "Pushing images to ECR..."
           docker push "$FULL_IMAGE_URI"
