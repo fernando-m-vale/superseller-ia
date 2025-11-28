@@ -138,15 +138,6 @@ resource "aws_ecs_task_definition" "web" {
         "awslogs-stream-prefix" = "ecs"
       }
     }
-
-    healthCheck = {
-     command     = ["CMD-SHELL", "curl -fsS http://$HOSTNAME:${var.web_container_port}/health || exit 1"]
-     interval    = 30
-     timeout     = 5
-     retries     = 3
-     startPeriod = 60
-    }
-  
   }])
 
   tags = merge(local.common_tags, {
