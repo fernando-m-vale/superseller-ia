@@ -74,6 +74,10 @@ export async function buildApp() {
   // Health check
   app.get('/health', async () => ({ status: 'ok' }));
 
+  // Health check com prefixo /api/v1 (para monitoramento e testes)
+  app.get('/api/v1/health', async () => ({ status: 'ok' }));
+
+
   return app;
 }
 
