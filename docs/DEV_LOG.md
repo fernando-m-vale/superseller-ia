@@ -54,3 +54,17 @@
 
 ## [2025-12-01] Refatoração de Infra e Diagnóstico de DB
 **Partner:** Gemini | **Status:** Em Andamento
+
+## [2025-12-01] Resolução de Conectividade App Runner <-> RDS
+**Status:** Resolvido
+
+### Problema
+Erro `P1001: Can't reach database server` e `Timed out fetching connection` ao tentar registrar usuário, mesmo com a senha correta.
+
+### Causa Raiz
+Bloqueio de **Security Group**. O RDS estava aceitando conexões apenas do Bastion Host e de si mesmo, mas bloqueava o tráfego vindo do novo serviço App Runner.
+
+### Solução Aplicada
+1.  Identificado o ID do Security Group do App Runner.
+2.  Adicionada regra de entrada (Inbound Rule) no Security Group do RDS permitindo tráfego TCP/5432 vindo do SG do App Runner.
+3.  Conexão estabelecida com sucesso. Registro de usuário validado em produção.
