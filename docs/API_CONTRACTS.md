@@ -1,5 +1,4 @@
 # Contratos de API e Dados
-
 ## 1. Estrutura do Banco de Dados (Prisma Schema)
 *Atenção: A fonte da verdade é o arquivo `apps/api/prisma/schema.prisma`.*
 
