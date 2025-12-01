@@ -54,10 +54,10 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [aws_security_group.rds[0].id]
   publicly_accessible    = false
 
-  multi_az               = var.rds_multi_az
+  multi_az                = var.rds_multi_az
   backup_retention_period = 7
-  backup_window          = "03:00-04:00"
-  maintenance_window     = "mon:04:00-mon:05:00"
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "mon:04:00-mon:05:00"
 
   enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
 
@@ -83,6 +83,6 @@ resource "aws_secretsmanager_secret" "rds_url" {
 resource "aws_secretsmanager_secret_version" "rds_url" {
   count = var.enable_rds ? 1 : 0
 
-  secret_id = aws_secretsmanager_secret.rds_url[0].id
+  secret_id     = aws_secretsmanager_secret.rds_url[0].id
   secret_string = "postgresql://${var.rds_username}:${random_password.rds[0].result}@${aws_db_instance.main[0].endpoint}/${var.rds_database_name}"
 }

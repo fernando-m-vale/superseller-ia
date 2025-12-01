@@ -1,0 +1,54 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AppRunnerDeploy",
+      "Effect": "Allow",
+      "Action": [
+        "apprunner:StartDeployment",
+        "apprunner:DescribeService",
+        "apprunner:ListServices"
+      ],
+      "Resource": [
+        "arn:aws:apprunner:us-east-2:234642166969:service/superseller-api/*",
+        "arn:aws:apprunner:us-east-2:234642166969:service/superseller-web/*"
+      ]
+    },
+    {
+      "Sid": "ECRLogin",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECRPush",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload"
+      ],
+      "Resource": [
+        "arn:aws:ecr:us-east-2:234642166969:repository/superseller/api",
+        "arn:aws:ecr:us-east-2:234642166969:repository/superseller/web"
+      ]
+    },
+    {
+      "Sid": "SecretsRead",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": [
+        "arn:aws:secretsmanager:us-east-2:234642166969:secret:prod/*"
+      ]
+    }
+  ]
+}
+

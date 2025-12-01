@@ -17,7 +17,7 @@ AWS IAM OIDC Provider
     ↓ (validates token against trust policy)
 IAM Role (superseller-github-oidc-dev)
     ↓ (assumes role)
-AWS Services (ECR, ECS, etc.)
+AWS Services (ECR, App Runner, Secrets Manager)
 ```
 
 ## Configuration
@@ -50,12 +50,35 @@ The trust policy determines which GitHub workflows can assume the role. Two vari
 - Allows: `repo:fernando-m-vale/superseller-ia:*`
 - Use this temporarily to allow all branches, PRs, and tags
 
-#### 4. IAM Permissions
-The role must have permissions to:
-- ECR: `ecr:GetAuthorizationToken`, `ecr:BatchCheckLayerAvailability`, `ecr:PutImage`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload`, `ecr:DescribeRepositories`
-- ECS: `ecs:DescribeClusters`, `ecs:DescribeServices`, `ecs:UpdateService`, `ecs:RegisterTaskDefinition`, `ecs:DescribeTaskDefinition`
-- Secrets Manager: `secretsmanager:GetSecretValue` (for application secrets)
-- CloudWatch Logs: `logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents`, `logs:DescribeLogGroups`
+#### 4. IAM Permissions (App Runner)
+
+The role must have permissions to deploy to App Runner. Use the policy in `infra/oidc/apprunner-deploy-policy.json`:
+
+**App Runner Permissions:**
+- `apprunner:StartDeployment` - Trigger new deployments
+- `apprunner:DescribeService` - Check deployment status
+- `apprunner:ListServices` - List available services
+
+**ECR Permissions:**
+- `ecr:GetAuthorizationToken` - Login to ECR
+- `ecr:BatchCheckLayerAvailability`, `ecr:PutImage`, `ecr:InitiateLayerUpload`, `ecr:UploadLayerPart`, `ecr:CompleteLayerUpload` - Push images
+
+**Secrets Manager:**
+- `secretsmanager:GetSecretValue` - Read build-time secrets (e.g., NEXT_PUBLIC_API_URL)
+
+##### Apply App Runner Deploy Policy
+
+```bash
+# Create the policy
+aws iam create-policy \
+  --policy-name superseller-apprunner-deploy \
+  --policy-document file://infra/oidc/apprunner-deploy-policy.json
+
+# Attach to the OIDC role
+aws iam attach-role-policy \
+  --role-name superseller-github-oidc-dev \
+  --policy-arn arn:aws:iam::234642166969:policy/superseller-apprunner-deploy
+```
 
 ### GitHub Side
 
@@ -67,11 +90,10 @@ Configure these in GitHub: **Settings → Secrets and variables → Actions → 
 | `AWS_ACCOUNT_ID` | `234642166969` | AWS account ID |
 | `AWS_REGION` | `us-east-2` | AWS region for resources |
 | `OIDC_ROLE` | `superseller-github-oidc-dev` | IAM role name to assume |
-| `ECS_CLUSTER_NAME` | `superseller-prod-cluster` | ECS cluster name |
-| `ECS_SERVICE_API_NAME` | `superseller-api-svc` | ECS service name for API |
-| `ECS_SERVICE_WEB_NAME` | `superseller-web-svc` | ECS service name for WEB |
 | `ECR_API_REPO` | `superseller/api` | ECR repository for API |
 | `ECR_WEB_REPO` | `superseller/web` | ECR repository for WEB |
+
+**Note:** ECS-related variables (`ECS_CLUSTER_NAME`, `ECS_SERVICE_*`) are no longer needed with App Runner.
 
 #### Workflow Configuration
 All workflows that need AWS access must include:
@@ -96,6 +118,22 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.OIDC_ROLE }}
           aws-region: ${{ vars.AWS_REGION }}
+```
+
+## App Runner Service ARNs
+
+The deploy workflows use these App Runner service ARNs (defined in the workflow files):
+
+| Service | ARN |
+|---------|-----|
+| API | `arn:aws:apprunner:us-east-2:234642166969:service/superseller-api/8586afa61cff49f0b03ee6a5675772aa` |
+| WEB | `arn:aws:apprunner:us-east-2:234642166969:service/superseller-web/bfc34e44dba340259ae9812f392fe204` |
+
+To get the current ARNs from Terraform:
+```bash
+cd infra/terraform/prod
+terraform output apprunner_api_service_arn
+terraform output apprunner_web_service_arn
 ```
 
 ## OIDC 'sub' Claim Patterns
@@ -128,7 +166,7 @@ The `sub` claim in the OIDC token identifies the workflow context. Different tri
 - Shows expected `sub` claim pattern
 - Attempts AWS authentication via OIDC
 - Lists ECR repositories
-- Describes ECS cluster
+- Describes App Runner services
 - Provides troubleshooting guidance
 
 ### 2. Pre-Deploy Readiness
@@ -143,10 +181,8 @@ The `sub` claim in the OIDC token identifies the workflow context. Different tri
 
 **What it checks**:
 - ✅ ECR repositories exist
-- ✅ ECS cluster exists and is ACTIVE
-- ⚠️  ECS services exist (optional for first deploy)
+- ✅ App Runner services exist and are RUNNING
 - ⚠️  CloudWatch log groups exist (optional)
-- ⚠️  ACM certificates exist for domains
 - ✅ Route53 hosted zone exists
 - ⚠️  Secrets Manager secrets exist
 
@@ -167,6 +203,22 @@ The `sub` claim in the OIDC token identifies the workflow context. Different tri
    aws iam update-assume-role-policy \
      --role-name superseller-github-oidc-dev \
      --policy-document file://iam/trust-policy-permissive.json
+   ```
+
+### Error: "Not authorized to perform apprunner:StartDeployment"
+
+**Cause**: The IAM role doesn't have App Runner permissions.
+
+**Solution**:
+1. Apply the App Runner deploy policy:
+   ```bash
+   aws iam create-policy \
+     --policy-name superseller-apprunner-deploy \
+     --policy-document file://infra/oidc/apprunner-deploy-policy.json
+
+   aws iam attach-role-policy \
+     --role-name superseller-github-oidc-dev \
+     --policy-arn arn:aws:iam::234642166969:policy/superseller-apprunner-deploy
    ```
 
 ### Error: "No OIDC provider found"
@@ -194,7 +246,7 @@ The `sub` claim in the OIDC token identifies the workflow context. Different tri
 **Solution**:
 1. Create the role in AWS IAM Console or via CLI
 2. Attach the trust policy from `iam/trust-policy-permissive.json`
-3. Attach necessary permissions (ECR, ECS, Secrets Manager, CloudWatch)
+3. Attach necessary permissions (ECR, App Runner, Secrets Manager)
 
 ### Error: "Access Denied" after successful authentication
 
@@ -205,9 +257,8 @@ The `sub` claim in the OIDC token identifies the workflow context. Different tri
 2. Add the required permission to the role's policy
 3. Common permissions needed:
    - `ecr:*` for ECR operations
-   - `ecs:*` for ECS operations
+   - `apprunner:*` for App Runner operations
    - `secretsmanager:GetSecretValue` for secrets
-   - `logs:*` for CloudWatch Logs
 
 ### Workflow doesn't trigger
 
@@ -300,6 +351,7 @@ After applying the trust policy:
 | Error Message | Cause | Solution |
 |--------------|-------|----------|
 | `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Trust policy doesn't match workflow | Update trust policy with correct `sub` pattern |
+| `Not authorized to perform apprunner:StartDeployment` | Missing App Runner permissions | Attach `apprunner-deploy-policy.json` to role |
 | `No OIDC provider found` | OIDC provider not configured | Create OIDC provider in AWS IAM |
 | `Role not found` | IAM role doesn't exist | Create IAM role with trust policy |
 | `Access Denied` | Missing permissions | Add required permissions to role policy |
@@ -310,4 +362,5 @@ After applying the trust policy:
 
 - [GitHub OIDC Documentation](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
 - [AWS IAM OIDC Documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html)
+- [AWS App Runner Documentation](https://docs.aws.amazon.com/apprunner/latest/dg/what-is-apprunner.html)
 - [aws-actions/configure-aws-credentials](https://github.com/aws-actions/configure-aws-credentials)

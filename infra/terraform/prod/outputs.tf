@@ -1,27 +1,32 @@
+# infra/terraform/prod/outputs.tf
+# =============================================================================
+# Outputs - App Runner Infrastructure
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# VPC
+# -----------------------------------------------------------------------------
 output "vpc_id" {
   description = "VPC ID"
   value       = var.vpc_id
 }
 
 output "public_subnet_ids" {
-  description = "Public subnet IDs used for ALB"
-  value       = local.alb_subnet_ids
+  description = "Public subnet IDs"
+  value       = local.public_subnet_ids
 }
 
 output "private_subnet_ids" {
-  description = "Private subnet IDs used for ECS and RDS"
-  value       = local.ecs_subnet_ids
+  description = "Private subnet IDs (used for VPC Connector and RDS)"
+  value       = local.private_subnet_ids
 }
 
-output "alb_security_group_id" {
-  description = "ALB Security Group ID"
-  value       = aws_security_group.alb.id
-}
-
-output "ecs_security_group_id" {
-  description = "ECS Security Group ID"
-  value       = aws_security_group.ecs.id
+# -----------------------------------------------------------------------------
+# Security Groups
+# -----------------------------------------------------------------------------
+output "apprunner_security_group_id" {
+  description = "App Runner VPC Connector Security Group ID"
+  value       = aws_security_group.apprunner.id
 }
 
 output "rds_security_group_id" {
@@ -29,6 +34,9 @@ output "rds_security_group_id" {
   value       = var.enable_rds ? aws_security_group.rds[0].id : null
 }
 
+# -----------------------------------------------------------------------------
+# ECR
+# -----------------------------------------------------------------------------
 output "ecr_api_repository_url" {
   description = "ECR API repository URL"
   value       = aws_ecr_repository.api.repository_url
@@ -39,91 +47,63 @@ output "ecr_web_repository_url" {
   value       = aws_ecr_repository.web.repository_url
 }
 
-output "ecs_task_role_arn" {
-  description = "ECS Task Role ARN"
-  value       = aws_iam_role.ecs_task.arn
+# -----------------------------------------------------------------------------
+# App Runner - Services
+# -----------------------------------------------------------------------------
+output "apprunner_api_service_arn" {
+  description = "App Runner API Service ARN"
+  value       = aws_apprunner_service.api.arn
 }
 
-output "ecs_execution_role_arn" {
-  description = "ECS Execution Role ARN"
-  value       = aws_iam_role.ecs_execution.arn
+output "apprunner_api_service_id" {
+  description = "App Runner API Service ID"
+  value       = aws_apprunner_service.api.service_id
 }
 
-output "ecs_cluster_id" {
-  description = "ECS Cluster ID"
-  value       = aws_ecs_cluster.main.id
+output "apprunner_api_service_url" {
+  description = "App Runner API Service URL (direct)"
+  value       = aws_apprunner_service.api.service_url
 }
 
-output "ecs_cluster_name" {
-  description = "ECS Cluster Name"
-  value       = aws_ecs_cluster.main.name
+output "apprunner_web_service_arn" {
+  description = "App Runner WEB Service ARN"
+  value       = aws_apprunner_service.web.arn
 }
 
-output "api_service_name" {
-  description = "API ECS Service Name"
-  value       = aws_ecs_service.api.name
+output "apprunner_web_service_id" {
+  description = "App Runner WEB Service ID"
+  value       = aws_apprunner_service.web.service_id
 }
 
-output "web_service_name" {
-  description = "Web ECS Service Name"
-  value       = aws_ecs_service.web.name
+output "apprunner_web_service_url" {
+  description = "App Runner WEB Service URL (direct)"
+  value       = aws_apprunner_service.web.service_url
 }
 
-output "api_task_definition_arn" {
-  description = "API Task Definition ARN"
-  value       = aws_ecs_task_definition.api.arn
+# -----------------------------------------------------------------------------
+# App Runner - VPC Connector
+# -----------------------------------------------------------------------------
+output "apprunner_vpc_connector_arn" {
+  description = "App Runner VPC Connector ARN"
+  value       = aws_apprunner_vpc_connector.main.arn
 }
 
-output "web_task_definition_arn" {
-  description = "Web Task Definition ARN"
-  value       = aws_ecs_task_definition.web.arn
+# -----------------------------------------------------------------------------
+# App Runner - IAM Roles
+# -----------------------------------------------------------------------------
+output "apprunner_ecr_access_role_arn" {
+  description = "App Runner ECR Access Role ARN"
+  value       = aws_iam_role.apprunner_ecr_access.arn
 }
 
-output "api_task_definition_revision" {
-  description = "API Task Definition Revision"
-  value       = aws_ecs_task_definition.api.revision
+output "apprunner_instance_role_arn" {
+  description = "App Runner Instance Role ARN"
+  value       = aws_iam_role.apprunner_instance.arn
 }
 
-output "web_task_definition_revision" {
-  description = "Web Task Definition Revision"
-  value       = aws_ecs_task_definition.web.revision
-}
-
-output "alb_arn" {
-  description = "ALB ARN"
-  value       = aws_lb.main.arn
-}
-
-output "alb_dns_name" {
-  description = "ALB DNS Name"
-  value       = aws_lb.main.dns_name
-}
-
-output "alb_zone_id" {
-  description = "ALB Zone ID"
-  value       = aws_lb.main.zone_id
-}
-
-output "api_target_group_arn" {
-  description = "API Target Group ARN"
-  value       = aws_lb_target_group.api.arn
-}
-
-output "web_target_group_arn" {
-  description = "Web Target Group ARN"
-  value       = aws_lb_target_group.web.arn
-}
-
-output "api_certificate_arn" {
-  description = "API ACM Certificate ARN"
-  value       = aws_acm_certificate.api.arn
-}
-
-output "web_certificate_arn" {
-  description = "Web ACM Certificate ARN"
-  value       = aws_acm_certificate.web.arn
-}
-
+# -----------------------------------------------------------------------------
+# DNS / URLs
+# -----------------------------------------------------------------------------
 output "api_fqdn" {
   description = "API Fully Qualified Domain Name"
   value       = local.api_fqdn
@@ -135,15 +115,54 @@ output "web_fqdn" {
 }
 
 output "api_url" {
-  description = "API URL"
-  value       = "https://${local.api_fqdn}"
+  description = "API URL (custom domain or App Runner direct)"
+  value       = var.enable_custom_domains ? "https://${local.api_fqdn}" : "https://${aws_apprunner_service.api.service_url}"
 }
 
 output "web_url" {
-  description = "Web URL"
-  value       = "https://${local.web_fqdn}"
+  description = "Web URL (custom domain or App Runner direct)"
+  value       = var.enable_custom_domains ? "https://${local.web_fqdn}" : "https://${aws_apprunner_service.web.service_url}"
 }
 
+# -----------------------------------------------------------------------------
+# Custom Domain Status
+# -----------------------------------------------------------------------------
+output "api_custom_domain_status" {
+  description = "API Custom Domain certificate status"
+  value       = var.enable_custom_domains ? aws_apprunner_custom_domain_association.api[0].status : "disabled"
+}
+
+output "web_custom_domain_status" {
+  description = "WEB Custom Domain certificate status"
+  value       = var.enable_custom_domains ? aws_apprunner_custom_domain_association.web[0].status : "disabled"
+}
+
+output "api_dns_target" {
+  description = "API DNS target for CNAME record"
+  value       = var.enable_custom_domains ? aws_apprunner_custom_domain_association.api[0].dns_target : aws_apprunner_service.api.service_url
+}
+
+output "web_dns_target" {
+  description = "WEB DNS target for CNAME record"
+  value       = var.enable_custom_domains ? aws_apprunner_custom_domain_association.web[0].dns_target : aws_apprunner_service.web.service_url
+}
+
+# -----------------------------------------------------------------------------
+# ACM Certificates (mantidos para custom domains)
+# -----------------------------------------------------------------------------
+output "api_certificate_arn" {
+  description = "API ACM Certificate ARN"
+  value       = aws_acm_certificate.api.arn
+}
+
+output "web_certificate_arn" {
+  description = "Web ACM Certificate ARN"
+  value       = aws_acm_certificate.web.arn
+}
+
+# -----------------------------------------------------------------------------
+# RDS (se habilitado)
+# -----------------------------------------------------------------------------
 output "rds_endpoint" {
   description = "RDS Endpoint (if enabled)"
   value       = var.enable_rds ? aws_db_instance.main[0].endpoint : null
@@ -152,14 +171,4 @@ output "rds_endpoint" {
 output "rds_database_name" {
   description = "RDS Database Name (if enabled)"
   value       = var.enable_rds ? var.rds_database_name : null
-}
-
-output "api_log_group" {
-  description = "API CloudWatch Log Group"
-  value       = aws_cloudwatch_log_group.api.name
-}
-
-output "web_log_group" {
-  description = "Web CloudWatch Log Group"
-  value       = aws_cloudwatch_log_group.web.name
 }

@@ -1,16 +1,16 @@
 ############################################
-# Data sources básicos (se já existirem em outro .tf, pode remover aqui)
+# Lambda Power Control - App Runner
+############################################
+# Funções Lambda para ligar/desligar os serviços App Runner
+# Útil para reduzir custos em horários de baixo uso
 ############################################
 
 data "aws_caller_identity" "current" {}
-
 
 ############################################
 # Empacotar código das Lambdas em .zip
 ############################################
 
-# path.module = infra/terraform/prod
-# subimos 2 níveis até infra/, depois lambda/...
 data "archive_file" "power_shutdown_zip" {
   type        = "zip"
   source_dir  = "${path.module}/../../lambda/power-shutdown"
@@ -24,7 +24,7 @@ data "archive_file" "power_startup_zip" {
 }
 
 ############################################
-# IAM Role + Policy para as Lambdas (apenas ECS + Logs)
+# IAM Role + Policy para as Lambdas (App Runner + Logs)
 ############################################
 
 resource "aws_iam_role" "lambda_power_role" {
@@ -45,18 +45,21 @@ resource "aws_iam_role" "lambda_power_role" {
 }
 
 data "aws_iam_policy_document" "lambda_power_policy_doc" {
-  # Permissões ECS
+  # Permissões App Runner
   statement {
-    sid    = "AllowECSUpdate"
+    sid    = "AllowAppRunnerControl"
     effect = "Allow"
 
     actions = [
-      "ecs:UpdateService",
-      "ecs:DescribeServices",
-      "ecs:DescribeClusters"
+      "apprunner:PauseService",
+      "apprunner:ResumeService",
+      "apprunner:DescribeService",
+      "apprunner:ListServices"
     ]
 
-    resources = ["*"]
+    resources = [
+      "arn:aws:apprunner:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/superseller-*"
+    ]
   }
 
   # Logs no CloudWatch
@@ -78,7 +81,7 @@ data "aws_iam_policy_document" "lambda_power_policy_doc" {
 
 resource "aws_iam_policy" "lambda_power_policy" {
   name        = "superseller-power-control-lambda-policy"
-  description = "Permissões para Ligar/Desligar ECS + Logs"
+  description = "Permissões para Pausar/Resumir App Runner + Logs"
   policy      = data.aws_iam_policy_document.lambda_power_policy_doc.json
 }
 
@@ -88,7 +91,7 @@ resource "aws_iam_role_policy_attachment" "lambda_power_attach" {
 }
 
 ############################################
-# Lambda: SHUTDOWN (desligar ambiente ECS)
+# Lambda: SHUTDOWN (pausar serviços App Runner)
 ############################################
 
 resource "aws_lambda_function" "power_shutdown" {
@@ -100,21 +103,21 @@ resource "aws_lambda_function" "power_shutdown" {
   filename         = data.archive_file.power_shutdown_zip.output_path
   source_code_hash = data.archive_file.power_shutdown_zip.output_base64sha256
 
-  timeout = 60
+  timeout = 120
 
   environment {
     variables = {
-      CLUSTER_NAME = "superseller-prod-cluster"
-      ECS_SERVICES = jsonencode([
-        "superseller-api-svc",
-        "superseller-web-svc"
+      # ARNs dos serviços App Runner
+      APPRUNNER_SERVICE_ARNS = jsonencode([
+        aws_apprunner_service.api.arn,
+        aws_apprunner_service.web.arn
       ])
     }
   }
 }
 
 ############################################
-# Lambda: STARTUP (ligar ambiente ECS)
+# Lambda: STARTUP (resumir serviços App Runner)
 ############################################
 
 resource "aws_lambda_function" "power_startup" {
@@ -126,14 +129,14 @@ resource "aws_lambda_function" "power_startup" {
   filename         = data.archive_file.power_startup_zip.output_path
   source_code_hash = data.archive_file.power_startup_zip.output_base64sha256
 
-  timeout = 300 # 5 minutos é mais do que suficiente só pra ECS
+  timeout = 300
 
   environment {
     variables = {
-      CLUSTER_NAME = "superseller-prod-cluster"
-      ECS_SERVICES = jsonencode([
-        "superseller-api-svc",
-        "superseller-web-svc"
+      # ARNs dos serviços App Runner
+      APPRUNNER_SERVICE_ARNS = jsonencode([
+        aws_apprunner_service.api.arn,
+        aws_apprunner_service.web.arn
       ])
     }
   }

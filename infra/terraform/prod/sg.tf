@@ -1,4 +1,7 @@
 # infra/terraform/prod/sg.tf
+# =============================================================================
+# Security Groups - App Runner + RDS
+# =============================================================================
 
 locals {
   default_tags = {
@@ -8,28 +11,34 @@ locals {
   }
 }
 
-# ALB: ingress público 80/443
-resource "aws_security_group" "alb" {
-  name        = "superseller-prod-alb-sg"
-  description = "ALB security group"
+# -----------------------------------------------------------------------------
+# App Runner VPC Connector Security Group
+# -----------------------------------------------------------------------------
+# Permite que os serviços App Runner acessem recursos na VPC (RDS)
+resource "aws_security_group" "apprunner" {
+  name        = "superseller-prod-apprunner-sg"
+  description = "Security group for App Runner VPC Connector"
   vpc_id      = var.vpc_id
 
-  ingress {
-    description = "HTTP from anywhere"
-    from_port   = 80
-    to_port     = 80
+  # Egress para RDS (PostgreSQL)
+  egress {
+    description = "PostgreSQL to RDS"
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [data.aws_vpc.main.cidr_block]
   }
 
-  ingress {
-    description = "HTTPS from anywhere"
+  # Egress para internet (APIs externas, etc.)
+  egress {
+    description = "HTTPS outbound"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Egress geral (necessário para DNS, etc.)
   egress {
     description = "Allow all outbound"
     from_port   = 0
@@ -38,43 +47,13 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = merge(local.default_tags, { Name = "superseller-prod-alb-sg" })
+  tags = merge(local.default_tags, { Name = "superseller-prod-apprunner-sg" })
 }
 
-# ECS: recebe tráfego do ALB nas portas 3000 (web) e 3001 (api)
-resource "aws_security_group" "ecs" {
-  name        = "superseller-prod-ecs-sg"
-  description = "ECS services security group"
-  vpc_id      = var.vpc_id
-
-  ingress {
-    description     = "Web (3000) from ALB"
-    from_port       = 3000
-    to_port         = 3000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  ingress {
-    description     = "API (3001) from ALB"
-    from_port       = 3001
-    to_port         = 3001
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    description = "Allow all outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = merge(local.default_tags, { Name = "superseller-prod-ecs-sg" })
-}
-
-# RDS: recebe 5432 apenas do ECS (habilite com var.enable_rds = true)
+# -----------------------------------------------------------------------------
+# RDS Security Group
+# -----------------------------------------------------------------------------
+# Recebe conexões PostgreSQL (5432) apenas do App Runner VPC Connector
 resource "aws_security_group" "rds" {
   count       = var.enable_rds ? 1 : 0
   name        = "superseller-prod-rds-sg"
@@ -82,11 +61,11 @@ resource "aws_security_group" "rds" {
   vpc_id      = var.vpc_id
 
   ingress {
-    description     = "Postgres from ECS"
+    description     = "Postgres from App Runner"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]
+    security_groups = [aws_security_group.apprunner.id]
   }
 
   egress {

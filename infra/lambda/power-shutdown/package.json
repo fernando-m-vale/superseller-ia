@@ -1,0 +1,10 @@
+{
+  "name": "superseller-power-shutdown",
+  "version": "1.0.0",
+  "description": "Lambda function to pause App Runner services",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-apprunner": "^3.0.0"
+  }
+}
+

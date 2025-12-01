@@ -1,46 +1,63 @@
-// Desliga apenas os serviços ECS (desiredCount = 0)
+// Pausa os serviços App Runner para reduzir custos
 
-const AWS = require('aws-sdk');
+const { AppRunnerClient, PauseServiceCommand, DescribeServiceCommand } = require('@aws-sdk/client-apprunner');
 
-const ecs = new AWS.ECS({ region: process.env.AWS_REGION || 'us-east-2' });
+const apprunner = new AppRunnerClient({ region: process.env.AWS_REGION || 'us-east-2' });
 
 exports.handler = async () => {
-  const cluster = process.env.CLUSTER_NAME;
-  const servicesJson = process.env.ECS_SERVICES || '[]';
+  const serviceArnsJson = process.env.APPRUNNER_SERVICE_ARNS || '[]';
 
-  if (!cluster) {
-    throw new Error('CLUSTER_NAME não definido nas variáveis de ambiente da Lambda');
+  let serviceArns;
+  try {
+    serviceArns = JSON.parse(serviceArnsJson);
+  } catch (e) {
+    throw new Error(`APPRUNNER_SERVICE_ARNS inválido (não é JSON válido): ${serviceArnsJson}`);
   }
 
-  let services;
-  try {
-    services = JSON.parse(servicesJson);
-  } catch (e) {
-    throw new Error(`ECS_SERVICES inválido (não é JSON válido): ${servicesJson}`);
+  if (serviceArns.length === 0) {
+    throw new Error('APPRUNNER_SERVICE_ARNS está vazio');
   }
 
   console.log('Iniciando shutdown do ambiente...');
-  console.log('Cluster:', cluster);
-  console.log('Serviços ECS:', services);
+  console.log('Serviços App Runner:', serviceArns);
 
-  // Zerar desiredCount dos serviços ECS
-  for (const service of services) {
-    console.log(`Atualizando serviço ECS ${service} para desiredCount=0...`);
-    await ecs.updateService({
-      cluster,
-      service,
-      desiredCount: 0,
-    }).promise();
+  const results = [];
+
+  for (const serviceArn of serviceArns) {
+    try {
+      // Verifica status atual do serviço
+      const describeCmd = new DescribeServiceCommand({ ServiceArn: serviceArn });
+      const describeResult = await apprunner.send(describeCmd);
+      const currentStatus = describeResult.Service.Status;
+
+      console.log(`Serviço ${serviceArn} - Status atual: ${currentStatus}`);
+
+      // Só pausa se estiver RUNNING
+      if (currentStatus === 'RUNNING') {
+        console.log(`Pausando serviço ${serviceArn}...`);
+        const pauseCmd = new PauseServiceCommand({ ServiceArn: serviceArn });
+        await apprunner.send(pauseCmd);
+        results.push({ serviceArn, action: 'paused', previousStatus: currentStatus });
+      } else if (currentStatus === 'PAUSED') {
+        console.log(`Serviço ${serviceArn} já está pausado.`);
+        results.push({ serviceArn, action: 'already_paused', previousStatus: currentStatus });
+      } else {
+        console.log(`Serviço ${serviceArn} está em estado ${currentStatus}, não é possível pausar.`);
+        results.push({ serviceArn, action: 'skipped', previousStatus: currentStatus });
+      }
+    } catch (error) {
+      console.error(`Erro ao pausar serviço ${serviceArn}:`, error.message);
+      results.push({ serviceArn, action: 'error', error: error.message });
+    }
   }
 
-  console.log('Shutdown concluído com sucesso.');
+  console.log('Shutdown concluído.');
 
   return {
     statusCode: 200,
     body: JSON.stringify({
       status: 'shutdown_completed',
-      cluster,
-      services,
+      results,
     }),
   };
 };

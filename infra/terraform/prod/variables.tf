@@ -1,3 +1,11 @@
+# infra/terraform/prod/variables.tf
+# =============================================================================
+# Variables - App Runner Infrastructure
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# AWS Configuration
+# -----------------------------------------------------------------------------
 variable "aws_region" {
   description = "AWS region for all resources"
   type        = string
@@ -16,6 +24,9 @@ variable "vpc_id" {
   default     = "vpc-097386e13a22a9c7b"
 }
 
+# -----------------------------------------------------------------------------
+# Domain Configuration
+# -----------------------------------------------------------------------------
 variable "domain_name" {
   description = "Root domain name"
   type        = string
@@ -34,36 +45,15 @@ variable "web_subdomain" {
   default     = "app"
 }
 
-variable "cluster_name" {
-  description = "ECS cluster name"
-  type        = string
-  default     = "superseller-prod-cluster"
+variable "enable_custom_domains" {
+  description = "Enable custom domain association for App Runner services (required for using your own domain with SSL)"
+  type        = bool
+  default     = true
 }
 
-variable "api_service_name" {
-  description = "API ECS service name"
-  type        = string
-  default     = "superseller-api-svc"
-}
-
-variable "web_service_name" {
-  description = "Web ECS service name"
-  type        = string
-  default     = "superseller-web-svc"
-}
-
-variable "api_task_family" {
-  description = "API task definition family"
-  type        = string
-  default     = "superseller-api"
-}
-
-variable "web_task_family" {
-  description = "Web task definition family"
-  type        = string
-  default     = "superseller-web"
-}
-
+# -----------------------------------------------------------------------------
+# App Runner - Container Ports
+# -----------------------------------------------------------------------------
 variable "api_container_port" {
   description = "API container port"
   type        = number
@@ -76,42 +66,39 @@ variable "web_container_port" {
   default     = 3000
 }
 
-variable "api_cpu" {
-  description = "API task CPU units"
+# -----------------------------------------------------------------------------
+# App Runner - API Service Configuration
+# -----------------------------------------------------------------------------
+variable "apprunner_api_cpu" {
+  description = "App Runner API service CPU (256, 512, 1024, 2048, 4096)"
   type        = string
   default     = "512"
 }
 
-variable "api_memory" {
-  description = "API task memory (MB)"
+variable "apprunner_api_memory" {
+  description = "App Runner API service memory (512, 1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288)"
   type        = string
   default     = "1024"
 }
 
-variable "web_cpu" {
-  description = "Web task CPU units"
+# -----------------------------------------------------------------------------
+# App Runner - WEB Service Configuration
+# -----------------------------------------------------------------------------
+variable "apprunner_web_cpu" {
+  description = "App Runner WEB service CPU (256, 512, 1024, 2048, 4096)"
   type        = string
   default     = "512"
 }
 
-variable "web_memory" {
-  description = "Web task memory (MB)"
+variable "apprunner_web_memory" {
+  description = "App Runner WEB service memory (512, 1024, 2048, 3072, 4096, 6144, 8192, 10240, 12288)"
   type        = string
   default     = "1024"
 }
 
-variable "api_desired_count" {
-  description = "Desired number of API tasks"
-  type        = number
-  default     = 1
-}
-
-variable "web_desired_count" {
-  description = "Desired number of Web tasks"
-  type        = number
-  default     = 1
-}
-
+# -----------------------------------------------------------------------------
+# RDS Configuration
+# -----------------------------------------------------------------------------
 variable "enable_rds" {
   description = "Enable RDS PostgreSQL database"
   type        = bool

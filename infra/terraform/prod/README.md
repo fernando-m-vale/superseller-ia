@@ -1,278 +1,254 @@
-# Super Seller IA - Production Infrastructure
+# SuperSeller IA - Infraestrutura AWS (App Runner)
 
-This directory contains Terraform configuration for provisioning the complete production infrastructure on AWS.
+## Arquitetura
 
-## Architecture Overview
+Esta infraestrutura usa **AWS App Runner** para executar os serviços de API e WEB, substituindo a arquitetura anterior baseada em ECS Fargate + ALB.
 
-The infrastructure includes:
+### Benefícios do App Runner
 
-- **ECR Repositories**: Docker image storage for API and Web applications
-- **ECS Fargate**: Serverless container orchestration
-- **Application Load Balancer**: HTTPS traffic distribution with path-based routing
-- **ACM Certificates**: SSL/TLS certificates for api.superselleria.com.br and app.superselleria.com.br
-- **Route53 DNS**: DNS records for both subdomains
-- **Security Groups**: Network isolation for ALB, ECS, and RDS
-- **IAM Roles**: Task and execution roles with least-privilege access
-- **CloudWatch Logs**: Centralized logging for all services
-- **RDS PostgreSQL** (optional): Managed database service
+- **Custo reduzido**: Paga apenas pelo tempo de execução real
+- **Simplicidade**: Menos recursos para gerenciar (sem ALB, Target Groups, ECS Cluster)
+- **Auto-scaling automático**: Escala automaticamente baseado na demanda
+- **Certificados SSL automáticos**: HTTPS incluído sem configuração adicional
+- **Deploy simplificado**: Push para ECR e atualiza automaticamente (se habilitado)
 
-## Prerequisites
-
-1. **AWS Credentials**: Configured via GitHub OIDC (role: `superseller-github-oidc-dev`)
-2. **Existing Resources**:
-   - VPC: `vpc-097386e13a22a9c7b`
-   - Route53 Hosted Zone: `superselleria.com.br`
-   - AWS Secrets Manager secrets (see below)
-
-## Required Secrets
-
-The following secrets must exist in AWS Secrets Manager before deployment:
+### Recursos Criados
 
 ```
-prod/DB_SSELLERIA          - Database connection URL
-prod/JWT_SECRET            - JWT signing secret
-prod/ML_APP_ID             - Mercado Livre App ID
-prod/ML_APP_SECRET         - Mercado Livre App Secret
-prod/ML_REDIRECT_URI       - Mercado Livre OAuth redirect URI
-prod/SHOPEE_CLIENT_ID      - Shopee Client ID
-prod/SHOPEE_CLIENT_SECRET  - Shopee Client Secret
-prod/SHOPEE_REDIRECT_URI   - Shopee OAuth redirect URI
-prod/NEXT_PUBLIC_API_URL   - API URL for frontend (https://api.superselleria.com.br/api/v1)
+┌─────────────────────────────────────────────────────────────────┐
+│                        AWS App Runner                           │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐          ┌─────────────────┐              │
+│  │  superseller-api │          │  superseller-web │              │
+│  │    (Porta 3001)  │          │    (Porta 3000)  │              │
+│  └────────┬────────┘          └────────┬────────┘              │
+│           │                            │                        │
+│           └──────────┬─────────────────┘                        │
+│                      │                                          │
+│           ┌──────────▼──────────┐                              │
+│           │   VPC Connector     │                              │
+│           │  (Private Subnets)  │                              │
+│           └──────────┬──────────┘                              │
+└──────────────────────┼──────────────────────────────────────────┘
+                       │
+          ┌────────────▼────────────┐
+          │     VPC (Existente)      │
+          │  ┌────────────────────┐  │
+          │  │   RDS PostgreSQL   │  │
+          │  │  (Private Subnet)  │  │
+          │  └────────────────────┘  │
+          └──────────────────────────┘
 ```
 
-## Infrastructure Components
+## Arquivos Terraform
 
-### Networking
+| Arquivo | Descrição |
+|---------|-----------|
+| `apprunner.tf` | Serviços App Runner (API/WEB), VPC Connector, IAM Roles |
+| `ecr.tf` | Repositórios ECR para imagens Docker |
+| `rds.tf` | RDS PostgreSQL (se enable_rds=true) |
+| `sg.tf` | Security Groups (App Runner, RDS) |
+| `secrets.tf` | Referências ao Secrets Manager |
+| `route53.tf` | DNS records para custom domains |
+| `acm.tf` | Certificados SSL/TLS |
+| `lambda-power-control.tf` | Lambdas para pausar/resumir serviços |
+| `variables.tf` | Variáveis de configuração |
+| `outputs.tf` | Outputs da infraestrutura |
+| `locals.tf` | Valores locais reutilizáveis |
+| `main.tf` | Data sources da VPC |
+| `providers.tf` | Configuração do provider AWS |
 
-- **VPC**: Uses existing VPC `vpc-097386e13a22a9c7b`
-- **Subnets**: Automatically discovers public and private subnets
-  - Public subnets: Used for ALB (internet-facing)
-  - Private subnets: Used for ECS tasks and RDS
+## Pré-requisitos
 
-### Security Groups
+1. **AWS CLI** configurado com credenciais válidas
+2. **Terraform** >= 1.6.0
+3. **Imagens Docker** nos repositórios ECR:
+   - `superseller/api:latest`
+   - `superseller/web:latest`
+4. **Secrets** configurados no Secrets Manager:
+   - `prod/DB_SSELLERIA` (DATABASE_URL)
+   - `prod/JWT_SECRET`
+   - `prod/ML_APP_ID`
+   - `prod/ML_APP_SECRET`
+   - `prod/ML_REDIRECT_URI`
+   - `prod/SHOPEE_CLIENT_ID`
+   - `prod/SHOPEE_CLIENT_SECRET`
+   - `prod/SHOPEE_REDIRECT_URI`
+   - `prod/NEXT_PUBLIC_API_URL`
 
-1. **ALB Security Group** (`superseller-prod-alb-sg`)
-   - Ingress: 80 (HTTP), 443 (HTTPS) from 0.0.0.0/0
-   - Egress: All traffic
+## Variáveis Principais
 
-2. **ECS Security Group** (`superseller-prod-ecs-sg`)
-   - Ingress: 3000 (Web), 3001 (API) from ALB only
-   - Egress: All traffic
+```hcl
+# App Runner - CPU e Memória
+apprunner_api_cpu    = "512"   # 256, 512, 1024, 2048, 4096
+apprunner_api_memory = "1024"  # 512-12288
+apprunner_web_cpu    = "512"
+apprunner_web_memory = "1024"
 
-3. **RDS Security Group** (`superseller-prod-rds-sg`) - if enabled
-   - Ingress: 5432 (PostgreSQL) from ECS only
-   - Egress: All traffic
+# Custom Domains
+enable_custom_domains = false  # true para usar api.superselleria.com.br
 
-### Container Services
+# RDS
+enable_rds = false  # true para criar novo RDS
+```
 
-- **ECS Cluster**: `superseller-prod-cluster`
-- **API Service**: `superseller-api-svc`
-  - Task: 512 CPU, 1024 MB memory
-  - Port: 3001
-  - Health check: `/health`
-- **Web Service**: `superseller-web-svc`
-  - Task: 512 CPU, 1024 MB memory
-  - Port: 3000
-  - Health check: `/`
+## Deploy
 
-### Load Balancing
-
-- **ALB**: `superseller-prod-alb`
-- **Listeners**:
-  - Port 80: Redirects to HTTPS
-  - Port 443: Routes traffic based on host header
-- **Target Groups**:
-  - API: Routes `api.superselleria.com.br` → API service
-  - Web: Routes `app.superselleria.com.br` → Web service
-
-### DNS & Certificates
-
-- **ACM Certificates**: Auto-validated via Route53 DNS
-  - `api.superselleria.com.br`
-  - `app.superselleria.com.br`
-- **Route53 Records**: A and AAAA aliases to ALB
-
-### Database (Optional)
-
-RDS PostgreSQL can be enabled by setting `enable_rds = true`:
-
-- Engine: PostgreSQL 15
-- Instance: db.t3.micro
-- Storage: 20 GB (auto-scaling up to 100 GB)
-- Multi-AZ: Disabled (can be enabled for production)
-- Backups: 7-day retention
-- Encryption: Enabled
-
-## Usage
-
-### Initial Setup
-
-1. **Configure AWS credentials** (via GitHub OIDC in CI/CD):
-   ```bash
-   # This is handled automatically by GitHub Actions
-   # Role: arn:aws:iam::234642166969:role/superseller-github-oidc-dev
-   ```
-
-2. **Initialize Terraform**:
-   ```bash
-   cd infra/terraform/prod
-   terraform init
-   ```
-
-3. **Review the plan**:
-   ```bash
-   terraform plan
-   ```
-
-4. **Apply the infrastructure**:
-   ```bash
-   terraform apply
-   ```
-
-### Enabling RDS
-
-To enable RDS PostgreSQL:
+### 1. Inicializar Terraform
 
 ```bash
-terraform apply -var="enable_rds=true"
+cd infra/terraform/prod
+terraform init
 ```
 
-**Note**: When RDS is disabled (default), the API must handle missing database connections gracefully or use an external database.
-
-### Updating Infrastructure
-
-1. Modify the Terraform files as needed
-2. Run `terraform plan` to review changes
-3. Run `terraform apply` to apply changes
-
-### Destroying Infrastructure
+### 2. Verificar plano de execução
 
 ```bash
-terraform destroy
+terraform plan
 ```
 
-**Warning**: This will delete all resources including data. Ensure backups are taken before destroying.
+### 3. Aplicar mudanças
 
-## Variables
+```bash
+terraform apply
+```
 
-Key variables can be customized in `variables.tf`:
+### 4. Deploy de nova imagem
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `aws_region` | `us-east-2` | AWS region |
-| `vpc_id` | `vpc-097386e13a22a9c7b` | VPC ID |
-| `domain_name` | `superselleria.com.br` | Root domain |
-| `enable_rds` | `false` | Enable RDS PostgreSQL |
-| `api_desired_count` | `1` | Number of API tasks |
-| `web_desired_count` | `1` | Number of Web tasks |
+```bash
+# Build e push para ECR
+aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 234642166969.dkr.ecr.us-east-2.amazonaws.com
+
+# API
+docker build -t superseller/api:latest -f apps/api/Dockerfile.prod .
+docker tag superseller/api:latest 234642166969.dkr.ecr.us-east-2.amazonaws.com/superseller/api:latest
+docker push 234642166969.dkr.ecr.us-east-2.amazonaws.com/superseller/api:latest
+
+# WEB
+docker build -t superseller/web:latest -f apps/web/Dockerfile.prod .
+docker tag superseller/web:latest 234642166969.dkr.ecr.us-east-2.amazonaws.com/superseller/web:latest
+docker push 234642166969.dkr.ecr.us-east-2.amazonaws.com/superseller/web:latest
+
+# Forçar novo deploy no App Runner (se auto_deployments_enabled = false)
+aws apprunner start-deployment --service-arn $(terraform output -raw apprunner_api_service_arn)
+aws apprunner start-deployment --service-arn $(terraform output -raw apprunner_web_service_arn)
+```
+
+## Power Control (Pausar/Resumir)
+
+Para reduzir custos, você pode pausar os serviços quando não estiverem em uso:
+
+```bash
+# Pausar (Shutdown)
+aws lambda invoke --function-name superseller-power-shutdown /dev/stdout
+
+# Resumir (Startup)
+aws lambda invoke --function-name superseller-power-startup /dev/stdout
+```
+
+**Nota**: Instale as dependências das Lambdas antes do primeiro deploy:
+
+```bash
+cd infra/lambda/power-shutdown && npm install && cd -
+cd infra/lambda/power-startup && npm install && cd -
+```
+
+## Migração de ECS para App Runner
+
+### ⚠️ IMPORTANTE: Procedimento de Migração
+
+Se você está migrando de uma infraestrutura ECS existente:
+
+1. **Backup do estado**: Faça backup do `terraform.tfstate`
+2. **Destruir recursos ECS/ALB manualmente** (ou via terraform destroy seletivo):
+   - `terraform state rm aws_ecs_service.api`
+   - `terraform state rm aws_ecs_service.web`
+   - `terraform state rm aws_ecs_task_definition.api`
+   - `terraform state rm aws_ecs_task_definition.web`
+   - `terraform state rm aws_ecs_cluster.main`
+   - `terraform state rm aws_lb.main`
+   - `terraform state rm aws_lb_target_group.api`
+   - `terraform state rm aws_lb_target_group.web`
+   - `terraform state rm aws_lb_listener.http`
+   - `terraform state rm aws_lb_listener.https`
+   - `terraform state rm aws_lb_listener_rule.api`
+   - `terraform state rm aws_lb_listener_rule.web`
+   - `terraform state rm aws_security_group.alb`
+   - `terraform state rm aws_security_group.ecs`
+3. **Aplicar nova infraestrutura**: `terraform apply`
+4. **Atualizar DNS**: Os registros Route53 serão atualizados automaticamente
+
+### O que foi mantido
+
+- ✅ VPC e Subnets existentes
+- ✅ RDS PostgreSQL (dados preservados)
+- ✅ ECR (repositórios de imagens)
+- ✅ Secrets Manager
+- ✅ ACM (certificados SSL)
+- ✅ Route53 (zona hospedada)
+
+### O que foi removido
+
+- ❌ ECS Cluster
+- ❌ ECS Services (API/WEB)
+- ❌ ECS Task Definitions
+- ❌ Application Load Balancer
+- ❌ ALB Target Groups
+- ❌ ALB Listeners e Rules
+- ❌ Security Groups do ALB e ECS
+
+### O que foi criado
+
+- ✅ App Runner Services (API/WEB)
+- ✅ App Runner VPC Connector
+- ✅ App Runner Auto Scaling Configuration
+- ✅ IAM Roles para App Runner
+- ✅ Security Group para VPC Connector
 
 ## Outputs
 
-After applying, Terraform outputs important values:
+Após `terraform apply`, os seguintes outputs estarão disponíveis:
 
 ```bash
-terraform output
+# URLs dos serviços
+terraform output api_url
+terraform output web_url
+
+# URLs diretas do App Runner
+terraform output apprunner_api_service_url
+terraform output apprunner_web_service_url
+
+# ARNs dos serviços (para CLI/automações)
+terraform output apprunner_api_service_arn
+terraform output apprunner_web_service_arn
 ```
 
-Key outputs:
-- `api_url`: https://api.superselleria.com.br
-- `web_url`: https://app.superselleria.com.br
-- `alb_dns_name`: ALB DNS name
-- `ecs_cluster_name`: ECS cluster name
-- `api_service_name`: API service name
-- `web_service_name`: Web service name
+## Estimativa de Custos (App Runner vs ECS)
 
-## Deployment Workflow
+| Recurso | ECS Fargate + ALB | App Runner |
+|---------|-------------------|------------|
+| Compute (API) | ~$15/mês | ~$5-10/mês* |
+| Compute (WEB) | ~$15/mês | ~$5-10/mês* |
+| Load Balancer | ~$16/mês | $0 (incluído) |
+| **Total** | **~$46/mês** | **~$10-20/mês** |
 
-1. **Provision Infrastructure** (this Terraform)
-   - Creates ECR, ECS, ALB, ACM, Route53, etc.
-
-2. **Build & Push Images** (GitHub Actions)
-   - Builds Docker images
-   - Pushes to ECR
-
-3. **Deploy Services** (GitHub Actions)
-   - Updates ECS task definitions
-   - Deploys to ECS services
-   - Waits for stability
-
-## Monitoring
-
-- **CloudWatch Logs**:
-  - API: `/ecs/superseller-api`
-  - Web: `/ecs/superseller-web`
-
-- **Container Insights**: Enabled on ECS cluster
-
-- **ALB Health Checks**:
-  - API: `GET /health` (expect 200)
-  - Web: `GET /` (expect 200)
+*App Runner cobra por tempo de execução + requisições. Com baixo tráfego, os custos são significativamente menores.
 
 ## Troubleshooting
 
-### Subnet Discovery Issues
+### Serviço não consegue conectar ao RDS
 
-If automatic subnet discovery fails:
+1. Verifique se o VPC Connector está usando as subnets corretas (privadas)
+2. Verifique se o Security Group do RDS permite ingress do SG do App Runner
+3. Verifique se a DATABASE_URL está correta no Secrets Manager
 
-1. List subnets manually:
-   ```bash
-   aws ec2 describe-subnets --filters Name=vpc-id,Values=vpc-097386e13a22a9c7b
-   ```
+### Deploy falha com erro de permissão ECR
 
-2. Identify public subnets (those with route to IGW)
+1. Verifique se a role `apprunner-ecr-access-role` tem permissão no ECR
+2. Verifique se a imagem existe no ECR com a tag correta
 
-3. Update `main.tf` with explicit subnet IDs if needed
+### Custom domain não funciona
 
-### Certificate Validation
-
-ACM certificates are validated via DNS. If validation hangs:
-
-1. Check Route53 for validation records
-2. Ensure hosted zone is correct
-3. Wait up to 30 minutes for DNS propagation
-
-### ECS Service Not Starting
-
-1. Check CloudWatch Logs for container errors
-2. Verify secrets exist in Secrets Manager
-3. Check security group rules
-4. Verify subnet has internet access (via NAT Gateway)
-
-## Security Considerations
-
-- All traffic uses HTTPS (HTTP redirects to HTTPS)
-- ECS tasks run in private subnets
-- Secrets stored in AWS Secrets Manager
-- IAM roles follow least-privilege principle
-- Security groups restrict traffic to necessary ports
-- RDS encryption enabled
-- CloudWatch logging enabled
-
-## Cost Optimization
-
-Current configuration (without RDS):
-- ECS Fargate: ~$30-40/month (2 tasks)
-- ALB: ~$20/month
-- Data transfer: Variable
-- **Total**: ~$50-60/month
-
-With RDS (db.t3.micro):
-- Add ~$15-20/month
-
-## Next Steps
-
-After infrastructure is provisioned:
-
-1. Deploy API and Web applications via GitHub Actions
-2. Configure WAF rules for ALB
-3. Set up auto-scaling policies
-4. Configure RDS backups and snapshots
-5. Set up CloudWatch alarms
-6. Enable AWS Config for compliance
-7. Configure VPC Flow Logs
-
-## Support
-
-For issues or questions:
-- GitHub Issues: https://github.com/fernando-m-vale/superseller-ia/issues
-- Documentation: `/docs/prod-deploy.md`
+1. Aguarde a propagação DNS (pode levar até 48h)
+2. Verifique os registros de validação no Route53
+3. Use `enable_custom_domains = true` nas variáveis
