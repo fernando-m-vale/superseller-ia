@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 // CORREÇÃO 1: Usando caminho relativo para garantir que o build encontre o arquivo
-import { env } from '../config/env'; 
+import { env } from '../config/env';
 
 // CORREÇÃO 2: Nome da função ajustado para 'mercadolivreRoutes' (minúsculo) para bater com o server.ts
 export async function mercadolivreRoutes(app: FastifyInstance) {
