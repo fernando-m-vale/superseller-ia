@@ -1,14 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { env } from '@/config/env';
+// CORREÇÃO 1: Usando caminho relativo para garantir que o build encontre o arquivo
+import { env } from '../config/env'; 
 
-export async function mercadoLivreRoutes(app: FastifyInstance) {
+// CORREÇÃO 2: Nome da função ajustado para 'mercadolivreRoutes' (minúsculo) para bater com o server.ts
+export async function mercadolivreRoutes(app: FastifyInstance) {
   // Rota para iniciar a conexão (Redireciona para o ML)
   app.get('/connect', async (request, reply) => {
     const { ML_APP_ID, ML_REDIRECT_URI } = env;
 
-    // CORREÇÃO: Usar o domínio de autenticação do Brasil (auth.mercadolivre.com.br)
-    // Em vez de api.mercadolibre.com que retorna "Resource not found"
+    // URL correta de autenticação do Brasil
     const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${ML_APP_ID}&redirect_uri=${ML_REDIRECT_URI}`;
 
     return reply.redirect(authUrl);
@@ -22,9 +23,7 @@ export async function mercadoLivreRoutes(app: FastifyInstance) {
 
     const { code } = querySchema.parse(request.query);
 
-    // Aqui você chamaria o serviço para trocar o Code pelo Token
-    // Exemplo: await registerMercadoLivreToken(request.user.tenantId, code);
-
+    // Aqui futuramente faremos a troca do token
     return reply.send({ message: 'Conexão realizada com sucesso!', code });
   });
 }
