@@ -12,6 +12,7 @@ export async function mercadolivreRoutes(app: FastifyInstance) {
     // URL correta de autenticação do Brasil
     const authUrl = `https://auth.mercadolivre.com.br/authorization?response_type=code&client_id=${ML_APP_ID}&redirect_uri=${ML_REDIRECT_URI}`;
 
+    
     return reply.redirect(authUrl);
   });
 
