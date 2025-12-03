@@ -18,8 +18,10 @@ interface RequestWithAuth extends FastifyRequest {
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
-  // Rota de Conexão
-  app.get('/auth/mercadolivre/connect', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // ✅ Rota Ajustada: Apenas '/authorize'
+  // O prefixo 'api/v1/auth/mercadolivre' já vem do server.ts
+  // Rota Final: /api/v1/auth/mercadolivre/authorize
+  app.get('/authorize', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
@@ -44,8 +46,9 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  // Rota de Callback
-  app.get('/auth/mercadolivre/callback', async (req: FastifyRequest, reply: FastifyReply) => {
+  // ✅ Rota Ajustada: Apenas '/callback'
+  // Rota Final: /api/v1/auth/mercadolivre/callback
+  app.get('/callback', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { code, state } = req.query as { code: string; state: string };
       
@@ -80,7 +83,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       const existingConnection = await prisma.marketplaceConnection.findFirst({
         where: {
           tenant_id: tenantId,
-          type: Marketplace.mercadolivre, // ✅ Corrigido para minúsculo
+          type: Marketplace.mercadolivre, 
         },
       });
 
@@ -98,7 +101,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         await prisma.marketplaceConnection.create({
           data: {
             tenant_id: tenantId,
-            type: Marketplace.mercadolivre, // ✅ Corrigido para minúsculo
+            type: Marketplace.mercadolivre, 
             access_token: access_token,
             refresh_token: refresh_token,
             expires_at: new Date(Date.now() + expires_in * 1000),
