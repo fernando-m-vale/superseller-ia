@@ -37,3 +37,31 @@ model AdMetric {
   sales         Decimal
   campaign      AdCampaign @relation(fields: [campaignId], references: [id])
 }
+
+1. Padrões de Banco de Dados (Prisma)
+
+IMPORTANTE: O banco de dados utiliza convenção snake_case para chaves estrangeiras e campos mapeados de APIs externas.
+
+Model: MarketplaceConnection
+
+Campos mapeados (TypeScript -> Banco):
+
+tenantId (No código) -> tenant_id (No Prisma/Banco)
+
+providerAccountId -> provider_account_id
+
+accessToken -> access_token
+
+refreshToken -> refresh_token
+
+expiresAt -> expires_at
+
+Sempre verifique o schema.prisma antes de criar queries prisma.create ou prisma.update.
+
+2. Rotas de Integração (Mercado Livre)
+
+Initiate: GET /api/v1/auth/mercadolivre/connect
+
+Callback: GET /api/v1/auth/mercadolivre/callback
+
+Webhooks: POST /api/v1/webhooks/mercadolivre

@@ -20,7 +20,6 @@ interface RequestWithAuth extends FastifyRequest {
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
   // Rota de Conexão: /api/v1/auth/mercadolivre/connect
-  // O prefixo /api/v1 vem do server.ts
   app.get('/auth/mercadolivre/connect', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
@@ -29,24 +28,18 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      // 1. Busca credenciais seguras na AWS
       const credentials = await getMercadoLivreCredentials();
       
-      // 2. Gera state de segurança para identificar o usuário na volta
       const state = crypto.randomBytes(16).toString('hex');
       const stateData = JSON.stringify({ tenantId, userId, nonce: state });
       const encodedState = Buffer.from(stateData).toString('base64');
 
-      // 3. Monta a URL de Login usando o domínio BRASILEIRO (auth.mercadolivre.com.br)
       const authUrl = new URL(`${ML_AUTH_BASE}/authorization`);
       authUrl.searchParams.append('response_type', 'code');
       authUrl.searchParams.append('client_id', credentials.clientId);
       authUrl.searchParams.append('redirect_uri', credentials.redirectUri);
       authUrl.searchParams.append('state', encodedState);
       
-      console.log('--- [DEBUG] Iniciando Auth ML ---');
-      console.log('URL:', authUrl.toString());
-
       return reply.redirect(authUrl.toString());
     } catch (error) {
       app.log.error(error);
@@ -63,7 +56,6 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         return reply.status(400).send({ error: 'No code provided' });
       }
 
-      // 1. Decodifica o state para saber quem é o usuário
       let decodedState;
       try {
         const jsonState = Buffer.from(state, 'base64').toString('utf-8');
@@ -74,7 +66,6 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
 
       const { tenantId, userId } = decodedState;
 
-      // 2. Troca o Code pelo Token (Aqui usamos a API global api.mercadolibre.com)
       const credentials = await getMercadoLivreCredentials();
       
       const tokenResponse = await axios.post(
@@ -92,40 +83,47 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       );
 
       const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
-      
-      // 3. Salva a conexão no Banco de Dados
-      await prisma.marketplaceConnection.upsert({
+      const providerAccountId = String(mlUserId);
+
+      // ✅ CORREÇÃO AQUI: Usando nomes de campos em snake_case para bater com o Schema do Banco
+      const existingConnection = await prisma.marketplaceConnection.findFirst({
         where: {
-          tenantId_provider_providerAccountId: {
-            tenantId,
-            provider: 'MERCADOLIVRE',
-            providerAccountId: String(mlUserId),
-          },
-        },
-        update: {
-          accessToken: access_token,
-          refreshToken: refresh_token,
-          expiresAt: new Date(Date.now() + expires_in * 1000),
-          status: 'ACTIVE',
-        },
-        create: {
-          tenantId,
-          provider: 'MERCADOLIVRE',
-          providerAccountId: String(mlUserId),
-          accessToken: access_token,
-          refreshToken: refresh_token,
-          expiresAt: new Date(Date.now() + expires_in * 1000),
-          status: 'ACTIVE',
+          tenant_id: tenantId,          // Era tenantId -> virou tenant_id
+          provider: 'MERCADOLIVRE', 
+          provider_account_id: providerAccountId, // Era providerAccountId -> virou provider_account_id
         },
       });
 
+      if (existingConnection) {
+        await prisma.marketplaceConnection.update({
+          where: { id: existingConnection.id },
+          data: {
+            access_token: access_token,   // Era accessToken -> virou access_token
+            refresh_token: refresh_token, // Era refreshToken -> virou refresh_token
+            expires_at: new Date(Date.now() + expires_in * 1000), // Era expiresAt -> virou expires_at
+            status: 'active',
+          },
+        });
+      } else {
+        await prisma.marketplaceConnection.create({
+          data: {
+            tenant_id: tenantId,          // Era tenantId -> virou tenant_id
+            provider: 'MERCADOLIVRE',
+            provider_account_id: providerAccountId, // Era providerAccountId -> virou provider_account_id
+            access_token: access_token,   // Era accessToken -> virou access_token
+            refresh_token: refresh_token, // Era refreshToken -> virou refresh_token
+            expires_at: new Date(Date.now() + expires_in * 1000), // Era expiresAt -> virou expires_at
+            status: 'active',
+          },
+        });
+      }
+
       // 4. Sucesso! Redireciona para o Dashboard
-      // Ajuste o domínio abaixo se o seu DNS já tiver propagado, senão use a URL do App Runner
+      // Ajuste o domínio conforme a propagação do seu DNS (ou use o do App Runner)
       return reply.redirect('https://app.superselleria.com.br/dashboard?success=true');
 
     } catch (error) {
       app.log.error(error);
-      // Retorna JSON em caso de erro crítico para podermos debugar
       return reply.status(500).send({ error: 'Failed to complete Mercado Livre connection', details: String(error) });
     }
   });

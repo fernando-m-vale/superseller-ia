@@ -68,3 +68,35 @@ Bloqueio de **Security Group**. O RDS estava aceitando conexões apenas do Basti
 1.  Identificado o ID do Security Group do App Runner.
 2.  Adicionada regra de entrada (Inbound Rule) no Security Group do RDS permitindo tráfego TCP/5432 vindo do SG do App Runner.
 3.  Conexão estabelecida com sucesso. Registro de usuário validado em produção.
+
+[2025-12-02] Ajustes de Roteamento e Tipagem ML
+
+Partner: Gemini | Status: Em Debug
+
+Ocorrências
+
+Erro de URL ML ("Resource not found"):
+
+Diagnóstico: A API estava gerando links de login apontando para api.mercadolibre.com (incorreto) em vez de auth.mercadolivre.com.br.
+
+Correção: Código ajustado para usar a URL de Auth correta.
+
+Erro de Prefixo de Rota (404):
+
+Diagnóstico: Frontend chamava /auth/mercadolivre/connect, mas Backend expunha /mercadolivre/connect.
+
+Correção: Ajustado server.ts para incluir prefixo /auth.
+
+Erro de Build TypeScript (Atual):
+
+Problema: Falha no pnpm build ao tentar salvar a conexão no banco.
+
+Erro: Object literal may only specify known properties, and 'tenantId' does not exist.
+
+Causa Raiz: Divergência de nomenclatura. O Schema do Prisma define colunas em snake_case (tenant_id, access_token), mas o código TypeScript estava passando camelCase.
+
+Ação Necessária: Refatorar a chamada do Prisma para usar os nomes exatos do banco.
+
+Infraestrutura
+
+Confirmado funcionamento do AWS App Runner com variáveis de ambiente carregadas via env.ts (criado hoje).
