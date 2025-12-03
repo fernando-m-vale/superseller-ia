@@ -100,3 +100,27 @@ Ação Necessária: Refatorar a chamada do Prisma para usar os nomes exatos do b
 Infraestrutura
 
 Confirmado funcionamento do AWS App Runner com variáveis de ambiente carregadas via env.ts (criado hoje).
+
+
+
+[2025-12-02] Infraestrutura, Banco e Tipagem
+
+Partner: Gemini & Devin | Status: Pausado em Debug
+
+Conquistas do Dia
+
+Infraestrutura: Pivot completo de ECS para AWS App Runner. Redução de complexidade e custo.
+
+Banco de Dados: Conexão RDS estabelecida, migrations aplicadas, erro 500 de Auth resolvido.
+
+Refatoração Backend: Ajuste massivo de tipagem no arquivo mercadolivre.ts para respeitar o padrão snake_case do banco e Enums do Prisma.
+
+Correção de URL: Backend ajustado para usar auth.mercadolivre.com.br (Auth) vs api.mercadolibre.com (Dados).
+
+Ocorrência Final (Debug)
+
+Cenário: Após merge do PR #57 (que corrigiu a rota do Frontend para /connect e renomeou a rota do Backend), o erro 404 Not Found persiste ao clicar no botão.
+
+Suspeita: O App Runner pode não ter atualizado a imagem corretamente ou existe um desencontro silencioso nos prefixos de rota do Fastify (server.ts).
+
+Ação: Debug pausado para retomada no dia seguinte com verificação de logs em tempo real.

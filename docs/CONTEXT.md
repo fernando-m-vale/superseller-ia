@@ -1,45 +1,39 @@
 Contexto do Projeto: SuperSeller IA
 
 Status: Fase 2 - Estabilização de Integrações
-Última Atualização: 02/12/2025
+Última Atualização: 02/12/2025 (Fim do dia)
 
 1. Visão Geral
 
 SaaS Multi-tenant para otimização de e-commerce.
-Foco Atual: Concluir integração OAuth com Mercado Livre e corrigir erros de tipagem no Backend.
+Foco Imediato: Debuggar o erro 404 Not Found na rota de conexão do Mercado Livre.
 
 2. Status Técnico
 
-Infraestrutura: ✅ AWS App Runner + RDS (Estável e Econômico).
+Infraestrutura: ✅ AWS App Runner + RDS (Estável).
 
-Banco de Dados: ✅ Conectado. Schema utiliza snake_case para campos de relação (ex: tenant_id).
+Banco de Dados: ✅ Conectado e Migrado. Schema validado (snake_case).
 
-Autenticação: ✅ Registro e Login de usuários funcionando (Testes T04-T06 aprovados).
+Autenticação: ✅ Registro e Login funcionais.
 
-Frontend: ⚠️ Funcional, mas testes V2 indicaram falta de Menu de Navegação nas rotas internas.
+Integração ML: ⚠️ Backend compilando e corrigido (PR #57), mas Frontend ainda recebe 404 ao chamar a rota.
 
-3. Problemas Conhecidos (Bloqueantes)
+3. Problemas Conhecidos (Bloqueante Atual)
 
-Build da API (TypeScript/Prisma):
+Rota de Conexão ML (404):
 
-Erro de compilação na rota mercadolivre.ts.
+O Frontend chama: /api/v1/auth/mercadolivre/connect.
 
-Causa: O código está tentando usar camelCase (tenantId, accessToken), mas o Prisma Client foi gerado esperando snake_case (tenant_id, access_token) conforme o banco de dados.
+O Backend (teoricamente) expõe: /api/v1/auth/mercadolivre/connect.
 
-Integração Mercado Livre:
+Sintoma: O navegador recebe 404 Not Found.
 
-URL de Auth corrigida para auth.mercadolivre.com.br.
+Hipóteses para amanhã: Cache do navegador/CDN, Cache de Build do Docker (imagem antiga), ou erro na montagem do prefixo no Fastify.
 
-Falta validar o fluxo ponta a ponta após correção do build.
+4. Próximos Passos (Plano de Ação)
 
-Usabilidade (Frontend):
+Verificar se a versão nova do código realmente subiu no App Runner (via Logs).
 
-Falta menu de navegação para acessar páginas internas (/ai, /recommendations).
+Testar a rota via curl direto no terminal para isolar se é erro de Frontend ou Backend.
 
-4. Próximos Passos Imediatos
-
-Corrigir mercadolivre.ts para usar os nomes de campos corretos do Prisma (tenant_id, etc).
-
-Validar conexão ML com sucesso.
-
-Implementar Menu de Navegação no Frontend.
+Validar variável NEXT_PUBLIC_API_URL no build do Frontend.
