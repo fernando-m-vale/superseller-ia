@@ -18,9 +18,9 @@ interface RequestWithAuth extends FastifyRequest {
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
-  // ✅ Rota: /api/v1/auth/mercadolivre/authorize
+  // ✅ Rota: /api/v1/auth/mercadolivre/connect
   // Retorna a URL de autenticação como JSON para o frontend redirecionar
-  app.get('/authorize', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/connect', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
@@ -58,7 +58,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       try {
         const jsonState = Buffer.from(state, 'base64').toString('utf-8');
         decodedState = JSON.parse(jsonState);
-      } catch (e) {
+      } catch {
         return reply.status(400).send({ error: 'Invalid state parameter' });
       }
 
