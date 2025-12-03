@@ -35,7 +35,7 @@ export const getMercadoLivreAuthUrl = async (): Promise<string> => {
     throw new Error('User not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/auth/mercadolivre/authorize`, {
+  const response = await fetch(`${API_URL}/auth/mercadolivre/connect`, {
     headers: {
       Authorization: `Bearer ${token}`,
     },
