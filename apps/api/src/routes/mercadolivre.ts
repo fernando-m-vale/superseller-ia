@@ -18,9 +18,8 @@ interface RequestWithAuth extends FastifyRequest {
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
-  // ✅ Rota Ajustada: Apenas '/authorize'
-  // O prefixo 'api/v1/auth/mercadolivre' já vem do server.ts
-  // Rota Final: /api/v1/auth/mercadolivre/authorize
+  // ✅ Rota: /api/v1/auth/mercadolivre/authorize
+  // Retorna a URL de autenticação como JSON para o frontend redirecionar
   app.get('/authorize', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
@@ -39,7 +38,8 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       authUrl.searchParams.append('redirect_uri', credentials.redirectUri);
       authUrl.searchParams.append('state', encodedState);
       
-      return reply.redirect(authUrl.toString());
+      // Retorna JSON para o frontend redirecionar
+      return reply.send({ authUrl: authUrl.toString() });
     } catch (error) {
       app.log.error(error);
       return reply.status(500).send({ error: 'Failed to initiate Mercado Livre connection' });
