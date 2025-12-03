@@ -1,67 +1,131 @@
-# Contratos de API e Dados
-**Status:** Planejamento de Expansão
+import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import { PrismaClient } from '@prisma/client';
+import axios from 'axios';
+import crypto from 'crypto';
+import { getMercadoLivreCredentials } from '../lib/secrets';
+import { authGuard } from '../plugins/auth';
 
-## 1. Schema Atual (Referência)
-*O schema real encontra-se em `apps/api/prisma/schema.prisma`.*
-Este arquivo documenta as *extensões planejadas* para suportar as novas funcionalidades.
+const prisma = new PrismaClient();
 
-## 2. Extensões Planejadas (Novos Models)
+// ✅ URL CORRETA para Login (Tela Amarela do Brasil)
+const ML_AUTH_BASE = 'https://auth.mercadolivre.com.br';
+// ✅ URL CORRETA para APIs de Dados (Troca de Token, Produtos, etc)
+const ML_API_BASE = 'https://api.mercadolibre.com';
 
-### A. Módulo de Publicidade (Ads)
-Para suportar gestão de Mercado Ads e Shopee Ads.
+interface RequestWithAuth extends FastifyRequest {
+  userId?: string;
+  tenantId?: string;
+}
 
-```prisma
-model AdCampaign {
-  id            String   @id @default(uuid())
-  tenantId      String
-  marketplace   Marketplace // ENUM: MERCADOLIVRE, SHOPEE
-  externalId    String   // ID da campanha no marketplace
-  name          String
-  status        String   // ACTIVE, PAUSED
-  dailyBudget   Decimal
-  acosTarget    Decimal? // Advertising Cost of Sales alvo
-  roas          Decimal? // Return on Ad Spend atual
+export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
-  metrics       AdMetric[]
-  listings      Listing[] // Relacionamento com anúncios
-  createdAt     DateTime @default(now())
-}
+  // Rota de Conexão: /api/v1/auth/mercadolivre/connect
+  app.get('/auth/mercadolivre/connect', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { userId, tenantId } = req as RequestWithAuth;
 
-model AdMetric {
-  id            String   @id @default(uuid())
-  campaignId    String
-  date          DateTime
-  clicks        Int
-  impressions   Int
-  cost          Decimal
-  sales         Decimal
-  campaign      AdCampaign @relation(fields: [campaignId], references: [id])
-}
+      if (!userId || !tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
 
-1. Padrões de Banco de Dados (Prisma)
+      const credentials = await getMercadoLivreCredentials();
+      
+      const state = crypto.randomBytes(16).toString('hex');
+      const stateData = JSON.stringify({ tenantId, userId, nonce: state });
+      const encodedState = Buffer.from(stateData).toString('base64');
 
-IMPORTANTE: O banco de dados utiliza convenção snake_case para chaves estrangeiras e campos mapeados de APIs externas.
+      const authUrl = new URL(`${ML_AUTH_BASE}/authorization`);
+      authUrl.searchParams.append('response_type', 'code');
+      authUrl.searchParams.append('client_id', credentials.clientId);
+      authUrl.searchParams.append('redirect_uri', credentials.redirectUri);
+      authUrl.searchParams.append('state', encodedState);
+      
+      return reply.redirect(authUrl.toString());
+    } catch (error) {
+      app.log.error(error);
+      return reply.status(500).send({ error: 'Failed to initiate Mercado Livre connection' });
+    }
+  });
 
-Model: MarketplaceConnection
+  // Rota de Callback: /api/v1/auth/mercadolivre/callback
+  app.get('/auth/mercadolivre/callback', async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const { code, state } = req.query as { code: string; state: string };
+      
+      if (!code) {
+        return reply.status(400).send({ error: 'No code provided' });
+      }
 
-Campos mapeados (TypeScript -> Banco):
+      let decodedState;
+      try {
+        const jsonState = Buffer.from(state, 'base64').toString('utf-8');
+        decodedState = JSON.parse(jsonState);
+      } catch (e) {
+        return reply.status(400).send({ error: 'Invalid state parameter' });
+      }
 
-tenantId (No código) -> tenant_id (No Prisma/Banco)
+      const { tenantId, userId } = decodedState;
 
-providerAccountId -> provider_account_id
+      const credentials = await getMercadoLivreCredentials();
+      
+      const tokenResponse = await axios.post(
+        `${ML_API_BASE}/oauth/token`,
+        new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: credentials.clientId,
+          client_secret: credentials.clientSecret,
+          code: code,
+          redirect_uri: credentials.redirectUri,
+        }),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        }
+      );
 
-accessToken -> access_token
+      const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
+      const providerAccountId = String(mlUserId);
 
-refreshToken -> refresh_token
+      // ✅ CORREÇÃO: Usando nomes de campos em snake_case conforme docs/API_CONTRACTS.md
+      const existingConnection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: tenantId,          // Era tenantId -> virou tenant_id
+          provider: 'MERCADOLIVRE', 
+          provider_account_id: providerAccountId, // Era providerAccountId -> virou provider_account_id
+        },
+      });
 
-expiresAt -> expires_at
+      if (existingConnection) {
+        await prisma.marketplaceConnection.update({
+          where: { id: existingConnection.id },
+          data: {
+            access_token: access_token,   // Era accessToken -> virou access_token
+            refresh_token: refresh_token, // Era refreshToken -> virou refresh_token
+            expires_at: new Date(Date.now() + expires_in * 1000), // Era expiresAt -> virou expires_at
+            status: 'active',
+          },
+        });
+      } else {
+        await prisma.marketplaceConnection.create({
+          data: {
+            tenant_id: tenantId,          // Era tenantId -> virou tenant_id
+            provider: 'MERCADOLIVRE',
+            provider_account_id: providerAccountId, // Era providerAccountId -> virou provider_account_id
+            access_token: access_token,   // Era accessToken -> virou access_token
+            refresh_token: refresh_token, // Era refreshToken -> virou refresh_token
+            expires_at: new Date(Date.now() + expires_in * 1000), // Era expiresAt -> virou expires_at
+            status: 'active',
+          },
+        });
+      }
 
-Sempre verifique o schema.prisma antes de criar queries prisma.create ou prisma.update.
+      // Sucesso! Redireciona para o Dashboard
+      return reply.redirect('https://app.superselleria.com.br/dashboard?success=true');
 
-2. Rotas de Integração (Mercado Livre)
+    } catch (error) {
+      app.log.error(error);
+      return reply.status(500).send({ error: 'Failed to complete Mercado Livre connection', details: String(error) });
+    }
+  });
 
-Initiate: GET /api/v1/auth/mercadolivre/connect
-
-Callback: GET /api/v1/auth/mercadolivre/callback
-
-Webhooks: POST /api/v1/webhooks/mercadolivre
+  done();
+};

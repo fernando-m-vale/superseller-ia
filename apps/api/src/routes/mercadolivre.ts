@@ -1,5 +1,5 @@
 import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Marketplace, ConnectionStatus } from '@prisma/client';
 import axios from 'axios';
 import crypto from 'crypto';
 import { getMercadoLivreCredentials } from '../lib/secrets';
@@ -7,9 +7,8 @@ import { authGuard } from '../plugins/auth';
 
 const prisma = new PrismaClient();
 
-// ✅ URL CORRETA para Login (Tela Amarela do Brasil)
+// URLs Corretas
 const ML_AUTH_BASE = 'https://auth.mercadolivre.com.br';
-// ✅ URL CORRETA para APIs de Dados (Troca de Token, Produtos, etc)
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
 interface RequestWithAuth extends FastifyRequest {
@@ -19,14 +18,12 @@ interface RequestWithAuth extends FastifyRequest {
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
-  // Rota de Conexão: /api/v1/auth/mercadolivre/connect
+  // Rota de Conexão
   app.get('/auth/mercadolivre/connect', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
 
-      if (!userId || !tenantId) {
-        return reply.status(401).send({ error: 'Unauthorized' });
-      }
+      if (!userId || !tenantId) return reply.status(401).send({ error: 'Unauthorized' });
 
       const credentials = await getMercadoLivreCredentials();
       
@@ -47,14 +44,12 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  // Rota de Callback: /api/v1/auth/mercadolivre/callback
+  // Rota de Callback
   app.get('/auth/mercadolivre/callback', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { code, state } = req.query as { code: string; state: string };
       
-      if (!code) {
-        return reply.status(400).send({ error: 'No code provided' });
-      }
+      if (!code) return reply.status(400).send({ error: 'No code provided' });
 
       let decodedState;
       try {
@@ -64,7 +59,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         return reply.status(400).send({ error: 'Invalid state parameter' });
       }
 
-      const { tenantId, userId } = decodedState;
+      const { tenantId } = decodedState;
 
       const credentials = await getMercadoLivreCredentials();
       
@@ -77,20 +72,15 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
           code: code,
           redirect_uri: credentials.redirectUri,
         }),
-        {
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        }
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
 
-      const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
-      const providerAccountId = String(mlUserId);
+      const { access_token, refresh_token, expires_in } = tokenResponse.data;
 
-      // ✅ CORREÇÃO AQUI: Usando nomes de campos em snake_case para bater com o Schema do Banco
       const existingConnection = await prisma.marketplaceConnection.findFirst({
         where: {
-          tenant_id: tenantId,          // Era tenantId -> virou tenant_id
-          provider: 'MERCADOLIVRE', 
-          provider_account_id: providerAccountId, // Era providerAccountId -> virou provider_account_id
+          tenant_id: tenantId,
+          type: Marketplace.mercadolivre, // ✅ Corrigido para minúsculo
         },
       });
 
@@ -98,28 +88,25 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         await prisma.marketplaceConnection.update({
           where: { id: existingConnection.id },
           data: {
-            access_token: access_token,   // Era accessToken -> virou access_token
-            refresh_token: refresh_token, // Era refreshToken -> virou refresh_token
-            expires_at: new Date(Date.now() + expires_in * 1000), // Era expiresAt -> virou expires_at
-            status: 'active',
+            access_token: access_token,
+            refresh_token: refresh_token,
+            expires_at: new Date(Date.now() + expires_in * 1000),
+            status: ConnectionStatus.active, 
           },
         });
       } else {
         await prisma.marketplaceConnection.create({
           data: {
-            tenant_id: tenantId,          // Era tenantId -> virou tenant_id
-            provider: 'MERCADOLIVRE',
-            provider_account_id: providerAccountId, // Era providerAccountId -> virou provider_account_id
-            access_token: access_token,   // Era accessToken -> virou access_token
-            refresh_token: refresh_token, // Era refreshToken -> virou refresh_token
-            expires_at: new Date(Date.now() + expires_in * 1000), // Era expiresAt -> virou expires_at
-            status: 'active',
+            tenant_id: tenantId,
+            type: Marketplace.mercadolivre, // ✅ Corrigido para minúsculo
+            access_token: access_token,
+            refresh_token: refresh_token,
+            expires_at: new Date(Date.now() + expires_in * 1000),
+            status: ConnectionStatus.active, 
           },
         });
       }
 
-      // 4. Sucesso! Redireciona para o Dashboard
-      // Ajuste o domínio conforme a propagação do seu DNS (ou use o do App Runner)
       return reply.redirect('https://app.superselleria.com.br/dashboard?success=true');
 
     } catch (error) {
