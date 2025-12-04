@@ -124,3 +124,25 @@ Cenário: Após merge do PR #57 (que corrigiu a rota do Frontend para /connect e
 Suspeita: O App Runner pode não ter atualizado a imagem corretamente ou existe um desencontro silencioso nos prefixos de rota do Fastify (server.ts).
 
 Ação: Debug pausado para retomada no dia seguinte com verificação de logs em tempo real.
+
+
+
+[2025-12-04] Resolução Crítica do Roteamento (404) e Novo Bloco (400 ML)
+
+Status: 404 Resolvido / 400 Novo Bloqueio
+
+Conquistas do Dia
+
+CI/CD: Pipeline corrigido (erros de YAML e pnpm resolvidos pelo Devin/Cursor).
+
+Roteamento Fastify (404): Corrigida a sintaxe dos prefixos de rota no server.ts (adicionando a barra /), eliminando o erro 404 Not Found. A rota /connect está acessível.
+
+Progresso: O fluxo de conexão atinge a página de autorização do Mercado Livre.
+
+Ocorrência Atual (400 Bad Request)
+
+Cenário: O Mercado Livre rejeita a requisição de login.
+
+Causa Raiz: O ML devolve 400 Bad Request por erro de validação de parâmetro (provavelmente redirect_uri ou client_id).
+
+Ação: O próximo passo é rodar o teste manual da URL para obter a mensagem de erro exata do ML.
