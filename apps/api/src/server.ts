@@ -17,6 +17,8 @@ app.get('/api/v1/health', async () => {
 });
 
 async function main() {
+  console.log('--- [DEBUG] Server Starting - Version ML Fix 2.0 ---'); // Adicione isso
+
   // Registro das rotas
   app.register(authRoutes, { prefix: 'api/v1/auth' });
   
