@@ -17,10 +17,14 @@ OAuth ML (400 Bad Request):
 
 Sintoma: ML retorna "Desculpe, não foi possível conectar" na URL de login.
 
-Causa Provável: Divergência de URL de Retorno (redirect_uri) entre o código e o painel do Mercado Livre DevCenter.
+Causa Mais Provável: Divergência de URL de Retorno (redirect_uri) entre o código e o painel do Mercado Livre DevCenter.
 
 3. Próximos Passos (Plano de Ação)
 
 Execução do Teste Manual: O Fernando irá testar a URL de autorização diretamente no navegador para isolar se o erro é no código (state) ou na configuração do DevCenter (redirect_uri).
 
 Correção: Ajustar a URL registrada no Mercado Livre ou o parâmetro state no mercadolivre.ts.
+
+4. Vitória do Dia
+
+Rotas Fastify (404): RESOLVIDO. A rota /api/v1/auth/mercadolivre/connect está funcional e acessível.
