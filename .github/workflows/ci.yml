@@ -1,39 +1,34 @@
 name: CI
+
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '18', cache: 'pnpm' }
-      - run: corepack enable
-      - run: pnpm i -w
-      - name: Lint web
-        run: cd apps/web && pnpm lint || true
-      - name: Build web
-        run: cd apps/web && pnpm build
-      - name: Build api
-        run: cd apps/api && pnpm build || true
-    permissions:
-      id-token: write
-      contents: read
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  # Este bloco de jobs estava duplicado e mal-indentado, removendo-o.
-  # O job de deploy no App Runner deve estar em um arquivo separado (deploy-api.yml),
-  # mas o CI (Continuous Integration) não precisa de credenciais AWS (OIDC)
-  # neste ponto, apenas o Deploy (Continuous Deployment).
-  # Vou manter o bloco de credenciais para garantir que não haja erros no push.
-  configure_aws: # Job para configurar credenciais, se usado separadamente
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          role-to-assume: arn:aws:iam::234642166969:role/superseller-github-oidc-dev
-          aws-region: us-east-2
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint web
+        run: pnpm --filter web lint || true
+
+      - name: Build web
+        run: pnpm --filter web build
+
+      - name: Build api
+        run: pnpm --filter @superseller/api build || true

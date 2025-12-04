@@ -1,9 +1,10 @@
 name: CodeQL
+
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    # A linha 18 estava aqui, mal indentada. Corrigindo:
+    branches: [main]
   schedule:
     - cron: '0 1 * * 0'
 
@@ -15,7 +16,13 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with: { languages: javascript }
-      - uses: github/codeql-action/analyze@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
