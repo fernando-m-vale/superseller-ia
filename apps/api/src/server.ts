@@ -5,42 +5,44 @@ import { authRoutes } from './routes/auth';
 import { mercadolivreRoutes } from './routes/mercadolivre';
 import { webhookRoutes } from './routes/mercado-livre-webhook';
 
-const app = fastify({
-  logger: true, // Garante logs detalhados
-});
+const app = fastify();
 
 app.register(cors, {
-  origin: '*', 
+  origin: '*', // Em produção, mude para o domínio do front
 });
 
-// Health check da API (Com barra inicial correta)
+// Health check da API (o Health Check raiz do app)
 app.get('/api/v1/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
 async function main() {
-  console.log('--- [DEBUG] Server Starting - Version Route Fix 3.0 ---');
+  console.log('--- [DEBUG] Server Starting - Version FINAL ROUTE FIX ---'); 
 
-  // CORREÇÃO: Adicionada a barra '/' no início de todos os prefixos
+  // 1. Registro das rotas
+  // CORREÇÃO CRÍTICA: Adicionar a barra inicial '/' em todos os prefixos
+  
+  // Rotas de Auth
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   
-  // A rota crítica:
+  // Rotas do Mercado Livre (Contém /connect e /callback)
   await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
   
+  // Rotas de Webhook
   await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
 
   try {
     await app.ready(); // Espera todos os plugins carregarem
     
-    // 🕵️‍♂️ O "Dedo-Duro": Mostra todas as rotas registradas no console
-    console.log('\n--- 🗺️  ROTA MAP (Check se sua rota está aqui) ---');
+    // DEBUG: Imprime as rotas para validar em 100% (Veremos no log do App Runner)
+    console.log('\n--- 🗺️  ROTA MAP (VERIFICAÇÃO) ---');
     console.log(app.printRoutes());
-    console.log('---------------------------------------------------\n');
+    console.log('-------------------------------------------\n');
 
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
     console.log(`🚀 HTTP Server running on port ${env.PORT}`);
   } catch (err) {
-    app.log.error(err);
+    console.error(err);
     process.exit(1);
   }
 }
