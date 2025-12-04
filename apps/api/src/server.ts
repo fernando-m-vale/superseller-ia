@@ -5,33 +5,42 @@ import { authRoutes } from './routes/auth';
 import { mercadolivreRoutes } from './routes/mercadolivre';
 import { webhookRoutes } from './routes/mercado-livre-webhook';
 
-const app = fastify();
-
-app.register(cors, {
-  origin: '*', // Em produção, mude para o domínio do front
+const app = fastify({
+  logger: true, // Garante logs detalhados
 });
 
-// Health check da API
+app.register(cors, {
+  origin: '*', 
+});
+
+// Health check da API (Com barra inicial correta)
 app.get('/api/v1/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
 async function main() {
-  console.log('--- [DEBUG] Server Starting - Version ML Fix 2.0 ---'); // Adicione isso
+  console.log('--- [DEBUG] Server Starting - Version Route Fix 3.0 ---');
 
-  // Registro das rotas
-  app.register(authRoutes, { prefix: 'api/v1/auth' });
+  // CORREÇÃO: Adicionada a barra '/' no início de todos os prefixos
+  await app.register(authRoutes, { prefix: '/api/v1/auth' });
   
-  // CORREÇÃO AQUI: Adicionado '/auth' ao prefixo para bater com a URL de Callback
-  app.register(mercadolivreRoutes, { prefix: 'api/v1/auth/mercadolivre' });
+  // A rota crítica:
+  await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
   
-  app.register(webhookRoutes, { prefix: 'api/v1/webhooks' });
+  await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
 
   try {
+    await app.ready(); // Espera todos os plugins carregarem
+    
+    // 🕵️‍♂️ O "Dedo-Duro": Mostra todas as rotas registradas no console
+    console.log('\n--- 🗺️  ROTA MAP (Check se sua rota está aqui) ---');
+    console.log(app.printRoutes());
+    console.log('---------------------------------------------------\n');
+
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
     console.log(`🚀 HTTP Server running on port ${env.PORT}`);
   } catch (err) {
-    console.error(err);
+    app.log.error(err);
     process.exit(1);
   }
 }
