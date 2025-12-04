@@ -35,7 +35,8 @@ const LoginSchema = z.object({
 });
 
 export const authRoutes: FastifyPluginCallback = (app, _, done) => {
-  app.post('/auth/register', async (req, reply) => {
+  // Rota: /api/v1/auth/register (prefixo já inclui /auth)
+  app.post('/register', async (req, reply) => {
     try {
       const body = RegisterSchema.parse(req.body);
 
@@ -100,7 +101,8 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  app.post('/auth/login', async (req, reply) => {
+  // Rota: /api/v1/auth/login
+  app.post('/login', async (req, reply) => {
     try {
       const body = LoginSchema.parse(req.body);
 
@@ -151,7 +153,8 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  app.get('/auth/me', async (req, reply) => {
+  // Rota: /api/v1/auth/me
+  app.get('/me', async (req, reply) => {
     try {
       const authorization = req.headers.authorization;
 
