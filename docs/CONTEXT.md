@@ -1,39 +1,26 @@
 Contexto do Projeto: SuperSeller IA
 
-Status: Fase 2 - Estabilização de Integrações
-Última Atualização: 02/12/2025 (Fim do dia)
+Status: Fase 2 - Parado em 400 Bad Request
+Última Atualização: 04/12/2025 (Fim do dia)
 
-1. Visão Geral
+1. Status Técnico
 
-SaaS Multi-tenant para otimização de e-commerce.
-Foco Imediato: Debuggar o erro 404 Not Found na rota de conexão do Mercado Livre.
+Infraestrutura: ✅ Roteamento (404) RESOLVIDO. Deploy funcionando.
 
-2. Status Técnico
+Banco de Dados: ✅ OK.
 
-Infraestrutura: ✅ AWS App Runner + RDS (Estável).
+Integração ML: 🔴 FALHA. A requisição de autorização foi rejeitada pelo ML.
 
-Banco de Dados: ✅ Conectado e Migrado. Schema validado (snake_case).
+2. Problemas Conhecidos (Bloqueante Atual)
 
-Autenticação: ✅ Registro e Login funcionais.
+OAuth ML (400 Bad Request):
 
-Integração ML: ⚠️ Backend compilando e corrigido (PR #57), mas Frontend ainda recebe 404 ao chamar a rota.
+Sintoma: ML retorna "Desculpe, não foi possível conectar" na URL de login.
 
-3. Problemas Conhecidos (Bloqueante Atual)
+Causa Provável: Divergência de URL de Retorno (redirect_uri) entre o código e o painel do Mercado Livre DevCenter.
 
-Rota de Conexão ML (404):
+3. Próximos Passos (Plano de Ação)
 
-O Frontend chama: /api/v1/auth/mercadolivre/connect.
+Execução do Teste Manual: O Fernando irá testar a URL de autorização diretamente no navegador para isolar se o erro é no código (state) ou na configuração do DevCenter (redirect_uri).
 
-O Backend (teoricamente) expõe: /api/v1/auth/mercadolivre/connect.
-
-Sintoma: O navegador recebe 404 Not Found.
-
-Hipóteses para amanhã: Cache do navegador/CDN, Cache de Build do Docker (imagem antiga), ou erro na montagem do prefixo no Fastify.
-
-4. Próximos Passos (Plano de Ação)
-
-Verificar se a versão nova do código realmente subiu no App Runner (via Logs).
-
-Testar a rota via curl direto no terminal para isolar se é erro de Frontend ou Backend.
-
-Validar variável NEXT_PUBLIC_API_URL no build do Frontend.
+Correção: Ajustar a URL registrada no Mercado Livre ou o parâmetro state no mercadolivre.ts.
