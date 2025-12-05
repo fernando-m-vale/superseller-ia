@@ -1,5 +1,5 @@
 import { FastifyPluginCallback } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Marketplace, ConnectionStatus } from '@prisma/client';
 import axios from 'axios';
 import crypto from 'crypto';
 import { getShopeeCredentials } from '../lib/secrets';
@@ -90,10 +90,14 @@ export const shopeeRoutes: FastifyPluginCallback = (app, _, done) => {
 
       const expiresAt = new Date(Date.now() + expire_in * 1000);
 
+      // Usar shop_id como provider_account_id (identificador único da loja na Shopee)
+      const providerAccountId = shop_id;
+
       const existingConnection = await prisma.marketplaceConnection.findFirst({
         where: {
           tenant_id: tenantId,
-          type: 'shopee',
+          type: Marketplace.shopee,
+          provider_account_id: providerAccountId,
         },
       });
 
@@ -103,22 +107,22 @@ export const shopeeRoutes: FastifyPluginCallback = (app, _, done) => {
             id: existingConnection.id,
           },
           data: {
-            access_token,
-            refresh_token,
+            access_token: access_token,
+            refresh_token: refresh_token,
             expires_at: expiresAt,
-            status: 'active',
-            updated_at: new Date(),
+            status: ConnectionStatus.active,
           },
         });
       } else {
         await prisma.marketplaceConnection.create({
           data: {
             tenant_id: tenantId,
-            type: 'shopee',
-            access_token,
-            refresh_token,
+            type: Marketplace.shopee,
+            provider_account_id: providerAccountId,
+            access_token: access_token,
+            refresh_token: refresh_token,
             expires_at: expiresAt,
-            status: 'active',
+            status: ConnectionStatus.active,
           },
         });
       }
@@ -141,8 +145,8 @@ export const shopeeRoutes: FastifyPluginCallback = (app, _, done) => {
       const connection = await prisma.marketplaceConnection.findFirst({
         where: {
           tenant_id: tenantId,
-          type: 'shopee',
-          status: 'active',
+          type: Marketplace.shopee,
+          status: ConnectionStatus.active,
         },
       });
 
@@ -178,7 +182,7 @@ export const shopeeRoutes: FastifyPluginCallback = (app, _, done) => {
           where: {
             tenant_id_marketplace_listing_id_ext: {
               tenant_id: tenantId,
-              marketplace: 'shopee',
+              marketplace: Marketplace.shopee,
               listing_id_ext: item.item_id.toString(),
             },
           },
@@ -187,11 +191,10 @@ export const shopeeRoutes: FastifyPluginCallback = (app, _, done) => {
             price: item.price || 0,
             stock: item.stock || 0,
             status: item.item_status === 'NORMAL' ? 'active' : 'paused',
-            updated_at: new Date(),
           },
           create: {
             tenant_id: tenantId,
-            marketplace: 'shopee',
+            marketplace: Marketplace.shopee,
             listing_id_ext: item.item_id.toString(),
             title: item.item_name,
             price: item.price || 0,
