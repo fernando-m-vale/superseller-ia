@@ -110,10 +110,9 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       }
 
-      // ✅ CORREÇÃO: Redirecionar para a raiz (/) onde está o dashboard
-      // Usa a variável de ambiente do frontend ou um fallback seguro
-      const dashboardUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.superselleria.com.br';
-      return reply.redirect(`${dashboardUrl}/?success=true`);
+      // Redirecionar para /overview após login bem-sucedido
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.superselleria.com.br';
+      return reply.redirect(`${appUrl}/overview?success=true`);
 
     } catch (error) {
       app.log.error(error);

@@ -104,20 +104,21 @@ model User {
 }
 
 model MarketplaceConnection {
-  id            String           @id @default(uuid())
-  tenant_id     String
-  type          Marketplace
-  access_token  String
-  refresh_token String?
-  expires_at    DateTime?
-  status        ConnectionStatus
-  created_at    DateTime         @default(now())
-  updated_at    DateTime         @updatedAt
+  id                  String           @id @default(uuid())
+  tenant_id           String
+  type                Marketplace
+  provider_account_id String
+  access_token        String
+  refresh_token       String?
+  expires_at          DateTime?
+  status              ConnectionStatus
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
+  @@unique([tenant_id, type, provider_account_id])
   @@index([tenant_id])
-  @@index([tenant_id, type])
   @@map("marketplace_connections")
 }
 
