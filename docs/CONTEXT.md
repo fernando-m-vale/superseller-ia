@@ -1,33 +1,37 @@
 Contexto do Projeto: SuperSeller IA
 
-Status: Fase 2 - Estabilização de Integrações
-Última Atualização: 05/12/2025
+Status: Fase 3 - Dashboard e Ingestão de Dados
+Última Atualização: 05/12/2025 (Final do Dia)
 
 1. Visão Geral
 
 SaaS Multi-tenant para otimização de e-commerce.
-Foco Atual: Validar o fluxo completo do Mercado Livre após correção de build e infraestrutura.
+Marco Atual: Integração OAuth com Mercado Livre concluída e Dashboard estabilizado.
 
 2. Status Técnico
 
-Infraestrutura: ✅ App Runner + RDS + NAT Gateway (Rede configurada para acesso externo).
+Infraestrutura: ✅ App Runner + RDS + NAT Gateway (Rede configurada e funcional).
 
-Banco de Dados: ✅ Schema atualizado com provider_account_id e Migration aplicada.
+Banco de Dados: ✅ Schema Multi-conta (provider_account_id) implementado e migrado.
 
-API Build: ✅ Rota Shopee corrigida (Tipagem Prisma).
+Integração ML: ✅ Fluxo OAuth completo. Tokens persistidos e renováveis.
 
-Integração ML: ⚠️ Aguardando teste final pós-deploy para confirmar redirecionamento e persistência.
+Frontend: ✅ Dashboard /overview carregando sem erros (dados mockados/zerados).
+
+API: ✅ Rotas de Métricas implementadas (/summary) para suportar a UI.
 
 3. Arquitetura de Rede
 
-App Runner conecta ao RDS via VPC Connector (Subnet Privada).
+App Runner (Privado) -> NAT Gateway (Público) -> API ML.
 
-App Runner conecta à Internet (APIs ML/Shopee) via NAT Gateway (Subnet Pública).
+App Runner -> VPC Connector -> RDS.
 
-4. Próximos Passos
+Nota: NAT Gateway pode ser desligado via Terraform (enable_nat_gateway = false) para economia.
 
-Aguardar término do Deploy (com fix da Shopee).
+4. Próximos Passos (Retomada)
 
-Realizar teste funcional de conexão com Mercado Livre.
+Job de Ingestão: Criar worker para baixar anúncios e vendas do Mercado Livre e popular o banco.
 
-Verificar se o redirecionamento final vai para /overview?success=true.
+Métricas Reais: Substituir o mock em metrics.ts por queries reais no banco (prisma.listing.count, etc).
+
+Webhooks: Processar notificações de vendas em tempo real.
