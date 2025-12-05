@@ -174,3 +174,29 @@ Próximos Passos
 Executar terraform apply para provisionar a nova rede.
 
 Validar fluxo de OAuth completo.
+
+[2025-12-05] Resolução de Conectividade Externa (Erro 502)
+
+Partner: Gemini & Cursor | Status: Em Implementação
+
+Ocorrência (Erro 502 Bad Gateway)
+
+Sintoma: Ao retornar do login no Mercado Livre, a aplicação ficava "pensando" e retornava erro 502 na rota de callback.
+
+Diagnóstico: Logs do App Runner não mostravam crash, mas sim timeouts e reinicializações frequentes. Identificado que o App Runner, por estar conectado à VPC Privada (para acessar o RDS), perdeu o acesso à internet pública (necessário para chamar a API do Mercado Livre).
+
+Causa Raiz: Ausência de NAT Gateway na infraestrutura. O App Runner não conseguia chamar api.mercadolibre.com para trocar o code pelo token.
+
+Solução Arquitetural
+
+Implementação de NAT Gateway: Adicionado via Terraform para rotear tráfego de saída das subnets privadas para a internet.
+
+Configuração de Rota: Subnets Privadas -> NAT Gateway -> Internet Gateway.
+
+Economia de Custos: Criada variável enable_nat_gateway no Terraform. Isso permite desligar o recurso caro (~$32/mês) em ambientes de desenvolvimento quando não estiver em uso ativo.
+
+Próximos Passos
+
+Executar terraform apply para provisionar a nova rede.
+
+Validar fluxo de OAuth completo (troca de token e redirecionamento).

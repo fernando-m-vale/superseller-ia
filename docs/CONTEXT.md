@@ -6,33 +6,28 @@ Status: Fase 2 - Estabilização de Integrações
 1. Visão Geral
 
 SaaS Multi-tenant para otimização de e-commerce.
-Foco Atual: Resolver erro 502 Bad Gateway no callback do Mercado Livre.
+Foco Atual: Validar o fluxo completo do Mercado Livre após correção de build e infraestrutura.
 
 2. Status Técnico
 
-Infraestrutura:
+Infraestrutura: ✅ App Runner + RDS + NAT Gateway (Rede configurada para acesso externo).
 
-✅ AWS App Runner (API + Web).
+Banco de Dados: ✅ Schema atualizado com provider_account_id e Migration aplicada.
 
-✅ RDS PostgreSQL (Privado).
+API Build: ✅ Rota Shopee corrigida (Tipagem Prisma).
 
-✅ NAT Gateway: Implementado para permitir que o App Runner acesse APIs externas (Mercado Livre) a partir da VPC.
+Integração ML: ⚠️ Aguardando teste final pós-deploy para confirmar redirecionamento e persistência.
 
-Banco de Dados: ✅ Conectado e Migrado.
+3. Arquitetura de Rede
 
-Autenticação: ✅ Registro, Login e OAuth ML (Login) funcionais.
+App Runner conecta ao RDS via VPC Connector (Subnet Privada).
 
-Integração ML: ⚠️ Callback retorna 502. Diagnóstico aponta para falta de conectividade de saída (resolvido com NAT Gateway).
-
-3. Arquitetura de Rede (Novo)
-
-O App Runner utiliza um VPC Connector para acessar o RDS nas subnets privadas.
-Para acessar a internet (ex: api.mercadolibre.com), o tráfego é roteado através de um NAT Gateway localizado nas subnets públicas.
+App Runner conecta à Internet (APIs ML/Shopee) via NAT Gateway (Subnet Pública).
 
 4. Próximos Passos
 
-Aplicar o Terraform para criar o NAT Gateway.
+Aguardar término do Deploy (com fix da Shopee).
 
-Testar novamente o fluxo de conexão com o Mercado Livre.
+Realizar teste funcional de conexão com Mercado Livre.
 
-Validar se o token é salvo no banco e o redirecionamento ocorre com sucesso.
+Verificar se o redirecionamento final vai para /overview?success=true.
