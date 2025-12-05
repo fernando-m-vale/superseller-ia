@@ -18,8 +18,7 @@ interface RequestWithAuth extends FastifyRequest {
 
 export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
   
-  // ✅ Rota: /api/v1/auth/mercadolivre/connect
-  // Retorna a URL de autenticação como JSON para o frontend redirecionar
+  // Rota de Conexão
   app.get('/connect', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { userId, tenantId } = req as RequestWithAuth;
@@ -38,7 +37,6 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       authUrl.searchParams.append('redirect_uri', credentials.redirectUri);
       authUrl.searchParams.append('state', encodedState);
       
-      // Retorna JSON para o frontend redirecionar
       return reply.send({ authUrl: authUrl.toString() });
     } catch (error) {
       app.log.error(error);
@@ -46,8 +44,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  // ✅ Rota Ajustada: Apenas '/callback'
-  // Rota Final: /api/v1/auth/mercadolivre/callback
+  // Rota de Callback
   app.get('/callback', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { code, state } = req.query as { code: string; state: string };
@@ -58,7 +55,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       try {
         const jsonState = Buffer.from(state, 'base64').toString('utf-8');
         decodedState = JSON.parse(jsonState);
-      } catch {
+      } catch (e) {
         return reply.status(400).send({ error: 'Invalid state parameter' });
       }
 
@@ -78,12 +75,14 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
       );
 
-      const { access_token, refresh_token, expires_in } = tokenResponse.data;
+      const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
+      const providerAccountId = String(mlUserId);
 
       const existingConnection = await prisma.marketplaceConnection.findFirst({
         where: {
           tenant_id: tenantId,
           type: Marketplace.mercadolivre, 
+          provider_account_id: providerAccountId,
         },
       });
 
@@ -102,6 +101,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
           data: {
             tenant_id: tenantId,
             type: Marketplace.mercadolivre, 
+            provider_account_id: providerAccountId,
             access_token: access_token,
             refresh_token: refresh_token,
             expires_at: new Date(Date.now() + expires_in * 1000),
@@ -110,7 +110,10 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       }
 
-      return reply.redirect('https://app.superselleria.com.br/dashboard?success=true');
+      // ✅ CORREÇÃO: Redirecionar para a raiz (/) onde está o dashboard
+      // Usa a variável de ambiente do frontend ou um fallback seguro
+      const dashboardUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.superselleria.com.br';
+      return reply.redirect(`${dashboardUrl}/?success=true`);
 
     } catch (error) {
       app.log.error(error);
