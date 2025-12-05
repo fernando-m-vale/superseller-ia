@@ -1,66 +1,90 @@
-# SuperSeller IA
+SuperSeller IA
 
-Plataforma SaaS multi-tenant que ajuda vendedores de e-commerce a otimizar seus anuncios em marketplaces usando inteligencia artificial.
+Plataforma SaaS multi-tenant que ajuda vendedores de e-commerce a otimizar seus anúncios em marketplaces usando inteligência artificial.
 
-## Visao Geral
+Visão Geral
 
-O SuperSeller IA analisa metricas de performance dos anuncios (CTR, taxa de conversao, receita) e gera recomendacoes acionaveis para melhorar visibilidade e vendas. A plataforma suporta integracao com Shopee e Mercado Livre via OAuth 2.0.
+O SuperSeller IA analisa métricas de performance dos anúncios (CTR, taxa de conversão, receita) e gera recomendações acionáveis para melhorar visibilidade e vendas. A plataforma suporta integração com Shopee e Mercado Livre via OAuth 2.0.
 
-### Principais Funcionalidades
+Principais Funcionalidades
 
-- **Integracao com Marketplaces**: Conexao OAuth 2.0 para sincronizar anuncios e metricas
-- **Health Score**: Pontuacao de saude (0-100) por anuncio baseada em regras de qualidade
-- **Recomendacoes IA**: Sugestoes para otimizar titulos, imagens, precos e atributos
-- **Automacao**: Regras configuraveis para aprovar e executar recomendacoes automaticamente
-- **Monitoramento**: Acompanhamento de efetividade das acoes aplicadas
+Integração com Marketplaces: Conexão OAuth 2.0 para sincronizar anúncios e métricas
 
-## Stack Tecnologica
+Health Score: Pontuação de saúde (0-100) por anúncio baseada em regras de qualidade
 
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | Next.js 14, React, TypeScript, Tailwind CSS |
-| Backend | Fastify, Node.js 20, TypeScript |
-| Banco de Dados | PostgreSQL (Prisma ORM) |
-| Infraestrutura | AWS ECS Fargate, ALB, Route53, Secrets Manager |
-| CI/CD | GitHub Actions com OIDC |
-| IaC | Terraform |
+Recomendações IA: Sugestões para otimizar títulos, imagens, preços e atributos
 
-## Estrutura do Projeto
+Automação: Regras configuráveis para aprovar e executar recomendações automaticamente
 
-```
+Monitoramento: Acompanhamento de efetividade das ações aplicadas
+
+Stack Tecnológica
+
+Camada
+
+Tecnologia
+
+Frontend
+
+Next.js 14, React, TypeScript, Tailwind CSS
+
+Backend
+
+Fastify, Node.js 20, TypeScript
+
+Banco de Dados
+
+PostgreSQL (AWS RDS) com Prisma ORM
+
+Infraestrutura
+
+AWS App Runner (Web + API), RDS Privado, NAT Gateway
+
+CI/CD
+
+GitHub Actions com OIDC
+
+IaC
+
+Terraform
+
+Estrutura do Projeto
+
 superseller-ia/
 ├── apps/
 │   ├── api/          # Backend Fastify (porta 3001)
 │   └── web/          # Frontend Next.js (porta 3000)
 ├── packages/
-│   ├── core/         # Utilitarios compartilhados
-│   └── ai/           # Engine de recomendacoes
+│   ├── core/         # Utilitários compartilhados
+│   └── ai/           # Engine de recomendações
 ├── infra/
-│   └── terraform/    # Definicoes de infraestrutura AWS
-├── docs/             # Documentacao tecnica
-└── package.json      # Configuracao do workspace pnpm
-```
+│   └── terraform/    # Definições de infraestrutura AWS (App Runner, RDS, VPC)
+├── docs/             # Documentação técnica e Logs
+└── package.json      # Configuração do workspace pnpm
 
-## Setup Rapido
 
-### Pre-requisitos
+Setup Rápido
 
-- Node.js 20+ (use `nvm use` para carregar a versao correta)
-- pnpm 8+
-- PostgreSQL 14+
-- Docker (opcional, para ambiente local)
+Pré-requisitos
 
-### Instalacao
+Node.js 20+ (use nvm use para carregar a versão correta)
 
-```bash
-# Clone o repositorio
-git clone https://github.com/fernando-m-vale/superseller-ia.git
+pnpm 8+
+
+PostgreSQL 14+
+
+Docker (opcional, para ambiente local)
+
+Instalação
+
+# Clone o repositório
+git clone [https://github.com/fernando-m-vale/superseller-ia.git](https://github.com/fernando-m-vale/superseller-ia.git)
 cd superseller-ia
 
-# Instale as dependencias
+# Instale as dependências
 pnpm install
 
-# Configure as variaveis de ambiente
+# Configure as variáveis de ambiente
 cp apps/api/.env.example apps/api/.env
 # Edite o arquivo .env com suas credenciais
 
@@ -68,79 +92,39 @@ cp apps/api/.env.example apps/api/.env
 pnpm --filter @superseller/api db:generate
 pnpm --filter @superseller/api db:dev
 
-# (Opcional) Popule o banco com dados de teste
-pnpm --filter @superseller/api db:seed
-```
 
-### Executando o Projeto
+Executando o Projeto
 
-```bash
 # Terminal 1: Inicie a API
 pnpm --filter @superseller/api dev
 
 # Terminal 2: Inicie o frontend
 pnpm --filter web dev
-```
+
 
 Acesse:
-- Frontend: http://localhost:3000
-- API: http://localhost:3001/api/v1
 
-### Comandos Uteis
+Frontend: http://localhost:3000
 
-```bash
-# Lint e verificacao de tipos
-pnpm lint
-pnpm typecheck
+API: http://localhost:3001/api/v1
 
-# Build de producao
-pnpm --filter @superseller/api build
-pnpm --filter web build
+Infraestrutura e Deploy
 
-# Testes
-pnpm test
-```
+O deploy é automatizado via GitHub Actions para a AWS.
+A infraestrutura utiliza AWS App Runner para computação serverless e RDS PostgreSQL em subnets privadas para segurança. O acesso externo (APIs Mercado Livre) é garantido via NAT Gateway.
 
-## Variaveis de Ambiente
+Para economia de custos em desenvolvimento, o NAT Gateway pode ser desabilitado via variável Terraform enable_nat_gateway = false.
 
-### API (`apps/api/.env`)
+Documentação
 
-```env
-DATABASE_URL=postgresql://user:pass@localhost:5432/superseller
-JWT_SECRET=sua-chave-secreta
-CORS_ORIGIN=http://localhost:3000
+Contexto Atual
 
-# Mercado Livre OAuth
-ML_APP_ID=seu-app-id
-ML_APP_SECRET=seu-app-secret
-ML_REDIRECT_URI=http://localhost:3001/api/v1/auth/mercadolivre/callback
+Log de Desenvolvimento
 
-# Shopee OAuth (opcional)
-SHOPEE_CLIENT_ID=seu-client-id
-SHOPEE_CLIENT_SECRET=seu-client-secret
-SHOPEE_REDIRECT_URI=http://localhost:3001/api/v1/auth/shopee/callback
-```
+Contratos de API
 
-### Web (`apps/web/.env.local`)
+Arquitetura
 
-```env
-NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
-```
+Licença
 
-## Documentacao
-
-- [Plano de Negocios](docs/business-plan.md)
-- [Backlog MVP](docs/mvp-backlog.md)
-- [Arquitetura](docs/architecture.md)
-- [Guidelines Frontend](docs/frontend-guidelines.md)
-- [Especificacao Health Score](docs/healthscore-spec.md)
-
-## Contribuindo
-
-1. Crie uma branch: `git checkout -b feature/sua-feature`
-2. Faca commits com Conventional Commits: `feat:`, `fix:`, `chore:`
-3. Abra um PR com descricao clara do que foi feito
-
-## Licenca
-
-Proprietario - Todos os direitos reservados.
+Proprietário - Todos os direitos reservados.
