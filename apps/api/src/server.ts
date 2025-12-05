@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { authRoutes } from './routes/auth';
 import { mercadolivreRoutes } from './routes/mercadolivre';
 import { webhookRoutes } from './routes/mercado-livre-webhook';
+import { metricsRoutes } from './routes/metrics';
 
 const app = fastify();
 
@@ -23,6 +24,8 @@ async function main() {
   await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
   
   await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
+  
+  await app.register(metricsRoutes, { prefix: '/api/v1/metrics' });
 
   try {
     await app.ready();
