@@ -1,12 +1,12 @@
 Super Seller IA — Arquitetura & Segurança (MVP→V1)
 
-Documento técnico com a visão de arquitetura, fluxos de dados, padrões de segurança/LGPD e desenho das APIs do MVP.
+Documento técnico com a visão de arquitetura, fluxos de dados, padrões de segurança/LGPD e desenho das APIs do MVP. Inclui esqueleto de rotas (Fastify + TypeScript + Zod) e contratos de dados.
 
 1) Objetivos de Arquitetura
 
 Escalável e modular (conectores por marketplace)
 
-Custo-eficiente (Serverless/App Runner com "scale to zero" possível)
+Custo-eficiente (App Runner com scale-to-zero e NAT Gateway sob demanda)
 
 Segurança e LGPD by design (mínimo necessário, criptografia, consentimento)
 
@@ -14,7 +14,7 @@ Observabilidade (telemetria de produto + logs + métricas)
 
 DX boa: monorepo, CI/CD Automatizado, IaC (Terraform)
 
-2) Diagrama lógico (Fluxo de Dados)
+2) Diagrama lógico (texto)
 
 [Web (Next.js)]  ↔  [API (Fastify)]  ↔  [Core Services]
                                    ↙            ↘
@@ -24,103 +24,195 @@ DX boa: monorepo, CI/CD Automatizado, IaC (Terraform)
                                  |                    |
                       [Marketplaces APIs]       [Storage/DB]
                                  |                    |
-                            [Logs/Eventos]     [Postgres (RDS)]
+                            [S3 Data Lake]  ← ETL → [Postgres (RDS)]
+                                   ↑                        ↓
+                           [Ingestion Jobs]          [Analytics/Telemetry]
 
 
 Principais componentes
 
 Web: dashboard, action queue, relatórios
 
-API: autenticação, conectores (ML/Shopee), scores, actions
+API: autenticação, conectores, scores, actions
 
-Connectors: Responsáveis pelo OAuth, coleta de dados e aplicação de mudanças
+Connectors: Shopee/ML — OAuth, coleta, aplicação de mudanças
 
-Dados: RDS Postgres (operacional) em Subnet Privada
+Core: cálculo do Health Score e Action Engine
 
-Infraestrutura: AWS App Runner gerenciado via Terraform
+Dados: S3 (bruto), RDS Postgres (operacional)
+
+Observabilidade: CloudWatch Logs/Metrics (Nativo App Runner)
 
 3) Serviços AWS (Implementação Atual)
 
-Computação: AWS App Runner (API + Web)
+API/Web: AWS App Runner (Gerenciado, substitui ECS Fargate para o MVP)
 
-Motivo: Menor custo operacional que ECS Fargate, gestão zero de clusters.
+Dados: RDS Postgres (Subnet Privada), S3 (raw)
 
-Banco de Dados: RDS PostgreSQL (Subnet Privada)
+Rede: NAT Gateway (saída internet), VPC Connector (acesso RDS)
 
-Acesso: Via VPC Connector do App Runner e Bastion Host.
+Jobs: EventBridge Scheduler + Lambda (ingestão diária)
 
-Rede: VPC Customizada (us-east-2)
+Secrets: AWS Secrets Manager (tokens OAuth, DB)
 
-NAT Gateway: Para permitir que o App Runner acesse APIs externas (Mercado Livre).
+Auth: JWT próprio (Usuários) + OAuth Marketplaces
 
-VPC Connector: Para permitir que o App Runner acesse o RDS.
-
-Secrets: AWS Secrets Manager (Credenciais OAuth, DB URL)
-
-CI/CD: GitHub Actions + AWS OIDC (Deploy automático)
-
-IaC: Terraform Modular
+IaC: Terraform (módulos por recurso)
 
 4) Segurança & LGPD
 
 4.1 Princípios
 
-Isolamento de Rede: Banco de dados inacessível publicamente. App Runner acessa via túnel privado.
+Minimização: guardar só o necessário para executar as recomendações
 
-Criptografia: HTTPS forçado (TLS), Secrets Manager para chaves.
+Transparência: termos e consentimento para cada conector
 
-Dados Sensíveis: Apenas access_token e refresh_token armazenados, criptografados ou protegidos pelo acesso ao banco.
+Criptografia: em trânsito (TLS) e em repouso (RDS AES-256)
 
-5) Modelo de Dados (Schema Simplificado)
+Isolamento por tenant: tenant_id em todas as tabelas e policies de acesso
 
-Tabelas principais
+Isolamento de Rede: Banco de dados inacessível publicamente
 
-Tenant: Unidade de isolamento de clientes.
+4.2 Dados pessoais
 
-User: Usuários do sistema (Auth via JWT).
+E-mail, nome e identificadores dos marketplaces → dados pessoais
 
-MarketplaceConnection: Armazena tokens OAuth.
+Pseudonimização onde possível (IDs internos por tenant)
 
-Campos chave: tenant_id, type (Enum: MERCADOLIVRE, SHOPEE), access_token, refresh_token.
+4.3 Controles
 
-Listing: Anúncios importados.
+RBAC (roles: owner, manager, operator)
 
-Action: Recomendações geradas pela IA e status de execução.
+Secrets Manager para tokens/keys
 
-6) Fluxo de Autenticação OAuth (Mercado Livre)
+Backups RDS (automáticos diários)
 
-O fluxo segue o padrão Authorization Code para garantir segurança:
+5) Modelo de Dados (operacional — v1)
 
-Frontend: Usuário clica em "Conectar".
+Tabelas principais (Convenção snake_case)
 
-Chama: GET /api/v1/auth/mercadolivre/connect
+tenants (id, name, created_at)
 
-API: Gera URL segura e redireciona.
+users (id, tenant_id, email, password_hash, created_at)
 
-URL: https://auth.mercadolivre.com.br/authorization com client_id e state.
+marketplace_connections (id, tenant_id, type, access_token, refresh_token, expires_at, status)
 
-Mercado Livre: Usuário loga e autoriza.
+listings (id, tenant_id, marketplace, listing_id_ext, title, price, stock, status, category, updated_at)
 
-Callback: ML redireciona de volta para a API.
+health_scores (id, tenant_id, listing_id, score, components_json, computed_at)
 
-Rota: GET /api/v1/auth/mercadolivre/callback?code=...
+actions (id, tenant_id, listing_id, type, payload_json, status, created_at, approved_at, applied_at)
 
-Troca de Token (Back-channel):
+6) APIs (Fastify + Zod) — Contratos MVP
 
-API chama POST api.mercadolibre.com/oauth/token (via NAT Gateway).
+Prefixo: /api/v1
 
-Recebe access_token e refresh_token.
+6.1 Auth & Tenancy
 
-Persistência: API salva/atualiza na tabela marketplace_connections.
+POST /auth/register — Cria usuário e tenant
 
-Finalização: API redireciona usuário para Dashboard (success=true).
+POST /auth/login — Autenticação JWT
 
-7) Topologia de Rede (Diagrama AWS)
+6.2 Connectors (Mercado Livre)
 
-Visualização da infraestrutura implementada via Terraform:
+GET /auth/mercadolivre/connect — Inicia fluxo OAuth (Redireciona para ML)
+
+GET /auth/mercadolivre/callback — Recebe código e troca por token (via NAT Gateway)
+
+POST /webhooks/mercadolivre — Recebe notificações de mudanças
+
+6.3 Listings & Métricas
+
+GET /listings — Lista com filtros
+
+GET /listings/:id/metrics — Série temporal
+
+6.4 Actions (aprovação/aplicação)
+
+GET /actions/recommendations — Recomendações pendentes
+
+POST /actions/:id/approve — Aprova sugestão da IA
+
+7) Esqueleto de rotas (TypeScript)
+
+Referência de implementação em apps/api/src/.
+
+7.1 Schemas com Zod — schemas.ts
+
+import { z } from 'zod';
+
+export const ListingFilterSchema = z.object({
+  marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
+  page: z.coerce.number().min(1).default(1),
+  pageSize: z.coerce.number().min(1).max(200).default(20),
+});
+
+
+7.2 Rotas — routes/mercadolivre.ts (Implementado)
+
+import { FastifyPluginCallback } from 'fastify';
+// ... imports
+
+export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
+  // Rota que inicia o OAuth
+  app.get('/connect', async (req, reply) => {
+     // Redireciona para auth.mercadolivre.com.br
+  });
+
+  // Rota de Callback
+  app.get('/callback', async (req, reply) => {
+     // Troca code por token e salva no banco
+  });
+  done();
+};
+
+
+8) Estratégia de Jobs (ingestão e scores)
+
+Ingestão Tempo Real: Webhooks do Mercado Livre disparam atualizações imediatas.
+
+Ingestão Diária: Job agendado para garantir consistência (reconciliação).
+
+Resiliência: Filas (SQS) planejadas para processamento assíncrono de IA.
+
+9) Observabilidade
+
+Logs estruturados (json) no CloudWatch.
+
+Health Checks: /api/v1/health monitorado pelo App Runner.
+
+Alarmes: Monitoramento de erros 5xx e latência via AWS CloudWatch.
+
+10) Roadmap técnico (MVP → V1)
+
+[x] Infraestrutura Core (App Runner + RDS + NAT)
+
+[x] Autenticação de Usuários
+
+[x] Integração OAuth Mercado Livre
+
+[ ] Integração OAuth Shopee
+
+[ ] Motor de Recomendação (IA)
+
+[ ] Dashboard Analítico
+
+11) Checklists de Segurança (MVP)
+
+[x] TLS forçado (HTTPS)
+
+[x] Secrets no AWS SM, nunca em env plano
+
+[x] Tokens OAuth protegidos no banco
+
+[x] Banco de dados em subnet privada
+
+[x] RBAC aplicado na API (Guardas de rota)
+
+12) Topologia de Rede (Diagrama AWS)
 
 graph TD
-    User[Usuário / Internet] -->|HTTPS| AppRunner[AWS App Runner (API + Web)]
+    User[Usuário / Internet] -->|HTTPS| AppRunner[AWS App Runner]
     
     subgraph VPC [VPC - us-east-2]
         subgraph PublicSubnet [Subnets Públicas]
@@ -137,53 +229,3 @@ graph TD
     AppRunner -->|VPC Connector| RDS
     AppRunner -->|VPC Connector| NAT
     NAT --> IGW -->|API Calls| ML[API Mercado Livre]
-
-
-8) Estratégia de Jobs e Workers
-
-Atualmente (MVP): Processamento síncrono ou disparado por cron externo.
-Futuro: Implementação de filas (SQS) para processamento assíncrono de:
-
-Ingestão de anúncios (Sync)
-
-Cálculo de Health Score
-
-Execução de ações em massa
-
-9) Observabilidade
-
-Logs: CloudWatch Logs (Integrado nativamente ao App Runner).
-
-Health Checks:
-
-API: /api/v1/health
-
-Monitoramento de uptime via Console AWS.
-
-10) Roadmap técnico (MVP → V1)
-
-[x] Infraestrutura Core (App Runner + RDS)
-
-[x] Autenticação de Usuários
-
-[x] Integração OAuth Mercado Livre (Conexão)
-
-[ ] Integração OAuth Shopee
-
-[ ] Sync de Anúncios (Job de Ingestão)
-
-[ ] Motor de Recomendação (IA)
-
-[ ] Dashboard Analítico
-
-11) Checklists de Segurança (MVP)
-
-[x] Secrets no AWS Secrets Manager
-
-[x] Banco de dados em Subnet Privada
-
-[x] HTTPS/TLS forçado
-
-[x] Validação de Schemas (Zod) na API
-
-[ ] Rotação de chaves periódica
