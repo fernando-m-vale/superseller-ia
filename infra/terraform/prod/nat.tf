@@ -18,7 +18,6 @@ resource "aws_eip" "nat" {
     Name = "superseller-prod-nat-eip"
   })
 
-  # Garante que o IGW existe antes de criar o EIP
   depends_on = [data.aws_internet_gateway.main]
 }
 
@@ -28,7 +27,7 @@ resource "aws_eip" "nat" {
 resource "aws_nat_gateway" "main" {
   count         = var.enable_nat_gateway ? 1 : 0
   allocation_id = aws_eip.nat[0].id
-  subnet_id     = local.public_subnet_ids[0] # Primeira subnet pública
+  subnet_id     = local.public_subnet_ids[0]
 
   tags = merge(local.common_tags, {
     Name = "superseller-prod-nat-gw"
@@ -38,29 +37,30 @@ resource "aws_nat_gateway" "main" {
 }
 
 # -----------------------------------------------------------------------------
-# Route Table para Subnets Privadas (com rota para NAT)
+# Identificar Route Tables das Subnets Privadas
 # -----------------------------------------------------------------------------
-resource "aws_route_table" "private" {
-  count  = var.enable_nat_gateway ? 1 : 0
-  vpc_id = var.vpc_id
+# As subnets privadas já possuem Route Tables associadas.
+# Vamos adicionar apenas a rota para o NAT Gateway nessas Route Tables.
 
-  # Rota para internet via NAT Gateway
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[0].id
-  }
-
-  tags = merge(local.common_tags, {
-    Name = "superseller-prod-private-rt"
-  })
+locals {
+  # Obtém os IDs das Route Tables das subnets privadas
+  private_route_table_ids = distinct([
+    for subnet_id in local.private_subnet_ids :
+    lookup(local.subnet_route_table_map, subnet_id, null)
+    if lookup(local.subnet_route_table_map, subnet_id, null) != null
+  ])
 }
 
 # -----------------------------------------------------------------------------
-# Associar Route Table às Subnets Privadas
+# Adicionar Rota para NAT Gateway nas Route Tables Privadas
 # -----------------------------------------------------------------------------
-resource "aws_route_table_association" "private" {
-  count          = var.enable_nat_gateway ? length(local.private_subnet_ids) : 0
-  subnet_id      = local.private_subnet_ids[count.index]
-  route_table_id = aws_route_table.private[0].id
-}
+# Isso NÃO cria novas associações, apenas adiciona a rota 0.0.0.0/0 -> NAT
+# nas Route Tables que já estão associadas às subnets privadas.
 
+resource "aws_route" "private_nat" {
+  count = var.enable_nat_gateway ? length(local.private_route_table_ids) : 0
+
+  route_table_id         = local.private_route_table_ids[count.index]
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.main[0].id
+}
