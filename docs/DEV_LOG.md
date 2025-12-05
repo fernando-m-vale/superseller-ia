@@ -146,3 +146,31 @@ Cenário: O Mercado Livre rejeita a requisição de login.
 Causa Raiz: O ML devolve 400 Bad Request por erro de validação de parâmetro (provavelmente redirect_uri ou client_id).
 
 Ação: O próximo passo é rodar o teste manual da URL para obter a mensagem de erro exata do ML.
+
+[2025-12-05] Resolução de Conectividade Externa (Erro 502)
+
+Partner: Gemini & Cursor | Status: Em Implementação
+
+Ocorrência (Erro 502 Bad Gateway)
+
+Sintoma: Ao retornar do login no Mercado Livre, a aplicação ficava "pensando" e retornava erro 502 na rota de callback.
+
+Diagnóstico: Logs do App Runner não mostravam crash, mas sim timeouts e reinicializações. Identificado que o App Runner, por estar conectado à VPC Privada (para acessar o RDS), perdeu o acesso à internet pública.
+
+Causa Raiz: Ausência de NAT Gateway na infraestrutura. O App Runner não conseguia chamar api.mercadolibre.com para trocar o code pelo token.
+
+Solução Arquitetural
+
+Implementação de NAT Gateway via Terraform.
+
+Configuração de rota: Subnets Privadas -> NAT Gateway -> Internet Gateway.
+
+Isso permite que o App Runner acesse simultaneamente o banco de dados (interno) e APIs de terceiros (externo).
+
+Economia de Custos: Implementada variável enable_nat_gateway no Terraform para desligar o recurso em ambientes de desenvolvimento quando não utilizado.
+
+Próximos Passos
+
+Executar terraform apply para provisionar a nova rede.
+
+Validar fluxo de OAuth completo.

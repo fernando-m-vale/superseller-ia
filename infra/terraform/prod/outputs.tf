@@ -161,6 +161,19 @@ output "web_certificate_arn" {
 }
 
 # -----------------------------------------------------------------------------
+# NAT Gateway (se habilitado)
+# -----------------------------------------------------------------------------
+output "nat_gateway_id" {
+  description = "NAT Gateway ID (if enabled)"
+  value       = var.enable_nat_gateway ? aws_nat_gateway.main[0].id : null
+}
+
+output "nat_gateway_public_ip" {
+  description = "NAT Gateway Public IP (if enabled)"
+  value       = var.enable_nat_gateway ? aws_eip.nat[0].public_ip : null
+}
+
+# -----------------------------------------------------------------------------
 # RDS (se habilitado)
 # -----------------------------------------------------------------------------
 output "rds_endpoint" {

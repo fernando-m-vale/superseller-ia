@@ -1,30 +1,38 @@
 Contexto do Projeto: SuperSeller IA
 
-Status: Fase 2 - Parado em 400 Bad Request
-Última Atualização: 04/12/2025 (Fim do dia)
+Status: Fase 2 - Estabilização de Integrações
+Última Atualização: 05/12/2025
 
-1. Status Técnico
+1. Visão Geral
 
-Infraestrutura: ✅ Roteamento (404) RESOLVIDO. Deploy funcionando.
+SaaS Multi-tenant para otimização de e-commerce.
+Foco Atual: Resolver erro 502 Bad Gateway no callback do Mercado Livre.
 
-Banco de Dados: ✅ OK.
+2. Status Técnico
 
-Integração ML: 🔴 FALHA. A requisição de autorização foi rejeitada pelo ML.
+Infraestrutura:
 
-2. Problemas Conhecidos (Bloqueante Atual)
+✅ AWS App Runner (API + Web).
 
-OAuth ML (400 Bad Request):
+✅ RDS PostgreSQL (Privado).
 
-Sintoma: ML retorna "Desculpe, não foi possível conectar" na URL de login.
+✅ NAT Gateway: Implementado para permitir que o App Runner acesse APIs externas (Mercado Livre) a partir da VPC.
 
-Causa Mais Provável: Divergência de URL de Retorno (redirect_uri) entre o código e o painel do Mercado Livre DevCenter.
+Banco de Dados: ✅ Conectado e Migrado.
 
-3. Próximos Passos (Plano de Ação)
+Autenticação: ✅ Registro, Login e OAuth ML (Login) funcionais.
 
-Execução do Teste Manual: O Fernando irá testar a URL de autorização diretamente no navegador para isolar se o erro é no código (state) ou na configuração do DevCenter (redirect_uri).
+Integração ML: ⚠️ Callback retorna 502. Diagnóstico aponta para falta de conectividade de saída (resolvido com NAT Gateway).
 
-Correção: Ajustar a URL registrada no Mercado Livre ou o parâmetro state no mercadolivre.ts.
+3. Arquitetura de Rede (Novo)
 
-4. Vitória do Dia
+O App Runner utiliza um VPC Connector para acessar o RDS nas subnets privadas.
+Para acessar a internet (ex: api.mercadolibre.com), o tráfego é roteado através de um NAT Gateway localizado nas subnets públicas.
 
-Rotas Fastify (404): RESOLVIDO. A rota /api/v1/auth/mercadolivre/connect está funcional e acessível.
+4. Próximos Passos
+
+Aplicar o Terraform para criar o NAT Gateway.
+
+Testar novamente o fluxo de conexão com o Mercado Livre.
+
+Validar se o token é salvo no banco e o redirecionamento ocorre com sucesso.

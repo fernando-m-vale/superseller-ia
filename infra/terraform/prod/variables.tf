@@ -97,6 +97,15 @@ variable "apprunner_web_memory" {
 }
 
 # -----------------------------------------------------------------------------
+# NAT Gateway Configuration
+# -----------------------------------------------------------------------------
+variable "enable_nat_gateway" {
+  description = "Enable NAT Gateway for private subnets (required for App Runner to access external APIs). Cost: ~$32/month"
+  type        = bool
+  default     = true
+}
+
+# -----------------------------------------------------------------------------
 # RDS Configuration
 # -----------------------------------------------------------------------------
 variable "enable_rds" {
