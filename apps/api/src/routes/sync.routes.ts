@@ -1,31 +1,32 @@
 import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
-import { z } from 'zod';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
+import { authGuard } from '../plugins/auth';
 
-// Schema de validação do body
-const SyncRequestSchema = z.object({
-  tenantId: z.string().uuid('tenantId deve ser um UUID válido'),
-});
-
-type SyncRequestBody = z.infer<typeof SyncRequestSchema>;
+interface RequestWithAuth extends FastifyRequest {
+  userId?: string;
+  tenantId?: string;
+}
 
 export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   /**
    * POST /api/v1/sync/mercadolivre
    * 
-   * Dispara sincronização manual dos anúncios do Mercado Livre
-   * 
-   * Body: { "tenantId": "uuid-do-tenant" }
+   * Dispara sincronização manual dos anúncios do Mercado Livre.
+   * Requer autenticação - usa tenantId do token JWT.
    */
   app.post(
     '/mercadolivre',
-    async (
-      request: FastifyRequest<{ Body: SyncRequestBody }>,
-      reply: FastifyReply
-    ) => {
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        // Validar body
-        const { tenantId } = SyncRequestSchema.parse(request.body);
+        const { tenantId } = request as RequestWithAuth;
+
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
 
         console.log(`[SYNC-ROUTE] Requisição de sync recebida para tenant: ${tenantId}`);
 
@@ -59,13 +60,6 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
       } catch (error) {
         console.error('[SYNC-ROUTE] Erro na sincronização:', error);
 
-        if (error instanceof z.ZodError) {
-          return reply.status(400).send({
-            error: 'Validação falhou',
-            details: error.errors,
-          });
-        }
-
         const errorMessage = error instanceof Error ? error.message : 'Erro interno';
         return reply.status(500).send({
           error: 'Falha na sincronização',
@@ -91,4 +85,3 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
 
   done();
 };
-
