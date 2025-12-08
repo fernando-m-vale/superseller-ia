@@ -1,5 +1,5 @@
 import { FastifyPluginCallback, FastifyRequest } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ListingStatus, Marketplace } from '@prisma/client';
 import { healthScore } from '@superseller/core';
 import { z } from 'zod';
 
@@ -15,7 +15,100 @@ const SummaryQuerySchema = z.object({
   marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
 });
 
+const OverviewQuerySchema = z.object({
+  marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
+});
+
 export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
+
+  // GET /api/v1/metrics/overview
+  // Retorna dados reais de Listings para o Dashboard principal
+  app.get('/overview', async (req, reply) => {
+    try {
+      const query = OverviewQuerySchema.parse(req.query);
+      const tenantId = (req as RequestWithTenant).tenantId;
+
+      // Se não tem tenantId (não autenticado), retorna mock vazio
+      if (!tenantId) {
+        return reply.send({
+          totalListings: 0,
+          activeListings: 0,
+          pausedListings: 0,
+          averagePrice: 0,
+          averageHealthScore: 0,
+          totalStock: 0,
+          byMarketplace: [],
+        });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const whereClause: any = { tenant_id: tenantId };
+      if (query.marketplace) {
+        whereClause.marketplace = query.marketplace;
+      }
+
+      // Total de listings
+      const totalListings = await prisma.listing.count({ where: whereClause });
+
+      // Listings ativos
+      const activeListings = await prisma.listing.count({
+        where: { ...whereClause, status: ListingStatus.active },
+      });
+
+      // Listings pausados
+      const pausedListings = await prisma.listing.count({
+        where: { ...whereClause, status: ListingStatus.paused },
+      });
+
+      // Agregações (preço médio, health score médio, estoque total)
+      const aggregations = await prisma.listing.aggregate({
+        where: whereClause,
+        _avg: {
+          price: true,
+          health_score: true,
+        },
+        _sum: {
+          stock: true,
+        },
+      });
+
+      // Breakdown por marketplace
+      const marketplaceBreakdown = await prisma.listing.groupBy({
+        by: ['marketplace'],
+        where: { tenant_id: tenantId },
+        _count: { id: true },
+        _avg: { price: true, health_score: true },
+      });
+
+      const byMarketplace = marketplaceBreakdown.map((mp) => ({
+        marketplace: mp.marketplace,
+        count: mp._count.id,
+        avgPrice: Number(mp._avg.price) || 0,
+        avgHealthScore: mp._avg.health_score || 0,
+      }));
+
+      return reply.send({
+        totalListings,
+        activeListings,
+        pausedListings,
+        averagePrice: Number(aggregations._avg.price) || 0,
+        averageHealthScore: aggregations._avg.health_score || 0,
+        totalStock: aggregations._sum.stock || 0,
+        byMarketplace,
+      });
+    } catch (error) {
+      app.log.error(error);
+      return reply.send({
+        totalListings: 0,
+        activeListings: 0,
+        pausedListings: 0,
+        averagePrice: 0,
+        averageHealthScore: 0,
+        totalStock: 0,
+        byMarketplace: [],
+      });
+    }
+  });
   
   // GET /api/v1/metrics/summary?days=7
   // Retorna resumo de métricas para o Dashboard

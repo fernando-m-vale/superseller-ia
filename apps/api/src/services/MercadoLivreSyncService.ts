@@ -36,6 +36,7 @@ export class MercadoLivreSyncService {
   private accessToken: string = '';
   private providerAccountId: string = '';
   private connectionId: string = '';
+  private refreshToken: string = '';
 
   constructor(tenantId: string) {
     this.tenantId = tenantId;
@@ -132,6 +133,7 @@ export class MercadoLivreSyncService {
     this.connectionId = connection.id;
     this.accessToken = connection.access_token;
     this.providerAccountId = connection.provider_account_id;
+    this.refreshToken = connection.refresh_token || '';
 
     console.log(`[ML-SYNC] Conexão encontrada. Provider Account ID: ${this.providerAccountId}`);
   }
@@ -198,6 +200,7 @@ export class MercadoLivreSyncService {
       });
 
       this.accessToken = access_token;
+      this.refreshToken = refresh_token || this.refreshToken;
       console.log('[ML-SYNC] Token renovado com sucesso');
     } catch (error) {
       if (error instanceof AxiosError) {
@@ -210,6 +213,32 @@ export class MercadoLivreSyncService {
         });
       }
       throw new Error('Falha ao renovar token. Reconecte a conta do Mercado Livre.');
+    }
+  }
+
+  /**
+   * Executa uma função com retry automático em caso de 401 (Unauthorized)
+   * Pattern: Tenta executar -> Se 401, renova token -> Tenta novamente (1x)
+   */
+  private async executeWithRetryOn401<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        console.log('[ML-SYNC] Recebido 401. Tentando renovar token e retry...');
+        
+        if (!this.refreshToken) {
+          throw new Error('Refresh token não disponível. Reconecte a conta.');
+        }
+
+        // Renovar token
+        await this.refreshAccessToken(this.refreshToken);
+        
+        // Retry da operação original
+        console.log('[ML-SYNC] Token renovado. Executando retry...');
+        return await fn();
+      }
+      throw error;
     }
   }
 
@@ -274,6 +303,7 @@ export class MercadoLivreSyncService {
 
   /**
    * Busca detalhes de múltiplos itens (até 20 por vez)
+   * Usa retry automático em caso de 401
    */
   private async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
     if (itemIds.length === 0) return [];
@@ -281,24 +311,30 @@ export class MercadoLivreSyncService {
       throw new Error('Máximo de 20 itens por requisição');
     }
 
-    try {
-      const response = await axios.get(`${ML_API_BASE}/items`, {
-        headers: { Authorization: `Bearer ${this.accessToken}` },
-        params: { ids: itemIds.join(',') },
-      });
+    return this.executeWithRetryOn401(async () => {
+      try {
+        const response = await axios.get(`${ML_API_BASE}/items`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          params: { ids: itemIds.join(',') },
+        });
 
-      // A API retorna um array de objetos { code, body }
-      const items: MercadoLivreItem[] = response.data
-        .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
-        .map((item: { code: number; body: MercadoLivreItem }) => item.body);
+        // A API retorna um array de objetos { code, body }
+        const items: MercadoLivreItem[] = response.data
+          .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
+          .map((item: { code: number; body: MercadoLivreItem }) => item.body);
 
-      return items;
-    } catch (error) {
-      if (error instanceof AxiosError) {
-        console.error('[ML-SYNC] Erro ao buscar detalhes:', error.response?.data);
+        return items;
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          const data = JSON.stringify(error.response?.data);
+          console.error(`[ML-SYNC] Erro ao buscar detalhes (${status}):`, data);
+          // Re-throw para o executeWithRetryOn401 tratar o 401
+          throw error;
+        }
+        throw new Error('Falha ao buscar detalhes dos anúncios');
       }
-      throw new Error('Falha ao buscar detalhes dos anúncios');
-    }
+    });
   }
 
   /**
@@ -310,6 +346,7 @@ export class MercadoLivreSyncService {
 
     for (const item of items) {
       const status = this.mapMLStatusToListingStatus(item.status);
+      const healthScore = this.calculateHealthScore(item);
 
       try {
         const existing = await prisma.listing.findUnique({
@@ -331,6 +368,7 @@ export class MercadoLivreSyncService {
               stock: item.available_quantity,
               status,
               category: item.category_id,
+              health_score: healthScore,
             },
           });
           updated++;
@@ -345,6 +383,7 @@ export class MercadoLivreSyncService {
               stock: item.available_quantity,
               status,
               category: item.category_id,
+              health_score: healthScore,
             },
           });
           created++;
@@ -355,6 +394,51 @@ export class MercadoLivreSyncService {
     }
 
     return { created, updated };
+  }
+
+  /**
+   * Calcula Health Score simplificado (placeholder para IA futura)
+   * Score de 0-100 baseado em critérios básicos
+   */
+  private calculateHealthScore(item: MercadoLivreItem): number {
+    let score = 0;
+
+    // Título preenchido (+20)
+    if (item.title && item.title.length > 10) {
+      score += 20;
+    }
+
+    // Título com bom tamanho (+10 extra se > 40 chars)
+    if (item.title && item.title.length > 40) {
+      score += 10;
+    }
+
+    // Preço definido (+20)
+    if (item.price && item.price > 0) {
+      score += 20;
+    }
+
+    // Estoque disponível (+20)
+    if (item.available_quantity > 0) {
+      score += 20;
+    }
+
+    // Categoria definida (+10)
+    if (item.category_id) {
+      score += 10;
+    }
+
+    // Thumbnail presente (+10)
+    if (item.thumbnail) {
+      score += 10;
+    }
+
+    // Status ativo (+10)
+    if (item.status === 'active') {
+      score += 10;
+    }
+
+    return Math.min(score, 100); // Cap em 100
   }
 
   /**
