@@ -217,40 +217,57 @@ export class MercadoLivreSyncService {
    * Busca os IDs de todos os anúncios do usuário
    */
   private async fetchUserItemIds(): Promise<string[]> {
-    const allIds: string[] = [];
-    let offset = 0;
-    const limit = 50;
-
-    while (true) {
-      try {
-        const response = await axios.get(
-          `${ML_API_BASE}/users/${this.providerAccountId}/items/search`,
-          {
-            headers: { Authorization: `Bearer ${this.accessToken}` },
-            params: { offset, limit },
-          }
-        );
-
-        const { results, paging } = response.data;
-        allIds.push(...results);
-
-        console.log(`[ML-SYNC] Buscados ${allIds.length}/${paging.total} IDs`);
-
-        if (offset + limit >= paging.total) {
-          break;
+        const allIds: string[] = [];
+        let offset = 0;
+        const limit = 50;
+    
+        // Validação de segurança
+        if (!this.providerAccountId) {
+            throw new Error('Provider Account ID está vazio. Falha ao carregar conexão.');
         }
-
-        offset += limit;
-      } catch (error) {
-        if (error instanceof AxiosError) {
-          console.error('[ML-SYNC] Erro ao buscar IDs:', error.response?.data);
-        }
-        throw new Error('Falha ao buscar lista de anúncios');
-      }
-    }
-
-    return allIds;
-  }
+    
+        while (true) {
+          try {
+            const url = `${ML_API_BASE}/users/${this.providerAccountId}/items/search`;
+            console.log(`[ML-SYNC] Chamando API: ${url} (Offset: ${offset})`);
+    
+            const response = await axios.get(
+              url,
+              {
+                headers: { Authorization: `Bearer ${this.accessToken}` },
+                // REMOVIDO: search_type: 'scan' (Causa do erro 403)
+                params: { offset, limit }, 
+              }
+            );
+    
+            const { results, paging } = response.data;
+            allIds.push(...results);
+    
+            console.log(`[ML-SYNC] Buscados ${allIds.length}/${paging.total} IDs`);
+    
+            // Proteção contra loop infinito (máximo 10.000 itens se não usar scroll)
+            // A API padrão tem limite de offset 10000. Para mais, precisaríamos de scroll_id (outro método).
+            // Para MVP, isso atende 99% dos sellers.
+            if (offset + limit >= paging.total || offset >= 10000) {
+              break;
+            }
+    
+            offset += limit;
+          } catch (error) {
+            if (error instanceof AxiosError) {
+              // Mantendo log detalhado para debug futuro
+              const mlError = error.response?.data;
+              const status = error.response?.status;
+              console.error('[ML-SYNC] Erro ao buscar IDs:', mlError);
+              // Se der erro, paramos o loop mas retornamos o que já pegamos (opcional) ou lançamos erro
+              throw new Error(`Falha ML (${status}): ${JSON.stringify(mlError)}`);
+            }
+            throw error;
+          }
+        }
+    
+        return allIds;
+      }
 
   /**
    * Busca detalhes de múltiplos itens (até 20 por vez)
