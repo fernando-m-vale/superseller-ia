@@ -229,12 +229,12 @@ export class MercadoLivreSyncService {
 
     while (true) {
       try {
-        // Usando /sites/MLB/search com seller_id (endpoint mais permissivo)
+        // Usando /sites/MLB/search com seller_id (endpoint PÚBLICO - não precisa de Auth)
         const url = `${ML_API_BASE}/sites/MLB/search`;
         console.log(`[ML-SYNC] Chamando API: ${url} (seller_id: ${this.providerAccountId}, Offset: ${offset})`);
 
         const response = await axios.get(url, {
-          headers: { Authorization: `Bearer ${this.accessToken}` },
+          // NOTA: Endpoint público - Authorization removido para evitar conflitos de escopo
           params: {
             seller_id: this.providerAccountId,
             offset,
@@ -250,7 +250,7 @@ export class MercadoLivreSyncService {
 
         console.log(`[ML-SYNC] Buscados ${allIds.length}/${paging.total} IDs`);
 
-        // Proteção contra loop infinito (máximo 10.000 itens)
+        // Proteção contra loop infinito (máximo 1000 itens via offset)
         // A API de search tem limite de offset 1000. Para MVP, isso atende a maioria dos sellers.
         if (offset + limit >= paging.total || offset >= 1000) {
           break;
@@ -258,11 +258,12 @@ export class MercadoLivreSyncService {
 
         offset += limit;
       } catch (error) {
-        if (error instanceof AxiosError) {
-          const mlError = error.response?.data;
+        // Melhorar debug: mostrar status e resposta completa do ML
+        if (axios.isAxiosError(error)) {
           const status = error.response?.status;
-          console.error('[ML-SYNC] Erro ao buscar IDs:', mlError);
-          throw new Error(`Falha ML (${status}): ${JSON.stringify(mlError)}`);
+          const data = JSON.stringify(error.response?.data);
+          console.error(`[ML-SYNC] Erro API ML (${status}):`, data);
+          throw new Error(`Erro ML ${status}: ${data}`);
         }
         throw error;
       }
