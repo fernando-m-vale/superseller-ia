@@ -1,0 +1,368 @@
+import axios, { AxiosError } from 'axios';
+import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+const ML_API_BASE = 'https://api.mercadolibre.com';
+
+interface MercadoLivreItem {
+  id: string;
+  title: string;
+  price: number;
+  available_quantity: number;
+  permalink: string;
+  thumbnail: string;
+  status: string;
+  category_id: string;
+}
+
+interface TokenRefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+interface SyncResult {
+  success: boolean;
+  itemsProcessed: number;
+  itemsCreated: number;
+  itemsUpdated: number;
+  errors: string[];
+  duration: number;
+}
+
+export class MercadoLivreSyncService {
+  private tenantId: string;
+  private accessToken: string = '';
+  private providerAccountId: string = '';
+  private connectionId: string = '';
+
+  constructor(tenantId: string) {
+    this.tenantId = tenantId;
+  }
+
+  /**
+   * Método principal de sincronização
+   */
+  async syncListings(): Promise<SyncResult> {
+    const startTime = Date.now();
+    const result: SyncResult = {
+      success: false,
+      itemsProcessed: 0,
+      itemsCreated: 0,
+      itemsUpdated: 0,
+      errors: [],
+      duration: 0,
+    };
+
+    try {
+      console.log(`[ML-SYNC] Iniciando sincronização para tenant: ${this.tenantId}`);
+
+      // 1. Buscar conexão do Mercado Livre
+      await this.loadConnection();
+
+      // 2. Verificar/renovar token se necessário
+      await this.ensureValidToken();
+
+      // 3. Buscar IDs dos anúncios
+      const itemIds = await this.fetchUserItemIds();
+      console.log(`[ML-SYNC] Encontrados ${itemIds.length} anúncios`);
+
+      if (itemIds.length === 0) {
+        console.log('[ML-SYNC] Nenhum anúncio encontrado para sincronizar');
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        return result;
+      }
+
+      // 4. Processar em lotes de 20
+      const chunks = this.chunkArray(itemIds, 20);
+      console.log(`[ML-SYNC] Processando ${chunks.length} lotes de até 20 itens`);
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`[ML-SYNC] Processando lote ${i + 1}/${chunks.length} (${chunk.length} itens)`);
+
+        try {
+          const items = await this.fetchItemsDetails(chunk);
+          const { created, updated } = await this.upsertListings(items);
+          
+          result.itemsProcessed += items.length;
+          result.itemsCreated += created;
+          result.itemsUpdated += updated;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+          result.errors.push(`Lote ${i + 1}: ${errorMsg}`);
+          console.error(`[ML-SYNC] Erro no lote ${i + 1}:`, errorMsg);
+        }
+      }
+
+      result.success = result.errors.length === 0;
+      result.duration = Date.now() - startTime;
+
+      console.log(`[ML-SYNC] Sincronização concluída em ${result.duration}ms`);
+      console.log(`[ML-SYNC] Processados: ${result.itemsProcessed}, Criados: ${result.itemsCreated}, Atualizados: ${result.itemsUpdated}`);
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      result.errors.push(errorMsg);
+      result.duration = Date.now() - startTime;
+      console.error('[ML-SYNC] Erro fatal na sincronização:', errorMsg);
+      return result;
+    }
+  }
+
+  /**
+   * Busca a conexão do Mercado Livre para o tenant
+   */
+  private async loadConnection(): Promise<void> {
+    const connection = await prisma.marketplaceConnection.findFirst({
+      where: {
+        tenant_id: this.tenantId,
+        type: Marketplace.mercadolivre,
+        status: ConnectionStatus.active,
+      },
+    });
+
+    if (!connection) {
+      throw new Error('Conexão com Mercado Livre não encontrada ou inativa');
+    }
+
+    this.connectionId = connection.id;
+    this.accessToken = connection.access_token;
+    this.providerAccountId = connection.provider_account_id;
+
+    console.log(`[ML-SYNC] Conexão encontrada. Provider Account ID: ${this.providerAccountId}`);
+  }
+
+  /**
+   * Verifica se o token está válido e renova se necessário
+   */
+  private async ensureValidToken(): Promise<void> {
+    const connection = await prisma.marketplaceConnection.findUnique({
+      where: { id: this.connectionId },
+    });
+
+    if (!connection) {
+      throw new Error('Conexão não encontrada');
+    }
+
+    // Verificar se o token expirou (com margem de 5 minutos)
+    const now = new Date();
+    const expiresAt = connection.expires_at;
+    const bufferMs = 5 * 60 * 1000; // 5 minutos
+
+    if (expiresAt && expiresAt.getTime() - bufferMs < now.getTime()) {
+      console.log('[ML-SYNC] Token expirado ou prestes a expirar. Renovando...');
+      
+      if (!connection.refresh_token) {
+        throw new Error('Refresh token não disponível. Reconecte a conta.');
+      }
+
+      await this.refreshAccessToken(connection.refresh_token);
+    } else {
+      console.log('[ML-SYNC] Token válido');
+    }
+  }
+
+  /**
+   * Renova o access token usando o refresh token
+   */
+  private async refreshAccessToken(refreshToken: string): Promise<void> {
+    try {
+      const response = await axios.post<TokenRefreshResponse>(
+        `${ML_API_BASE}/oauth/token`,
+        null,
+        {
+          params: {
+            grant_type: 'refresh_token',
+            client_id: process.env.ML_CLIENT_ID,
+            client_secret: process.env.ML_CLIENT_SECRET,
+            refresh_token: refreshToken,
+          },
+        }
+      );
+
+      const { access_token, refresh_token, expires_in } = response.data;
+
+      // Atualizar no banco
+      await prisma.marketplaceConnection.update({
+        where: { id: this.connectionId },
+        data: {
+          access_token,
+          refresh_token: refresh_token || refreshToken,
+          expires_at: new Date(Date.now() + expires_in * 1000),
+          status: ConnectionStatus.active,
+        },
+      });
+
+      this.accessToken = access_token;
+      console.log('[ML-SYNC] Token renovado com sucesso');
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        console.error('[ML-SYNC] Erro ao renovar token:', error.response?.data);
+        
+        // Marcar conexão como expirada
+        await prisma.marketplaceConnection.update({
+          where: { id: this.connectionId },
+          data: { status: ConnectionStatus.expired },
+        });
+      }
+      throw new Error('Falha ao renovar token. Reconecte a conta do Mercado Livre.');
+    }
+  }
+
+  /**
+   * Busca os IDs de todos os anúncios do usuário
+   */
+  private async fetchUserItemIds(): Promise<string[]> {
+    const allIds: string[] = [];
+    let offset = 0;
+    const limit = 50;
+
+    while (true) {
+      try {
+        const response = await axios.get(
+          `${ML_API_BASE}/users/${this.providerAccountId}/items/search`,
+          {
+            headers: { Authorization: `Bearer ${this.accessToken}` },
+            params: { offset, limit },
+          }
+        );
+
+        const { results, paging } = response.data;
+        allIds.push(...results);
+
+        console.log(`[ML-SYNC] Buscados ${allIds.length}/${paging.total} IDs`);
+
+        if (offset + limit >= paging.total) {
+          break;
+        }
+
+        offset += limit;
+      } catch (error) {
+        if (error instanceof AxiosError) {
+          console.error('[ML-SYNC] Erro ao buscar IDs:', error.response?.data);
+        }
+        throw new Error('Falha ao buscar lista de anúncios');
+      }
+    }
+
+    return allIds;
+  }
+
+  /**
+   * Busca detalhes de múltiplos itens (até 20 por vez)
+   */
+  private async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
+    if (itemIds.length === 0) return [];
+    if (itemIds.length > 20) {
+      throw new Error('Máximo de 20 itens por requisição');
+    }
+
+    try {
+      const response = await axios.get(`${ML_API_BASE}/items`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+        params: { ids: itemIds.join(',') },
+      });
+
+      // A API retorna um array de objetos { code, body }
+      const items: MercadoLivreItem[] = response.data
+        .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
+        .map((item: { code: number; body: MercadoLivreItem }) => item.body);
+
+      return items;
+    } catch (error) {
+      if (error instanceof AxiosError) {
+        console.error('[ML-SYNC] Erro ao buscar detalhes:', error.response?.data);
+      }
+      throw new Error('Falha ao buscar detalhes dos anúncios');
+    }
+  }
+
+  /**
+   * Faz upsert dos listings no banco
+   */
+  private async upsertListings(items: MercadoLivreItem[]): Promise<{ created: number; updated: number }> {
+    let created = 0;
+    let updated = 0;
+
+    for (const item of items) {
+      const status = this.mapMLStatusToListingStatus(item.status);
+
+      try {
+        const existing = await prisma.listing.findUnique({
+          where: {
+            tenant_id_marketplace_listing_id_ext: {
+              tenant_id: this.tenantId,
+              marketplace: Marketplace.mercadolivre,
+              listing_id_ext: item.id,
+            },
+          },
+        });
+
+        if (existing) {
+          await prisma.listing.update({
+            where: { id: existing.id },
+            data: {
+              title: item.title,
+              price: item.price,
+              stock: item.available_quantity,
+              status,
+              category: item.category_id,
+            },
+          });
+          updated++;
+        } else {
+          await prisma.listing.create({
+            data: {
+              tenant_id: this.tenantId,
+              marketplace: Marketplace.mercadolivre,
+              listing_id_ext: item.id,
+              title: item.title,
+              price: item.price,
+              stock: item.available_quantity,
+              status,
+              category: item.category_id,
+            },
+          });
+          created++;
+        }
+      } catch (error) {
+        console.error(`[ML-SYNC] Erro ao salvar item ${item.id}:`, error);
+      }
+    }
+
+    return { created, updated };
+  }
+
+  /**
+   * Mapeia status do ML para o enum ListingStatus
+   */
+  private mapMLStatusToListingStatus(mlStatus: string): ListingStatus {
+    switch (mlStatus.toLowerCase()) {
+      case 'active':
+        return ListingStatus.active;
+      case 'paused':
+        return ListingStatus.paused;
+      case 'closed':
+      case 'under_review':
+      case 'inactive':
+      default:
+        return ListingStatus.deleted;
+    }
+  }
+
+  /**
+   * Divide array em chunks
+   */
+  private chunkArray<T>(array: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+  }
+}
+
