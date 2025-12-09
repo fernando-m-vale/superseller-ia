@@ -2,19 +2,20 @@ import { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { ListingFilterSchema } from '../schemas';
 import { calculateListingHealth } from '../services/listing-health';
+import { authGuard } from '../plugins/auth';
 
 const prisma = new PrismaClient();
 
-interface RequestWithTenant extends FastifyRequest {
-  tenantId: string;
-}
-
 export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
-  // GET /api/v1/listings - Lista anúncios do tenant
-  app.get('/', async (req, reply) => {
+  // GET /api/v1/listings - Lista anúncios do tenant (requer autenticação)
+  app.get('/', { preHandler: authGuard }, async (req, reply) => {
     try {
       const q = ListingFilterSchema.parse(req.query);
-      const tenantId = (req as RequestWithTenant).tenantId || 'demo-tenant';
+      const tenantId = req.tenantId;
+
+      if (!tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
 
       const where: {
         tenant_id: string;
@@ -101,9 +102,14 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
 
 
   // GET /api/v1/listings/:id/metrics - Métricas de um listing específico
-  app.get('/:id/metrics', async (req) => {
+  app.get('/:id/metrics', { preHandler: authGuard }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const tenantId = (req as RequestWithTenant).tenantId;
+    const tenantId = req.tenantId;
+    
+    if (!tenantId) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+    
     // TODO: retornar série temporal do listing
     return { listingId: id, tenantId, series: [] };
   });

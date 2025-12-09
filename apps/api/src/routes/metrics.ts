@@ -2,10 +2,7 @@ import { FastifyPluginCallback, FastifyRequest } from 'fastify';
 import { PrismaClient, ListingStatus, Marketplace } from '@prisma/client';
 import { healthScore } from '@superseller/core';
 import { z } from 'zod';
-
-interface RequestWithTenant extends FastifyRequest {
-  tenantId?: string;
-}
+import { authGuard } from '../plugins/auth';
 
 const prisma = new PrismaClient();
 
@@ -23,22 +20,13 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
 
   // GET /api/v1/metrics/overview
   // Retorna dados reais de Listings para o Dashboard principal
-  app.get('/overview', async (req, reply) => {
+  app.get('/overview', { preHandler: authGuard }, async (req, reply) => {
     try {
       const query = OverviewQuerySchema.parse(req.query);
-      const tenantId = (req as RequestWithTenant).tenantId;
+      const tenantId = req.tenantId;
 
-      // Se não tem tenantId (não autenticado), retorna mock vazio
       if (!tenantId) {
-        return reply.send({
-          totalListings: 0,
-          activeListings: 0,
-          pausedListings: 0,
-          averagePrice: 0,
-          averageHealthScore: 0,
-          totalStock: 0,
-          byMarketplace: [],
-        });
+        return reply.status(401).send({ error: 'Unauthorized' });
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,21 +100,13 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
   
   // GET /api/v1/metrics/summary?days=7
   // Retorna resumo de métricas para o Dashboard
-  app.get('/summary', async (req, reply) => {
+  app.get('/summary', { preHandler: authGuard }, async (req, reply) => {
     try {
       const query = SummaryQuerySchema.parse(req.query);
-      const tenantId = (req as RequestWithTenant).tenantId;
+      const tenantId = req.tenantId;
 
-      // Se não tem tenantId (não autenticado), retorna mock vazio
       if (!tenantId) {
-        return reply.send({
-          totalRevenue: 0,
-          totalOrders: 0,
-          averageTicket: 0,
-          totalVisits: 0,
-          conversionRate: 0,
-          series: [],
-        });
+        return reply.status(401).send({ error: 'Unauthorized' });
       }
 
       const cutoffDate = new Date();
@@ -231,10 +211,10 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
   });
 
   // GET /api/v1/metrics/detailed (rota existente renomeada)
-  app.get('/detailed', async (req, reply) => {
+  app.get('/detailed', { preHandler: authGuard }, async (req, reply) => {
     try {
       const query = SummaryQuerySchema.parse(req.query);
-      const tenantId = (req as RequestWithTenant).tenantId;
+      const tenantId = req.tenantId;
 
       if (!tenantId) {
         return reply.status(401).send({ error: 'Unauthorized' });
