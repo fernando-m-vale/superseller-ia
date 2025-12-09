@@ -1,6 +1,48 @@
+Developer Log - SuperSeller IA
+
+[2025-12-09] Deploy da API e População de Dados (Fase Final)
+
+Partner: Gemini & Cursor | Status: Backend Concluído / Frontend em Ajuste
+
+Conquistas
+
+Correção de Deploy (CI/CD):
+
+Resolvido o bloqueio crítico de dotenv em produção (removido do código fonte).
+
+Corrigido erro de Health Check do App Runner (adicionada rota /health na raiz).
+
+Deploy da API realizado com sucesso (Status: Running).
+
+Ingestão de Dados (Sync):
+
+Executado script de sincronização com sucesso.
+
+Banco de dados populado com 46 anúncios do Mercado Livre, incluindo a nova coluna health_score.
+
+Serviço de ingestão validado e funcional.
+
+Implementação de Rotas de Dados:
+
+Criadas e registradas rotas /api/v1/listings e /api/v1/metrics.
+
+Código atualizado para consultar dados reais do Prisma (substituindo mocks zerados).
+
+Rota /listings validada (existente no backend), pronta para consumo.
+
+Ocorrência Final (Frontend 401)
+
+Cenário: Ao acessar a Home e o Dashboard, os dados não carregam visualmente.
+
+Erro: O console do navegador mostra 401 Unauthorized na chamada para /listings.
+
+Diagnóstico: O Backend está protegendo a rota corretamente (authGuard), mas o Frontend provavelmente não está enviando o token JWT no cabeçalho da requisição nessas novas chamadas.
+
+Ação: Próxima sessão será dedicada a corrigir a camada de serviço do Frontend (Axios/Fetch interceptors) para garantir que o token seja enviado.
+
 [2025-12-05] Integração Mercado Livre e Dashboard
 
-Partner: Gemini & Cursor | Status: Sucesso
+Status: Sucesso
 
 Conquistas Principais
 
