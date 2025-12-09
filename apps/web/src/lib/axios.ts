@@ -11,11 +11,16 @@ export const api = axios.create({
 
 // Interceptor: Injeta o token em TODA requisição
 api.interceptors.request.use((config) => {
-  // Tenta pegar do cookie (padrão) ou localStorage
-  const token = Cookies.get('auth-token') || localStorage.getItem('auth-token');
-  
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (typeof window !== 'undefined') {
+    // Read from the correct localStorage key (accessToken) that auth.ts uses
+    // Also check legacy keys for backward compatibility
+    const token = Cookies.get('auth-token') || 
+                  localStorage.getItem('accessToken') || 
+                  localStorage.getItem('auth-token');
+    
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
   
   return config;
