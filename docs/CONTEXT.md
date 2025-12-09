@@ -1,37 +1,34 @@
 Contexto do Projeto: SuperSeller IA
 
-Status: Fase 3 - Dashboard e Ingestão de Dados
-Última Atualização: 05/12/2025 (Final do Dia)
+Status: Fase 3 - Integração Frontend/Backend
+Última Atualização: 09/12/2025
 
 1. Visão Geral
 
 SaaS Multi-tenant para otimização de e-commerce.
-Marco Atual: Integração OAuth com Mercado Livre concluída e Dashboard estabilizado.
+Marco Atual: Backend 100% funcional (Infra, Auth, Sync ML, Rotas de Dados).
+Bloqueio Atual: Frontend falha ao consumir os dados (Erro 401 na Home e Erro de Carregamento no Dashboard).
 
 2. Status Técnico
 
-Infraestrutura: ✅ App Runner + RDS + NAT Gateway (Rede configurada e funcional).
+Infraestrutura: ✅ App Runner (Deploy OK), RDS (Migrated), NAT Gateway (Ativo).
 
-Banco de Dados: ✅ Schema Multi-conta (provider_account_id) implementado e migrado.
+Banco de Dados: ✅ Tabelas populadas com 46 anúncios reais do Mercado Livre.
 
-Integração ML: ✅ Fluxo OAuth completo. Tokens persistidos e renováveis.
+API:
 
-Frontend: ✅ Dashboard /overview carregando sem erros (dados mockados/zerados).
+✅ Rota /api/v1/listings: Implementada e registrada.
 
-API: ✅ Rotas de Métricas implementadas (/summary) para suportar a UI.
+✅ Rota /api/v1/metrics: Implementada com cálculos reais (prisma.aggregate).
 
-3. Arquitetura de Rede
+Frontend: ⚠️ Páginas / e /overview carregam a estrutura, mas falham ao buscar dados da API.
 
-App Runner (Privado) -> NAT Gateway (Público) -> API ML.
+Sintoma: Erro 401 (Unauthorized) ou mensagem de erro genérica.
 
-App Runner -> VPC Connector -> RDS.
+3. Próximos Passos (Retomada)
 
-Nota: NAT Gateway pode ser desligado via Terraform (enable_nat_gateway = false) para economia.
+Debug Frontend: Verificar como o token JWT está sendo passado (ou não) nas chamadas fetch dos componentes ListingsTable e DashboardMetrics.
 
-4. Próximos Passos (Retomada)
+Ajuste de Cliente HTTP: Garantir que o axios ou fetch do Next.js inclua o header Authorization: Bearer ....
 
-Job de Ingestão: Criar worker para baixar anúncios e vendas do Mercado Livre e popular o banco.
-
-Métricas Reais: Substituir o mock em metrics.ts por queries reais no banco (prisma.listing.count, etc).
-
-Webhooks: Processar notificações de vendas em tempo real.
+Visualização Final: Ver os dados do banco renderizados na tela.
