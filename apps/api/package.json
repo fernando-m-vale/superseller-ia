@@ -5,7 +5,7 @@
   "type": "commonjs",
   "private": true,
   "scripts": {
-    "dev": "tsx src/server.ts",
+    "dev": "tsx -r dotenv/config src/server.ts",
     "prebuild": "prisma generate",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
@@ -38,6 +38,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "dotenv": "^16.4.5",
     "@types/bcryptjs": "^3.0.0",
     "@types/ioredis": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.10",
