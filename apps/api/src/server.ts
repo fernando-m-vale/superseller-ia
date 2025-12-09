@@ -6,6 +6,7 @@ import { mercadolivreRoutes } from './routes/mercadolivre';
 import { webhookRoutes } from './routes/mercado-livre-webhook';
 import { metricsRoutes } from './routes/metrics';
 import { syncRoutes } from './routes/sync.routes';
+import { listingsRoutes } from './routes/listings';
 
 const app = fastify();
 
@@ -29,6 +30,8 @@ async function main() {
   await app.register(metricsRoutes, { prefix: '/api/v1/metrics' });
   
   await app.register(syncRoutes, { prefix: '/api/v1/sync' });
+  
+  await app.register(listingsRoutes, { prefix: '/api/v1/listings' });
 
   try {
     await app.ready();

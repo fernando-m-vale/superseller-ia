@@ -132,7 +132,7 @@ model Listing {
   stock           Int
   status          ListingStatus
   category        String?
-  health_score    Int?          @default(0) // Score de 0-100 calculado pela IA
+  health_score    Float?        @default(0) // Score de 0-100 calculado pela IA
   created_at      DateTime      @default(now())
   updated_at      DateTime      @updatedAt
 

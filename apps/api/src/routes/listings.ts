@@ -10,7 +10,8 @@ interface RequestWithTenant extends FastifyRequest {
 }
 
 export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
-  app.get('/listings', async (req, reply) => {
+  // GET /api/v1/listings - Lista anúncios do tenant
+  app.get('/', async (req, reply) => {
     try {
       const q = ListingFilterSchema.parse(req.query);
       const tenantId = (req as RequestWithTenant).tenantId || 'demo-tenant';
@@ -99,12 +100,13 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
   });
 
 
-app.get('/listings/:id/metrics', async (req) => {
-const { id } = req.params as { id: string };
-const tenantId = (req as RequestWithTenant).tenantId;
-// TODO: retornar série temporal do listing
-return { listingId: id, tenantId, series: [] };
-});
+  // GET /api/v1/listings/:id/metrics - Métricas de um listing específico
+  app.get('/:id/metrics', async (req) => {
+    const { id } = req.params as { id: string };
+    const tenantId = (req as RequestWithTenant).tenantId;
+    // TODO: retornar série temporal do listing
+    return { listingId: id, tenantId, series: [] };
+  });
 
 
 done();
