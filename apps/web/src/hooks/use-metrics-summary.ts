@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getApiBaseUrl } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth';
 
 export interface MetricsSummary {
   tenantId: string;
@@ -36,10 +37,15 @@ export function useMetricsSummary(options: UseMetricsSummaryOptions = {}) {
       }
 
       const apiUrl = getApiBaseUrl();
+      const token = getAccessToken();
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
       const response = await fetch(`${apiUrl}/metrics/summary?${params}`, {
-        headers: {
-          'x-tenant-id': 'demo-tenant',
-        },
+        headers,
       });
 
       if (!response.ok) {
