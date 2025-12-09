@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
-import { getApiBaseUrl } from '@/lib/api'
+import useSWR from 'swr'
+// Mude de '@/lib/axios' para '../lib/axios'
+import { api } from '../lib/axios'
 
 export interface HealthIssue {
   code: string
@@ -34,29 +35,27 @@ export interface ListingsFilters {
   pageSize?: number
 }
 
-async function fetchListings(filters: ListingsFilters = {}): Promise<ListingsResponse> {
-  const apiUrl = getApiBaseUrl()
-  
+// Fetcher usando nossa instância Axios (que já tem o interceptor de token)
+const fetcher = (url: string) => api.get(url).then((res) => res.data)
+
+export function useListings(filters: ListingsFilters) {
+  // Monta a Query String
   const params = new URLSearchParams()
-  if (filters.q) params.append('q', filters.q)
-  if (filters.marketplace) params.append('marketplace', filters.marketplace)
   if (filters.page) params.append('page', filters.page.toString())
   if (filters.pageSize) params.append('pageSize', filters.pageSize.toString())
+  if (filters.marketplace) params.append('marketplace', filters.marketplace)
+  if (filters.q) params.append('q', filters.q)
 
-  const url = `${apiUrl}/listings${params.toString() ? `?${params.toString()}` : ''}`
-  
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch listings: ${response.status}`)
+  const queryString = params.toString()
+  // O axios já tem a baseURL configurada, então passamos apenas o caminho relativo
+  const url = `/listings?${queryString}`
+
+  const { data, error, isLoading, mutate } = useSWR<ListingsResponse>(url, fetcher)
+
+  return {
+    data, // Retorna o objeto completo { items, total }
+    isLoading,
+    error,
+    refetch: mutate,
   }
-  
-  return response.json()
-}
-
-export function useListings(filters: ListingsFilters = {}) {
-  return useQuery({
-    queryKey: ['listings', filters],
-    queryFn: () => fetchListings(filters),
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  })
 }

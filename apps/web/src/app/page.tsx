@@ -7,8 +7,10 @@ export default function HomePage() {
   return (
     <AuthGuard>
       <div className="space-y-6">
+        {/* Checklist de ativação (conectar contas) */}
         <ActivationChecklist />
         
+        {/* Cabeçalho da seção de anúncios com botão de sync */}
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Anúncios</h2>
@@ -19,6 +21,7 @@ export default function HomePage() {
           <MercadoLivreSyncButton />
         </div>
         
+        {/* Tabela de anúncios (consome useListings -> axios -> API) */}
         <ListingsTable />
       </div>
     </AuthGuard>
