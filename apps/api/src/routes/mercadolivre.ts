@@ -38,10 +38,10 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       authUrl.searchParams.append('state', encodedState);
       
       return reply.send({ authUrl: authUrl.toString() });
-    } catch (error) {
-      app.log.error(error);
-      return reply.status(500).send({ error: 'Failed to initiate Mercado Livre connection' });
-    }
+        } catch (error) {
+          app.log.error({ err: error }, 'Failed to initiate Mercado Livre connection');
+          return reply.status(500).send({ error: 'Failed to initiate Mercado Livre connection' });
+        }
   });
 
     // Rota de Health Check - verifica se há conexão ativa com ML
@@ -83,10 +83,10 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
             countryId: userData.country_id || 'BR',
             tags: userData.tags || [],
           });
-        } catch (apiError) {
-          // Token might be expired, return basic info
-          app.log.warn('Failed to fetch ML user info, token may be expired:', apiError);
-          return reply.send({
+                } catch (apiError) {
+                  // Token might be expired, return basic info
+                  app.log.warn({ err: apiError }, 'Failed to fetch ML user info, token may be expired');
+                  return reply.send({
             ok: true,
             sellerId: connection.provider_account_id,
             nickname: '',
@@ -95,11 +95,11 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
             tags: [],
           });
         }
-      } catch (error) {
-        app.log.error(error);
-        return reply.status(500).send({ error: 'Failed to check Mercado Livre health' });
-      }
-    });
+          } catch (error) {
+            app.log.error({ err: error }, 'Failed to check Mercado Livre health');
+            return reply.status(500).send({ error: 'Failed to check Mercado Livre health' });
+          }
+        });
 
     // Rota de Callback
     app.get('/callback', async (req: FastifyRequest, reply: FastifyReply) => {
@@ -171,11 +171,11 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.superselleria.com.br';
       return reply.redirect(`${appUrl}/overview?success=true`);
 
-    } catch (error) {
-      app.log.error(error);
-      return reply.status(500).send({ error: 'Failed to complete Mercado Livre connection', details: String(error) });
-    }
-  });
+      } catch (error) {
+        app.log.error({ err: error }, 'Failed to complete Mercado Livre connection');
+        return reply.status(500).send({ error: 'Failed to complete Mercado Livre connection', details: String(error) });
+      }
+    });
 
-  done();
+    done();
 };
