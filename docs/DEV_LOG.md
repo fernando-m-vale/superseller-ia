@@ -1,5 +1,63 @@
 Developer Log - SuperSeller IA
 
+[2025-12-09] - Estabilização de Produção e Sync de Vendas
+
+Status: ✅ Produção Acessível | ⚠️ Ajustes de Dados Pendentes
+
+Atividades Realizadas
+
+Correção Crítica de Auth (Erro 401):
+
+Problema: Dashboard e chamadas de API retornavam 401 em produção.
+
+Causa: Hook use-metrics-summary não enviava cabeçalho Authorization e interceptor do Axios buscava token na chave errada do localStorage.
+
+Solução: Padronização do storage para accessToken e inclusão do header nas chamadas SWR/Fetch (PR #61).
+
+Correção de Crash (Tela Branca):
+
+Problema: Erro TypeError: e.price.toFixed is not a function.
+
+Solução: Adicionado tratamento defensivo Number(value ?? 0).toFixed(2) nos componentes de listagem e gráficos (PR #62).
+
+Implementação de Sync de Vendas (Feature):
+
+Contexto: O sistema conectava mas não trazia histórico de vendas (apenas anúncios).
+
+Implementação (Cursor): * Criação de tabelas Order e OrderItem no Prisma.
+
+Implementação do MercadoLivreOrdersService para buscar histórico e processar Webhooks.
+
+Criação de rota de trigger manual para sync de 30 dias.
+
+Refinamento de UI/UX:
+
+Onboarding: Checklist agora é automático (read-only) e detecta se o usuário já tem anúncios/vendas.
+
+Filtros: Adicionados filtros funcionais de Marketplace (ML/Shopee) e Status (Ativo/Pausado).
+
+Dashboard: Unificação parcial de queries para tentar resolver NaN.
+
+Problemas Identificados (Backlog Imediato)
+
+Bug de Totais no Dashboard: O gráfico plota curvas (Impressões/Visitas) corretamente, mas os Cards de KPIs (Receita, Pedidos) mostram 0 ou NaN. Provável erro na query de agregação do MetricsService.
+
+Health Score Zerado: A coluna aparece na tabela, mas os valores não estão sendo mapeados corretamente da API do ML (possível divergência de nome de campo health vs quality_grade).
+
+Filtro de Data: Alterar entre "7 dias" e "30 dias" não está atualizando o gráfico visualmente.
+
+Terraform Drift: Devin alertou que a infraestrutura manual no App Runner divergiu do código Terraform.
+
+Próximos Passos
+
+Debugar MetricsService para corrigir a soma dos Totais.
+
+Mapear corretamente o campo de Health Score.
+
+Executar script de importação do Terraform para sincronizar a infra.
+
+
+
 [2025-12-08] Deploy da API e População de Dados (Fase Final)
 
 Partner: Gemini & Cursor | Status: Backend Concluído / Frontend em Ajuste

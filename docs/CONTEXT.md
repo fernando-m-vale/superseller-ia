@@ -1,34 +1,59 @@
-Contexto do Projeto: SuperSeller IA
+Contexto do Projeto - Super Seller IA
 
-Status: Fase 3 - Integração Frontend/Backend
-Última Atualização: 09/12/2025
+Visão Geral
 
-1. Visão Geral
+Plataforma SaaS para gestão e otimização de anúncios em marketplaces (Mercado Livre e Shopee) utilizando Inteligência Artificial.
 
-SaaS Multi-tenant para otimização de e-commerce.
-Marco Atual: Backend 100% funcional (Infra, Auth, Sync ML, Rotas de Dados).
-Bloqueio Atual: Frontend falha ao consumir os dados (Erro 401 na Home e Erro de Carregamento no Dashboard).
+Estado Atual do Projeto (2025-12-09)
 
-2. Status Técnico
+Frontend: Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui.
 
-Infraestrutura: ✅ App Runner (Deploy OK), RDS (Migrated), NAT Gateway (Ativo).
+Backend: Node.js (Fastify) + Prisma ORM.
 
-Banco de Dados: ✅ Tabelas populadas com 46 anúncios reais do Mercado Livre.
+Infraestrutura: AWS App Runner (Docker) + RDS (PostgreSQL).
 
-API:
+Status de Produção: Estável (Online). Login funcional, integração com Mercado Livre ativa.
 
-✅ Rota /api/v1/listings: Implementada e registrada.
+Funcionalidades Implementadas
 
-✅ Rota /api/v1/metrics: Implementada com cálculos reais (prisma.aggregate).
+✅ Autenticação: NextAuth.js com suporte a JWT e Refresh Token.
 
-Frontend: ⚠️ Páginas / e /overview carregam a estrutura, mas falham ao buscar dados da API.
+✅ Integração Mercado Livre: OAuth flow, download de anúncios, sincronização de visitas e Sincronização de Pedidos (Novo).
 
-Sintoma: Erro 401 (Unauthorized) ou mensagem de erro genérica.
+✅ Dashboard: Gráficos de tendências (Vendas, Visitas, Impressões). Nota: Totais numéricos precisam de ajuste.
 
-3. Próximos Passos (Retomada)
+✅ Gestão de Anúncios: Listagem com filtros (Status, Marketplace), paginação e exibição de detalhes.
 
-Debug Frontend: Verificar como o token JWT está sendo passado (ou não) nas chamadas fetch dos componentes ListingsTable e DashboardMetrics.
+✅ Onboarding: Checklist automatizado de primeiros passos.
 
-Ajuste de Cliente HTTP: Garantir que o axios ou fetch do Next.js inclua o header Authorization: Bearer ....
+Estrutura de Dados Crítica
 
-Visualização Final: Ver os dados do banco renderizados na tela.
+Tenant: Unidade de isolamento de dados por usuário/empresa.
+
+Integration: Armazena tokens OAuth (ML/Shopee).
+
+Listing: Anúncios sincronizados (agora com campo health_score).
+
+Order/OrderItem: Pedidos sincronizados para cálculo de GMV e Receita.
+
+Metric: Dados diários de performance (visits, views, sales_qty).
+
+Problemas Conhecidos & Dívida Técnica
+
+Inconsistência de Métricas: O endpoint /metrics/overview retorna as séries temporais corretamente (gráfico funciona), mas o objeto totals retorna zeros, deixando os cards de KPI vazios.
+
+Health Score: O campo existe no banco, mas a integração não está populando o valor correto (sempre zero ou null).
+
+Terraform Drift: A configuração real da AWS (App Runner) foi alterada manualmente e não bate com o arquivo main.tf. Risco de sobrescrita em deploys futuros.
+
+Webhooks: A estrutura de processamento existe, mas precisa de validação real em produção para garantir que novos pedidos entrem automaticamente.
+
+Próximos Passos (Prioridade)
+
+Bugfix Dashboard: Corrigir agregação de Receita e Pedidos no Backend.
+
+Bugfix Health Score: Ajustar mapeamento de dados da API do Mercado Livre.
+
+Infra: Sincronizar estado do Terraform.
+
+IA: Iniciar implementação do motor de Recomendações (fase 4 do roadmap).
