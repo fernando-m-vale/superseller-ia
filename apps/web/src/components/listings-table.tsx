@@ -35,6 +35,14 @@ export function ListingsTable() {
     }))
   }
 
+  const handleStatusChange = (status: string) => {
+    setFilters(prev => ({ 
+      ...prev, 
+      status: status === 'all' ? undefined : status as 'active' | 'paused',
+      page: 1 
+    }))
+  }
+
   const handlePageChange = (newPage: number) => {
     setFilters(prev => ({ ...prev, page: newPage }))
   }
@@ -75,6 +83,15 @@ export function ListingsTable() {
           <option value="all">Todos os marketplaces</option>
           <option value="shopee">Shopee</option>
           <option value="mercadolivre">Mercado Livre</option>
+        </Select>
+
+        <Select
+          value={filters.status || 'all'}
+          onChange={(e) => handleStatusChange(e.target.value)}
+        >
+          <option value="all">Todos os status</option>
+          <option value="active">Ativos</option>
+          <option value="paused">Pausados</option>
         </Select>
       </div>
 
@@ -133,32 +150,32 @@ export function ListingsTable() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        {listing.healthScore !== undefined ? (
+                        {listing.healthScore !== undefined && listing.healthScore !== null && listing.healthScore > 0 ? (
                           <div 
                             className="flex items-center gap-2 cursor-help"
                             title={listing.healthIssues && listing.healthIssues.length > 0 
                               ? listing.healthIssues.map(i => i.message).join('\n') 
-                              : 'Anúncio saudável'}
+                              : listing.healthScore >= 80 ? 'Anúncio saudável' : listing.healthScore >= 50 ? 'Precisa de atenção' : 'Necessita melhorias'}
                           >
                             {listing.healthScore >= 80 ? (
                               <CheckCircle2 className="h-4 w-4 text-green-600" />
                             ) : listing.healthScore >= 50 ? (
                               <AlertTriangle className="h-4 w-4 text-yellow-600" />
                             ) : (
-                              <AlertCircle className="h-4 w-4 text-red-600" />
+                              <AlertTriangle className="h-4 w-4 text-orange-500" />
                             )}
                             <span className={`font-medium ${
                               listing.healthScore >= 80 
                                 ? 'text-green-600' 
                                 : listing.healthScore >= 50 
                                   ? 'text-yellow-600' 
-                                  : 'text-red-600'
+                                  : 'text-orange-500'
                             }`}>
-                              {listing.healthScore}
+                              {listing.healthScore.toFixed(0)}%
                             </span>
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">-</span>
+                          <span className="text-muted-foreground">N/A</span>
                         )}
                       </TableCell>
                     </TableRow>

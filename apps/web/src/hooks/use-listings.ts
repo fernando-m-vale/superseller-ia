@@ -31,6 +31,7 @@ export interface ListingsResponse {
 export interface ListingsFilters {
   q?: string
   marketplace?: 'shopee' | 'mercadolivre'
+  status?: 'active' | 'paused'
   page?: number
   pageSize?: number
 }
@@ -44,6 +45,7 @@ export function useListings(filters: ListingsFilters) {
   if (filters.page) params.append('page', filters.page.toString())
   if (filters.pageSize) params.append('pageSize', filters.pageSize.toString())
   if (filters.marketplace) params.append('marketplace', filters.marketplace)
+  if (filters.status) params.append('status', filters.status)
   if (filters.q) params.append('q', filters.q)
 
   const queryString = params.toString()

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { loadChecklistState, saveChecklistState, resetChecklistState } from '@/lib/storage'
+import { loadChecklistState, saveChecklistState } from '@/lib/storage'
 import { ChecklistState, INITIAL_CHECKLIST_STATE } from '@/types/onboarding'
 import { getMercadoLivreAuthUrl, getMercadoLivreHealth } from '@/lib/marketplaces'
 import { api } from '@/lib/axios'
@@ -32,13 +32,13 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     key: 'createFirstListing',
-    title: 'Cadastrar primeiro anúncio',
-    description: 'Adicione seu primeiro produto para análise',
+    title: 'Sincronizar anúncios',
+    description: 'Sincronize seus anúncios para análise',
   },
   {
     key: 'validateInitialMetrics',
     title: 'Validar métricas iniciais',
-    description: 'Aguarde a coleta das primeiras métricas de performance',
+    description: 'Aguarde a coleta das primeiras métricas de vendas',
   },
   {
     key: 'enableAutoRecommendations',
@@ -46,7 +46,7 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     description: 'Habilite sugestões inteligentes para otimizar seus anúncios',
     cta: {
       label: 'Ver recomendações',
-      href: '/recommendations',
+      href: '/ai',
     },
   },
 ]
@@ -80,6 +80,7 @@ export function ActivationChecklist() {
 
     checkMercadoLivreConnection()
     checkListingsExist()
+    checkMetricsAndRecommendations()
   }, [])
 
   const checkMercadoLivreConnection = async () => {
@@ -143,6 +144,51 @@ export function ActivationChecklist() {
     }
   }
 
+  // Verifica se há métricas (Passo 3) e recomendações (Passo 4)
+  const checkMetricsAndRecommendations = async () => {
+    try {
+      // Passo 3: Validar métricas - true se totalOrders > 0
+      const metricsResponse = await api.get('/metrics/overview')
+      const metricsData = metricsResponse.data
+      const hasMetrics = (metricsData?.totalOrders || 0) > 0
+
+      // Passo 4: Recomendações - true se existir pelo menos 1 recomendação
+      let hasRecommendations = false
+      try {
+        const recsResponse = await api.get('/ai/recommendations?limit=1')
+        hasRecommendations = (recsResponse.data?.items?.length || 0) > 0
+      } catch {
+        // Se o endpoint não existir, manter false
+        hasRecommendations = false
+      }
+
+      const currentState = loadChecklistState()
+      let shouldUpdate = false
+      const newCompleted = { ...currentState.completed }
+
+      if (hasMetrics && !currentState.completed.validateInitialMetrics) {
+        newCompleted.validateInitialMetrics = true
+        shouldUpdate = true
+      }
+
+      if (hasRecommendations && !currentState.completed.enableAutoRecommendations) {
+        newCompleted.enableAutoRecommendations = true
+        shouldUpdate = true
+      }
+
+      if (shouldUpdate) {
+        const newState: ChecklistState = {
+          ...currentState,
+          completed: newCompleted,
+        }
+        setState(newState)
+        saveChecklistState(newState)
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
   const handleConnectMercadoLivre = async () => {
     setMlConnecting(true)
     setMlError(null)
@@ -160,62 +206,6 @@ export function ActivationChecklist() {
     const completed = Object.values(state.completed).filter(Boolean).length
     const total = Object.keys(state.completed).length
     return Math.round((completed / total) * 100)
-  }
-
-  const handleToggleItem = (key: ChecklistItemKey) => {
-    const newState: ChecklistState = {
-      ...state,
-      completed: {
-        ...state.completed,
-        [key]: !state.completed[key],
-      },
-    }
-    setState(newState)
-    saveChecklistState(newState)
-    
-    console.info('[Checklist]', 'toggle_item', {
-      item: key,
-      completed: newState.completed[key],
-    })
-  }
-
-  const handleMarkAll = () => {
-    const newState: ChecklistState = {
-      ...state,
-      completed: {
-        connectMarketplace: true,
-        createFirstListing: true,
-        validateInitialMetrics: true,
-        enableAutoRecommendations: true,
-      },
-    }
-    setState(newState)
-    saveChecklistState(newState)
-    
-    console.info('[Checklist]', 'mark_all', { completed: true })
-  }
-
-  const handleClearAll = () => {
-    const newState: ChecklistState = {
-      ...state,
-      completed: {
-        connectMarketplace: false,
-        createFirstListing: false,
-        validateInitialMetrics: false,
-        enableAutoRecommendations: false,
-      },
-    }
-    setState(newState)
-    saveChecklistState(newState)
-    
-    console.info('[Checklist]', 'clear_all', { completed: false })
-  }
-
-  const handleReset = () => {
-    resetChecklistState()
-    setState(INITIAL_CHECKLIST_STATE)
-    
-    console.info('[Checklist]', 'reset', { completed: false })
   }
 
   if (!isClient) {
@@ -264,8 +254,8 @@ export function ActivationChecklist() {
               <Checkbox
                 id={item.key}
                 checked={state.completed[item.key]}
-                onCheckedChange={() => handleToggleItem(item.key)}
-                className="mt-1"
+                disabled
+                className="mt-1 cursor-not-allowed"
               />
               <div className="flex-1 space-y-1">
                 <label
@@ -310,34 +300,6 @@ export function ActivationChecklist() {
           ))}
         </div>
 
-        <Separator />
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleMarkAll}
-            disabled={progress === 100}
-          >
-            Marcar tudo
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClearAll}
-            disabled={progress === 0}
-          >
-            Limpar tudo
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReset}
-            disabled={progress === 0}
-          >
-            Resetar progresso
-          </Button>
-        </div>
       </CardContent>
     </Card>
   )

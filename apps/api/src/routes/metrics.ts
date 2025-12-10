@@ -81,6 +81,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       }));
 
       // ============ DADOS DE VENDAS (últimos 30 dias) ============
+      // IMPORTANTE: Usar o mesmo período para totais E gráfico para consistência
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       thirtyDaysAgo.setHours(0, 0, 0, 0);
@@ -89,6 +90,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       const ordersWhereClause: any = {
         tenant_id: tenantId,
         order_date: { gte: thirtyDaysAgo },
+        // GMV inclui pedidos pagos, enviados e entregues
         status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
       };
 
@@ -96,29 +98,9 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         ordersWhereClause.marketplace = query.marketplace;
       }
 
-      // Total de pedidos pagos
-      const totalOrders = await prisma.order.count({ where: ordersWhereClause });
-
-      // GMV (receita total)
-      const revenueResult = await prisma.order.aggregate({
+      // Buscar todos os pedidos do período para totais E série
+      const allOrders = await prisma.order.findMany({
         where: ordersWhereClause,
-        _sum: {
-          total_amount: true,
-        },
-      });
-
-      const totalRevenue = Number(revenueResult._sum.total_amount) || 0;
-      const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-      // Série temporal para gráfico (últimos 7 dias)
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-      const recentOrders = await prisma.order.findMany({
-        where: {
-          ...ordersWhereClause,
-          order_date: { gte: sevenDaysAgo },
-        },
         select: {
           order_date: true,
           total_amount: true,
@@ -126,10 +108,15 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         orderBy: { order_date: 'asc' },
       });
 
-      // Agrupar por dia
+      // Calcular totais a partir dos mesmos dados da série (consistência)
+      const totalOrders = allOrders.length;
+      const totalRevenue = allOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+      const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      // Agrupar por dia para série temporal
       const salesSeriesMap = new Map<string, { date: string; revenue: number; orders: number }>();
       
-      for (const order of recentOrders) {
+      for (const order of allOrders) {
         const dateStr = order.order_date.toISOString().split('T')[0];
         const existing = salesSeriesMap.get(dateStr) || { date: dateStr, revenue: 0, orders: 0 };
         existing.revenue += Number(order.total_amount);
