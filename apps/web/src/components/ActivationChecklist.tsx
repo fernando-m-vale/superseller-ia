@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { loadChecklistState, saveChecklistState, resetChecklistState } from '@/lib/storage'
 import { ChecklistState, INITIAL_CHECKLIST_STATE } from '@/types/onboarding'
 import { getMercadoLivreAuthUrl, getMercadoLivreHealth } from '@/lib/marketplaces'
+import { api } from '@/lib/axios'
 
 type ChecklistItemKey = keyof ChecklistState['completed']
 
@@ -78,6 +79,7 @@ export function ActivationChecklist() {
     }
 
     checkMercadoLivreConnection()
+    checkListingsExist()
   }, [])
 
   const checkMercadoLivreConnection = async () => {
@@ -102,6 +104,42 @@ export function ActivationChecklist() {
       }
     } catch {
       setMlConnected(false)
+    }
+  }
+
+  const checkListingsExist = async () => {
+    try {
+      const response = await api.get('/listings?pageSize=1')
+      const data = response.data
+      if (data && data.total > 0) {
+        const currentState = loadChecklistState()
+        if (!currentState.completed.connectMarketplace) {
+          const newState: ChecklistState = {
+            ...currentState,
+            completed: {
+              ...currentState.completed,
+              connectMarketplace: true,
+            },
+          }
+          setState(newState)
+          saveChecklistState(newState)
+          setMlConnected(true)
+        }
+        if (!currentState.completed.createFirstListing) {
+          const newState: ChecklistState = {
+            ...currentState,
+            completed: {
+              ...currentState.completed,
+              connectMarketplace: true,
+              createFirstListing: true,
+            },
+          }
+          setState(newState)
+          saveChecklistState(newState)
+        }
+      }
+    } catch {
+      // Silently fail - listings check is supplementary
     }
   }
 

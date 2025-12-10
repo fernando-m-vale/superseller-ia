@@ -96,24 +96,33 @@ function OverviewContent() {
   const trendData = Array.from({ length: periodDays }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (periodDays - 1 - i));
+    const safeImpressions = Number(data.totalImpressions) || 0;
+    const safeVisits = Number(data.totalVisits) || 0;
+    const safeOrders = Number(data.totalOrders) || 0;
     return {
       date: date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      impressions: Math.floor(data.totalImpressions / periodDays + Math.random() * 500),
-      visits: Math.floor(data.totalVisits / periodDays + Math.random() * 50),
-      orders: Math.floor(data.totalOrders / periodDays + Math.random() * 5),
+      impressions: Math.floor(safeImpressions / periodDays + Math.random() * 500),
+      visits: Math.floor(safeVisits / periodDays + Math.random() * 50),
+      orders: Math.floor(safeOrders / periodDays + Math.random() * 5),
     };
   });
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('pt-BR').format(num);
+  const formatNumber = (num: number | null | undefined) => {
+    const safeNum = Number(num) || 0;
+    if (!Number.isFinite(safeNum)) return '0';
+    return new Intl.NumberFormat('pt-BR').format(safeNum);
   };
 
-  const formatCurrency = (num: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
+  const formatCurrency = (num: number | null | undefined) => {
+    const safeNum = Number(num) || 0;
+    if (!Number.isFinite(safeNum)) return 'R$ 0,00';
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeNum);
   };
 
-  const formatPercentage = (num: number) => {
-    return `${(num * 100).toFixed(2)}%`;
+  const formatPercentage = (num: number | null | undefined) => {
+    const safeNum = Number(num) || 0;
+    if (!Number.isFinite(safeNum)) return '0.00%';
+    return `${(safeNum * 100).toFixed(2)}%`;
   };
 
   return (
