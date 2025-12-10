@@ -25,12 +25,12 @@ export function ImpactChart({ recommendations }: ImpactChartProps) {
     return acc;
   }, [] as Array<{ type: string; count: number; avgScore: number; avgPriority: number }>);
 
-  const chartData = impactData.map(item => ({
-    name: item.type.charAt(0).toUpperCase() + item.type.slice(1),
-    'Recommendations': item.count,
-    'Avg Score': parseFloat(item.avgScore.toFixed(2)),
-    'Avg Priority': parseFloat((item.avgPriority * 100).toFixed(2)),
-  }));
+    const chartData = impactData.map(item => ({
+      name: item.type.charAt(0).toUpperCase() + item.type.slice(1),
+      'Recommendations': item.count,
+      'Avg Score': parseFloat(Number(item.avgScore ?? 0).toFixed(2)),
+      'Avg Priority': parseFloat((Number(item.avgPriority ?? 0) * 100).toFixed(2)),
+    }));
 
   return (
     <div className="bg-white rounded-lg shadow p-6">

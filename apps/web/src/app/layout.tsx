@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 import Footer from '@/components/Footer'
+import { Header } from '@/components/Header'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -43,20 +44,15 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <Providers>
-          <div className="min-h-screen bg-background flex flex-col">
-            <header className="border-b">
-              <div className="container mx-auto px-4 py-4">
-                <h1 className="text-2xl font-bold text-primary">Super Seller IA</h1>
-                <p className="text-muted-foreground">Otimize seus anúncios com inteligência artificial</p>
-              </div>
-            </header>
-            <main className="container mx-auto px-4 py-8 flex-1">
-              {children}
-            </main>
-            <Footer />
-          </div>
-        </Providers>
+                <Providers>
+                  <div className="min-h-screen bg-background flex flex-col">
+                    <Header />
+                    <main className="container mx-auto px-4 py-8 flex-1">
+                      {children}
+                    </main>
+                    <Footer />
+                  </div>
+                </Providers>
       </body>
     </html>
   )

@@ -121,7 +121,7 @@ export function ListingsTable() {
                           {listing.marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'}
                         </span>
                       </TableCell>
-                      <TableCell>R$ {listing.price.toFixed(2)}</TableCell>
+                      <TableCell>R$ {Number(listing.price ?? 0).toFixed(2)}</TableCell>
                       <TableCell>{listing.stock}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
