@@ -14,6 +14,17 @@ interface MercadoLivreItem {
   thumbnail: string;
   status: string;
   category_id: string;
+  // Campos de qualidade do ML (podem não existir em todos os itens)
+  health?: number; // 0.0-1.0 (qualidade geral)
+  listing_type_id?: string; // gold_special, gold_pro, etc
+  pictures?: Array<{ id: string }>;
+  attributes?: Array<{ id: string; value_name: string }>;
+  video_id?: string;
+  descriptions?: Array<{ id: string }>;
+  shipping?: {
+    free_shipping?: boolean;
+    mode?: string;
+  };
 }
 
 interface TokenRefreshResponse {
@@ -397,15 +408,21 @@ export class MercadoLivreSyncService {
   }
 
   /**
-   * Calcula Health Score simplificado (placeholder para IA futura)
-   * Score de 0-100 baseado em critérios básicos
+   * Calcula Health Score baseado em dados da API do ML
+   * Usa item.health se disponível (0.0-1.0 → 0-100), senão calcula baseado em critérios
    */
   private calculateHealthScore(item: MercadoLivreItem): number {
+    // Se a API retornar health diretamente, usar (converte 0.0-1.0 para 0-100)
+    if (typeof item.health === 'number' && item.health >= 0 && item.health <= 1) {
+      return Math.round(item.health * 100);
+    }
+
+    // Caso contrário, calcular baseado em critérios
     let score = 0;
 
-    // Título preenchido (+20)
+    // Título preenchido (+15)
     if (item.title && item.title.length > 10) {
-      score += 20;
+      score += 15;
     }
 
     // Título com bom tamanho (+10 extra se > 40 chars)
@@ -413,14 +430,14 @@ export class MercadoLivreSyncService {
       score += 10;
     }
 
-    // Preço definido (+20)
+    // Preço definido (+15)
     if (item.price && item.price > 0) {
-      score += 20;
+      score += 15;
     }
 
-    // Estoque disponível (+20)
+    // Estoque disponível (+15)
     if (item.available_quantity > 0) {
-      score += 20;
+      score += 15;
     }
 
     // Categoria definida (+10)
@@ -431,6 +448,16 @@ export class MercadoLivreSyncService {
     // Thumbnail presente (+10)
     if (item.thumbnail) {
       score += 10;
+    }
+
+    // Múltiplas fotos (+10)
+    if (item.pictures && item.pictures.length > 1) {
+      score += 10;
+    }
+
+    // Frete grátis (+5)
+    if (item.shipping?.free_shipping) {
+      score += 5;
     }
 
     // Status ativo (+10)

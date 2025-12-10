@@ -186,7 +186,7 @@ function OverviewContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pedidos (30 dias)</CardTitle>
+            <CardTitle className="text-sm font-medium">Pedidos ({periodDays} dias)</CardTitle>
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -199,7 +199,7 @@ function OverviewContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receita (30 dias)</CardTitle>
+            <CardTitle className="text-sm font-medium">Receita ({periodDays} dias)</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -216,7 +216,7 @@ function OverviewContent() {
         <CardHeader>
           <CardTitle>Tendência de Vendas</CardTitle>
           <CardDescription>
-            Evolução de receita e pedidos (últimos 7 dias)
+            Evolução de receita e pedidos (últimos {periodDays} dias)
           </CardDescription>
         </CardHeader>
         <CardContent>

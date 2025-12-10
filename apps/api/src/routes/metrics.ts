@@ -13,6 +13,7 @@ const SummaryQuerySchema = z.object({
 });
 
 const OverviewQuerySchema = z.object({
+  days: z.coerce.number().min(1).max(365).default(30),
   marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
 });
 
@@ -80,16 +81,17 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         avgHealthScore: mp._avg.health_score || 0,
       }));
 
-      // ============ DADOS DE VENDAS (últimos 30 dias) ============
+      // ============ DADOS DE VENDAS (período dinâmico baseado em query.days) ============
       // IMPORTANTE: Usar o mesmo período para totais E gráfico para consistência
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      thirtyDaysAgo.setHours(0, 0, 0, 0);
+      const periodDays = query.days;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - periodDays);
+      cutoffDate.setHours(0, 0, 0, 0);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ordersWhereClause: any = {
         tenant_id: tenantId,
-        order_date: { gte: thirtyDaysAgo },
+        order_date: { gte: cutoffDate },
         // GMV inclui pedidos pagos, enviados e entregues
         status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
       };
@@ -137,7 +139,8 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         averageHealthScore: aggregations._avg.health_score || 0,
         totalStock: aggregations._sum.stock || 0,
         byMarketplace,
-        // Sales data (últimos 30 dias)
+        // Sales data (período dinâmico)
+        periodDays,
         totalOrders,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         averageTicket: Math.round(averageTicket * 100) / 100,
@@ -155,6 +158,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         totalStock: 0,
         byMarketplace: [],
         // Sales data
+        periodDays: 30,
         totalOrders: 0,
         totalRevenue: 0,
         averageTicket: 0,

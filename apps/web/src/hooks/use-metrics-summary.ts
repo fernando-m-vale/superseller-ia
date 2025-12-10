@@ -50,6 +50,8 @@ export function useMetricsSummary(options: UseMetricsSummaryOptions = {}) {
     queryKey: ['metrics-summary', days, marketplace],
     queryFn: async () => {
       const params = new URLSearchParams();
+      // CORREÇÃO: Passar days para a API para filtrar período
+      params.set('days', days.toString());
       if (marketplace) {
         params.set('marketplace', marketplace);
       }
