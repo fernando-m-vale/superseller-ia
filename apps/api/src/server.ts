@@ -27,6 +27,8 @@ async function main() {
     await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
     await app.register(metricsRoutes, { prefix: '/api/v1/metrics' });
     await app.register(listingsRoutes, { prefix: '/api/v1/listings' });
+    // Alias /api/v1/ads -> /api/v1/listings (compatibilidade com frontend)
+    await app.register(listingsRoutes, { prefix: '/api/v1/ads' });
     await app.register(syncRoutes, { prefix: '/api/v1/sync' });
 
     await app.ready();

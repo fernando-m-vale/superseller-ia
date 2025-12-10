@@ -88,6 +88,14 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       cutoffDate.setDate(cutoffDate.getDate() - periodDays);
       cutoffDate.setHours(0, 0, 0, 0);
 
+      app.log.info(`[METRICS] Buscando pedidos para tenant ${tenantId}, período ${periodDays} dias, desde ${cutoffDate.toISOString()}`);
+
+      // Primeiro, contar TODOS os pedidos do tenant (sem filtro de status) para debug
+      const totalOrdersInDb = await prisma.order.count({
+        where: { tenant_id: tenantId },
+      });
+      app.log.info(`[METRICS] Total de pedidos no banco para este tenant: ${totalOrdersInDb}`);
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ordersWhereClause: any = {
         tenant_id: tenantId,
@@ -106,9 +114,29 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         select: {
           order_date: true,
           total_amount: true,
+          status: true,
         },
         orderBy: { order_date: 'asc' },
       });
+
+      app.log.info(`[METRICS] Pedidos encontrados com filtro de status (paid/shipped/delivered): ${allOrders.length}`);
+
+      // Se não encontrou com filtro de status, buscar sem filtro para debug
+      if (allOrders.length === 0 && totalOrdersInDb > 0) {
+        const ordersWithoutStatusFilter = await prisma.order.findMany({
+          where: {
+            tenant_id: tenantId,
+            order_date: { gte: cutoffDate },
+          },
+          select: {
+            status: true,
+            order_date: true,
+            total_amount: true,
+          },
+          take: 10,
+        });
+        app.log.info(`[METRICS] Amostra de pedidos sem filtro de status: ${JSON.stringify(ordersWithoutStatusFilter.map(o => ({ status: o.status, date: o.order_date, amount: o.total_amount })))}`);
+      }
 
       // Calcular totais a partir dos mesmos dados da série (consistência)
       const totalOrders = allOrders.length;
@@ -129,6 +157,8 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       const salesSeries = Array.from(salesSeriesMap.values()).sort((a, b) =>
         a.date.localeCompare(b.date)
       );
+
+      app.log.info(`[METRICS] Retornando: totalOrders=${totalOrders}, totalRevenue=${totalRevenue}, salesSeries.length=${salesSeries.length}`);
 
       return reply.send({
         // Listings data

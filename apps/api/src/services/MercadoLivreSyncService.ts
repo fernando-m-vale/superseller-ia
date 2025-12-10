@@ -16,6 +16,7 @@ interface MercadoLivreItem {
   category_id: string;
   // Campos de qualidade do ML (podem não existir em todos os itens)
   health?: number; // 0.0-1.0 (qualidade geral)
+  quality_grade?: string; // "good", "regular", "bad" - fallback para health
   listing_type_id?: string; // gold_special, gold_pro, etc
   pictures?: Array<{ id: string }>;
   attributes?: Array<{ id: string; value_name: string }>;
@@ -409,15 +410,38 @@ export class MercadoLivreSyncService {
 
   /**
    * Calcula Health Score baseado em dados da API do ML
-   * Usa item.health se disponível (0.0-1.0 → 0-100), senão calcula baseado em critérios
+   * Prioridade: item.health (0.0-1.0) → item.quality_grade → cálculo baseado em critérios
    */
   private calculateHealthScore(item: MercadoLivreItem): number {
-    // Se a API retornar health diretamente, usar (converte 0.0-1.0 para 0-100)
+    // 1. Se a API retornar health diretamente (0.0-1.0), usar
     if (typeof item.health === 'number' && item.health >= 0 && item.health <= 1) {
-      return Math.round(item.health * 100);
+      const score = Math.round(item.health * 100);
+      console.log(`[ML-SYNC] Health Score via item.health: ${item.health} -> ${score}`);
+      return score;
     }
 
-    // Caso contrário, calcular baseado em critérios
+    // 2. Se tiver quality_grade, mapear para score
+    if (item.quality_grade) {
+      let score = 50; // default
+      switch (item.quality_grade.toLowerCase()) {
+        case 'good':
+        case 'excellent':
+          score = 90;
+          break;
+        case 'regular':
+        case 'average':
+          score = 70;
+          break;
+        case 'bad':
+        case 'poor':
+          score = 40;
+          break;
+      }
+      console.log(`[ML-SYNC] Health Score via quality_grade: ${item.quality_grade} -> ${score}`);
+      return score;
+    }
+
+    // 3. Calcular baseado em critérios do anúncio
     let score = 0;
 
     // Título preenchido (+15)
@@ -465,7 +489,9 @@ export class MercadoLivreSyncService {
       score += 10;
     }
 
-    return Math.min(score, 100); // Cap em 100
+    const finalScore = Math.min(score, 100);
+    console.log(`[ML-SYNC] Health Score calculado: ${finalScore} (title: ${item.title?.length || 0} chars, pictures: ${item.pictures?.length || 0}, status: ${item.status})`);
+    return finalScore;
   }
 
   /**

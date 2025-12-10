@@ -320,29 +320,48 @@ export class MercadoLivreOrdersService {
     let offset = 0;
     const limit = 50;
 
+    console.log(`[ML-ORDERS] ========== INICIANDO FETCH DE PEDIDOS ==========`);
+    console.log(`[ML-ORDERS] Seller ID: ${this.providerAccountId}`);
+    console.log(`[ML-ORDERS] Data From: ${dateFrom}`);
+    console.log(`[ML-ORDERS] Token (primeiros 20 chars): ${this.accessToken.substring(0, 20)}...`);
+
     while (true) {
       const orders = await this.executeWithRetryOn401(async () => {
         try {
           const url = `${ML_API_BASE}/orders/search`;
-          console.log(`[ML-ORDERS] Chamando API: ${url} (Offset: ${offset})`);
+          const params = {
+            seller: this.providerAccountId,
+            'order.date_created.from': dateFrom,
+            sort: 'date_desc',
+            offset,
+            limit,
+          };
+          
+          console.log(`[ML-ORDERS] Chamando API: ${url}`);
+          console.log(`[ML-ORDERS] Params:`, JSON.stringify(params));
 
           const response = await axios.get<MLOrdersSearchResponse>(url, {
             headers: { Authorization: `Bearer ${this.accessToken}` },
-            params: {
-              seller: this.providerAccountId,
-              'order.date_created.from': dateFrom,
-              sort: 'date_desc',
-              offset,
-              limit,
-            },
+            params,
           });
+
+          console.log(`[ML-ORDERS] Resposta status: ${response.status}`);
+          console.log(`[ML-ORDERS] Paging: total=${response.data.paging.total}, offset=${response.data.paging.offset}, limit=${response.data.paging.limit}`);
+          console.log(`[ML-ORDERS] Results neste lote: ${response.data.results.length}`);
+          
+          // Log do primeiro pedido para debug
+          if (response.data.results.length > 0) {
+            const firstOrder = response.data.results[0];
+            console.log(`[ML-ORDERS] Exemplo de pedido: ID=${firstOrder.id}, Status=${firstOrder.status}, Total=${firstOrder.total_amount}, Date=${firstOrder.date_created}`);
+          }
 
           return response.data;
         } catch (error) {
           if (axios.isAxiosError(error)) {
             const status = error.response?.status;
             const data = JSON.stringify(error.response?.data);
-            console.error(`[ML-ORDERS] Erro API ML (${status}):`, data);
+            console.error(`[ML-ORDERS] ❌ Erro API ML (${status}):`, data);
+            console.error(`[ML-ORDERS] Headers da resposta:`, JSON.stringify(error.response?.headers));
             throw error;
           }
           throw error;
@@ -350,15 +369,16 @@ export class MercadoLivreOrdersService {
       });
 
       allOrders.push(...orders.results);
-      console.log(`[ML-ORDERS] Buscados ${allOrders.length}/${orders.paging.total} pedidos`);
+      console.log(`[ML-ORDERS] ✓ Buscados ${allOrders.length}/${orders.paging.total} pedidos`);
 
-      if (offset + limit >= orders.paging.total) {
+      if (offset + limit >= orders.paging.total || orders.paging.total === 0) {
         break;
       }
 
       offset += limit;
     }
 
+    console.log(`[ML-ORDERS] ========== FIM DO FETCH: ${allOrders.length} pedidos ==========`);
     return allOrders;
   }
 
@@ -398,6 +418,8 @@ export class MercadoLivreOrdersService {
     const orderStatus = this.mapMLStatusToOrderStatus(mlOrder.status);
     const totalAmount = mlOrder.total_amount;
 
+    console.log(`[ML-ORDERS] Processando pedido ${mlOrder.id}: status=${mlOrder.status} -> ${orderStatus}, total=${totalAmount}`);
+
     // Encontrar data de pagamento
     const paidPayment = mlOrder.payments?.find(p => p.status === 'approved');
     const paidDate = paidPayment?.date_approved ? new Date(paidPayment.date_approved) : null;
@@ -415,6 +437,7 @@ export class MercadoLivreOrdersService {
 
     if (existing) {
       // Update
+      console.log(`[ML-ORDERS] ✓ Atualizando pedido existente: ${existing.id}`);
       await prisma.order.update({
         where: { id: existing.id },
         data: {
@@ -428,6 +451,7 @@ export class MercadoLivreOrdersService {
       return { created: false, gmv: totalAmount };
     } else {
       // Create order com items
+      console.log(`[ML-ORDERS] ✓ Criando novo pedido no banco...`);
       const order = await prisma.order.create({
         data: {
           tenant_id: this.tenantId,
@@ -442,9 +466,11 @@ export class MercadoLivreOrdersService {
           paid_date: paidDate,
         },
       });
+      console.log(`[ML-ORDERS] ✓ Pedido criado com ID interno: ${order.id}`);
 
       // Criar order items
-      for (const item of mlOrder.order_items) {
+      console.log(`[ML-ORDERS] Criando ${mlOrder.order_items?.length || 0} items...`);
+      for (const item of mlOrder.order_items || []) {
         // Tentar encontrar o listing correspondente
         const listing = await prisma.listing.findUnique({
           where: {
@@ -468,6 +494,7 @@ export class MercadoLivreOrdersService {
           },
         });
       }
+      console.log(`[ML-ORDERS] ✓ Items criados com sucesso`);
 
       return { created: true, gmv: totalAmount };
     }
