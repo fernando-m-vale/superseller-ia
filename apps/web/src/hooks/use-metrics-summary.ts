@@ -44,7 +44,7 @@ export function useMetricsSummary(options: UseMetricsSummaryOptions = {}) {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      const response = await fetch(`${apiUrl}/metrics/summary?${params}`, {
+      const response = await fetch(`${apiUrl}/metrics/detailed?${params}`, {
         headers,
       });
 
