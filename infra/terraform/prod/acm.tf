@@ -1,4 +1,5 @@
 resource "aws_acm_certificate" "api" {
+  count             = var.enable_custom_domains ? 1 : 0
   domain_name       = local.api_fqdn
   validation_method = "DNS"
 
@@ -13,6 +14,7 @@ resource "aws_acm_certificate" "api" {
 }
 
 resource "aws_acm_certificate" "web" {
+  count             = var.enable_custom_domains ? 1 : 0
   domain_name       = local.web_fqdn
   validation_method = "DNS"
 
@@ -26,46 +28,38 @@ resource "aws_acm_certificate" "web" {
   })
 }
 
+# Use tolist to convert the set to a list and access the first element
+# This avoids the for_each issue with unknown keys during import
 resource "aws_route53_record" "api_cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.api.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
+  count = var.enable_custom_domains ? 1 : 0
 
   allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
+  name            = tolist(aws_acm_certificate.api[0].domain_validation_options)[0].resource_record_name
+  records         = [tolist(aws_acm_certificate.api[0].domain_validation_options)[0].resource_record_value]
   ttl             = 60
-  type            = each.value.type
+  type            = tolist(aws_acm_certificate.api[0].domain_validation_options)[0].resource_record_type
   zone_id         = data.aws_route53_zone.main.zone_id
 }
 
 resource "aws_route53_record" "web_cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.web.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
+  count = var.enable_custom_domains ? 1 : 0
 
   allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
+  name            = tolist(aws_acm_certificate.web[0].domain_validation_options)[0].resource_record_name
+  records         = [tolist(aws_acm_certificate.web[0].domain_validation_options)[0].resource_record_value]
   ttl             = 60
-  type            = each.value.type
+  type            = tolist(aws_acm_certificate.web[0].domain_validation_options)[0].resource_record_type
   zone_id         = data.aws_route53_zone.main.zone_id
 }
 
 resource "aws_acm_certificate_validation" "api" {
-  certificate_arn         = aws_acm_certificate.api.arn
-  validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
+  count                   = var.enable_custom_domains ? 1 : 0
+  certificate_arn         = aws_acm_certificate.api[0].arn
+  validation_record_fqdns = [aws_route53_record.api_cert_validation[0].fqdn]
 }
 
 resource "aws_acm_certificate_validation" "web" {
-  certificate_arn         = aws_acm_certificate.web.arn
-  validation_record_fqdns = [for record in aws_route53_record.web_cert_validation : record.fqdn]
+  count                   = var.enable_custom_domains ? 1 : 0
+  certificate_arn         = aws_acm_certificate.web[0].arn
+  validation_record_fqdns = [aws_route53_record.web_cert_validation[0].fqdn]
 }

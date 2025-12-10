@@ -152,12 +152,12 @@ output "web_dns_target" {
 # -----------------------------------------------------------------------------
 output "api_certificate_arn" {
   description = "API ACM Certificate ARN"
-  value       = aws_acm_certificate.api.arn
+  value       = var.enable_custom_domains ? aws_acm_certificate.api[0].arn : null
 }
 
 output "web_certificate_arn" {
   description = "Web ACM Certificate ARN"
-  value       = aws_acm_certificate.web.arn
+  value       = var.enable_custom_domains ? aws_acm_certificate.web[0].arn : null
 }
 
 # -----------------------------------------------------------------------------
