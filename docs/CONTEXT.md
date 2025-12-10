@@ -54,6 +54,6 @@ Bugfix Dashboard: Corrigir agregação de Receita e Pedidos no Backend.
 
 Bugfix Health Score: Ajustar mapeamento de dados da API do Mercado Livre.
 
-Infra: Sincronizar estado do Terraform.
+Infra: Sincronizar estado do  Terraform com a configuração manual do App Runner.
 
 IA: Iniciar implementação do motor de Recomendações (fase 4 do roadmap).
