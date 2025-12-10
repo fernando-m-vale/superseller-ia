@@ -128,9 +128,14 @@ export class MercadoLivreSyncService {
 
   /**
    * Busca a conexão do Mercado Livre para o tenant
+   * Flexibilizado para tentar renovar tokens de conexões expiradas
    */
   private async loadConnection(): Promise<void> {
-    const connection = await prisma.marketplaceConnection.findFirst({
+    console.log(`[ML-SYNC] ========== BUSCANDO CONEXÃO ==========`);
+    console.log(`[ML-SYNC] Tenant ID: ${this.tenantId}`);
+
+    // Primeiro, buscar conexão ativa
+    let connection = await prisma.marketplaceConnection.findFirst({
       where: {
         tenant_id: this.tenantId,
         type: Marketplace.mercadolivre,
@@ -138,8 +143,50 @@ export class MercadoLivreSyncService {
       },
     });
 
+    // Se não encontrou ativa, buscar qualquer conexão do ML para debug/renovação
     if (!connection) {
-      throw new Error('Conexão com Mercado Livre não encontrada ou inativa');
+      console.log(`[ML-SYNC] ❌ Nenhuma conexão ATIVA encontrada. Buscando qualquer conexão...`);
+      
+      const allConnections = await prisma.marketplaceConnection.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          type: Marketplace.mercadolivre,
+        },
+      });
+
+      console.log(`[ML-SYNC] Conexões ML encontradas: ${allConnections.length}`);
+      
+      if (allConnections.length > 0) {
+        for (const conn of allConnections) {
+          console.log(`[ML-SYNC] - ID: ${conn.id}, Status: ${conn.status}, Provider: ${conn.provider_account_id}`);
+        }
+
+        // Tentar usar uma conexão expirada e renovar o token
+        const expiredConnection = allConnections.find(c => c.status === ConnectionStatus.expired);
+        if (expiredConnection && expiredConnection.refresh_token) {
+          console.log(`[ML-SYNC] 🔄 Tentando renovar token da conexão expirada...`);
+          
+          this.connectionId = expiredConnection.id;
+          this.refreshToken = expiredConnection.refresh_token;
+          this.providerAccountId = expiredConnection.provider_account_id;
+          
+          try {
+            await this.refreshAccessToken(expiredConnection.refresh_token);
+            console.log(`[ML-SYNC] ✅ Token renovado! Conexão reativada.`);
+            
+            connection = await prisma.marketplaceConnection.findUnique({
+              where: { id: this.connectionId },
+            });
+          } catch (refreshError) {
+            console.error(`[ML-SYNC] ❌ Falha ao renovar token:`, refreshError);
+            throw new Error('Conexão expirada e falha ao renovar token. Reconecte a conta.');
+          }
+        }
+      }
+
+      if (!connection) {
+        throw new Error('Conexão com Mercado Livre não encontrada ou inativa');
+      }
     }
 
     this.connectionId = connection.id;
@@ -147,7 +194,7 @@ export class MercadoLivreSyncService {
     this.providerAccountId = connection.provider_account_id;
     this.refreshToken = connection.refresh_token || '';
 
-    console.log(`[ML-SYNC] Conexão encontrada. Provider Account ID: ${this.providerAccountId}`);
+    console.log(`[ML-SYNC] ✅ Conexão carregada: Provider ${this.providerAccountId}, Status: ${connection.status}`);
   }
 
   /**

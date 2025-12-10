@@ -192,9 +192,15 @@ export class MercadoLivreOrdersService {
 
   /**
    * Busca a conexão do Mercado Livre para o tenant
+   * Flexibilizado para tentar renovar tokens de conexões expiradas
    */
   private async loadConnection(): Promise<void> {
-    const connection = await prisma.marketplaceConnection.findFirst({
+    console.log(`[ML-ORDERS] ========== BUSCANDO CONEXÃO ==========`);
+    console.log(`[ML-ORDERS] Tenant ID: ${this.tenantId}`);
+    console.log(`[ML-ORDERS] Marketplace: ${Marketplace.mercadolivre}`);
+
+    // Primeiro, buscar conexão ativa
+    let connection = await prisma.marketplaceConnection.findFirst({
       where: {
         tenant_id: this.tenantId,
         type: Marketplace.mercadolivre,
@@ -202,8 +208,60 @@ export class MercadoLivreOrdersService {
       },
     });
 
+    // Se não encontrou ativa, buscar qualquer conexão do ML para debug
     if (!connection) {
-      throw new Error('Conexão com Mercado Livre não encontrada ou inativa');
+      console.log(`[ML-ORDERS] ❌ Nenhuma conexão ATIVA encontrada. Buscando qualquer conexão...`);
+      
+      const allConnections = await prisma.marketplaceConnection.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          type: Marketplace.mercadolivre,
+        },
+      });
+
+      console.log(`[ML-ORDERS] Conexões encontradas para este tenant/marketplace: ${allConnections.length}`);
+      
+      if (allConnections.length > 0) {
+        for (const conn of allConnections) {
+          console.log(`[ML-ORDERS] - ID: ${conn.id}, Status: ${conn.status}, Provider: ${conn.provider_account_id}, ExpiresAt: ${conn.expires_at}`);
+        }
+
+        // Tentar usar uma conexão expirada e renovar o token
+        const expiredConnection = allConnections.find(c => c.status === ConnectionStatus.expired);
+        if (expiredConnection && expiredConnection.refresh_token) {
+          console.log(`[ML-ORDERS] 🔄 Encontrada conexão EXPIRADA com refresh_token. Tentando renovar...`);
+          
+          this.connectionId = expiredConnection.id;
+          this.refreshToken = expiredConnection.refresh_token;
+          this.providerAccountId = expiredConnection.provider_account_id;
+          
+          try {
+            await this.refreshAccessToken(expiredConnection.refresh_token);
+            console.log(`[ML-ORDERS] ✅ Token renovado com sucesso! Conexão reativada.`);
+            
+            // Recarregar a conexão atualizada
+            connection = await prisma.marketplaceConnection.findUnique({
+              where: { id: this.connectionId },
+            });
+          } catch (refreshError) {
+            console.error(`[ML-ORDERS] ❌ Falha ao renovar token:`, refreshError);
+            throw new Error('Conexão expirada e falha ao renovar token. Reconecte a conta do Mercado Livre.');
+          }
+        }
+      }
+
+      // Se ainda não encontrou conexão válida, listar todas do tenant para debug
+      if (!connection) {
+        const allTenantConnections = await prisma.marketplaceConnection.findMany({
+          where: { tenant_id: this.tenantId },
+        });
+        console.log(`[ML-ORDERS] Todas as conexões do tenant: ${allTenantConnections.length}`);
+        for (const conn of allTenantConnections) {
+          console.log(`[ML-ORDERS] - Type: ${conn.type}, Status: ${conn.status}, Provider: ${conn.provider_account_id}`);
+        }
+        
+        throw new Error('Conexão com Mercado Livre não encontrada ou inativa. Verifique se a conta está conectada.');
+      }
     }
 
     this.connectionId = connection.id;
@@ -211,7 +269,12 @@ export class MercadoLivreOrdersService {
     this.providerAccountId = connection.provider_account_id;
     this.refreshToken = connection.refresh_token || '';
 
-    console.log(`[ML-ORDERS] Conexão encontrada. Provider Account ID: ${this.providerAccountId}`);
+    console.log(`[ML-ORDERS] ✅ Conexão carregada com sucesso!`);
+    console.log(`[ML-ORDERS] - Connection ID: ${this.connectionId}`);
+    console.log(`[ML-ORDERS] - Provider Account ID: ${this.providerAccountId}`);
+    console.log(`[ML-ORDERS] - Status: ${connection.status}`);
+    console.log(`[ML-ORDERS] - Expires At: ${connection.expires_at}`);
+    console.log(`[ML-ORDERS] - Has Refresh Token: ${!!this.refreshToken}`);
   }
 
   /**
