@@ -91,9 +91,9 @@ export function RecommendationsTable({
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   {getImpactBadge(rec.impact)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {rec.score.toFixed(2)}
-                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {Number(rec.score ?? 0).toFixed(2)}
+                                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   {getStatusBadge(rec.status)}
                 </td>

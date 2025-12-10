@@ -44,8 +44,65 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
-  // Rota de Callback
-  app.get('/callback', async (req: FastifyRequest, reply: FastifyReply) => {
+    // Rota de Health Check - verifica se há conexão ativa com ML
+    app.get('/health', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { tenantId } = req as RequestWithAuth;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const connection = await prisma.marketplaceConnection.findFirst({
+          where: {
+            tenant_id: tenantId,
+            type: Marketplace.mercadolivre,
+            status: ConnectionStatus.active,
+          },
+          orderBy: { updated_at: 'desc' },
+        });
+
+        if (!connection) {
+          return reply.status(404).send({ error: 'No active Mercado Livre connection found' });
+        }
+
+        // Fetch user info from ML API to get nickname, siteId, etc.
+        try {
+          const userResponse = await axios.get(`${ML_API_BASE}/users/me`, {
+            headers: {
+              Authorization: `Bearer ${connection.access_token}`,
+            },
+          });
+
+          const userData = userResponse.data;
+          return reply.send({
+            ok: true,
+            sellerId: connection.provider_account_id,
+            nickname: userData.nickname || '',
+            siteId: userData.site_id || 'MLB',
+            countryId: userData.country_id || 'BR',
+            tags: userData.tags || [],
+          });
+        } catch (apiError) {
+          // Token might be expired, return basic info
+          app.log.warn('Failed to fetch ML user info, token may be expired:', apiError);
+          return reply.send({
+            ok: true,
+            sellerId: connection.provider_account_id,
+            nickname: '',
+            siteId: 'MLB',
+            countryId: 'BR',
+            tags: [],
+          });
+        }
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({ error: 'Failed to check Mercado Livre health' });
+      }
+    });
+
+    // Rota de Callback
+    app.get('/callback', async (req: FastifyRequest, reply: FastifyReply) => {
     try {
       const { code, state } = req.query as { code: string; state: string };
       

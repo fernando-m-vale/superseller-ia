@@ -265,10 +265,10 @@ function OverviewContent() {
                 <p className="text-lg font-semibold text-green-900">{data.bestListing.title}</p>
                 <p className="text-sm text-green-700">ID: {data.bestListing.id}</p>
               </div>
-              <Badge className="bg-green-600 text-white text-lg px-4 py-2">
-                <Target className="h-4 w-4 mr-1" />
-                {data.bestListing.healthScore.toFixed(2)}
-              </Badge>
+                            <Badge className="bg-green-600 text-white text-lg px-4 py-2">
+                              <Target className="h-4 w-4 mr-1" />
+                              {Number(data.bestListing.healthScore ?? 0).toFixed(2)}
+                            </Badge>
             </div>
           </CardContent>
         </Card>
