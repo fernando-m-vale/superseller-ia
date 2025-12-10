@@ -49,5 +49,12 @@ COPY --from=build /app ./
 # Porta da API
 EXPOSE 3001
 
-# Comando de entrada
-CMD ["node", "apps/api/dist/server.js"]
+# Create startup script that runs migrations before starting the server
+RUN echo '#!/bin/sh\n\
+echo "Running database migrations..."\n\
+cd /app/apps/api && npx prisma migrate deploy\n\
+echo "Starting server..."\n\
+exec node /app/apps/api/dist/server.js' > /app/start.sh && chmod +x /app/start.sh
+
+# Comando de entrada - runs migrations then starts server
+CMD ["/app/start.sh"]
