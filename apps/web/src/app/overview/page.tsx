@@ -122,12 +122,6 @@ function OverviewContent() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(safeNum);
   };
 
-  const formatPercentage = (num: number | null | undefined) => {
-    const safeNum = Number(num) || 0;
-    if (!Number.isFinite(safeNum)) return '0.00%';
-    return `${(safeNum * 100).toFixed(2)}%`;
-  };
-
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
