@@ -51,10 +51,20 @@ enum JobStatus {
 enum JobType {
   shopee_sync
   mercadolivre_sync
+  mercadolivre_orders_sync
   amazon_sync
   magalu_sync
   metrics_aggregation
   data_quality_check
+}
+
+enum OrderStatus {
+  pending
+  paid
+  shipped
+  delivered
+  cancelled
+  refunded
 }
 
 enum RuleStatus {
@@ -79,6 +89,7 @@ model Tenant {
   users                   User[]
   marketplace_connections MarketplaceConnection[]
   listings                Listing[]
+  orders                  Order[]
   listing_metrics_daily   ListingMetricsDaily[]
   ai_model_metrics        AiModelMetric[]
   data_quality_checks     DataQualityCheck[]
@@ -139,12 +150,61 @@ model Listing {
   tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   listing_metrics_daily   ListingMetricsDaily[]
   listing_action_outcomes ListingActionOutcome[]
+  order_items             OrderItem[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
   @@index([tenant_id, marketplace])
   @@index([tenant_id, status])
   @@map("listings")
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  tenant_id       String
+  marketplace     Marketplace
+  order_id_ext    String        // ID do pedido no marketplace (ex: ML order ID)
+  status          OrderStatus
+  total_amount    Decimal       @db.Decimal(12, 2)
+  currency        String        @default("BRL")
+  buyer_nickname  String?
+  buyer_id_ext    String?       // ID do comprador no marketplace
+  shipping_cost   Decimal?      @db.Decimal(10, 2)
+  order_date      DateTime      // Data do pedido no marketplace
+  paid_date       DateTime?     // Data do pagamento
+  shipped_date    DateTime?     // Data de envio
+  delivered_date  DateTime?     // Data de entrega
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
+
+  tenant Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  items  OrderItem[]
+
+  @@unique([tenant_id, marketplace, order_id_ext])
+  @@index([tenant_id])
+  @@index([tenant_id, marketplace])
+  @@index([tenant_id, status])
+  @@index([order_date])
+  @@map("orders")
+}
+
+model OrderItem {
+  id              String   @id @default(uuid())
+  order_id        String
+  listing_id      String?  // Pode ser null se o listing foi deletado
+  listing_id_ext  String   // ID do item no marketplace
+  title           String
+  quantity        Int
+  unit_price      Decimal  @db.Decimal(10, 2)
+  total_price     Decimal  @db.Decimal(10, 2)
+  created_at      DateTime @default(now())
+
+  order   Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  listing Listing? @relation(fields: [listing_id], references: [id], onDelete: SetNull)
+
+  @@index([order_id])
+  @@index([listing_id])
+  @@map("order_items")
 }
 
 model ListingMetricsDaily {

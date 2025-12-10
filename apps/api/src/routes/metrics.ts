@@ -1,5 +1,5 @@
 import { FastifyPluginCallback, FastifyRequest } from 'fastify';
-import { PrismaClient, ListingStatus, Marketplace } from '@prisma/client';
+import { PrismaClient, ListingStatus, Marketplace, OrderStatus } from '@prisma/client';
 import { healthScore } from '@superseller/core';
 import { z } from 'zod';
 import { authGuard } from '../plugins/auth';
@@ -13,6 +13,11 @@ const SummaryQuerySchema = z.object({
 });
 
 const OverviewQuerySchema = z.object({
+  marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
+});
+
+const SalesQuerySchema = z.object({
+  days: z.coerce.number().min(1).max(365).default(30),
   marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
 });
 
@@ -75,7 +80,69 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         avgHealthScore: mp._avg.health_score || 0,
       }));
 
+      // ============ DADOS DE VENDAS (últimos 30 dias) ============
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ordersWhereClause: any = {
+        tenant_id: tenantId,
+        order_date: { gte: thirtyDaysAgo },
+        status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+      };
+
+      if (query.marketplace) {
+        ordersWhereClause.marketplace = query.marketplace;
+      }
+
+      // Total de pedidos pagos
+      const totalOrders = await prisma.order.count({ where: ordersWhereClause });
+
+      // GMV (receita total)
+      const revenueResult = await prisma.order.aggregate({
+        where: ordersWhereClause,
+        _sum: {
+          total_amount: true,
+        },
+      });
+
+      const totalRevenue = Number(revenueResult._sum.total_amount) || 0;
+      const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      // Série temporal para gráfico (últimos 7 dias)
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const recentOrders = await prisma.order.findMany({
+        where: {
+          ...ordersWhereClause,
+          order_date: { gte: sevenDaysAgo },
+        },
+        select: {
+          order_date: true,
+          total_amount: true,
+        },
+        orderBy: { order_date: 'asc' },
+      });
+
+      // Agrupar por dia
+      const salesSeriesMap = new Map<string, { date: string; revenue: number; orders: number }>();
+      
+      for (const order of recentOrders) {
+        const dateStr = order.order_date.toISOString().split('T')[0];
+        const existing = salesSeriesMap.get(dateStr) || { date: dateStr, revenue: 0, orders: 0 };
+        existing.revenue += Number(order.total_amount);
+        existing.orders += 1;
+        salesSeriesMap.set(dateStr, existing);
+      }
+
+      const salesSeries = Array.from(salesSeriesMap.values()).sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+
       return reply.send({
+        // Listings data
         totalListings,
         activeListings,
         pausedListings,
@@ -83,10 +150,16 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         averageHealthScore: aggregations._avg.health_score || 0,
         totalStock: aggregations._sum.stock || 0,
         byMarketplace,
+        // Sales data (últimos 30 dias)
+        totalOrders,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        averageTicket: Math.round(averageTicket * 100) / 100,
+        salesSeries,
       });
     } catch (error) {
       app.log.error(error);
       return reply.send({
+        // Listings data
         totalListings: 0,
         activeListings: 0,
         pausedListings: 0,
@@ -94,6 +167,11 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         averageHealthScore: 0,
         totalStock: 0,
         byMarketplace: [],
+        // Sales data
+        totalOrders: 0,
+        totalRevenue: 0,
+        averageTicket: 0,
+        salesSeries: [],
       });
     }
   });
@@ -205,6 +283,122 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         averageTicket: 0,
         totalVisits: 0,
         conversionRate: 0,
+        series: [],
+      });
+    }
+  });
+
+  // GET /api/v1/metrics/sales
+  // Retorna métricas de vendas baseadas em pedidos reais
+  app.get('/sales', { preHandler: authGuard }, async (req, reply) => {
+    try {
+      const query = SalesQuerySchema.parse(req.query);
+      const tenantId = req.tenantId;
+
+      if (!tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - query.days);
+      cutoffDate.setHours(0, 0, 0, 0);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const whereClause: any = {
+        tenant_id: tenantId,
+        order_date: { gte: cutoffDate },
+      };
+
+      if (query.marketplace) {
+        whereClause.marketplace = query.marketplace;
+      }
+
+      // Total de pedidos
+      const totalOrders = await prisma.order.count({ where: whereClause });
+
+      // Pedidos pagos (faturamento real)
+      const paidOrders = await prisma.order.count({
+        where: {
+          ...whereClause,
+          status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+        },
+      });
+
+      // GMV (Gross Merchandise Value) - soma de todos os pedidos pagos
+      const gmvResult = await prisma.order.aggregate({
+        where: {
+          ...whereClause,
+          status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+        },
+        _sum: {
+          total_amount: true,
+        },
+      });
+
+      const totalRevenue = Number(gmvResult._sum.total_amount) || 0;
+      const averageTicket = paidOrders > 0 ? totalRevenue / paidOrders : 0;
+
+      // Pedidos cancelados
+      const cancelledOrders = await prisma.order.count({
+        where: {
+          ...whereClause,
+          status: OrderStatus.cancelled,
+        },
+      });
+
+      // Taxa de cancelamento
+      const cancellationRate = totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0;
+
+      // Série temporal de vendas (agrupado por dia)
+      const orders = await prisma.order.findMany({
+        where: {
+          ...whereClause,
+          status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+        },
+        select: {
+          order_date: true,
+          total_amount: true,
+        },
+        orderBy: {
+          order_date: 'asc',
+        },
+      });
+
+      // Agrupar por data
+      const seriesMap = new Map<string, { date: string; revenue: number; orders: number }>();
+
+      for (const order of orders) {
+        const dateStr = order.order_date.toISOString().split('T')[0];
+        const existing = seriesMap.get(dateStr) || { date: dateStr, revenue: 0, orders: 0 };
+        existing.revenue += Number(order.total_amount);
+        existing.orders += 1;
+        seriesMap.set(dateStr, existing);
+      }
+
+      const series = Array.from(seriesMap.values()).sort((a, b) =>
+        a.date.localeCompare(b.date)
+      );
+
+      return reply.send({
+        totalOrders,
+        paidOrders,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        averageTicket: Math.round(averageTicket * 100) / 100,
+        cancelledOrders,
+        cancellationRate: Math.round(cancellationRate * 100) / 100,
+        periodDays: query.days,
+        series,
+      });
+    } catch (error) {
+      app.log.error(error);
+      return reply.send({
+        totalOrders: 0,
+        paidOrders: 0,
+        totalRevenue: 0,
+        averageTicket: 0,
+        cancelledOrders: 0,
+        cancellationRate: 0,
+        periodDays: 30,
         series: [],
       });
     }

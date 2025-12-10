@@ -6,6 +6,7 @@ import { mercadolivreRoutes } from './routes/mercadolivre';
 import { webhookRoutes } from './routes/mercado-livre-webhook';
 import { metricsRoutes } from './routes/metrics';
 import { listingsRoutes } from './routes/listings';
+import { syncRoutes } from './routes/sync.routes';
 
 const app = fastify({ logger: true });
 
@@ -26,6 +27,7 @@ async function main() {
     await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
     await app.register(metricsRoutes, { prefix: '/api/v1/metrics' });
     await app.register(listingsRoutes, { prefix: '/api/v1/listings' });
+    await app.register(syncRoutes, { prefix: '/api/v1/sync' });
 
     await app.ready();
     console.log('\n--- 🗺️  ROTA MAP ---');
