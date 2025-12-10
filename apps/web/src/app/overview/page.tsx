@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Eye, MousePointerClick, ShoppingCart, DollarSign, Target, Award } from 'lucide-react';
+import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award } from 'lucide-react';
 
 function OverviewContent() {
   const [periodDays, setPeriodDays] = useState<number>(7);
@@ -93,19 +93,22 @@ function OverviewContent() {
     );
   }
 
-  const trendData = Array.from({ length: periodDays }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (periodDays - 1 - i));
-    const safeImpressions = Number(data.totalImpressions) || 0;
-    const safeVisits = Number(data.totalVisits) || 0;
-    const safeOrders = Number(data.totalOrders) || 0;
-    return {
-      date: date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      impressions: Math.floor(safeImpressions / periodDays + Math.random() * 500),
-      visits: Math.floor(safeVisits / periodDays + Math.random() * 50),
-      orders: Math.floor(safeOrders / periodDays + Math.random() * 5),
-    };
-  });
+  // Usar dados reais da série temporal de vendas se disponível
+  const trendData = (data.salesSeries && data.salesSeries.length > 0)
+    ? data.salesSeries.map((item) => ({
+        date: new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+        revenue: item.revenue,
+        orders: item.orders,
+      }))
+    : Array.from({ length: Math.min(periodDays, 7) }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (Math.min(periodDays, 7) - 1 - i));
+        return {
+          date: date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          revenue: 0,
+          orders: 0,
+        };
+      });
 
   const formatNumber = (num: number | null | undefined) => {
     const safeNum = Number(num) || 0;
@@ -163,46 +166,46 @@ function OverviewContent() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Impressões</CardTitle>
+            <CardTitle className="text-sm font-medium">Total de Anúncios</CardTitle>
             <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalImpressions)}</div>
+            <div className="text-2xl font-bold">{formatNumber(data.totalListings)}</div>
             <p className="text-xs text-muted-foreground">
-              CTR: {formatPercentage(data.avgCTR)}
+              {formatNumber(data.activeListings)} ativos
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Visitas</CardTitle>
+            <CardTitle className="text-sm font-medium">Estoque Total</CardTitle>
             <MousePointerClick className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalVisits)}</div>
+            <div className="text-2xl font-bold">{formatNumber(data.totalStock)}</div>
             <p className="text-xs text-muted-foreground">
-              CVR: {formatPercentage(data.avgCVR)}
+              Preço médio: {formatCurrency(data.averagePrice)}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pedidos</CardTitle>
+            <CardTitle className="text-sm font-medium">Pedidos (30 dias)</CardTitle>
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatNumber(data.totalOrders)}</div>
             <p className="text-xs text-muted-foreground">
-              Total de conversões
+              Ticket médio: {formatCurrency(data.averageTicket)}
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receita</CardTitle>
+            <CardTitle className="text-sm font-medium">Receita (30 dias)</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -217,9 +220,9 @@ function OverviewContent() {
       {/* Trend Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Tendência de Performance</CardTitle>
+          <CardTitle>Tendência de Vendas</CardTitle>
           <CardDescription>
-            Evolução das métricas nos últimos {periodDays} dias
+            Evolução de receita e pedidos (últimos 7 dias)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -227,22 +230,22 @@ function OverviewContent() {
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
+              <YAxis yAxisId="left" orientation="left" stroke="#82ca9d" />
+              <YAxis yAxisId="right" orientation="right" stroke="#ffc658" />
+              <Tooltip 
+                formatter={(value: number, name: string) => {
+                  if (name === 'Receita') return [`R$ ${value.toFixed(2)}`, name];
+                  return [value, name];
+                }}
+              />
               <Legend />
               <Line
                 type="monotone"
-                dataKey="impressions"
-                stroke="#8884d8"
-                name="Impressões"
-                strokeWidth={2}
-              />
-              <Line
-                type="monotone"
-                dataKey="visits"
+                dataKey="revenue"
                 stroke="#82ca9d"
-                name="Visitas"
+                name="Receita"
                 strokeWidth={2}
+                yAxisId="left"
               />
               <Line
                 type="monotone"
@@ -250,34 +253,40 @@ function OverviewContent() {
                 stroke="#ffc658"
                 name="Pedidos"
                 strokeWidth={2}
+                yAxisId="right"
               />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
 
-      {/* Best Listing Card */}
-      {data.bestListing && (
-        <Card className="border-green-200 bg-green-50">
+      {/* Marketplace Breakdown */}
+      {data.byMarketplace && data.byMarketplace.length > 0 && (
+        <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Award className="h-5 w-5 text-green-600" />
-              <CardTitle className="text-green-900">Melhor Anúncio</CardTitle>
+              <Award className="h-5 w-5 text-primary" />
+              <CardTitle>Por Marketplace</CardTitle>
             </div>
-            <CardDescription className="text-green-700">
-              Anúncio com maior health score no período
+            <CardDescription>
+              Distribuição de anúncios por plataforma
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-lg font-semibold text-green-900">{data.bestListing.title}</p>
-                <p className="text-sm text-green-700">ID: {data.bestListing.id}</p>
-              </div>
-                            <Badge className="bg-green-600 text-white text-lg px-4 py-2">
-                              <Target className="h-4 w-4 mr-1" />
-                              {Number(data.bestListing.healthScore ?? 0).toFixed(2)}
-                            </Badge>
+            <div className="grid gap-4 md:grid-cols-2">
+              {data.byMarketplace.map((mp) => (
+                <div key={mp.marketplace} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <p className="font-semibold capitalize">{mp.marketplace}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {mp.count} anúncios | Health: {Number(mp.avgHealthScore || 0).toFixed(0)}%
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-lg px-4 py-2">
+                    {formatCurrency(mp.avgPrice)}
+                  </Badge>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -287,24 +296,26 @@ function OverviewContent() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">CTR Médio</CardTitle>
+            <CardTitle className="text-sm font-medium">Health Score Médio</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatPercentage(data.avgCTR)}</div>
+            <div className="text-2xl font-bold">
+              {Number(data.averageHealthScore || 0).toFixed(0)}%
+            </div>
             <p className="text-xs text-muted-foreground">
-              Click-through rate médio
+              Qualidade média dos anúncios
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium">CVR Médio</CardTitle>
+            <CardTitle className="text-sm font-medium">Anúncios Pausados</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatPercentage(data.avgCVR)}</div>
+            <div className="text-2xl font-bold">{formatNumber(data.pausedListings)}</div>
             <p className="text-xs text-muted-foreground">
-              Conversion rate médio
+              Anúncios inativos
             </p>
           </CardContent>
         </Card>
@@ -315,7 +326,7 @@ function OverviewContent() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(data.totalOrders > 0 ? data.totalRevenue / data.totalOrders : 0)}
+              {formatCurrency(data.averageTicket || 0)}
             </div>
             <p className="text-xs text-muted-foreground">
               Valor médio por pedido
@@ -326,7 +337,7 @@ function OverviewContent() {
 
       {/* Footer */}
       <div className="text-center text-sm text-muted-foreground">
-        Última atualização: {new Date(data.updatedAt).toLocaleString('pt-BR')}
+        Última atualização: {data.updatedAt ? new Date(data.updatedAt).toLocaleString('pt-BR') : 'Agora'}
       </div>
     </div>
   );
