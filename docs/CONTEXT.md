@@ -4,56 +4,58 @@ Visão Geral
 
 Plataforma SaaS para gestão e otimização de anúncios em marketplaces (Mercado Livre e Shopee) utilizando Inteligência Artificial.
 
-Estado Atual do Projeto (2025-12-09)
+Estado Atual do Projeto (2025-12-10)
 
 Frontend: Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui.
 
 Backend: Node.js (Fastify) + Prisma ORM.
 
-Infraestrutura: AWS App Runner (Docker) + RDS (PostgreSQL).
+Infraestrutura: AWS App Runner (Gerenciado via Terraform) + RDS (PostgreSQL).
 
-Status de Produção: Estável (Online). Login funcional, integração com Mercado Livre ativa.
+Status de Produção: Validado. Sync de Anúncios e Pedidos funcionando com dados reais e Auto-Refresh de tokens. Infraestrutura (Terraform) sincronizada.
 
 Funcionalidades Implementadas
 
-✅ Autenticação: NextAuth.js com suporte a JWT e Refresh Token.
+✅ Autenticação: NextAuth.js + Renovação automática de Tokens ML.
 
-✅ Integração Mercado Livre: OAuth flow, download de anúncios, sincronização de visitas e Sincronização de Pedidos (Novo).
+✅ Sync Robusto: Anúncios e Pedidos (Histórico de 30 dias + Webhooks).
 
-✅ Dashboard: Gráficos de tendências (Vendas, Visitas, Impressões). Nota: Totais numéricos precisam de ajuste.
+✅ Dashboard:
 
-✅ Gestão de Anúncios: Listagem com filtros (Status, Marketplace), paginação e exibição de detalhes.
+KPIs Financeiros (GMV, Ticket Médio).
 
-✅ Onboarding: Checklist automatizado de primeiros passos.
+Gráficos de Série Temporal (Vendas x Visitas).
+
+Filtros dinâmicos (Marketplace, Status).
+
+✅ Infraestrutura: Pipeline de Deploy corrigido com Migrations automáticas no startup e State do Terraform saneado.
 
 Estrutura de Dados Crítica
 
-Tenant: Unidade de isolamento de dados por usuário/empresa.
+Tenant: Unidade de isolamento.
 
-Integration: Armazena tokens OAuth (ML/Shopee).
+Integration: Tokens com lógica de expiresAt e refreshToken.
 
-Listing: Anúncios sincronizados (agora com campo health_score).
+Listing: Anúncios (Campos vitais: price, status, permalink, thumbnail).
 
-Order/OrderItem: Pedidos sincronizados para cálculo de GMV e Receita.
+Order/OrderItem: Base para cálculo de receita.
 
-Metric: Dados diários de performance (visits, views, sales_qty).
+Metric: Séries temporais para gráficos.
 
-Problemas Conhecidos & Dívida Técnica
+Problemas Conhecidos & Backlog de Produto
 
-Inconsistência de Métricas: O endpoint /metrics/overview retorna as séries temporais corretamente (gráfico funciona), mas o objeto totals retorna zeros, deixando os cards de KPI vazios.
+Health Score (Pivot Estratégico): O campo original da API do ML (health_score) provou-se insuficiente/vazio.
 
-Health Score: O campo existe no banco, mas a integração não está populando o valor correto (sempre zero ou null).
+Nova Definição: Criar algoritmo proprietário (Super Seller Score) que avalie a qualidade real do anúncio cruzando dados de SEO, Conversão e Competitividade.
 
-Terraform Drift: A configuração real da AWS (App Runner) foi alterada manualmente e não bate com o arquivo main.tf. Risco de sobrescrita em deploys futuros.
+Recomendações (IA): A tabela existe, mas o motor de geração de sugestões ainda não foi implementado.
 
-Webhooks: A estrutura de processamento existe, mas precisa de validação real em produção para garantir que novos pedidos entrem automaticamente.
+Webhooks: A estrutura de processamento existe, mas precisa de validação contínua em produção para garantir que novos pedidos entrem automaticamente sem necessidade de sync manual.
 
-Próximos Passos (Prioridade)
+Próximos Passos (Prioridade Imediata)
 
-Bugfix Dashboard: Corrigir agregação de Receita e Pedidos no Backend.
+UI/UX: Implementar Card "Anúncios Ativos" no Dashboard (Quick Win).
 
-Bugfix Health Score: Ajustar mapeamento de dados da API do Mercado Livre.
+Feature Core: Desenvolver lógica do "Super Seller Score" (Cálculo proprietário de saúde do anúncio).
 
-Infra: Sincronizar estado do  Terraform com a configuração manual do App Runner.
-
-IA: Iniciar implementação do motor de Recomendações (fase 4 do roadmap).
+Feature AI: Iniciar motor de IA para gerar a primeira recomendação real (ex: "Melhorar título" ou "Ajustar preço").

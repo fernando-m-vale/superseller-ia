@@ -1,5 +1,53 @@
 Developer Log - SuperSeller IA
 
+[2025-12-10] - A Conquista dos Dados Reais (Infra & DB Fix)
+
+Status: ✅ Sucesso Crítico (Dados no Dashboard) | 🚧 Refinamento de Produto Iniciado
+
+🏆 Conquistas do Dia (O "Turning Point")
+
+Infraestrutura e Banco de Dados (A Batalha Final):
+
+Problema: Erro persistente Table public.orders does not exist mesmo após tentativas de migração via túnel SSH.
+
+Diagnóstico (Devin): O App Runner estava apontando para um banco de dados diferente do que estávamos migrando manualmente. Além disso, havia "drift" no Terraform.
+
+Solução Definitiva: Devin sincronizou o Terraform, injetou as variáveis corretas de ambiente (DATABASE_URL) e configurou o Dockerfile para rodar prisma migrate deploy no startup.
+
+Resultado: Tabelas criadas automaticamente no ambiente correto.
+
+Sincronização de Pedidos (Vendas Reais):
+
+Bugfix: O serviço de sync falhava com "Conexão não encontrada" porque o token estava expirado e o filtro buscava apenas ACTIVE.
+
+Correção (Cursor): Implementada lógica de Auto-Refresh. Se o token estiver vencido, o sistema renova automaticamente antes de baixar os pedidos.
+
+Validação: Script manual (V6) rodou com sucesso, baixando 107 pedidos e gerando R$ 5k+ de GMV no dashboard.
+
+Dashboard Funcional:
+
+Gráficos de tendências (Vendas, Visitas) operacionais.
+
+Cards de KPIs (Receita, Pedidos) populados corretamente.
+
+Filtros de Marketplace e Status operacionais.
+
+⚠️ Mudança Estratégica (Health Score)
+
+Insight: O Health Score vindo da API do Mercado Livre estava vindo zerado/nulo.
+
+Decisão de Produto: Em vez de apenas corrigir a leitura, decidimos criar um Score Proprietário (Super Seller Score).
+
+Motivo: Notas altas no ML não garantem vendas. Nossa IA deve cruzar impressões, conversão e preço para dar uma nota real de "potencial de venda".
+
+Próximos Passos (Amanhã)
+
+Motor de Health Score: Implementar lógica inicial do nosso próprio score (ex: ponderação entre fotos, completude e conversão).
+
+UX Dashboard: Adicionar Card de "Anúncios Ativos" ao lado de "Pausados".
+
+IA de Recomendações: Dar o pontapé inicial no módulo que analisará esses dados para sugerir melhorias.
+
 [2025-12-09] - Estabilização de Produção e Sync de Vendas
 
 Status: ✅ Produção Acessível | ⚠️ Ajustes de Dados Pendentes
