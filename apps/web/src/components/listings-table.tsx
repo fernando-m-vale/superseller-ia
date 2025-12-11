@@ -24,6 +24,7 @@ import {
 import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useListingRecommendations, applyRecommendation } from '@/hooks/use-recommendations'
+import { useToast } from '@/hooks/use-toast'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -34,9 +35,10 @@ export function ListingsTable() {
   const [sheetOpen, setSheetOpen] = useState(false)
 
   const { data, isLoading, error, refetch } = useListings(filters)
+  const { toast } = useToast()
   
   // Buscar todas as recomendações pendentes do tenant
-  const { data: recommendationsData } = useRecommendations({ status: 'pending', limit: 100 })
+  const { data: recommendationsData, refetch: refetchRecommendations } = useRecommendations({ status: 'pending', limit: 100 })
   
   // Criar um mapa de listingId -> recomendações para lookup rápido
   const recommendationsByListing = new Map<string, Recommendation[]>()
@@ -47,7 +49,7 @@ export function ListingsTable() {
   })
 
   // Buscar recomendações do listing selecionado
-  const { recommendations: selectedRecommendations } = useListingRecommendations(selectedListingId)
+  const { recommendations: selectedRecommendations, refetch: refetchSelectedRecommendations } = useListingRecommendations(selectedListingId)
 
   const handleOpenRecommendations = (listingId: string) => {
     setSelectedListingId(listingId)
@@ -57,10 +59,24 @@ export function ListingsTable() {
   const handleApplyRecommendation = async (recId: string) => {
     try {
       await applyRecommendation(recId)
-      // Recarregar recomendações
-      refetch()
+      
+      // Toast de sucesso
+      toast({
+        variant: 'success',
+        title: 'Recomendação aplicada!',
+        description: 'A recomendação foi marcada como concluída.',
+      })
+      
+      // Atualizar listas localmente
+      refetchRecommendations()
+      refetchSelectedRecommendations()
     } catch (error) {
       console.error('Erro ao aplicar recomendação:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível marcar a recomendação como feita. Tente novamente.',
+      })
     }
   }
 

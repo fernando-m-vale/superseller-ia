@@ -68,27 +68,38 @@ export class RecommendationService {
     }
 
     // Sem descrição ou descrição muito curta
-    if (!input.description || input.description.length < 100) {
+    // Validação: verificar se description é null, undefined ou string vazia
+    const hasDescription = input.description && typeof input.description === 'string' && input.description.trim().length > 0;
+    const descriptionLength = hasDescription ? input.description.trim().length : 0;
+    
+    if (!hasDescription || descriptionLength < 100) {
       recommendations.push({
         type: RecommendationType.content,
         priority: 70,
         title: '📄 Adicione uma descrição completa',
-        description: 'Uma descrição detalhada (com mais de 100 caracteres) ajuda os compradores a entender melhor o produto e aumenta a confiança na compra. Inclua especificações técnicas, benefícios e diferenciais.',
+        description: hasDescription 
+          ? `Sua descrição tem apenas ${descriptionLength} caracteres. Uma descrição detalhada (com mais de 100 caracteres) ajuda os compradores a entender melhor o produto e aumenta a confiança na compra. Inclua especificações técnicas, benefícios e diferenciais.`
+          : 'Adicione uma descrição detalhada ao seu anúncio. Descrições completas (com mais de 100 caracteres) ajudam os compradores a entender melhor o produto e aumentam a confiança na compra.',
         impactEstimate: '+15% taxa de conversão',
-        ruleTrigger: `description_length < 100 (atual: ${input.description?.length || 0})`,
+        ruleTrigger: `description_length < 100 (atual: ${descriptionLength})`,
         scoreImpact: 10,
       });
     }
 
     // Poucas fotos
-    if (input.picturesCount < 3) {
+    // Validação: garantir que picturesCount é um número válido
+    const validPicturesCount = typeof input.picturesCount === 'number' && input.picturesCount >= 0 ? input.picturesCount : 0;
+    
+    if (validPicturesCount < 3) {
       recommendations.push({
         type: RecommendationType.image,
         priority: 80,
         title: '📸 Melhore a qualidade das imagens',
-        description: `Seu anúncio tem apenas ${input.picturesCount} foto(s). Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso.`,
+        description: validPicturesCount === 0
+          ? 'Seu anúncio não possui fotos. Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso.'
+          : `Seu anúncio tem apenas ${validPicturesCount} foto(s). Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso.`,
         impactEstimate: '+25% cliques',
-        ruleTrigger: `pictures_count < 3 (atual: ${input.picturesCount})`,
+        ruleTrigger: `pictures_count < 3 (atual: ${validPicturesCount})`,
         scoreImpact: 5,
       });
     }
@@ -222,13 +233,28 @@ export class RecommendationService {
   async generateAndSaveForListing(listing: Listing): Promise<number> {
     const scoreBreakdown = listing.score_breakdown as ScoreBreakdown | null;
     
+    // Validação robusta dos campos
+    const description = listing.description || null;
+    const descriptionLength = description ? description.length : 0;
+    const picturesCount = listing.pictures_count ?? 0;
+    
+    // Log para debug de falsos positivos
+    console.log(`[RECOMMENDATIONS] Gerando para listing ${listing.id}:`, {
+      titleLength: listing.title.length,
+      descriptionLength,
+      picturesCount,
+      hasVideo: listing.has_video,
+      stock: listing.stock,
+      status: listing.status,
+    });
+    
     const input: RecommendationInput = {
       listingId: listing.id,
       tenantId: listing.tenant_id,
       title: listing.title,
-      description: listing.description,
+      description,
       titleLength: listing.title.length,
-      picturesCount: listing.pictures_count || 0,
+      picturesCount,
       hasVideo: listing.has_video || false,
       price: Number(listing.price),
       stock: listing.stock,
@@ -239,6 +265,9 @@ export class RecommendationService {
     };
 
     const recommendations = this.generateRecommendationsForListing(input);
+    
+    // Log das recomendações geradas
+    console.log(`[RECOMMENDATIONS] ${recommendations.length} recomendações geradas para ${listing.id}`);
     
     // Marcar recomendações antigas como expiradas
     await prisma.recommendation.updateMany({

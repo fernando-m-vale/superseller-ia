@@ -27,6 +27,11 @@ export interface MetricsSummary {
     revenue: number;
     orders: number;
   }>;
+  topListings: Array<{
+    title: string;
+    revenue: number;
+    orders: number;
+  }>;
   // Campos legados para compatibilidade com a UI existente
   totalImpressions: number;
   totalVisits: number;

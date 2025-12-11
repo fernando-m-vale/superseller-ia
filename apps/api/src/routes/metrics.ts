@@ -160,6 +160,53 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         a.date.localeCompare(b.date)
       );
 
+      // Top 3 produtos por receita (últimos 30 dias)
+      const topListings = await prisma.orderItem.groupBy({
+        by: ['listing_id_ext'],
+        where: {
+          order: {
+            tenant_id: tenantId,
+            order_date: { gte: cutoffDate },
+            status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+          },
+        },
+        _sum: {
+          total_price: true,
+        },
+        _count: {
+          id: true,
+        },
+        orderBy: {
+          _sum: {
+            total_price: 'desc',
+          },
+        },
+        take: 3,
+      });
+
+      // Buscar detalhes dos listings
+      const topListingsWithDetails = await Promise.all(
+        topListings.map(async (item) => {
+          const listing = await prisma.listing.findFirst({
+            where: {
+              tenant_id: tenantId,
+              listing_id_ext: item.listing_id_ext,
+            },
+            select: {
+              id: true,
+              title: true,
+              listing_id_ext: true,
+            },
+          });
+
+          return {
+            title: listing?.title || 'Produto desconhecido',
+            revenue: Number(item._sum.total_price) || 0,
+            orders: item._count.id,
+          };
+        })
+      );
+
       app.log.info(`[METRICS] Retornando: totalOrders=${totalOrders}, totalRevenue=${totalRevenue}, salesSeries.length=${salesSeries.length}`);
 
       return reply.send({
@@ -178,6 +225,8 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         averageTicket: Math.round(averageTicket * 100) / 100,
         salesSeries,
+        // Top products
+        topListings: topListingsWithDetails,
       });
     } catch (error) {
       app.log.error(error);
@@ -194,6 +243,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         // Sales data
         periodDays: 30,
         totalOrders: 0,
+        topListings: [],
         totalRevenue: 0,
         averageTicket: 0,
         salesSeries: [],

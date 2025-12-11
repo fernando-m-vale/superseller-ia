@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { clearTokens } from '@/lib/auth'
+import { useAuth } from '@/hooks/use-auth'
 
 const menuItems = [
   { href: '/overview', label: 'Visão Geral', icon: LayoutDashboard },
@@ -27,6 +28,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { data: user } = useAuth()
 
   const handleLogout = () => {
     clearTokens()
@@ -76,7 +78,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <div className="px-4 py-4 border-t space-y-2">
           <div className="px-3 py-2 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Usuário</p>
-            <p className="text-xs">user@example.com</p>
+            <p className="text-xs">{user?.email || 'Carregando...'}</p>
           </div>
           <Button
             variant="ghost"
@@ -150,7 +152,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <div className="px-4 py-4 border-t space-y-2">
           <div className="px-3 py-2 text-sm text-muted-foreground">
             <p className="font-medium text-foreground">Usuário</p>
-            <p className="text-xs">user@example.com</p>
+            <p className="text-xs">{user?.email || 'Carregando...'}</p>
           </div>
           <Button
             variant="ghost"

@@ -206,9 +206,9 @@ function OverviewContent() {
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-baseline gap-2 flex-wrap">
               <div className="text-2xl font-bold">{formatNumber(data.totalOrders)}</div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs shrink-0">
                 <TrendingUp className="h-3 w-3 mr-1" />
                 +12%
               </Badge>
@@ -225,9 +225,9 @@ function OverviewContent() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-baseline gap-2 flex-wrap">
               <div className="text-2xl font-bold">{formatCurrency(data.totalRevenue)}</div>
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs shrink-0">
                 <TrendingUp className="h-3 w-3 mr-1" />
                 +8%
               </Badge>
@@ -367,49 +367,47 @@ function OverviewContent() {
       </div>
 
       {/* Top Produtos */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Award className="h-5 w-5 text-primary" />
-            <CardTitle>Top 3 Produtos (Receita)</CardTitle>
-          </div>
-          <CardDescription>
-            Produtos com maior receita no período
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[
-              { title: 'iPhone 15 Pro 256GB', revenue: 12500, orders: 8 },
-              { title: 'Samsung Galaxy S24 Ultra', revenue: 9800, orders: 6 },
-              { title: 'MacBook Air M3', revenue: 15200, orders: 4 },
-            ].map((product, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-sm">
-                    {index + 1}
+      {data.topListings && data.topListings.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-primary" />
+              <CardTitle>Top 3 Produtos (Receita)</CardTitle>
+            </div>
+            <CardDescription>
+              Produtos com maior receita no período
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {data.topListings.map((product, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-sm">
+                      {index + 1}
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">{product.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {product.orders} pedido{product.orders !== 1 ? 's' : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">{product.title}</p>
+                  <div className="text-right">
+                    <p className="font-semibold">{formatCurrency(product.revenue)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {product.orders} pedido{product.orders !== 1 ? 's' : ''}
+                      {formatCurrency(product.orders > 0 ? product.revenue / product.orders : 0)} médio
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold">{formatCurrency(product.revenue)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(product.revenue / product.orders)} médio
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Footer */}
       <div className="text-center text-sm text-muted-foreground">
