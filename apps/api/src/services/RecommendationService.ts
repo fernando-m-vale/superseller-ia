@@ -69,8 +69,9 @@ export class RecommendationService {
 
     // Sem descrição ou descrição muito curta
     // Validação: verificar se description é null, undefined ou string vazia
-    const hasDescription = input.description && typeof input.description === 'string' && input.description.trim().length > 0;
-    const descriptionLength = hasDescription ? input.description.trim().length : 0;
+    const description = input.description || '';
+    const hasDescription = typeof description === 'string' && description.trim().length > 0;
+    const descriptionLength = hasDescription ? description.trim().length : 0;
     
     if (!hasDescription || descriptionLength < 100) {
       recommendations.push({
