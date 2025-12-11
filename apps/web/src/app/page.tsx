@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { getAccessToken } from '@/lib/auth'
 import { Button } from '@/components/ui/button'
 
