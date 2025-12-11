@@ -3,7 +3,6 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getAccessToken } from '@/lib/auth'
-import { ActivationChecklist } from '@/components/ActivationChecklist'
 
 export default function HomePage() {
   const router = useRouter()

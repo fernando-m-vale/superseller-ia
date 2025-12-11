@@ -4,58 +4,36 @@ Visão Geral
 
 Plataforma SaaS para gestão e otimização de anúncios em marketplaces (Mercado Livre e Shopee) utilizando Inteligência Artificial.
 
-Estado Atual do Projeto (2025-12-10)
+Estado Atual do Projeto (2025-12-12)
 
-Frontend: Next.js 14 (App Router) + Tailwind CSS + Shadcn/ui.
+Status de Produção: Maduro. O sistema possui um layout profissional (Sidebar), métricas proprietárias (Score) e um motor de recomendações ativo.
 
-Backend: Node.js (Fastify) + Prisma ORM.
-
-Infraestrutura: AWS App Runner (Gerenciado via Terraform) + RDS (PostgreSQL).
-
-Status de Produção: Validado. Sync de Anúncios e Pedidos funcionando com dados reais e Auto-Refresh de tokens. Infraestrutura (Terraform) sincronizada.
+UX: Navegação unificada e painéis laterais interativos substituíram a navegação fragmentada.
 
 Funcionalidades Implementadas
 
-✅ Autenticação: NextAuth.js + Renovação automática de Tokens ML.
+✅ Super Seller Score: Algoritmo proprietário (0-100) que avalia a saúde real do anúncio.
 
-✅ Sync Robusto: Anúncios e Pedidos (Histórico de 30 dias + Webhooks).
+✅ Motor de Recomendações: Sistema de regras que gera dicas práticas (SEO, Preço, Estoque) baseadas no score.
 
-✅ Dashboard:
+✅ Novo Layout (Dashboard): Sidebar fixa, redirecionamento automático e painéis deslizantes (Sheets) para detalhes.
 
-KPIs Financeiros (GMV, Ticket Médio).
-
-Gráficos de Série Temporal (Vendas x Visitas).
-
-Filtros dinâmicos (Marketplace, Status).
-
-✅ Infraestrutura: Pipeline de Deploy corrigido com Migrations automáticas no startup e State do Terraform saneado.
+✅ Dashboard Rico: KPIs financeiros, Gráficos de Tendência e Tabela "Top 3 Produtos".
 
 Estrutura de Dados Crítica
 
-Tenant: Unidade de isolamento.
+Listing: Possui super_seller_score e score_breakdown.
 
-Integration: Tokens com lógica de expiresAt e refreshToken.
+Recommendation: Nova tabela que armazena as dicas geradas para cada anúncio (Status: Pending, Applied, Dismissed).
 
-Listing: Anúncios (Campos vitais: price, status, permalink, thumbnail).
+Problemas Conhecidos & Dívida Técnica
 
-Order/OrderItem: Base para cálculo de receita.
+Lockfile Drift: O pnpm-lock.yaml precisa ser estabilizado para voltarmos a usar --frozen-lockfile no CI (segurança). Atualmente rodando com --no-frozen-lockfile como hotfix.
 
-Metric: Séries temporais para gráficos.
+Webhooks: A infraestrutura existe, mas a recepção de eventos em tempo real ainda carece de validação massiva em produção.
 
-Problemas Conhecidos & Backlog de Produto
+Próximos Passos (Roadmap de Curto Prazo)
 
-Health Score (Pivot Estratégico): O campo original da API do ML (health_score) provou-se insuficiente/vazio.
+IA Generativa: Conectar um LLM para executar as recomendações (ex: "Clicar em 'Melhorar Título' gera 3 sugestões via IA").
 
-Nova Definição: Criar algoritmo proprietário (Super Seller Score) que avalie a qualidade real do anúncio cruzando dados de SEO, Conversão e Competitividade.
-
-Recomendações (IA): A tabela existe, mas o motor de geração de sugestões ainda não foi implementado.
-
-Webhooks: A estrutura de processamento existe, mas precisa de validação contínua em produção para garantir que novos pedidos entrem automaticamente sem necessidade de sync manual.
-
-Próximos Passos (Prioridade Imediata)
-
-UI/UX: Implementar Card "Anúncios Ativos" no Dashboard (Quick Win).
-
-Feature Core: Desenvolver lógica do "Super Seller Score" (Cálculo proprietário de saúde do anúncio).
-
-Feature AI: Iniciar motor de IA para gerar a primeira recomendação real (ex: "Melhorar título" ou "Ajustar preço").
+Gestão de Recomendações: Permitir que o usuário marque dicas como "Feito" ou "Ignorar" (API já existe, falta conectar UI).

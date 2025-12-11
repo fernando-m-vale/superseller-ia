@@ -8,8 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp, TrendingDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp } from 'lucide-react';
 
 function OverviewContent() {
   const [periodDays, setPeriodDays] = useState<number>(7);

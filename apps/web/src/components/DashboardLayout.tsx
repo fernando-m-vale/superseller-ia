@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { getAccessToken, removeAccessToken } from '@/lib/auth'
+import { clearTokens } from '@/lib/auth'
 
 const menuItems = [
   { href: '/overview', label: 'Visão Geral', icon: LayoutDashboard },
@@ -29,7 +29,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = () => {
-    removeAccessToken()
+    clearTokens()
     router.push('/')
   }
 

@@ -1,5 +1,46 @@
-
 Developer Log - SuperSeller IA
+
+[2025-12-11] - UX Revolution & IA Engine
+
+Status: ✅ Deploy Web Destravado (Hotfix Lockfile) | 🚀 Produto com Cara de SaaS
+
+🏆 Conquistas do Dia (Transformação de Produto)
+
+Refatoração de UX (Navegação Profissional):
+
+Dashboard Layout: Implementado menu lateral fixo (Sidebar) com links para Visão Geral, Anúncios e Recomendações.
+
+Redirecionamento Inteligente: Usuários logados são automaticamente levados para /overview, transformando a antiga "Home" em landing page.
+
+Interação Moderna: Substituição de Tooltips (que falhavam no clique) por Sheets (Painéis Laterais) da Shadcn UI. Agora, clicar em uma dica abre um painel rico com detalhes e ações.
+
+Motor de Recomendações (IA Baseada em Regras):
+
+Lógica: Implementado serviço que analisa o score_breakdown e gera cards de ação (ex: "Melhore o Título", "Baixa Conversão").
+
+Visual: Ícones de lâmpada pulsantes indicam oportunidades críticas na tabela de anúncios.
+
+Super Seller Score (O Diferencial):
+
+Algoritmo: Implementado cálculo proprietário (0-100) baseado em Cadastro (30%), Tráfego (30%) e Estoque/Status (40%).
+
+Resultado: O sistema agora julga a qualidade da conta e exibe a nota média no Dashboard.
+
+🛠️ Correções Técnicas Críticas (Hotfixes)
+
+CI/CD Lockfile: O build falhava com ERR_PNPM_OUTDATED_LOCKFILE.
+
+Solução: Regenerado pnpm-lock.yaml localmente e, como medida de emergência, relaxada a restrição --frozen-lockfile nos Dockerfiles de produção para garantir o deploy.
+
+Tipagem Fastify: Corrigidos erros de TypeScript (TS2345) nas rotas com parâmetros genéricos.
+
+Prisma JSON: Corrigido erro de tipagem ao salvar objetos JSON (score_breakdown) no banco.
+
+Próximos Passos (Amanhã)
+
+Webhooks: Testar e validar o recebimento de novos pedidos em tempo real.
+
+Refinamento de IA: Começar a usar LLM (GPT/Claude) para gerar conteúdo para as recomendações (ex: reescrever o título).
 
 [2025-12-11] - O Nascimento do Super Seller Score
 

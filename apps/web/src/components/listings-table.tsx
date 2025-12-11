@@ -20,11 +20,9 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from '@/components/ui/sheet'
 import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { useListingRecommendations, applyRecommendation } from '@/hooks/use-recommendations'
 
 export function ListingsTable() {
