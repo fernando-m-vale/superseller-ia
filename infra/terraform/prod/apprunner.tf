@@ -129,6 +129,7 @@ resource "aws_apprunner_service" "api" {
           SHOPEE_CLIENT_ID     = data.aws_secretsmanager_secret.prod["shopee_client_id"].arn
           SHOPEE_CLIENT_SECRET = data.aws_secretsmanager_secret.prod["shopee_client_secret"].arn
           SHOPEE_REDIRECT_URI  = data.aws_secretsmanager_secret.prod["shopee_redirect_uri"].arn
+          OPENAI_API_KEY       = data.aws_secretsmanager_secret.prod["openai_api_key"].arn
         }
       }
 
