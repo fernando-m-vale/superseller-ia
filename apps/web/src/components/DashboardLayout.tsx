@@ -297,7 +297,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 md:ml-64 min-w-0 relative z-0">
+      <div className="flex-1 md:pl-64 min-w-0 relative z-0">
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-30 bg-card border-b px-4 py-3 flex items-center gap-4">
           <Button

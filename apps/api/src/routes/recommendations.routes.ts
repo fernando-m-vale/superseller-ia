@@ -94,8 +94,12 @@ export const recommendationsRoutes: FastifyPluginCallback = (app, _, done) => {
         if (query.listingId) {
           whereClause.listing_id = query.listingId;
         }
+        // If no status filter is provided, default to showing pending recommendations
+        // This ensures users see actionable items by default
         if (query.status) {
           whereClause.status = query.status;
+        } else {
+          whereClause.status = RecommendationStatus.pending;
         }
         if (query.type) {
           whereClause.type = query.type;

@@ -8,6 +8,7 @@ import { metricsRoutes } from './routes/metrics';
 import { listingsRoutes } from './routes/listings';
 import { syncRoutes } from './routes/sync.routes';
 import { recommendationsRoutes } from './routes/recommendations.routes';
+import { aiAnalyzeRoutes } from './routes/ai-analyze.routes';
 
 const app = fastify({ logger: true });
 
@@ -32,6 +33,7 @@ async function main() {
     await app.register(listingsRoutes, { prefix: '/api/v1/ads' });
     await app.register(syncRoutes, { prefix: '/api/v1/sync' });
     await app.register(recommendationsRoutes, { prefix: '/api/v1/recommendations' });
+    await app.register(aiAnalyzeRoutes, { prefix: '/api/v1/ai' });
 
     await app.ready();
     console.log('\n--- 🗺️  ROTA MAP ---');
