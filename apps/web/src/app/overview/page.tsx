@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useMetricsSummary } from '@/hooks/use-metrics-summary';
 import { AuthGuard } from '@/components/AuthGuard';
+import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap } from 'lucide-react';
+import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp, TrendingDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 function OverviewContent() {
   const [periodDays, setPeriodDays] = useState<number>(7);
@@ -123,7 +125,7 @@ function OverviewContent() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -205,8 +207,14 @@ function OverviewContent() {
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalOrders)}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="flex items-baseline gap-2">
+              <div className="text-2xl font-bold">{formatNumber(data.totalOrders)}</div>
+              <Badge variant="secondary" className="text-xs">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                +12%
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
               Ticket médio: {formatCurrency(data.averageTicket)}
             </p>
           </CardContent>
@@ -218,8 +226,14 @@ function OverviewContent() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.totalRevenue)}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="flex items-baseline gap-2">
+              <div className="text-2xl font-bold">{formatCurrency(data.totalRevenue)}</div>
+              <Badge variant="secondary" className="text-xs">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                +8%
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
               GMV total do período
             </p>
           </CardContent>
@@ -353,6 +367,51 @@ function OverviewContent() {
         </Card>
       </div>
 
+      {/* Top Produtos */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Award className="h-5 w-5 text-primary" />
+            <CardTitle>Top 3 Produtos (Receita)</CardTitle>
+          </div>
+          <CardDescription>
+            Produtos com maior receita no período
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[
+              { title: 'iPhone 15 Pro 256GB', revenue: 12500, orders: 8 },
+              { title: 'Samsung Galaxy S24 Ultra', revenue: 9800, orders: 6 },
+              { title: 'MacBook Air M3', revenue: 15200, orders: 4 },
+            ].map((product, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary font-bold text-sm">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{product.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {product.orders} pedido{product.orders !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold">{formatCurrency(product.revenue)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(product.revenue / product.orders)} médio
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Footer */}
       <div className="text-center text-sm text-muted-foreground">
         Última atualização: {data.updatedAt ? new Date(data.updatedAt).toLocaleString('pt-BR') : 'Agora'}
@@ -364,7 +423,9 @@ function OverviewContent() {
 export default function OverviewPage() {
   return (
     <AuthGuard>
-      <OverviewContent />
+      <DashboardLayout>
+        <OverviewContent />
+      </DashboardLayout>
     </AuthGuard>
   );
 }

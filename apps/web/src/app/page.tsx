@@ -1,29 +1,50 @@
-import { AuthGuard } from '@/components/AuthGuard'
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { getAccessToken } from '@/lib/auth'
 import { ActivationChecklist } from '@/components/ActivationChecklist'
-import { ListingsTable } from '@/components/listings-table'
-import { MercadoLivreSyncButton } from '@/components/MercadoLivreSyncButton'
 
 export default function HomePage() {
-  return (
-    <AuthGuard>
-      <div className="space-y-6">
-        {/* Checklist de ativação (conectar contas) */}
-        <ActivationChecklist />
-        
-        {/* Cabeçalho da seção de anúncios com botão de sync */}
-        <div className="flex items-center justify-between">
+  const router = useRouter()
+
+  useEffect(() => {
+    const token = getAccessToken()
+    if (token) {
+      // Se já está logado, redirecionar para o dashboard
+      router.push('/overview')
+    }
+  }, [router])
+
+  const token = getAccessToken()
+  
+  // Se não está logado, mostrar landing/login
+  if (!token) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/10 to-background">
+        <div className="max-w-md w-full space-y-8 text-center p-8">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">Anúncios</h2>
+            <h1 className="text-4xl font-bold mb-2">Super Seller IA</h1>
             <p className="text-muted-foreground">
-              Gerencie seus anúncios nos marketplaces conectados
+              Plataforma de IA para otimizar seus anúncios em marketplaces
             </p>
           </div>
-          <MercadoLivreSyncButton />
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Faça login para acessar o dashboard
+            </p>
+          </div>
         </div>
-        
-        {/* Tabela de anúncios (consome useListings -> axios -> API) */}
-        <ListingsTable />
       </div>
-    </AuthGuard>
+    )
+  }
+
+  // Se está logado mas ainda não redirecionou (loading state)
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <p className="text-muted-foreground">Redirecionando...</p>
+      </div>
+    </div>
   )
 }

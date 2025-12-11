@@ -15,18 +15,25 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { useListingRecommendations, applyRecommendation } from '@/hooks/use-recommendations'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
     page: 1,
     pageSize: 20,
   })
+  const [selectedListingId, setSelectedListingId] = useState<string | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   const { data, isLoading, error, refetch } = useListings(filters)
   
@@ -40,6 +47,24 @@ export function ListingsTable() {
     existing.push(rec)
     recommendationsByListing.set(rec.listingId, existing)
   })
+
+  // Buscar recomendações do listing selecionado
+  const { recommendations: selectedRecommendations } = useListingRecommendations(selectedListingId)
+
+  const handleOpenRecommendations = (listingId: string) => {
+    setSelectedListingId(listingId)
+    setSheetOpen(true)
+  }
+
+  const handleApplyRecommendation = async (recId: string) => {
+    try {
+      await applyRecommendation(recId)
+      // Recarregar recomendações
+      refetch()
+    } catch (error) {
+      console.error('Erro ao aplicar recomendação:', error)
+    }
+  }
 
   const handleSearch = (q: string) => {
     setFilters(prev => ({ ...prev, q: q || undefined, page: 1 }))
@@ -230,54 +255,27 @@ export function ListingsTable() {
                           const hasCritical = sortedRecs.some(r => r.priority >= 90)
                           
                           return (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className={`flex items-center gap-1 cursor-pointer ${
-                                    hasCritical ? 'animate-pulse' : ''
-                                  }`}>
-                                    <Lightbulb className={`h-5 w-5 ${
-                                      hasCritical 
-                                        ? 'text-red-500 fill-red-100' 
-                                        : 'text-yellow-500 fill-yellow-100'
-                                    }`} />
-                                    <span className={`text-xs font-medium ${
-                                      hasCritical ? 'text-red-600' : 'text-yellow-600'
-                                    }`}>
-                                      {recs.length}
-                            </span>
-                          </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="left" className="max-w-sm p-3">
-                                  <div className="space-y-2">
-                                    <p className="font-semibold text-sm">
-                                      {recs.length} dica{recs.length > 1 ? 's' : ''} de melhoria
-                                    </p>
-                                    <ul className="space-y-1.5">
-                                      {sortedRecs.slice(0, 3).map((rec) => (
-                                        <li key={rec.id} className="flex items-start gap-2 text-xs">
-                                          <span className={`mt-0.5 ${
-                                            rec.priority >= 90 
-                                              ? '🔴' 
-                                              : rec.priority >= 70 
-                                                ? '🟡' 
-                                                : '🔵'
-                                          }`}>
-                                            {rec.priority >= 90 ? '🔴' : rec.priority >= 70 ? '🟡' : '🔵'}
-                                          </span>
-                                          <span>{rec.title}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                    {recs.length > 3 && (
-                                      <p className="text-xs text-muted-foreground">
-                                        +{recs.length - 3} mais...
-                                      </p>
-                                    )}
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-auto p-1"
+                              onClick={() => handleOpenRecommendations(listing.id)}
+                            >
+                              <div className={`flex items-center gap-1 ${
+                                hasCritical ? 'animate-pulse' : ''
+                              }`}>
+                                <Lightbulb className={`h-5 w-5 ${
+                                  hasCritical 
+                                    ? 'text-red-500 fill-red-100' 
+                                    : 'text-yellow-500 fill-yellow-100'
+                                }`} />
+                                <span className={`text-xs font-medium ${
+                                  hasCritical ? 'text-red-600' : 'text-yellow-600'
+                                }`}>
+                                  {recs.length}
+                                </span>
+                              </div>
+                            </Button>
                           )
                         })()}
                       </TableCell>
@@ -320,6 +318,81 @@ export function ListingsTable() {
           </div>
         </>
       )}
+
+      {/* Sheet de Recomendações */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="sm:max-w-lg overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>
+              {data?.items.find(l => l.id === selectedListingId)?.title || 'Recomendações'}
+            </SheetTitle>
+            <SheetDescription>
+              {selectedRecommendations.length} dica{selectedRecommendations.length !== 1 ? 's' : ''} de melhoria para este anúncio
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-4">
+            {selectedRecommendations.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Lightbulb className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhuma recomendação disponível para este anúncio.</p>
+              </div>
+            ) : (
+              selectedRecommendations
+                .sort((a, b) => b.priority - a.priority)
+                .map((rec) => (
+                  <div
+                    key={rec.id}
+                    className="p-4 border rounded-lg space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge
+                            variant={
+                              rec.priority >= 90
+                                ? 'destructive'
+                                : rec.priority >= 70
+                                  ? 'default'
+                                  : 'secondary'
+                            }
+                          >
+                            {rec.type}
+                          </Badge>
+                          {rec.priority >= 90 && (
+                            <Badge variant="outline" className="text-red-600 border-red-600">
+                              Crítico
+                            </Badge>
+                          )}
+                        </div>
+                        <h4 className="font-semibold text-sm mb-1">{rec.title}</h4>
+                        <p className="text-sm text-muted-foreground">{rec.description}</p>
+                        {rec.impactEstimate && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            💡 {rec.impactEstimate}
+                          </p>
+                        )}
+                        {rec.scoreImpact && (
+                          <p className="text-xs text-muted-foreground">
+                            📈 Potencial de ganho: +{rec.scoreImpact} pontos no Super Seller Score
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => handleApplyRecommendation(rec.id)}
+                    >
+                      Marcar como Feito
+                    </Button>
+                  </div>
+                ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
