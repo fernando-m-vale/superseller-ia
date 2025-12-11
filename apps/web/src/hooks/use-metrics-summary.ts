@@ -9,12 +9,14 @@ export interface MetricsSummary {
   pausedListings: number;
   averagePrice: number;
   averageHealthScore: number;
+  averageSuperSellerScore: number; // Super Seller Score proprietário (0-100)
   totalStock: number;
   byMarketplace: Array<{
     marketplace: string;
     count: number;
     avgPrice: number;
     avgHealthScore: number;
+    avgSuperSellerScore: number;
   }>;
   // Dados de Vendas (dos últimos 30 dias)
   totalOrders: number;

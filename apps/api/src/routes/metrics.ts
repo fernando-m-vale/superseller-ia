@@ -54,12 +54,13 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         where: { ...whereClause, status: ListingStatus.paused },
       });
 
-      // Agregações (preço médio, health score médio, estoque total)
+      // Agregações (preço médio, health score médio, super seller score médio, estoque total)
       const aggregations = await prisma.listing.aggregate({
         where: whereClause,
         _avg: {
           price: true,
           health_score: true,
+          super_seller_score: true,
         },
         _sum: {
           stock: true,
@@ -71,7 +72,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         by: ['marketplace'],
         where: { tenant_id: tenantId },
         _count: { id: true },
-        _avg: { price: true, health_score: true },
+        _avg: { price: true, health_score: true, super_seller_score: true },
       });
 
       const byMarketplace = marketplaceBreakdown.map((mp) => ({
@@ -79,6 +80,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         count: mp._count.id,
         avgPrice: Number(mp._avg.price) || 0,
         avgHealthScore: mp._avg.health_score || 0,
+        avgSuperSellerScore: mp._avg.super_seller_score || 0,
       }));
 
       // ============ DADOS DE VENDAS (período dinâmico baseado em query.days) ============
@@ -167,6 +169,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         pausedListings,
         averagePrice: Number(aggregations._avg.price) || 0,
         averageHealthScore: aggregations._avg.health_score || 0,
+        averageSuperSellerScore: Math.round(aggregations._avg.super_seller_score || 0),
         totalStock: aggregations._sum.stock || 0,
         byMarketplace,
         // Sales data (período dinâmico)
@@ -185,6 +188,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         pausedListings: 0,
         averagePrice: 0,
         averageHealthScore: 0,
+        averageSuperSellerScore: 0,
         totalStock: 0,
         byMarketplace: [],
         // Sales data

@@ -115,7 +115,7 @@ export function ListingsTable() {
                   <TableHead>Preço</TableHead>
                   <TableHead>Estoque</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Health Score</TableHead>
+                  <TableHead>Super Seller Score</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -150,33 +150,54 @@ export function ListingsTable() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        {listing.healthScore !== undefined && listing.healthScore !== null && listing.healthScore > 0 ? (
-                          <div 
-                            className="flex items-center gap-2 cursor-help"
-                            title={listing.healthIssues && listing.healthIssues.length > 0 
-                              ? listing.healthIssues.map(i => i.message).join('\n') 
-                              : listing.healthScore >= 80 ? 'Anúncio saudável' : listing.healthScore >= 50 ? 'Precisa de atenção' : 'Necessita melhorias'}
-                          >
-                            {listing.healthScore >= 80 ? (
-                              <CheckCircle2 className="h-4 w-4 text-green-600" />
-                            ) : listing.healthScore >= 50 ? (
-                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                            ) : (
-                              <AlertTriangle className="h-4 w-4 text-orange-500" />
-                            )}
-                            <span className={`font-medium ${
-                              listing.healthScore >= 80 
-                                ? 'text-green-600' 
-                                : listing.healthScore >= 50 
-                                  ? 'text-yellow-600' 
-                                  : 'text-orange-500'
-                            }`}>
-                              {listing.healthScore.toFixed(0)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">N/A</span>
-                        )}
+                        {(() => {
+                          // Preferir Super Seller Score, fallback para Health Score
+                          const score = listing.superSellerScore ?? listing.healthScore;
+                          const breakdown = listing.scoreBreakdown;
+                          
+                          if (score !== undefined && score !== null && score > 0) {
+                            // Gerar tooltip com breakdown
+                            const tooltipLines = [
+                              `Score Total: ${score}%`,
+                            ];
+                            if (breakdown) {
+                              tooltipLines.push('─────────────');
+                              tooltipLines.push(`📝 Cadastro: ${breakdown.cadastro}/30`);
+                              tooltipLines.push(`📈 Tráfego: ${breakdown.trafego}/30`);
+                              tooltipLines.push(`✅ Disponibilidade: ${breakdown.disponibilidade}/40`);
+                            }
+                            
+                            return (
+                              <div 
+                                className="flex items-center gap-2 cursor-help"
+                                title={tooltipLines.join('\n')}
+                              >
+                                {score >= 80 ? (
+                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                ) : score >= 60 ? (
+                                  <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                                ) : score >= 40 ? (
+                                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-red-500" />
+                                )}
+                                <span className={`font-medium ${
+                                  score >= 80 
+                                    ? 'text-green-600' 
+                                    : score >= 60 
+                                      ? 'text-blue-500' 
+                                      : score >= 40
+                                        ? 'text-yellow-600' 
+                                        : 'text-red-500'
+                                }`}>
+                                  {score}%
+                                </span>
+                              </div>
+                            );
+                          }
+                          
+                          return <span className="text-muted-foreground">N/A</span>;
+                        })()}
                       </TableCell>
                     </TableRow>
                   ))

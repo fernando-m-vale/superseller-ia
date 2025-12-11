@@ -69,7 +69,9 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         stock: listing.stock,
         status: listing.status,
         category: listing.category,
-        healthScore: listing.health_score ?? undefined, // snake_case -> camelCase
+        healthScore: listing.health_score ?? undefined, // Score legado da API do ML
+        superSellerScore: listing.super_seller_score ?? undefined, // Super Seller Score proprietário
+        scoreBreakdown: listing.score_breakdown ?? undefined, // Detalhamento do score
         createdAt: listing.created_at,
         updatedAt: listing.updated_at,
       }));

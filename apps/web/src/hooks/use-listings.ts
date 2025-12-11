@@ -8,6 +8,22 @@ export interface HealthIssue {
   message: string
 }
 
+export interface ScoreBreakdown {
+  cadastro: number
+  trafego: number
+  disponibilidade: number
+  details?: {
+    hasGoodTitle: boolean
+    hasDescription: boolean
+    hasGoodImage: boolean
+    hasValidPrice: boolean
+    hasRecentVisits: boolean
+    hasGoodConversion: boolean
+    isActive: boolean
+    hasStock: boolean
+  }
+}
+
 export interface Listing {
   id: string
   title: string
@@ -16,7 +32,9 @@ export interface Listing {
   stock: number
   status: string
   category?: string
-  healthScore?: number
+  healthScore?: number // Score legado da API do ML
+  superSellerScore?: number // Super Seller Score proprietário (0-100)
+  scoreBreakdown?: ScoreBreakdown // Detalhamento do score
   healthIssues?: HealthIssue[]
 }
 

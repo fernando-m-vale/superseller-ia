@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus } from '@prisma/client';
+import { ScoreCalculator } from './ScoreCalculator';
 
 const prisma = new PrismaClient();
 
@@ -18,14 +19,17 @@ interface MercadoLivreItem {
   health?: number; // 0.0-1.0 (qualidade geral)
   quality_grade?: string; // "good", "regular", "bad" - fallback para health
   listing_type_id?: string; // gold_special, gold_pro, etc
-  pictures?: Array<{ id: string }>;
+  pictures?: Array<{ id: string; url?: string; size?: string }>;
   attributes?: Array<{ id: string; value_name: string }>;
   video_id?: string;
-  descriptions?: Array<{ id: string }>;
+  descriptions?: Array<{ id: string; plain_text?: string }>;
   shipping?: {
     free_shipping?: boolean;
     mode?: string;
   };
+  // Campos adicionais para Super Seller Score
+  sold_quantity?: number;
+  visits?: number;
 }
 
 interface TokenRefreshResponse {
@@ -406,6 +410,34 @@ export class MercadoLivreSyncService {
     for (const item of items) {
       const status = this.mapMLStatusToListingStatus(item.status);
       const healthScore = this.calculateHealthScore(item);
+      
+      // Extrair descrição do primeiro item de descriptions (se existir)
+      const description = item.descriptions?.[0]?.plain_text || null;
+      
+      // Contar fotos
+      const picturesCount = item.pictures?.length || 0;
+      
+      // Verificar se tem vídeo
+      const hasVideo = !!item.video_id;
+      
+      // Dados para o Super Seller Score
+      const listingForScore = {
+        id: item.id,
+        title: item.title,
+        description,
+        price: item.price,
+        stock: item.available_quantity,
+        status: status,
+        thumbnail_url: item.thumbnail,
+        pictures_count: picturesCount,
+        visits_last_7d: item.visits || 0,
+        sales_last_7d: item.sold_quantity || 0,
+      };
+      
+      // Calcular Super Seller Score
+      const scoreResult = ScoreCalculator.calculate(listingForScore);
+      
+      console.log(`[ML-SYNC] Super Seller Score para ${item.id}: ${scoreResult.total} (Cadastro: ${scoreResult.cadastro}, Tráfego: ${scoreResult.trafego}, Disponibilidade: ${scoreResult.disponibilidade})`);
 
       try {
         const existing = await prisma.listing.findUnique({
@@ -418,17 +450,32 @@ export class MercadoLivreSyncService {
           },
         });
 
+        const listingData = {
+          title: item.title,
+          description,
+          price: item.price,
+          stock: item.available_quantity,
+          status,
+          category: item.category_id,
+          health_score: healthScore, // Legado - score da API ML
+          super_seller_score: scoreResult.total, // Novo score proprietário
+          score_breakdown: {
+            cadastro: scoreResult.cadastro,
+            trafego: scoreResult.trafego,
+            disponibilidade: scoreResult.disponibilidade,
+            details: scoreResult.details,
+          },
+          thumbnail_url: item.thumbnail,
+          pictures_count: picturesCount,
+          has_video: hasVideo,
+          visits_last_7d: item.visits || 0,
+          sales_last_7d: item.sold_quantity || 0,
+        };
+
         if (existing) {
           await prisma.listing.update({
             where: { id: existing.id },
-            data: {
-              title: item.title,
-              price: item.price,
-              stock: item.available_quantity,
-              status,
-              category: item.category_id,
-              health_score: healthScore,
-            },
+            data: listingData,
           });
           updated++;
         } else {
@@ -437,12 +484,7 @@ export class MercadoLivreSyncService {
               tenant_id: this.tenantId,
               marketplace: Marketplace.mercadolivre,
               listing_id_ext: item.id,
-              title: item.title,
-              price: item.price,
-              stock: item.available_quantity,
-              status,
-              category: item.category_id,
-              health_score: healthScore,
+              ...listingData,
             },
           });
           created++;

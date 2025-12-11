@@ -1,8 +1,12 @@
 import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
+import { ScoreCalculator } from '../services/ScoreCalculator';
 import { authGuard } from '../plugins/auth';
+
+const prisma = new PrismaClient();
 
 interface RequestWithAuth extends FastifyRequest {
   userId?: string;
@@ -221,6 +225,116 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/recalculate-scores
+   * 
+   * Recalcula o Super Seller Score de TODOS os anúncios do tenant.
+   * Útil após mudanças no algoritmo ou para correção de dados.
+   */
+  app.post(
+    '/recalculate-scores',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { tenantId } = request as RequestWithAuth;
+
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        console.log(`[SYNC-ROUTE] Recálculo de scores iniciado para tenant: ${tenantId}`);
+
+        // Buscar todos os anúncios do tenant
+        const listings = await prisma.listing.findMany({
+          where: { tenant_id: tenantId },
+        });
+
+        console.log(`[SYNC-ROUTE] Encontrados ${listings.length} anúncios para recalcular`);
+
+        let updated = 0;
+        const scoreStats = {
+          excelente: 0,
+          bom: 0,
+          regular: 0,
+          critico: 0,
+        };
+
+        for (const listing of listings) {
+          // Calcular novo score
+          const scoreResult = ScoreCalculator.calculate({
+            id: listing.id,
+            title: listing.title,
+            description: listing.description,
+            price: listing.price.toString(),
+            stock: listing.stock,
+            status: listing.status,
+            thumbnail_url: listing.thumbnail_url,
+            pictures_count: listing.pictures_count,
+            visits_last_7d: listing.visits_last_7d,
+            sales_last_7d: listing.sales_last_7d,
+          });
+
+          // Atualizar no banco
+          await prisma.listing.update({
+            where: { id: listing.id },
+            data: {
+              super_seller_score: scoreResult.total,
+              score_breakdown: {
+                cadastro: scoreResult.cadastro,
+                trafego: scoreResult.trafego,
+                disponibilidade: scoreResult.disponibilidade,
+                details: scoreResult.details,
+              },
+            },
+          });
+
+          updated++;
+
+          // Contabilizar estatísticas
+          const grade = ScoreCalculator.getGrade(scoreResult.total);
+          if (grade.label === 'Excelente') scoreStats.excelente++;
+          else if (grade.label === 'Bom') scoreStats.bom++;
+          else if (grade.label === 'Regular') scoreStats.regular++;
+          else scoreStats.critico++;
+        }
+
+        // Calcular média
+        const avgScore = listings.length > 0
+          ? Math.round(listings.reduce((sum, l) => sum + (l.super_seller_score || 0), 0) / listings.length)
+          : 0;
+
+        // Buscar nova média após atualização
+        const newAvg = await prisma.listing.aggregate({
+          where: { tenant_id: tenantId },
+          _avg: { super_seller_score: true },
+        });
+
+        console.log(`[SYNC-ROUTE] Recálculo concluído. ${updated} anúncios atualizados. Nova média: ${newAvg._avg.super_seller_score?.toFixed(0)}%`);
+
+        return reply.status(200).send({
+          message: 'Recálculo de scores concluído com sucesso',
+          data: {
+            totalListings: listings.length,
+            updated,
+            averageScore: Math.round(newAvg._avg.super_seller_score || 0),
+            distribution: scoreStats,
+          },
+        });
+      } catch (error) {
+        console.error('[SYNC-ROUTE] Erro no recálculo de scores:', error);
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro interno';
+        return reply.status(500).send({
+          error: 'Falha no recálculo de scores',
+          message: errorMessage,
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/sync/status
    * 
    * Endpoint auxiliar para verificar se o serviço de sync está disponível
@@ -234,6 +348,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         'POST /mercadolivre - Sync de anúncios',
         'POST /mercadolivre/orders - Sync de pedidos',
         'POST /mercadolivre/full - Sync completo',
+        'POST /recalculate-scores - Recalcular Super Seller Score',
       ],
       timestamp: new Date().toISOString(),
     });

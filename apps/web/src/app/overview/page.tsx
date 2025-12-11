@@ -288,7 +288,7 @@ function OverviewContent() {
                   <div>
                     <p className="font-semibold capitalize">{mp.marketplace}</p>
                     <p className="text-sm text-muted-foreground">
-                      {mp.count} anúncios | Health: {Number(mp.avgHealthScore || 0).toFixed(0)}%
+                      {mp.count} anúncios | Score: {Number(mp.avgSuperSellerScore || mp.avgHealthScore || 0).toFixed(0)}%
                     </p>
                   </div>
                   <Badge variant="outline" className="text-lg px-4 py-2">
@@ -303,16 +303,25 @@ function OverviewContent() {
 
       {/* Additional Metrics */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+        <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
           <CardHeader>
-            <CardTitle className="text-sm font-medium">Health Score Médio</CardTitle>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <span className="text-lg">⚡</span>
+              Super Seller Score
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {Number(data.averageHealthScore || 0).toFixed(0)}%
+            <div className="text-3xl font-bold text-blue-700 dark:text-blue-400">
+              {Number(data.averageSuperSellerScore || data.averageHealthScore || 0).toFixed(0)}%
             </div>
-            <p className="text-xs text-muted-foreground">
-              Qualidade média dos anúncios
+            <p className="text-xs text-muted-foreground mt-1">
+              {(() => {
+                const score = Number(data.averageSuperSellerScore || data.averageHealthScore || 0);
+                if (score >= 80) return '🟢 Excelente - Seus anúncios estão otimizados';
+                if (score >= 60) return '🔵 Bom - Há espaço para melhorias';
+                if (score >= 40) return '🟡 Regular - Atenção aos seus anúncios';
+                return '🔴 Crítico - Melhore seus anúncios urgentemente';
+              })()}
             </p>
           </CardContent>
         </Card>

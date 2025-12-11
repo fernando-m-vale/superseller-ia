@@ -134,18 +134,26 @@ model MarketplaceConnection {
 }
 
 model Listing {
-  id              String        @id @default(uuid())
-  tenant_id       String
-  marketplace     Marketplace
-  listing_id_ext  String
-  title           String
-  price           Decimal       @db.Decimal(10, 2)
-  stock           Int
-  status          ListingStatus
-  category        String?
-  health_score    Float?        @default(0) // Score de 0-100 calculado pela IA
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
+  id                  String        @id @default(uuid())
+  tenant_id           String
+  marketplace         Marketplace
+  listing_id_ext      String
+  title               String
+  description         String?       // Descrição do anúncio para análise
+  price               Decimal       @db.Decimal(10, 2)
+  stock               Int
+  status              ListingStatus
+  category            String?
+  health_score        Float?        @default(0) // Score legado da API do ML (0-100)
+  super_seller_score  Int?          @default(0) // Super Seller Score proprietário (0-100)
+  score_breakdown     Json?         // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
+  thumbnail_url       String?       // URL da imagem principal
+  pictures_count      Int?          @default(0) // Quantidade de fotos
+  has_video           Boolean?      @default(false) // Tem vídeo?
+  visits_last_7d      Int?          @default(0) // Visitas últimos 7 dias
+  sales_last_7d       Int?          @default(0) // Vendas últimos 7 dias
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
 
   tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   listing_metrics_daily   ListingMetricsDaily[]
@@ -156,6 +164,7 @@ model Listing {
   @@index([tenant_id])
   @@index([tenant_id, marketplace])
   @@index([tenant_id, status])
+  @@index([super_seller_score])
   @@map("listings")
 }
 
