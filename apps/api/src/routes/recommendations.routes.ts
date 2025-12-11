@@ -201,12 +201,12 @@ export const recommendationsRoutes: FastifyPluginCallback = (app, _, done) => {
    * 
    * Busca recomendações de um anúncio específico.
    */
-  app.get(
+  app.get<{ Params: { listingId: string } }>(
     '/listing/:listingId',
     { preHandler: authGuard },
-    async (request: FastifyRequest<{ Params: { listingId: string } }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
-        const { tenantId } = request as RequestWithAuth;
+        const { tenantId } = request as unknown as RequestWithAuth;
 
         if (!tenantId) {
           return reply.status(401).send({ 
@@ -258,12 +258,12 @@ export const recommendationsRoutes: FastifyPluginCallback = (app, _, done) => {
    * 
    * Marca uma recomendação como aplicada.
    */
-  app.patch(
+  app.patch<{ Params: { id: string } }>(
     '/:id/apply',
     { preHandler: authGuard },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
-        const { tenantId } = request as RequestWithAuth;
+        const { tenantId } = request as unknown as RequestWithAuth;
 
         if (!tenantId) {
           return reply.status(401).send({ 
@@ -311,12 +311,12 @@ export const recommendationsRoutes: FastifyPluginCallback = (app, _, done) => {
    * 
    * Marca uma recomendação como ignorada.
    */
-  app.patch(
+  app.patch<{ Params: { id: string } }>(
     '/:id/dismiss',
     { preHandler: authGuard },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    async (request, reply) => {
       try {
-        const { tenantId } = request as RequestWithAuth;
+        const { tenantId } = request as unknown as RequestWithAuth;
 
         if (!tenantId) {
           return reply.status(401).send({ 
