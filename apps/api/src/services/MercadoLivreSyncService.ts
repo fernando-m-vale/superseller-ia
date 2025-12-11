@@ -464,7 +464,7 @@ export class MercadoLivreSyncService {
             trafego: scoreResult.trafego,
             disponibilidade: scoreResult.disponibilidade,
             details: scoreResult.details,
-          },
+          } as any, // Cast para InputJsonValue do Prisma
           thumbnail_url: item.thumbnail,
           pictures_count: picturesCount,
           has_video: hasVideo,

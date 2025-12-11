@@ -286,7 +286,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
                 trafego: scoreResult.trafego,
                 disponibilidade: scoreResult.disponibilidade,
                 details: scoreResult.details,
-              },
+              } as any, // Cast para InputJsonValue do Prisma
             },
           });
 
