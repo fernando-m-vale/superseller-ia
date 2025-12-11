@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award } from 'lucide-react';
+import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap } from 'lucide-react';
 
 function OverviewContent() {
   const [periodDays, setPeriodDays] = useState<number>(7);
@@ -157,7 +157,7 @@ function OverviewContent() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Anúncios</CardTitle>
@@ -166,7 +166,22 @@ function OverviewContent() {
           <CardContent>
             <div className="text-2xl font-bold">{formatNumber(data.totalListings)}</div>
             <p className="text-xs text-muted-foreground">
-              {formatNumber(data.activeListings)} ativos
+              Em todas as plataformas
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Anúncios Ativos</CardTitle>
+            <Zap className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-700 dark:text-green-400">
+              {formatNumber(data.activeListings)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Produtos à venda agora
             </p>
           </CardContent>
         </Card>
