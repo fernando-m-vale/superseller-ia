@@ -17,6 +17,9 @@ const envSchema = z.object({
   SHOPEE_CLIENT_ID: z.string().optional(),
   SHOPEE_CLIENT_SECRET: z.string().optional(),
   SHOPEE_REDIRECT_URI: z.string().optional(),
+
+  // OpenAI (Optional - for AI-powered listing analysis)
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 // Validação segura

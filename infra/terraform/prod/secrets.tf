@@ -10,6 +10,7 @@ locals {
     shopee_client_secret = "prod/SHOPEE_CLIENT_SECRET"
     shopee_redirect_uri  = "prod/SHOPEE_REDIRECT_URI"
     next_public_api_url  = "prod/NEXT_PUBLIC_API_URL"
+    openai_api_key       = "prod/OPENAI_API_KEY"
   }
 }
 
