@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, Check } from 'lucide-react'
 import type { Marketplace } from '@/types/recommendations'
+import { applyRecommendation } from '@/hooks/use-recommendations'
+import { useToast } from '@/hooks/use-toast'
 
 function formatMarketplace(marketplace: Marketplace): string {
   return marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'
@@ -30,6 +32,7 @@ function formatDate(dateString: string): string {
 export default function RecommendationsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { toast } = useToast()
   
   const [marketplace, setMarketplace] = useState<Marketplace | ''>('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -68,6 +71,31 @@ export default function RecommendationsPage() {
 
   const { data, isLoading, error, refetch } = useRecommendations(filters)
   const isError = !!error
+
+  const handleApplyRecommendation = async (recId: string) => {
+    try {
+      await applyRecommendation(recId)
+      toast({
+        variant: 'success',
+        title: 'Recomendação aplicada!',
+        description: 'A recomendação foi marcada como concluída.',
+      })
+      refetch()
+    } catch (error) {
+      console.error('Erro ao aplicar recomendação:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível marcar a recomendação como feita. Tente novamente.',
+      })
+    }
+  }
+
+  const getEffortLabel = (priority: number): string => {
+    if (priority >= 90) return 'Alto'
+    if (priority >= 70) return 'Médio'
+    return 'Baixo'
+  }
   
   // Filtrar no frontend por marketplace e busca (se necessário)
   const filteredItems = data?.items?.filter(item => {
@@ -229,6 +257,7 @@ export default function RecommendationsPage() {
                     <TableHead>Esforço</TableHead>
                     <TableHead>Health Score</TableHead>
                     <TableHead>Data</TableHead>
+                    <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -253,7 +282,7 @@ export default function RecommendationsPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {recommendation.type}
+                          {getEffortLabel(recommendation.priority)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -263,6 +292,22 @@ export default function RecommendationsPage() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(recommendation.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        {recommendation.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleApplyRecommendation(recommendation.id)}
+                            className="gap-2"
+                          >
+                            <Check className="h-4 w-4" />
+                            Marcar como Feito
+                          </Button>
+                        )}
+                        {recommendation.status === 'applied' && (
+                          <Badge variant="secondary">Aplicada</Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

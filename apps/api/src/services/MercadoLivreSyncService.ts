@@ -376,8 +376,35 @@ export class MercadoLivreSyncService {
   }
 
   /**
+   * Busca a descrição completa de um item via endpoint específico
+   */
+  private async fetchItemDescription(itemId: string): Promise<string | null> {
+    try {
+      const response = await axios.get(`${ML_API_BASE}/items/${itemId}/description`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+      
+      // A API retorna { plain_text: "...", text: "...", last_updated: "..." }
+      return response.data?.plain_text || null;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        // 404 significa que o item não tem descrição, não é erro crítico
+        if (status === 404) {
+          console.log(`[ML-SYNC] Item ${itemId} não possui descrição`);
+          return null;
+        }
+        console.error(`[ML-SYNC] Erro ao buscar descrição do item ${itemId} (${status}):`, error.response?.data);
+      }
+      // Não lança erro para não bloquear o sync, apenas retorna null
+      return null;
+    }
+  }
+
+  /**
    * Busca detalhes de múltiplos itens (até 20 por vez)
    * Usa retry automático em caso de 401
+   * Também busca descrições completas via endpoint específico
    */
   private async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
     if (itemIds.length === 0) return [];
@@ -397,7 +424,20 @@ export class MercadoLivreSyncService {
           .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
           .map((item: { code: number; body: MercadoLivreItem }) => item.body);
 
-        return items;
+        // Buscar descrições completas para cada item (em paralelo, mas com limite)
+        console.log(`[ML-SYNC] Buscando descrições completas para ${items.length} itens...`);
+        const itemsWithDescriptions = await Promise.all(
+          items.map(async (item) => {
+            const fullDescription = await this.fetchItemDescription(item.id);
+            if (fullDescription) {
+              // Sobrescrever a descrição se encontramos uma completa
+              item.descriptions = [{ id: item.id, plain_text: fullDescription }];
+            }
+            return item;
+          })
+        );
+
+        return itemsWithDescriptions;
       } catch (error) {
         if (axios.isAxiosError(error)) {
           const status = error.response?.status;
@@ -423,10 +463,14 @@ export class MercadoLivreSyncService {
       const healthScore = this.calculateHealthScore(item);
       
       // Extrair descrição do primeiro item de descriptions (se existir)
+      // Priorizar plain_text completo (vindo de /items/{id}/description)
       const description = item.descriptions?.[0]?.plain_text || null;
       
-      // Contar fotos
-      const picturesCount = item.pictures?.length || 0;
+      // Contar fotos - garantir que pictures é um array válido
+      const picturesCount = Array.isArray(item.pictures) ? item.pictures.length : 0;
+      
+      // Log para debug de falsos positivos
+      console.log(`[ML-SYNC] Item ${item.id}: pictures=${picturesCount}, description_length=${description?.length || 0}`);
       
       // Verificar se tem vídeo
       const hasVideo = !!item.video_id;

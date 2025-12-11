@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { 
   LayoutDashboard, 
@@ -10,7 +11,10 @@ import {
   Settings, 
   LogOut,
   Menu,
-  X
+  X,
+  User,
+  ChevronDown,
+  Link as LinkIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -21,19 +25,37 @@ const menuItems = [
   { href: '/overview', label: 'Visão Geral', icon: LayoutDashboard },
   { href: '/listings', label: 'Anúncios', icon: Package },
   { href: '/recommendations', label: 'Recomendações', icon: Lightbulb },
-  { href: '/settings', label: 'Configurações', icon: Settings },
 ]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user } = useAuth()
 
   const handleLogout = () => {
     clearTokens()
     router.push('/')
   }
+
+  const handleConnectAccount = () => {
+    router.push('/overview') // Redireciona para overview onde tem o botão de conectar
+  }
+
+  // Fechar menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.user-menu-container')) {
+        setUserMenuOpen(false)
+      }
+    }
+    if (userMenuOpen) {
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [userMenuOpen])
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -76,18 +98,57 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         {/* Footer */}
         <div className="px-4 py-4 border-t space-y-2">
-          <div className="px-3 py-2 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Usuário</p>
-            <p className="text-xs">{user?.email || 'Carregando...'}</p>
-          </div>
           <Button
-            variant="ghost"
+            variant="outline"
             className="w-full justify-start gap-3"
-            onClick={handleLogout}
+            onClick={handleConnectAccount}
           >
-            <LogOut className="h-4 w-4" />
-            Sair
+            <LinkIcon className="h-4 w-4" />
+            Conectar Nova Conta
           </Button>
+          
+          {/* User Menu */}
+          <div className="relative user-menu-container">
+            <Button
+              variant="ghost"
+              className="w-full justify-between gap-2"
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+            >
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <User className="h-4 w-4 shrink-0" />
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground truncate">{user?.email || 'Carregando...'}</p>
+                </div>
+              </div>
+              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+            </Button>
+            
+            {userMenuOpen && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-card border rounded-md shadow-lg z-50">
+                <div className="py-1">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 rounded-none"
+                    onClick={() => {
+                      router.push('/settings')
+                      setUserMenuOpen(false)
+                    }}
+                  >
+                    <Settings className="h-4 w-4" />
+                    Configurações
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 rounded-none text-destructive hover:text-destructive"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -150,23 +211,66 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="px-4 py-4 border-t space-y-2">
-          <div className="px-3 py-2 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">Usuário</p>
-            <p className="text-xs">{user?.email || 'Carregando...'}</p>
-          </div>
           <Button
-            variant="ghost"
+            variant="outline"
             className="w-full justify-start gap-3"
-            onClick={handleLogout}
+            onClick={() => {
+              handleConnectAccount()
+              setSidebarOpen(false)
+            }}
           >
-            <LogOut className="h-4 w-4" />
-            Sair
+            <LinkIcon className="h-4 w-4" />
+            Conectar Nova Conta
           </Button>
+          
+          {/* User Menu Mobile */}
+          <div className="relative user-menu-container">
+            <Button
+              variant="ghost"
+              className="w-full justify-between gap-2"
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+            >
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <User className="h-4 w-4 shrink-0" />
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-xs font-medium text-foreground truncate">{user?.email || 'Carregando...'}</p>
+                </div>
+              </div>
+              <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+            </Button>
+            
+            {userMenuOpen && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-card border rounded-md shadow-lg z-50">
+                <div className="py-1">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 rounded-none"
+                    onClick={() => {
+                      router.push('/settings')
+                      setUserMenuOpen(false)
+                      setSidebarOpen(false)
+                    }}
+                  >
+                    <Settings className="h-4 w-4" />
+                    Configurações
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 rounded-none text-destructive hover:text-destructive"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 md:ml-64">
+      <div className="flex-1 md:ml-64 min-w-0">
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-30 bg-card border-b px-4 py-3 flex items-center gap-4">
           <Button
@@ -185,7 +289,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="p-4 md:p-6 lg:p-8">
+        <main className="p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden">
           {children}
         </main>
       </div>
