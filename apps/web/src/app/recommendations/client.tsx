@@ -10,40 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { AlertCircle } from 'lucide-react'
-import type { Marketplace, ActionRecommendation, Impact, Effort } from '@/types/recommendations'
-
-function getImpactVariant(impact: Impact): 'destructive' | 'default' | 'secondary' {
-  switch (impact) {
-    case 'high':
-      return 'destructive'
-    case 'medium':
-      return 'default'
-    case 'low':
-      return 'secondary'
-  }
-}
-
-function getEffortColor(effort: Effort): string {
-  switch (effort) {
-    case 'low':
-      return 'bg-green-100 text-green-800 border-green-200'
-    case 'medium':
-      return 'bg-gray-100 text-gray-800 border-gray-200'
-    case 'high':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-  }
-}
-
-function formatActionType(action: string): string {
-  const actionMap: Record<string, string> = {
-    increase_ad_spend: 'Aumentar investimento em anúncios',
-    optimize_photos: 'Otimizar fotos',
-    improve_title: 'Melhorar título',
-    adjust_price: 'Ajustar preço',
-    restock: 'Repor estoque',
-  }
-  return actionMap[action] || action
-}
+import type { Marketplace } from '@/types/recommendations'
 
 function formatMarketplace(marketplace: Marketplace): string {
   return marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'
@@ -93,14 +60,25 @@ export default function RecommendationsPage() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
+  // A API de recommendations só suporta: listingId, status, type, limit
   const filters = {
-    marketplace: marketplace || undefined,
-    q: debouncedSearch || undefined,
-    page: currentPage,
-    pageSize,
+    status: 'pending' as const, // Filtrar apenas pendentes por padrão
+    limit: pageSize,
   }
 
-  const { data, isLoading, isError, error, refetch } = useRecommendations(filters)
+  const { data, isLoading, error, refetch } = useRecommendations(filters)
+  const isError = !!error
+  
+  // Filtrar no frontend por marketplace e busca (se necessário)
+  const filteredItems = data?.items?.filter(item => {
+    if (marketplace && item.listing?.marketplace !== marketplace) return false
+    if (debouncedSearch && !item.title.toLowerCase().includes(debouncedSearch.toLowerCase())) return false
+    return true
+  }) || []
+  
+  // Paginação no frontend
+  const paginatedItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const totalPages = Math.ceil(filteredItems.length / pageSize)
 
   const updateURL = () => {
     const params = new URLSearchParams()
@@ -128,12 +106,10 @@ export default function RecommendationsPage() {
   }
 
   const handleNextPage = () => {
-    if (data && currentPage < Math.ceil(data.total / data.pageSize)) {
+    if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1)
     }
   }
-
-  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0
 
   return (
     <div className="space-y-6">
@@ -223,7 +199,7 @@ export default function RecommendationsPage() {
               <div className="h-10 bg-muted animate-pulse rounded" />
               <div className="h-10 bg-muted animate-pulse rounded" />
             </div>
-          ) : data && data.items.length === 0 ? (
+          ) : filteredItems.length === 0 ? (
             <div className="p-12 text-center">
               <p className="text-muted-foreground mb-4">
                 Nenhuma recomendação encontrada para os filtros selecionados.
@@ -256,29 +232,33 @@ export default function RecommendationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.items.map((recommendation: ActionRecommendation) => (
+                  {paginatedItems.map((recommendation) => (
                     <TableRow key={recommendation.id}>
-                      <TableCell className="font-medium max-w-xs truncate" title={recommendation.listingTitle}>
-                        {recommendation.listingTitle}
-                      </TableCell>
-                      <TableCell>{formatMarketplace(recommendation.marketplace)}</TableCell>
-                      <TableCell>{formatActionType(recommendation.action)}</TableCell>
-                      <TableCell className="max-w-sm truncate" title={recommendation.reason}>
-                        {recommendation.reason}
+                      <TableCell className="font-medium max-w-xs truncate" title={recommendation.listing?.title || 'N/A'}>
+                        {recommendation.listing?.title || 'N/A'}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getImpactVariant(recommendation.impact)}>
-                          {recommendation.impact}
+                        {recommendation.listing?.marketplace 
+                          ? formatMarketplace(recommendation.listing.marketplace as Marketplace)
+                          : '—'}
+                      </TableCell>
+                      <TableCell>{recommendation.title}</TableCell>
+                      <TableCell className="max-w-sm truncate" title={recommendation.description}>
+                        {recommendation.description}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={recommendation.priority >= 90 ? 'destructive' : recommendation.priority >= 70 ? 'default' : 'secondary'}>
+                          {recommendation.priority >= 90 ? 'Alto' : recommendation.priority >= 70 ? 'Médio' : 'Baixo'}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getEffortColor(recommendation.effort)}>
-                          {recommendation.effort}
+                        <Badge variant="outline">
+                          {recommendation.type}
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {recommendation.healthScore != null
-                          ? recommendation.healthScore.toFixed(2)
+                        {recommendation.listing?.superSellerScore != null
+                          ? `${recommendation.listing.superSellerScore}%`
                           : '—'}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
