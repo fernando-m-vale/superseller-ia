@@ -1,5 +1,47 @@
 Developer Log - SuperSeller IA
 
+[2025-12-12] - UX Revolution, Higiene de Dados & Resgate de Login
+
+Status: ✅ Deploy Web em Andamento (Fix Pack V3) | 🚀 Sistema Estável e Polido
+
+🛠️ Correções e Melhorias (Fix Packs V1, V2 & V3)
+
+Refatoração de UX (Navegação & Layout):
+
+Dashboard Profissional: Implementado DashboardLayout com Sidebar fixa, garantindo área segura de conteúdo (pl-64) sem sobreposição.
+
+Menu Inteligente: Links reorganizados. "Configurações" movido para o Dropdown do Usuário; "Conectar Conta" adicionado ao rodapé do menu.
+
+Landing Page: Transformada em porta de entrada clara com botão de Login (CTA) restaurado (Fix V3), resolvendo o bloqueio de acesso pós-logout.
+
+Qualidade de Dados (Data Hygiene):
+
+Problema: Motor de recomendações gerava falsos positivos ("Sem descrição") pois o sync antigo ignorava campos detalhados.
+
+Correção: Atualizado MercadoLivreSyncService para buscar /items/{id}/description e validar array de fotos corretamente.
+
+Ação: Sync manual executado com sucesso para sanear a base legada e recalcular scores.
+
+Funcionalidade de Recomendações:
+
+Interação: Substituição de Tooltips por Sheets (Painéis Laterais) clicáveis.
+
+Ação Real: Botão "Marcar como Feito" funcional, com feedback visual imediato (Toast) e remoção da lista.
+
+Visual: Coluna "Esforço" corrigida (labels amigáveis: Alto/Médio/Baixo).
+
+Histórico Recente
+
+[11/12] Implementação do Super Seller Score e Motor de Recomendações Inicial.
+
+[10/12] Estabilização de Infraestrutura (DB Drift) e Sync de Pedidos.
+
+Próximos Passos
+
+Validação Final: Confirmar acesso via Landing Page e fluxo completo de Login.
+
+IA Generativa: Integrar LLM para resolver as recomendações (ex: reescrever títulos automaticamente).
+
 [2025-12-11] - UX Revolution & IA Engine
 
 Status: ✅ Deploy Web Destravado (Hotfix Lockfile) | 🚀 Produto com Cara de SaaS

@@ -6,34 +6,38 @@ Plataforma SaaS para gestão e otimização de anúncios em marketplaces (Mercad
 
 Estado Atual do Projeto (2025-12-12)
 
-Status de Produção: Maduro. O sistema possui um layout profissional (Sidebar), métricas proprietárias (Score) e um motor de recomendações ativo.
+Status de Produção: Maduro. O sistema possui navegação fluida (Sidebar), dados confiáveis (após saneamento) e funcionalidades de ação (Recomendações interativas).
 
-UX: Navegação unificada e painéis laterais interativos substituíram a navegação fragmentada.
+UX: Dashboard Layout profissional com Sidebar fixa, menus contextuais e Sheets para detalhes.
 
-Funcionalidades Implementadas
+Acesso: Landing Page com CTA claro para login/cadastro.
+
+Funcionalidades Chave
 
 ✅ Super Seller Score: Algoritmo proprietário (0-100) que avalia a saúde real do anúncio.
 
-✅ Motor de Recomendações: Sistema de regras que gera dicas práticas (SEO, Preço, Estoque) baseadas no score.
+✅ Recomendações Inteligentes: Dicas baseadas em regras de negócio precisas (sem falsos positivos).
 
-✅ Novo Layout (Dashboard): Sidebar fixa, redirecionamento automático e painéis deslizantes (Sheets) para detalhes.
+✅ Gestão de Tarefas: Usuário pode visualizar detalhes em painel lateral e marcar recomendações como "Feitas".
 
-✅ Dashboard Rico: KPIs financeiros, Gráficos de Tendência e Tabela "Top 3 Produtos".
+✅ Dashboard Financeiro: Dados reais de GMV e Pedidos sincronizados, com badges de crescimento e Top 3 Produtos.
 
-Estrutura de Dados Crítica
+Estrutura de Dados
 
-Listing: Possui super_seller_score e score_breakdown.
+Listing: super_seller_score, score_breakdown, pictures (JSON), description (Text).
 
-Recommendation: Nova tabela que armazena as dicas geradas para cada anúncio (Status: Pending, Applied, Dismissed).
+Recommendation: status (Pending/Applied), type, priority, effort.
 
 Problemas Conhecidos & Dívida Técnica
 
-Lockfile Drift: O pnpm-lock.yaml precisa ser estabilizado para voltarmos a usar --frozen-lockfile no CI (segurança). Atualmente rodando com --no-frozen-lockfile como hotfix.
+Lockfile Drift: Rodando com hotfix --no-frozen-lockfile no CI. Precisa de estabilização definitiva futura.
 
-Webhooks: A infraestrutura existe, mas a recepção de eventos em tempo real ainda carece de validação massiva em produção.
+Webhooks: Infraestrutura pronta, pendente validação de estabilidade em alta escala.
 
 Próximos Passos (Roadmap de Curto Prazo)
 
-IA Generativa: Conectar um LLM para executar as recomendações (ex: "Clicar em 'Melhorar Título' gera 3 sugestões via IA").
+IA Generativa (The "Wow" Factor):
 
-Gestão de Recomendações: Permitir que o usuário marque dicas como "Feito" ou "Ignorar" (API já existe, falta conectar UI).
+Transformar a dica "Melhore o título" em um botão "Gerar Título com IA" (Integração OpenAI/Anthropic).
+
+Gestão de Assinatura: Implementar página de planos/pagamento (Stripe/Asaas) no futuro menu de Configurações.
