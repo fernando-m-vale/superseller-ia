@@ -2,7 +2,9 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { getAccessToken } from '@/lib/auth'
+import { Button } from '@/components/ui/button'
 
 export default function HomePage() {
   const router = useRouter()
@@ -32,6 +34,23 @@ export default function HomePage() {
             <p className="text-sm text-muted-foreground">
               Faça login para acessar o dashboard
             </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+              <Button 
+                size="lg" 
+                className="w-full sm:w-auto"
+                onClick={() => router.push('/login')}
+              >
+                Acessar Plataforma
+              </Button>
+              <Button 
+                size="lg" 
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => router.push('/register')}
+              >
+                Criar Conta
+              </Button>
+            </div>
           </div>
         </div>
       </div>

@@ -38,23 +38,43 @@ export function Header() {
           <h1 className="text-2xl font-bold text-primary">Super Seller IA</h1>
           <p className="text-muted-foreground">Otimize seus anúncios com inteligência artificial</p>
         </div>
-        {mounted && isLoggedIn && (
+        {mounted && (
           <div className="flex items-center gap-4">
-            {user && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="h-4 w-4" />
-                <span>{user.email}</span>
+            {isLoggedIn ? (
+              <>
+                {user && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <User className="h-4 w-4" />
+                    <span>{user.email}</span>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="flex items-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sair
+                </Button>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push('/login')}
+                >
+                  Entrar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => router.push('/register')}
+                >
+                  Criar Conta
+                </Button>
               </div>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="flex items-center gap-2"
-            >
-              <LogOut className="h-4 w-4" />
-              Sair
-            </Button>
           </div>
         )}
       </div>
