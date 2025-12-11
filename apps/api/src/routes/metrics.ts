@@ -212,35 +212,35 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - query.days);
-      cutoffDate.setHours(0, 0, 0, 0);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - query.days);
+    cutoffDate.setHours(0, 0, 0, 0);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const whereClause: any = {
-        tenant_id: tenantId,
-        date: { gte: cutoffDate },
-      };
+      tenant_id: tenantId,
+      date: { gte: cutoffDate },
+    };
 
-      if (query.marketplace) {
-        whereClause.listing = { marketplace: query.marketplace };
-      }
+    if (query.marketplace) {
+      whereClause.listing = { marketplace: query.marketplace };
+    }
 
-      const metrics = await prisma.listingMetricsDaily.findMany({
-        where: whereClause,
-        include: {
-          listing: {
-            select: {
-              id: true,
-              title: true,
-              marketplace: true,
-            },
+    const metrics = await prisma.listingMetricsDaily.findMany({
+      where: whereClause,
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            marketplace: true,
           },
         },
-        orderBy: {
-          date: 'asc',
-        },
-      });
+      },
+      orderBy: {
+        date: 'asc',
+      },
+    });
 
       // Se não há métricas, retorna mock vazio
       if (metrics.length === 0) {
@@ -475,8 +475,8 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       const totalOrders = metrics.reduce((sum, m) => sum + m.orders, 0);
       const totalRevenue = metrics.reduce((sum, m) => sum + Number(m.gmv), 0);
 
-      const avgCTR = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
-      const avgCVR = totalVisits > 0 ? totalOrders / totalVisits : 0;
+    const avgCTR = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+    const avgCVR = totalVisits > 0 ? totalOrders / totalVisits : 0;
 
       // Calcular health score por listing
       type ListingMetric = {
@@ -488,54 +488,54 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       };
 
       const listingMetricsMap = new Map<string, ListingMetric[]>();
-      const listingInfoMap = new Map<string, { id: string; title: string }>();
+    const listingInfoMap = new Map<string, { id: string; title: string }>();
 
-      for (const metric of metrics) {
-        if (!listingMetricsMap.has(metric.listing_id)) {
-          listingMetricsMap.set(metric.listing_id, []);
-          listingInfoMap.set(metric.listing_id, {
-            id: metric.listing.id,
-            title: metric.listing.title,
-          });
-        }
-
-        listingMetricsMap.get(metric.listing_id)!.push({
-          date: metric.date.toISOString().split('T')[0],
-          impressions: metric.impressions,
-          visits: metric.visits,
-          orders: metric.orders,
-          revenue: Number(metric.gmv),
+    for (const metric of metrics) {
+      if (!listingMetricsMap.has(metric.listing_id)) {
+        listingMetricsMap.set(metric.listing_id, []);
+        listingInfoMap.set(metric.listing_id, {
+          id: metric.listing.id,
+          title: metric.listing.title,
         });
       }
 
-      let bestListing: { id: string; title: string; healthScore: number } | null = null;
-      let maxHealthScore = -1;
+      listingMetricsMap.get(metric.listing_id)!.push({
+        date: metric.date.toISOString().split('T')[0],
+        impressions: metric.impressions,
+        visits: metric.visits,
+        orders: metric.orders,
+        revenue: Number(metric.gmv),
+      });
+    }
 
-      for (const [listingId, listingMetrics] of listingMetricsMap.entries()) {
-        const score = healthScore(listingMetrics, { windowDays: query.days });
-        
-        if (score !== null && score > maxHealthScore) {
-          maxHealthScore = score;
-          const info = listingInfoMap.get(listingId)!;
-          bestListing = {
-            id: info.id,
-            title: info.title,
-            healthScore: score,
-          };
-        }
+    let bestListing: { id: string; title: string; healthScore: number } | null = null;
+    let maxHealthScore = -1;
+
+    for (const [listingId, listingMetrics] of listingMetricsMap.entries()) {
+      const score = healthScore(listingMetrics, { windowDays: query.days });
+      
+      if (score !== null && score > maxHealthScore) {
+        maxHealthScore = score;
+        const info = listingInfoMap.get(listingId)!;
+        bestListing = {
+          id: info.id,
+          title: info.title,
+          healthScore: score,
+        };
       }
+    }
 
       return reply.send({
-        tenantId,
-        periodDays: query.days,
-        totalImpressions,
-        totalVisits,
-        totalOrders,
-        totalRevenue,
-        avgCTR: Math.round(avgCTR * 10000) / 10000,
-        avgCVR: Math.round(avgCVR * 10000) / 10000,
-        bestListing,
-        updatedAt: new Date().toISOString(),
+      tenantId,
+      periodDays: query.days,
+      totalImpressions,
+      totalVisits,
+      totalOrders,
+      totalRevenue,
+      avgCTR: Math.round(avgCTR * 10000) / 10000,
+      avgCVR: Math.round(avgCVR * 10000) / 10000,
+      bestListing,
+      updatedAt: new Date().toISOString(),
       });
     } catch (error) {
       app.log.error(error);

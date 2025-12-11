@@ -23,9 +23,9 @@ async function main() {
   try {
     console.log('--- [DEBUG] Server Starting ---');
 
-    await app.register(authRoutes, { prefix: '/api/v1/auth' });
-    await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
-    await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
+  await app.register(authRoutes, { prefix: '/api/v1/auth' });
+  await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
+  await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
     await app.register(metricsRoutes, { prefix: '/api/v1/metrics' });
     await app.register(listingsRoutes, { prefix: '/api/v1/listings' });
     // Alias /api/v1/ads -> /api/v1/listings (compatibilidade com frontend)

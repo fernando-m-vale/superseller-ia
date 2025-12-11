@@ -111,8 +111,8 @@ jobs:
             STATUS=$(aws apprunner describe-service \
               --service-arn $APPRUNNER_SERVICE_ARN \
               --query 'Service.Status' \
-              --output text)
-            
+            --output text)
+          
             echo "Current status: $STATUS (${ELAPSED}s elapsed)"
             
             if [ "$STATUS" = "RUNNING" ]; then

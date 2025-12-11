@@ -187,28 +187,28 @@ export function ListingsTable() {
                             }
                             
                             return (
-                              <div 
-                                className="flex items-center gap-2 cursor-help"
+                          <div 
+                            className="flex items-center gap-2 cursor-help"
                                 title={tooltipLines.join('\n')}
-                              >
+                          >
                                 {score >= 80 ? (
-                                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                              <CheckCircle2 className="h-4 w-4 text-green-600" />
                                 ) : score >= 60 ? (
                                   <CheckCircle2 className="h-4 w-4 text-blue-500" />
                                 ) : score >= 40 ? (
-                                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                                ) : (
+                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                            ) : (
                                   <AlertCircle className="h-4 w-4 text-red-500" />
-                                )}
-                                <span className={`font-medium ${
+                            )}
+                            <span className={`font-medium ${
                                   score >= 80 
-                                    ? 'text-green-600' 
+                                ? 'text-green-600' 
                                     : score >= 60 
                                       ? 'text-blue-500' 
                                       : score >= 40
-                                        ? 'text-yellow-600' 
+                                  ? 'text-yellow-600' 
                                         : 'text-red-500'
-                                }`}>
+                            }`}>
                                   {score}%
                                 </span>
                               </div>
@@ -245,8 +245,8 @@ export function ListingsTable() {
                                       hasCritical ? 'text-red-600' : 'text-yellow-600'
                                     }`}>
                                       {recs.length}
-                                    </span>
-                                  </div>
+                            </span>
+                          </div>
                                 </TooltipTrigger>
                                 <TooltipContent side="left" className="max-w-sm p-3">
                                   <div className="space-y-2">

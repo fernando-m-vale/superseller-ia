@@ -96,22 +96,22 @@ enable_rds = false  # true para criar novo RDS
 
 ### 1. Inicializar Terraform
 
-```bash
-cd infra/terraform/prod
-terraform init
-```
+   ```bash
+   cd infra/terraform/prod
+   terraform init
+   ```
 
 ### 2. Verificar plano de execução
 
-```bash
-terraform plan
-```
+   ```bash
+   terraform plan
+   ```
 
 ### 3. Aplicar mudanças
 
-```bash
-terraform apply
-```
+   ```bash
+   terraform apply
+   ```
 
 ### 4. Deploy de nova imagem
 

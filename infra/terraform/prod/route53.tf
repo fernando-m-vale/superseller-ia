@@ -47,7 +47,7 @@ resource "aws_route53_record" "web_direct" {
   ttl             = 300
   records         = [aws_apprunner_service.web.service_url]
   allow_overwrite = true
-}
+  }
 
 # -----------------------------------------------------------------------------
 # API - CNAME principal do domínio (quando custom domains habilitado)
@@ -111,7 +111,7 @@ resource "aws_route53_record" "api_validation_1" {
   ttl             = 300
   records         = [local.api_validation_records_list[1].value]
   allow_overwrite = true
-}
+  }
 
 # WEB - Registro de validação 1
 resource "aws_route53_record" "web_validation_0" {
