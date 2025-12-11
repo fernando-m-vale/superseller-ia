@@ -80,6 +80,22 @@ enum ActionType {
   stock_update
 }
 
+enum RecommendationType {
+  seo           // Otimização de título/descrição
+  image         // Melhoria de imagens
+  price         // Ajuste de preço
+  conversion    // Melhoria de conversão
+  stock         // Gestão de estoque
+  content       // Conteúdo geral
+}
+
+enum RecommendationStatus {
+  pending       // Aguardando ação do usuário
+  applied       // Usuário aplicou a recomendação
+  dismissed     // Usuário ignorou
+  expired       // Expirou (anúncio mudou)
+}
+
 // Models
 model Tenant {
   id         String   @id @default(uuid())
@@ -96,6 +112,7 @@ model Tenant {
   job_logs                JobLog[]
   auto_approve_rules      AutoApproveRule[]
   listing_action_outcomes ListingActionOutcome[]
+  recommendations         Recommendation[]
 
   @@map("tenants")
 }
@@ -159,6 +176,7 @@ model Listing {
   listing_metrics_daily   ListingMetricsDaily[]
   listing_action_outcomes ListingActionOutcome[]
   order_items             OrderItem[]
+  recommendations         Recommendation[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -349,4 +367,34 @@ model ListingActionOutcome {
   @@index([action_type])
   @@index([executed_at])
   @@map("listing_action_outcomes")
+}
+
+model Recommendation {
+  id                  String               @id @default(uuid())
+  tenant_id           String
+  listing_id          String
+  type                RecommendationType
+  status              RecommendationStatus @default(pending)
+  priority            Int                  @default(50) // 1-100, maior = mais urgente
+  title               String               // Ex: "Melhore a qualidade das imagens"
+  description         String               // Descrição detalhada da ação
+  impact_estimate     String?              // Ex: "+15% conversão esperada"
+  rule_trigger        String?              // Ex: "pictures_count < 3"
+  score_impact        Int?                 // Quantos pontos o anúncio pode ganhar
+  metadata            Json?                // Dados extras para a UI
+  applied_at          DateTime?            // Quando foi aplicada
+  dismissed_at        DateTime?            // Quando foi ignorada
+  created_at          DateTime             @default(now())
+  updated_at          DateTime             @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, listing_id, type, rule_trigger]) // Evita duplicatas
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([tenant_id, status])
+  @@index([type])
+  @@index([priority])
+  @@map("recommendations")
 }

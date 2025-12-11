@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus } from '@prisma/client';
 import { ScoreCalculator } from './ScoreCalculator';
+import { RecommendationService } from './RecommendationService';
 
 const prisma = new PrismaClient();
 
@@ -119,6 +120,16 @@ export class MercadoLivreSyncService {
 
       console.log(`[ML-SYNC] Sincronização concluída em ${result.duration}ms`);
       console.log(`[ML-SYNC] Processados: ${result.itemsProcessed}, Criados: ${result.itemsCreated}, Atualizados: ${result.itemsUpdated}`);
+
+      // 5. Gerar recomendações para os anúncios sincronizados
+      try {
+        console.log('[ML-SYNC] Gerando recomendações...');
+        const recommendationService = new RecommendationService(this.tenantId);
+        const recResult = await recommendationService.generateForAllListings();
+        console.log(`[ML-SYNC] Recomendações geradas: ${recResult.totalRecommendations} para ${recResult.totalListings} anúncios`);
+      } catch (recError) {
+        console.error('[ML-SYNC] Erro ao gerar recomendações (não crítico):', recError);
+      }
 
       return result;
     } catch (error) {

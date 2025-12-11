@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useListings, type ListingsFilters } from '@/hooks/use-listings'
+import { useRecommendations, type Recommendation } from '@/hooks/use-recommendations'
 import {
   Table,
   TableBody,
@@ -13,7 +14,13 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb } from 'lucide-react'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -22,6 +29,17 @@ export function ListingsTable() {
   })
 
   const { data, isLoading, error, refetch } = useListings(filters)
+  
+  // Buscar todas as recomendações pendentes do tenant
+  const { data: recommendationsData } = useRecommendations({ status: 'pending', limit: 100 })
+  
+  // Criar um mapa de listingId -> recomendações para lookup rápido
+  const recommendationsByListing = new Map<string, Recommendation[]>()
+  recommendationsData?.items.forEach(rec => {
+    const existing = recommendationsByListing.get(rec.listingId) || []
+    existing.push(rec)
+    recommendationsByListing.set(rec.listingId, existing)
+  })
 
   const handleSearch = (q: string) => {
     setFilters(prev => ({ ...prev, q: q || undefined, page: 1 }))
@@ -116,12 +134,13 @@ export function ListingsTable() {
                   <TableHead>Estoque</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Super Seller Score</TableHead>
+                  <TableHead className="w-12">Dicas</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       Nenhum anúncio encontrado
                     </TableCell>
                   </TableRow>
@@ -197,6 +216,69 @@ export function ListingsTable() {
                           }
                           
                           return <span className="text-muted-foreground">N/A</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const recs = recommendationsByListing.get(listing.id) || []
+                          if (recs.length === 0) {
+                            return <span className="text-muted-foreground">-</span>
+                          }
+                          
+                          // Ordenar por prioridade (maior primeiro)
+                          const sortedRecs = [...recs].sort((a, b) => b.priority - a.priority)
+                          const hasCritical = sortedRecs.some(r => r.priority >= 90)
+                          
+                          return (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className={`flex items-center gap-1 cursor-pointer ${
+                                    hasCritical ? 'animate-pulse' : ''
+                                  }`}>
+                                    <Lightbulb className={`h-5 w-5 ${
+                                      hasCritical 
+                                        ? 'text-red-500 fill-red-100' 
+                                        : 'text-yellow-500 fill-yellow-100'
+                                    }`} />
+                                    <span className={`text-xs font-medium ${
+                                      hasCritical ? 'text-red-600' : 'text-yellow-600'
+                                    }`}>
+                                      {recs.length}
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-sm p-3">
+                                  <div className="space-y-2">
+                                    <p className="font-semibold text-sm">
+                                      {recs.length} dica{recs.length > 1 ? 's' : ''} de melhoria
+                                    </p>
+                                    <ul className="space-y-1.5">
+                                      {sortedRecs.slice(0, 3).map((rec) => (
+                                        <li key={rec.id} className="flex items-start gap-2 text-xs">
+                                          <span className={`mt-0.5 ${
+                                            rec.priority >= 90 
+                                              ? '🔴' 
+                                              : rec.priority >= 70 
+                                                ? '🟡' 
+                                                : '🔵'
+                                          }`}>
+                                            {rec.priority >= 90 ? '🔴' : rec.priority >= 70 ? '🟡' : '🔵'}
+                                          </span>
+                                          <span>{rec.title}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    {recs.length > 3 && (
+                                      <p className="text-xs text-muted-foreground">
+                                        +{recs.length - 3} mais...
+                                      </p>
+                                    )}
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )
                         })()}
                       </TableCell>
                     </TableRow>

@@ -1,4 +1,35 @@
+
 Developer Log - SuperSeller IA
+
+[2025-12-11] - O Nascimento do Super Seller Score
+
+Status: ✅ Diferenciais Competitivos Implementados
+
+🚀 Novas Features (Entregas de Valor)
+
+Super Seller Score (Algoritmo Proprietário):
+
+Problema: Dependência do health_score do ML (falho/vazio).
+
+Solução: Implementado motor de cálculo próprio (ScoreCalculator.ts) que avalia Cadastro (30%), Tráfego (30%) e Disponibilidade (40%).
+
+Execução: Criada rota de recálculo em massa, migração de banco via túnel SSH e atualização da UI com feedbacks visuais (Cores/Ícones).
+
+Resultado: O usuário agora tem uma métrica clara de qualidade da conta (ex: 72% - Bom).
+
+Card "Anúncios Ativos":
+
+UX: Adicionado indicador visual no Dashboard para mostrar o tamanho real da operação ativa, complementando a visão de pausados.
+
+🛠️ Correções Técnicas
+
+Hotfix de Build: Corrigido erro de tipagem TypeScript (TS2322) no salvamento de campos JSON (score_breakdown) usando casting explícito para InputJsonValue.
+
+Database Drift: Sincronizado schema de produção manual via db push para suportar as novas colunas de score.
+
+Próximos Passos
+
+Motor de Recomendações (IA): Utilizar o breakdown do score (ex: "perdeu ponto em foto") para gerar sugestões de ação automática.
 
 [2025-12-10] - A Conquista dos Dados Reais (Infra & DB Fix)
 

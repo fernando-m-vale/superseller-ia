@@ -36,6 +36,7 @@ export interface Listing {
   superSellerScore?: number // Super Seller Score proprietário (0-100)
   scoreBreakdown?: ScoreBreakdown // Detalhamento do score
   healthIssues?: HealthIssue[]
+  recommendationsCount?: number // Quantidade de recomendações pendentes
 }
 
 export interface ListingsResponse {
