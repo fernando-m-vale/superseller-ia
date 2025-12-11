@@ -126,7 +126,7 @@ export default function RecommendationsPage() {
 
   const handleApplyFilters = () => {
     setCurrentPage(1)
-    updateURL()
+    // O useEffect já atualiza a URL automaticamente quando currentPage muda
   }
 
   const handlePreviousPage = () => {
