@@ -58,6 +58,8 @@ export default function RecommendationsPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery)
+      // Resetar página quando busca muda
+      setCurrentPage(1)
     }, 500)
 
     return () => clearTimeout(timer)
@@ -66,7 +68,7 @@ export default function RecommendationsPage() {
   // A API de recommendations só suporta: listingId, status, type, limit
   const filters = {
     status: 'pending' as const, // Filtrar apenas pendentes por padrão
-    limit: pageSize,
+    limit: 1000, // Buscar mais itens para permitir filtros no frontend
   }
 
   const { data, isLoading, error, refetch } = useRecommendations(filters)
@@ -108,19 +110,19 @@ export default function RecommendationsPage() {
   const paginatedItems = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize)
   const totalPages = Math.ceil(filteredItems.length / pageSize)
 
-  const updateURL = () => {
+  // Atualizar URL quando filtros mudarem
+  useEffect(() => {
     const params = new URLSearchParams()
     if (marketplace) params.set('marketplace', marketplace)
     if (debouncedSearch) params.set('q', debouncedSearch)
     params.set('page', currentPage.toString())
     params.set('pageSize', pageSize.toString())
     
-    router.push(`/recommendations?${params.toString()}`)
-  }
-
-  useEffect(() => {
-    updateURL()
-  }, [marketplace, debouncedSearch, currentPage, pageSize])
+    const newUrl = `/recommendations?${params.toString()}`
+    if (window.location.pathname + window.location.search !== newUrl) {
+      router.replace(newUrl, { scroll: false })
+    }
+  }, [marketplace, debouncedSearch, currentPage, pageSize, router])
 
   const handleApplyFilters = () => {
     setCurrentPage(1)

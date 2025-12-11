@@ -67,39 +67,62 @@ export class RecommendationService {
       });
     }
 
+    // Função auxiliar para remover tags HTML e contar apenas texto
+    const stripHtml = (html: string): string => {
+      if (!html) return '';
+      return html.replace(/<[^>]*>/g, '').trim();
+    };
+
     // Sem descrição ou descrição muito curta
     // Validação: verificar se description é null, undefined ou string vazia
+    // Limpar tags HTML antes de contar caracteres
     const description = input.description || '';
-    const hasDescription = typeof description === 'string' && description.trim().length > 0;
-    const descriptionLength = hasDescription ? description.trim().length : 0;
+    const cleanDescription = stripHtml(description);
+    const hasDescription = typeof cleanDescription === 'string' && cleanDescription.length > 0;
+    const descriptionLength = hasDescription ? cleanDescription.length : 0;
     
-    if (!hasDescription || descriptionLength < 100) {
+    // Reduzir limiar: se tiver mais de 50 caracteres, considerar como existente
+    if (!hasDescription || descriptionLength < 50) {
+      const priority = descriptionLength === 0 ? 70 : 50; // Menor prioridade se já tem algo
       recommendations.push({
         type: RecommendationType.content,
-        priority: 70,
-        title: '📄 Adicione uma descrição completa',
+        priority,
+        title: descriptionLength === 0 
+          ? '📄 Adicione uma descrição ao anúncio'
+          : '📄 Melhore a descrição do anúncio',
         description: hasDescription 
           ? `Sua descrição tem apenas ${descriptionLength} caracteres. Uma descrição detalhada (com mais de 100 caracteres) ajuda os compradores a entender melhor o produto e aumenta a confiança na compra. Inclua especificações técnicas, benefícios e diferenciais.`
-          : 'Adicione uma descrição detalhada ao seu anúncio. Descrições completas (com mais de 100 caracteres) ajudam os compradores a entender melhor o produto e aumentam a confiança na compra.',
+          : 'Adicione uma descrição detalhada ao seu anúncio. Descrições completas ajudam os compradores a entender melhor o produto e aumentam a confiança na compra.',
         impactEstimate: '+15% taxa de conversão',
-        ruleTrigger: `description_length < 100 (atual: ${descriptionLength})`,
+        ruleTrigger: `description_length < 50 (atual: ${descriptionLength})`,
         scoreImpact: 10,
       });
     }
 
     // Poucas fotos
     // Validação: garantir que picturesCount é um número válido
+    // Reduzir exigência: se tiver pelo menos 1 foto, não gerar recomendação crítica
     const validPicturesCount = typeof input.picturesCount === 'number' && input.picturesCount >= 0 ? input.picturesCount : 0;
     
-    if (validPicturesCount < 3) {
+    if (validPicturesCount === 0) {
+      // Crítico: sem fotos
       recommendations.push({
         type: RecommendationType.image,
-        priority: 80,
-        title: '📸 Melhore a qualidade das imagens',
-        description: validPicturesCount === 0
-          ? 'Seu anúncio não possui fotos. Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso.'
-          : `Seu anúncio tem apenas ${validPicturesCount} foto(s). Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso.`,
+        priority: 90,
+        title: '📸 Adicione fotos ao anúncio',
+        description: 'Seu anúncio não possui fotos. Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso.',
         impactEstimate: '+25% cliques',
+        ruleTrigger: `pictures_count = 0`,
+        scoreImpact: 10,
+      });
+    } else if (validPicturesCount < 3) {
+      // Melhoria: poucas fotos (mas já tem pelo menos 1)
+      recommendations.push({
+        type: RecommendationType.image,
+        priority: 50,
+        title: '📸 Adicione mais fotos',
+        description: `Seu anúncio tem apenas ${validPicturesCount} foto(s). Use pelo menos 5 imagens de alta resolução (1200x1200px) com fundo branco, mostrando diferentes ângulos, detalhes e o produto em uso para aumentar a conversão.`,
+        impactEstimate: '+15% cliques',
         ruleTrigger: `pictures_count < 3 (atual: ${validPicturesCount})`,
         scoreImpact: 5,
       });

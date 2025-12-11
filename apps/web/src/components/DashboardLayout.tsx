@@ -17,8 +17,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { clearTokens } from '@/lib/auth'
+import { clearTokens, getAccessToken } from '@/lib/auth'
 import { useAuth } from '@/hooks/use-auth'
+import { getApiBaseUrl } from '@/lib/api'
 
 const menuItems = [
   { href: '/overview', label: 'Visão Geral', icon: LayoutDashboard },
@@ -38,8 +39,35 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     router.push('/')
   }
 
-  const handleConnectAccount = () => {
-    router.push('/overview') // Redireciona para overview onde tem o botão de conectar
+  const handleConnectAccount = async () => {
+    try {
+      const token = getAccessToken()
+      
+      if (!token) {
+        router.push('/login')
+        return
+      }
+
+      const apiUrl = getApiBaseUrl()
+      const response = await fetch(`${apiUrl}/auth/mercadolivre/connect`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Falha ao iniciar conexão')
+      }
+
+      const data = await response.json()
+      if (data.authUrl) {
+        window.location.href = data.authUrl
+      }
+    } catch (error) {
+      console.error('Erro ao conectar conta:', error)
+      // Fallback: redirecionar para overview onde tem o botão de conectar
+      router.push('/overview')
+    }
   }
 
   // Fechar menu ao clicar fora
@@ -269,7 +297,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 md:ml-64 min-w-0">
+      <div className="flex-1 md:ml-64 min-w-0 relative z-0">
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-30 bg-card border-b px-4 py-3 flex items-center gap-4">
           <Button
@@ -288,7 +316,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden">
+        <main className="p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden pb-20">
           {children}
         </main>
       </div>
