@@ -109,11 +109,28 @@ function AIAnalysisTab({
   // Estado de erro
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
+      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <h3 className="text-lg font-semibold mb-2">Erro ao gerar análise</h3>
-        <p className="text-muted-foreground mb-4">{error}</p>
-        <Button onClick={onAnalyze} variant="outline">
+        <p className="text-muted-foreground mb-2 max-w-md">
+          {error}
+        </p>
+        <p className="text-xs text-muted-foreground mb-6">
+          Se o problema persistir, entre em contato com o suporte.
+        </p>
+        <Button 
+          onClick={async () => {
+            try {
+              await onAnalyze()
+            } catch (err) {
+              // Erro já foi tratado no hook, apenas logar para debugging
+              console.error('[AI-ANALYZE] Erro ao tentar novamente:', err)
+            }
+          }} 
+          variant="outline"
+          className="min-w-[140px]"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
           Tentar novamente
         </Button>
       </div>
@@ -689,7 +706,15 @@ export function ListingsTable() {
                 analysis={aiAnalysis}
                 isLoading={aiLoading}
                 error={aiError}
-                onAnalyze={triggerAIAnalysis}
+                onAnalyze={async () => {
+                  try {
+                    await triggerAIAnalysis()
+                  } catch (error) {
+                    // Erro já foi tratado no hook, apenas logar para debugging
+                    console.error('[AI-ANALYZE] Erro ao disparar análise:', error)
+                    // Não mostrar toast de erro aqui, o componente AIAnalysisTab já exibe o erro
+                  }
+                }}
                 currentTitle={data?.items.find(l => l.id === selectedListingId)?.title || ''}
                 copiedText={copiedText}
                 onCopy={(text) => {
