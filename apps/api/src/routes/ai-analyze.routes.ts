@@ -120,30 +120,62 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
    * GET /api/v1/ai/status
    * 
    * Check if the AI service is available and configured.
+   * Always returns 200 OK, even if the service is not configured.
    */
   app.get(
     '/status',
     { preHandler: authGuard },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { tenantId } = request as RequestWithAuth;
+      try {
+        const { tenantId } = request as RequestWithAuth;
 
-      if (!tenantId) {
-        return reply.status(401).send({
-          error: 'Unauthorized',
-          message: 'Token inválido ou tenant não identificado',
+        if (!tenantId) {
+          return reply.status(401).send({
+            status: 'online',
+            keyConfigured: false,
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado',
+          });
+        }
+
+        // Verificar se a API key está configurada sem instanciar o serviço
+        // para evitar qualquer possível erro de inicialização
+        const apiKey = process.env.OPENAI_API_KEY;
+        const keyConfigured = Boolean(apiKey && apiKey.trim().length > 0);
+
+        // Tentar instanciar o serviço de forma segura
+        let isAvailable = false;
+        try {
+          const service = new OpenAIService(tenantId);
+          isAvailable = service.isAvailable();
+        } catch (serviceError) {
+          console.error('[AI-STATUS] Erro ao verificar disponibilidade do serviço:', serviceError);
+          // Continuar mesmo se houver erro, retornando keyConfigured
+        }
+
+        // Sempre retornar 200 OK com status online
+        return reply.status(200).send({
+          status: 'online',
+          keyConfigured: keyConfigured && isAvailable,
+          available: isAvailable,
+          model: isAvailable ? 'gpt-4o' : null,
+          message: isAvailable
+            ? 'Serviço de IA disponível e configurado'
+            : 'Serviço de IA não configurado. OPENAI_API_KEY não definida.',
+        });
+      } catch (error) {
+        // Garantir que sempre retornamos 200 OK mesmo em caso de erro inesperado
+        console.error('[AI-STATUS] Erro inesperado no endpoint de status:', error);
+        
+        return reply.status(200).send({
+          status: 'online',
+          keyConfigured: false,
+          available: false,
+          model: null,
+          message: 'Erro ao verificar status do serviço de IA',
+          error: error instanceof Error ? error.message : 'Erro desconhecido',
         });
       }
-
-      const service = new OpenAIService(tenantId);
-      const isAvailable = service.isAvailable();
-
-      return reply.send({
-        available: isAvailable,
-        model: isAvailable ? 'gpt-4o' : null,
-        message: isAvailable
-          ? 'Serviço de IA disponível e configurado'
-          : 'Serviço de IA não configurado. OPENAI_API_KEY não definida.',
-      });
     }
   );
 

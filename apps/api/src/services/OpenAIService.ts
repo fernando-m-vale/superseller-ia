@@ -83,13 +83,26 @@ Guidelines:
 export class OpenAIService {
   private client: OpenAI | null = null;
   private tenantId: string;
+  private isReady: boolean = false;
 
   constructor(tenantId: string) {
     this.tenantId = tenantId;
     
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey) {
-      this.client = new OpenAI({ apiKey });
+    try {
+      const apiKey = process.env.OPENAI_API_KEY;
+      if (apiKey && apiKey.trim().length > 0) {
+        this.client = new OpenAI({ apiKey });
+        this.isReady = true;
+      } else {
+        // API key não configurada, mas não lançar erro
+        this.isReady = false;
+        console.warn('[OPENAI-SERVICE] OpenAI API key not configured for tenant:', tenantId);
+      }
+    } catch (error) {
+      // Erro ao inicializar cliente OpenAI, mas não quebrar o serviço
+      console.error('[OPENAI-SERVICE] Erro ao inicializar cliente OpenAI:', error);
+      this.isReady = false;
+      this.client = null;
     }
   }
 
@@ -97,14 +110,14 @@ export class OpenAIService {
    * Check if OpenAI is configured and available
    */
   isAvailable(): boolean {
-    return this.client !== null;
+    return this.isReady && this.client !== null;
   }
 
   /**
    * Analyze a listing using GPT-4o and return actionable insights
    */
   async analyzeListing(listing: ListingAnalysisInput): Promise<AIAnalysisResult> {
-    if (!this.client) {
+    if (!this.isReady || !this.client) {
       throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.');
     }
 
