@@ -8,12 +8,11 @@ export interface MercadoLivreAuthResponse {
 }
 
 export interface MercadoLivreHealthResponse {
-  ok: boolean;
-  sellerId: string;
-  nickname: string;
-  siteId: string;
-  countryId: string;
-  tags: string[];
+  connected: boolean;
+  status: 'CONNECTED' | 'DISCONNECTED' | 'EXPIRED' | 'REVOKED';
+  expiresAt?: string;
+  isExpired?: boolean;
+  message?: string;
 }
 
 export interface MercadoLivreSyncResponse {
@@ -54,23 +53,32 @@ export const getMercadoLivreHealth = async (): Promise<MercadoLivreHealthRespons
   const token = getAccessToken();
   
   if (!token) {
-    return null;
+    return {
+      connected: false,
+      status: 'DISCONNECTED',
+    };
   }
 
   try {
-    const response = await fetch(`${API_URL}/mercadolivre/health`, {
+    const response = await fetch(`${API_URL}/auth/mercadolivre/status`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
     });
 
     if (!response.ok) {
-      return null;
+      return {
+        connected: false,
+        status: 'DISCONNECTED',
+      };
     }
 
     return await response.json();
   } catch {
-    return null;
+    return {
+      connected: false,
+      status: 'DISCONNECTED',
+    };
   }
 };
 

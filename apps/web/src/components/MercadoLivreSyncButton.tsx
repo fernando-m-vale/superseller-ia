@@ -44,7 +44,7 @@ export function MercadoLivreSyncButton() {
     return null
   }
 
-  if (!health || !health.ok) {
+  if (!health || !health.connected) {
     return null
   }
 

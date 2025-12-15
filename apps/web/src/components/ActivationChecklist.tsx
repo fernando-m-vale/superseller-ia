@@ -57,7 +57,6 @@ export function ActivationChecklist() {
   const [mlConnecting, setMlConnecting] = useState(false)
   const [mlConnected, setMlConnected] = useState(false)
   const [mlError, setMlError] = useState<string | null>(null)
-  const [mlNickname, setMlNickname] = useState<string | null>(null)
 
   useEffect(() => {
     setIsClient(true)
@@ -86,9 +85,10 @@ export function ActivationChecklist() {
   const checkMercadoLivreConnection = async () => {
     try {
       const health = await getMercadoLivreHealth()
-      if (health && health.ok) {
+      if (health && health.connected) {
         setMlConnected(true)
-        setMlNickname(health.nickname)
+        // Note: O endpoint /status não retorna nickname, então removemos essa parte
+        // Se precisar do nickname, usar o endpoint /health que ainda existe
         
         const currentState = loadChecklistState()
         if (!currentState.completed.connectMarketplace) {
@@ -102,6 +102,8 @@ export function ActivationChecklist() {
           setState(newState)
           saveChecklistState(newState)
         }
+      } else {
+        setMlConnected(false)
       }
     } catch {
       setMlConnected(false)
@@ -279,7 +281,7 @@ export function ActivationChecklist() {
                   <div className="mt-2 flex items-center gap-2">
                     {mlConnected ? (
                       <Badge variant="default" className="bg-green-600">
-                        Mercado Livre conectado{mlNickname ? `: ${mlNickname}` : ''}
+                        Mercado Livre conectado
                       </Badge>
                     ) : (
                       <Button
