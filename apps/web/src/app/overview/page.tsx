@@ -73,10 +73,30 @@ function OverviewContent() {
     connectionStatus?.status === 'REVOKED';
 
   // Verificar se há erro de conexão expirada nos dados de métricas
-  const hasAuthError = error && (
-    (error as any)?.response?.data?.code === 'AUTH_REVOKED' ||
-    (error as any)?.message?.includes('Conexão expirada')
-  );
+  // Type guard para verificar se o erro tem propriedades de resposta HTTP
+  interface ApiError {
+    response?: {
+      data?: {
+        code?: string;
+      };
+    };
+    message?: string;
+  }
+
+  const isApiError = (err: unknown): err is ApiError => {
+    return typeof err === 'object' && err !== null;
+  };
+
+  const hasAuthError = (() => {
+    if (!error || !isApiError(error)) {
+      return false;
+    }
+    const apiError = error as ApiError;
+    return (
+      apiError.response?.data?.code === 'AUTH_REVOKED' ||
+      (typeof apiError.message === 'string' && apiError.message.includes('Conexão expirada'))
+    );
+  })();
 
   if (!mounted) {
     return (
