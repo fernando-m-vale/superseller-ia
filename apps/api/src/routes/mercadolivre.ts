@@ -4,12 +4,39 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { getMercadoLivreCredentials } from '../lib/secrets';
 import { authGuard } from '../plugins/auth';
+import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
+import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
 
 const prisma = new PrismaClient();
 
 // URLs Corretas
 const ML_AUTH_BASE = 'https://auth.mercadolivre.com.br';
 const ML_API_BASE = 'https://api.mercadolibre.com';
+
+/**
+ * Função helper para disparar sync completo após reconexão
+ * Executa de forma assíncrona (fire-and-forget) para não bloquear a resposta
+ */
+async function triggerFullSync(tenantId: string): Promise<void> {
+  try {
+    console.log(`[ML-CALLBACK] Iniciando sync completo para tenant: ${tenantId}`);
+    
+    // Sync de listings
+    const syncService = new MercadoLivreSyncService(tenantId);
+    const listingsResult = await syncService.syncListings();
+    console.log(`[ML-CALLBACK] Sync de listings concluído: ${listingsResult.itemsProcessed} processados`);
+
+    // Sync de pedidos (últimos 30 dias)
+    const ordersService = new MercadoLivreOrdersService(tenantId);
+    const ordersResult = await ordersService.syncOrders(30);
+    console.log(`[ML-CALLBACK] Sync de pedidos concluído: ${ordersResult.ordersProcessed} processados`);
+
+    console.log(`[ML-CALLBACK] Sync completo finalizado para tenant: ${tenantId}`);
+  } catch (error) {
+    // Log do erro mas não propaga para não afetar o callback
+    console.error(`[ML-CALLBACK] Erro ao executar sync completo para tenant ${tenantId}:`, error);
+  }
+}
 
 interface RequestWithAuth extends FastifyRequest {
   userId?: string;
@@ -208,6 +235,12 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
           },
         });
       }
+
+      // Disparar sync completo de forma assíncrona (fire-and-forget)
+      // Não aguarda conclusão para não bloquear o redirect
+      triggerFullSync(tenantId).catch(err => {
+        app.log.error({ err }, `Failed to trigger sync after reconnection for tenant ${tenantId}`);
+      });
 
       // Redirecionar para /overview após login bem-sucedido
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.superselleria.com.br';

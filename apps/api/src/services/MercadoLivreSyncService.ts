@@ -54,9 +54,43 @@ export class MercadoLivreSyncService {
   private providerAccountId: string = '';
   private connectionId: string = '';
   private refreshToken: string = '';
+  private isSyncing: boolean = false; // Flag para evitar loops
 
   constructor(tenantId: string) {
     this.tenantId = tenantId;
+  }
+
+  /**
+   * Dispara sync completo após refresh de token (fire-and-forget)
+   * Evita loop infinito verificando se já está em sync
+   */
+  private async triggerFullSyncAfterRefresh(): Promise<void> {
+    if (this.isSyncing) {
+      return; // Já está em sync, não disparar novamente
+    }
+
+    try {
+      this.isSyncing = true;
+      console.log(`[ML-SYNC] Disparando sync completo após refresh de token para tenant: ${this.tenantId}`);
+      
+      // Importar OrdersService dinamicamente para evitar dependência circular
+      const { MercadoLivreOrdersService } = await import('./MercadoLivreOrdersService');
+      
+      // Sync de listings (já temos o service instanciado)
+      const listingsResult = await this.syncListings();
+      console.log(`[ML-SYNC] Sync de listings após refresh: ${listingsResult.itemsProcessed} processados`);
+
+      // Sync de pedidos (últimos 30 dias)
+      const ordersService = new MercadoLivreOrdersService(this.tenantId);
+      const ordersResult = await ordersService.syncOrders(30);
+      console.log(`[ML-SYNC] Sync de pedidos após refresh: ${ordersResult.ordersProcessed} processados`);
+
+      console.log(`[ML-SYNC] Sync completo após refresh finalizado para tenant: ${this.tenantId}`);
+    } catch (error) {
+      console.error(`[ML-SYNC] Erro ao executar sync após refresh para tenant ${this.tenantId}:`, error);
+    } finally {
+      this.isSyncing = false;
+    }
   }
 
   /**
@@ -138,6 +172,8 @@ export class MercadoLivreSyncService {
       result.duration = Date.now() - startTime;
       console.error('[ML-SYNC] Erro fatal na sincronização:', errorMsg);
       return result;
+    } finally {
+      this.isSyncing = false;
     }
   }
 
@@ -291,6 +327,14 @@ export class MercadoLivreSyncService {
       this.accessToken = access_token;
       this.refreshToken = refresh_token || this.refreshToken;
       console.log('[ML-SYNC] Token renovado com sucesso');
+
+      // Disparar sync completo após renovação bem-sucedida (apenas se não estiver já em sync)
+      // Isso garante que dados sejam atualizados quando token é renovado proativamente
+      if (!this.isSyncing) {
+        this.triggerFullSyncAfterRefresh().catch((err: unknown) => {
+          console.error('[ML-SYNC] Erro ao disparar sync após refresh:', err);
+        });
+      }
     } catch (error) {
       if (error instanceof AxiosError) {
         const status = error.response?.status;
