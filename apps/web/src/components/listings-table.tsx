@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useListings, type ListingsFilters } from '@/hooks/use-listings'
 import { useRecommendations, type Recommendation } from '@/hooks/use-recommendations'
 import {
@@ -21,10 +21,269 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb } from 'lucide-react'
+import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb, Sparkles, Copy, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useListingRecommendations, applyRecommendation } from '@/hooks/use-recommendations'
+import { useAIAnalyze } from '@/hooks/use-ai-analyze'
 import { useToast } from '@/hooks/use-toast'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import type { AIAnalysisResponse } from '@/hooks/use-ai-analyze'
+
+// Componente da aba de Análise IA
+function AIAnalysisTab({
+  analysis,
+  isLoading,
+  error,
+  onAnalyze,
+  currentTitle,
+  copiedText,
+  onCopy,
+}: {
+  analysis: AIAnalysisResponse | null
+  isLoading: boolean
+  error: string | null
+  onAnalyze: () => Promise<void>
+  currentTitle: string
+  copiedText: string | null
+  onCopy: (text: string) => void
+}) {
+  const loadingMessages = [
+    'Analisando concorrentes...',
+    'Verificando fotos e qualidade...',
+    'Otimizando copy e SEO...',
+    'Gerando insights personalizados...',
+  ]
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
+
+  useEffect(() => {
+    if (isLoading) {
+      const interval = setInterval(() => {
+        setCurrentMessageIndex((prev) => (prev + 1) % loadingMessages.length)
+      }, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [isLoading])
+
+  // Estado inicial - sem análise
+  if (!analysis && !isLoading && !error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+        <Sparkles className="h-16 w-16 text-primary mb-4 opacity-50" />
+        <h3 className="text-xl font-semibold mb-2">Análise Completa com IA</h3>
+        <p className="text-muted-foreground mb-6 max-w-md">
+          Descubra hacks de crescimento e melhore seu SEO com nossa inteligência artificial.
+        </p>
+        <Button
+          onClick={onAnalyze}
+          size="lg"
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+        >
+          <Sparkles className="h-5 w-5 mr-2" />
+          Gerar Análise Completa
+        </Button>
+      </div>
+    )
+  }
+
+  // Estado de carregamento
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col items-center justify-center py-8">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground animate-pulse">
+            {loadingMessages[currentMessageIndex]}
+          </p>
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-40 w-full" />
+        </div>
+      </div>
+    )
+  }
+
+  // Estado de erro
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+        <h3 className="text-lg font-semibold mb-2">Erro ao gerar análise</h3>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <Button onClick={onAnalyze} variant="outline">
+          Tentar novamente
+        </Button>
+      </div>
+    )
+  }
+
+  // Estado com análise
+  if (!analysis) return null
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600'
+    if (score >= 60) return 'text-blue-600'
+    if (score >= 40) return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
+  const getScoreBgColor = (score: number) => {
+    if (score >= 80) return 'bg-green-100'
+    if (score >= 60) return 'bg-blue-100'
+    if (score >= 40) return 'bg-yellow-100'
+    return 'bg-red-100'
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Score IA */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Score IA</CardTitle>
+            <Badge className={`${getScoreBgColor(analysis.score)} ${getScoreColor(analysis.score)} text-lg font-bold px-4 py-1`}>
+              {analysis.score}/100
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="w-full bg-muted rounded-full h-3 mb-4">
+            <div
+              className={`h-3 rounded-full transition-all ${
+                analysis.score >= 80
+                  ? 'bg-green-600'
+                  : analysis.score >= 60
+                  ? 'bg-blue-600'
+                  : analysis.score >= 40
+                  ? 'bg-yellow-600'
+                  : 'bg-red-600'
+              }`}
+              style={{ width: `${analysis.score}%` }}
+            />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Análise gerada em {new Date(analysis.analyzedAt).toLocaleString('pt-BR')} usando {analysis.model}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Diagnóstico */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Diagnóstico</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm leading-relaxed">{analysis.critique}</p>
+        </CardContent>
+      </Card>
+
+      {/* Hacks de Crescimento */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Hacks de Crescimento</CardTitle>
+          <CardDescription>Principais oportunidades de melhoria</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-3">
+            {analysis.growthHacks.map((hack, index) => (
+              <li key={index} className="flex items-start gap-3">
+                <div className={`mt-1 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                  index === 0 ? 'bg-green-100 text-green-600' :
+                  index === 1 ? 'bg-blue-100 text-blue-600' :
+                  'bg-purple-100 text-purple-600'
+                }`}>
+                  <span className="text-xs font-bold">{index + 1}</span>
+                </div>
+                <p className="text-sm flex-1">{hack}</p>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* Sugestão de SEO */}
+      {analysis.seoSuggestions.title && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Sugestão de SEO</CardTitle>
+            <CardDescription>Otimização de título para melhor performance</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Título Atual</p>
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm line-clamp-2">{currentTitle}</p>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-muted-foreground">Sugestão IA</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => analysis.seoSuggestions.title && onCopy(analysis.seoSuggestions.title)}
+                  className="h-7"
+                >
+                  {copiedText === analysis.seoSuggestions.title ? (
+                    <>
+                      <Check className="h-3 w-3 mr-1" />
+                      Copiado
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3 mr-1" />
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+              <div className="p-3 bg-primary/5 border-2 border-primary/20 rounded-md">
+                <p className="text-sm font-medium">{analysis.seoSuggestions.title}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {analysis.seoSuggestions.description && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Sugestão de Descrição</CardTitle>
+            <CardDescription>Otimização de descrição para melhor conversão</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-end mb-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => analysis.seoSuggestions.description && onCopy(analysis.seoSuggestions.description)}
+                className="h-7"
+              >
+                {copiedText === analysis.seoSuggestions.description ? (
+                  <>
+                    <Check className="h-3 w-3 mr-1" />
+                    Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copiar
+                  </>
+                )}
+              </Button>
+            </div>
+            <div className="p-3 bg-primary/5 border-2 border-primary/20 rounded-md">
+              <p className="text-sm whitespace-pre-wrap">{analysis.seoSuggestions.description}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -50,6 +309,11 @@ export function ListingsTable() {
 
   // Buscar recomendações do listing selecionado
   const { recommendations: selectedRecommendations, refetch: refetchSelectedRecommendations } = useListingRecommendations(selectedListingId)
+  
+  // Hook para análise de IA
+  const { data: aiAnalysis, isLoading: aiLoading, error: aiError, analyze: triggerAIAnalysis } = useAIAnalyze(selectedListingId)
+  const [activeTab, setActiveTab] = useState<'recommendations' | 'ai'>('recommendations')
+  const [copiedText, setCopiedText] = useState<string | null>(null)
 
   const handleOpenRecommendations = (listingId: string) => {
     setSelectedListingId(listingId)
@@ -333,19 +597,32 @@ export function ListingsTable() {
         </>
       )}
 
-      {/* Sheet de Recomendações */}
+      {/* Sheet de Recomendações e Análise IA */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="sm:max-w-lg overflow-y-auto">
+        <SheetContent className="sm:max-w-2xl overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {data?.items.find(l => l.id === selectedListingId)?.title || 'Recomendações'}
+              {data?.items.find(l => l.id === selectedListingId)?.title || 'Detalhes do Anúncio'}
             </SheetTitle>
             <SheetDescription>
-              {selectedRecommendations.length} dica{selectedRecommendations.length !== 1 ? 's' : ''} de melhoria para este anúncio
+              Análise completa e recomendações para melhorar seu anúncio
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-6 space-y-4">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'recommendations' | 'ai')} className="mt-6">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="recommendations">
+                <Lightbulb className="h-4 w-4 mr-2" />
+                Recomendações ({selectedRecommendations.length})
+              </TabsTrigger>
+              <TabsTrigger value="ai">
+                <Sparkles className="h-4 w-4 mr-2" />
+                Inteligência Artificial
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="recommendations" className="mt-4">
+              <div className="space-y-4">
             {selectedRecommendations.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Lightbulb className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -404,7 +681,29 @@ export function ListingsTable() {
                   </div>
                 ))
             )}
-          </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="ai" className="mt-4">
+              <AIAnalysisTab
+                analysis={aiAnalysis}
+                isLoading={aiLoading}
+                error={aiError}
+                onAnalyze={triggerAIAnalysis}
+                currentTitle={data?.items.find(l => l.id === selectedListingId)?.title || ''}
+                copiedText={copiedText}
+                onCopy={(text) => {
+                  navigator.clipboard.writeText(text)
+                  setCopiedText(text)
+                  setTimeout(() => setCopiedText(null), 2000)
+                  toast({
+                    title: 'Copiado!',
+                    description: 'Texto copiado para a área de transferência',
+                  })
+                }}
+              />
+            </TabsContent>
+          </Tabs>
         </SheetContent>
       </Sheet>
     </div>
