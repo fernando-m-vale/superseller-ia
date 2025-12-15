@@ -65,6 +65,7 @@ export function useAIAnalyze(listingId: string | null) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({}), // REQUIRED: Fastify strict mode requires a valid JSON body
       })
 
       if (!response.ok) {
