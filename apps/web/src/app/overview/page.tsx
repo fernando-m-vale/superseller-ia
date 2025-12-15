@@ -1,18 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMetricsSummary } from '@/hooks/use-metrics-summary';
+import { useMercadoLivreStatus } from '@/hooks/use-mercadolivre-status';
 import { AuthGuard } from '@/components/AuthGuard';
 import { DashboardLayout } from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp } from 'lucide-react';
+import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp, AlertCircle, Link as LinkIcon } from 'lucide-react';
+import { getApiBaseUrl } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth';
 
 function OverviewContent() {
+  const router = useRouter();
   const [periodDays, setPeriodDays] = useState<number>(7);
   const [mounted, setMounted] = useState(false);
+  const { data: connectionStatus } = useMercadoLivreStatus();
 
   useEffect(() => {
     const saved = localStorage.getItem('overview-period-days');
@@ -29,6 +37,46 @@ function OverviewContent() {
   }, [periodDays, mounted]);
 
   const { data, isLoading, error } = useMetricsSummary({ days: periodDays });
+
+  const handleReconnect = async () => {
+    try {
+      const apiUrl = getApiBaseUrl();
+      const token = getAccessToken();
+      
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch(`${apiUrl}/auth/mercadolivre/connect`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Falha ao iniciar conexão');
+      }
+
+      const data = await response.json();
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (error) {
+      console.error('Erro ao reconectar:', error);
+    }
+  };
+
+  const isDisconnected = !connectionStatus?.connected || 
+    connectionStatus?.status === 'DISCONNECTED' || 
+    connectionStatus?.status === 'EXPIRED' || 
+    connectionStatus?.status === 'REVOKED';
+
+  // Verificar se há erro de conexão expirada nos dados de métricas
+  const hasAuthError = error && (
+    (error as any)?.response?.data?.code === 'AUTH_REVOKED' ||
+    (error as any)?.message?.includes('Conexão expirada')
+  );
 
   if (!mounted) {
     return (
@@ -125,6 +173,30 @@ function OverviewContent() {
 
   return (
     <div className="space-y-6">
+      {/* Alerta de Conexão Expirada */}
+      {(isDisconnected || hasAuthError) && (
+        <Alert variant="destructive" className="border-red-500 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-900 font-semibold">
+            Conexão com Mercado Livre Expirada
+          </AlertTitle>
+          <AlertDescription className="text-red-800 mt-2">
+            <p className="mb-3">
+              Sua conexão com o Mercado Livre expirou ou foi revogada. Para continuar recebendo dados atualizados, reconecte sua conta.
+            </p>
+            <Button
+              onClick={handleReconnect}
+              variant="default"
+              size="sm"
+              className="bg-red-600 hover:bg-red-700"
+            >
+              <LinkIcon className="h-4 w-4 mr-2" />
+              Reconectar Mercado Livre
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

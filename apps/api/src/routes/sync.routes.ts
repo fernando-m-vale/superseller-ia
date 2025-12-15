@@ -55,6 +55,21 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         const syncService = new MercadoLivreSyncService(tenantId);
         const result = await syncService.syncListings();
 
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = result.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
         // Retornar resultado
         if (result.success) {
           return reply.status(200).send({
@@ -78,13 +93,20 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           });
         }
-      } catch (error) {
-        console.error('[SYNC-ROUTE] Erro na sincronização de listings:', error);
+      } catch (error: any) {
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
 
-        const errorMessage = error instanceof Error ? error.message : 'Erro interno';
+        app.log.error(error);
         return reply.status(500).send({
           error: 'Falha na sincronização',
-          message: errorMessage,
+          message: error instanceof Error ? error.message : 'Erro desconhecido',
         });
       }
     }
@@ -121,6 +143,21 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         const ordersService = new MercadoLivreOrdersService(tenantId);
         const result = await ordersService.syncOrders(daysBack);
 
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = result.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
         // Retornar resultado
         if (result.success) {
           return reply.status(200).send({
@@ -146,13 +183,20 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           });
         }
-      } catch (error) {
-        console.error('[SYNC-ROUTE] Erro na sincronização de pedidos:', error);
+      } catch (error: any) {
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
 
-        const errorMessage = error instanceof Error ? error.message : 'Erro interno';
+        console.error('[SYNC-ROUTE] Erro na sincronização de pedidos:', error);
         return reply.status(500).send({
           error: 'Falha na sincronização de pedidos',
-          message: errorMessage,
+          message: error instanceof Error ? error.message : 'Erro interno',
         });
       }
     }
@@ -188,6 +232,19 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         const ordersService = new MercadoLivreOrdersService(tenantId);
         const ordersResult = await ordersService.syncOrders(30);
 
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = 
+          listingsResult.errors.some(err => err.includes('AUTH_REVOKED') || err.includes('Conexão expirada')) ||
+          ordersResult.errors.some(err => err.includes('AUTH_REVOKED') || err.includes('Conexão expirada'));
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
         const allSuccess = listingsResult.success && ordersResult.success;
 
         return reply.status(allSuccess ? 200 : 207).send({
@@ -212,13 +269,20 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           },
         });
-      } catch (error) {
-        console.error('[SYNC-ROUTE] Erro na sincronização completa:', error);
+      } catch (error: any) {
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
 
-        const errorMessage = error instanceof Error ? error.message : 'Erro interno';
+        console.error('[SYNC-ROUTE] Erro na sincronização completa:', error);
         return reply.status(500).send({
           error: 'Falha na sincronização completa',
-          message: errorMessage,
+          message: error instanceof Error ? error.message : 'Erro interno',
         });
       }
     }

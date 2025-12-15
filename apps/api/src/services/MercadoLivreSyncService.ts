@@ -214,6 +214,7 @@ export class MercadoLivreSyncService {
 
   /**
    * Verifica se o token está válido e renova se necessário
+   * @throws Error com código 'AUTH_REVOKED' se o refresh falhar por revogação
    */
   private async ensureValidToken(): Promise<void> {
     const connection = await prisma.marketplaceConnection.findUnique({
@@ -229,14 +230,25 @@ export class MercadoLivreSyncService {
     const expiresAt = connection.expires_at;
     const bufferMs = 5 * 60 * 1000; // 5 minutos
 
-    if (expiresAt && expiresAt.getTime() - bufferMs < now.getTime()) {
+    // Se expirou ou está prestes a expirar, renovar
+    if (!expiresAt || expiresAt.getTime() - bufferMs < now.getTime()) {
       console.log('[ML-SYNC] Token expirado ou prestes a expirar. Renovando...');
       
       if (!connection.refresh_token) {
-        throw new Error('Refresh token não disponível. Reconecte a conta.');
+        const error = new Error('Refresh token não disponível. Reconecte a conta.');
+        (error as any).code = 'AUTH_REVOKED';
+        throw error;
       }
 
-      await this.refreshAccessToken(connection.refresh_token);
+      try {
+        await this.refreshAccessToken(connection.refresh_token);
+      } catch (refreshError: any) {
+        // Re-throw erros AUTH_REVOKED
+        if (refreshError.code === 'AUTH_REVOKED') {
+          throw refreshError;
+        }
+        throw refreshError;
+      }
     } else {
       console.log('[ML-SYNC] Token válido');
     }
@@ -244,17 +256,20 @@ export class MercadoLivreSyncService {
 
   /**
    * Renova o access token usando o refresh token
+   * @throws Error com código 'AUTH_REVOKED' se o refresh token foi revogado
    */
   private async refreshAccessToken(refreshToken: string): Promise<void> {
     try {
+      const credentials = await import('../lib/secrets').then(m => m.getMercadoLivreCredentials());
+      
       const response = await axios.post<TokenRefreshResponse>(
         `${ML_API_BASE}/oauth/token`,
         null,
         {
           params: {
             grant_type: 'refresh_token',
-            client_id: process.env.ML_CLIENT_ID,
-            client_secret: process.env.ML_CLIENT_SECRET,
+            client_id: credentials.clientId,
+            client_secret: credentials.clientSecret,
             refresh_token: refreshToken,
           },
         }
@@ -278,9 +293,23 @@ export class MercadoLivreSyncService {
       console.log('[ML-SYNC] Token renovado com sucesso');
     } catch (error) {
       if (error instanceof AxiosError) {
-        console.error('[ML-SYNC] Erro ao renovar token:', error.response?.data);
+        const status = error.response?.status;
+        const errorData = error.response?.data;
+        console.error('[ML-SYNC] Erro ao renovar token:', { status, data: errorData });
         
-        // Marcar conexão como expirada
+        // Se o refresh token foi revogado (400 ou 401), marcar como revogado
+        if (status === 400 || status === 401) {
+          await prisma.marketplaceConnection.update({
+            where: { id: this.connectionId },
+            data: { status: ConnectionStatus.revoked },
+          });
+          
+          const authError = new Error('Conexão expirada. Reconecte sua conta.');
+          (authError as any).code = 'AUTH_REVOKED';
+          throw authError;
+        }
+        
+        // Outros erros: marcar como expirado
         await prisma.marketplaceConnection.update({
           where: { id: this.connectionId },
           data: { status: ConnectionStatus.expired },

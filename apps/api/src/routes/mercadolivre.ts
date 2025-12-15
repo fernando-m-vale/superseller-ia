@@ -44,6 +44,48 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         }
   });
 
+    // Rota de Status da Conexão - verifica status e retorna se está conectado
+    app.get('/status', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { tenantId } = req as RequestWithAuth;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const connection = await prisma.marketplaceConnection.findFirst({
+          where: {
+            tenant_id: tenantId,
+            type: Marketplace.mercadolivre,
+          },
+          orderBy: { updated_at: 'desc' },
+        });
+
+        if (!connection) {
+          return reply.send({
+            connected: false,
+            status: 'DISCONNECTED',
+            message: 'Nenhuma conexão encontrada',
+          });
+        }
+
+        // Verificar se está ativa e não expirada
+        const now = new Date();
+        const isExpired = connection.expires_at && connection.expires_at < now;
+        const isActive = connection.status === ConnectionStatus.active && !isExpired;
+
+        return reply.send({
+          connected: isActive,
+          status: isActive ? 'CONNECTED' : connection.status.toUpperCase(),
+          expiresAt: connection.expires_at?.toISOString(),
+          isExpired,
+        });
+      } catch (error) {
+        app.log.error({ err: error }, 'Failed to check Mercado Livre status');
+        return reply.status(500).send({ error: 'Failed to check Mercado Livre status' });
+      }
+    });
+
     // Rota de Health Check - verifica se há conexão ativa com ML
     app.get('/health', { preHandler: authGuard }, async (req: FastifyRequest, reply: FastifyReply) => {
       try {
