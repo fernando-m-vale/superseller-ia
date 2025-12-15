@@ -87,7 +87,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar Desktop */}
-      <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 md:bg-card md:border-r">
+      <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 md:left-0 md:top-0 md:h-full md:z-50 md:bg-card md:border-r">
         {/* Logo */}
         <div className="flex items-center gap-2 px-6 py-4 border-b">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
@@ -100,7 +100,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-4 py-4 space-y-1">
+        <nav className="flex-1 px-4 py-4 space-y-1 pointer-events-auto">
           {menuItems.map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
@@ -111,21 +111,21 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 prefetch={true}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                  'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer pointer-events-auto',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                 )}
               >
-                <Icon className="h-5 w-5" />
-                <span>{item.label}</span>
+                <Icon className="h-5 w-5 pointer-events-none" />
+                <span className="pointer-events-none">{item.label}</span>
               </Link>
             )
           })}
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t space-y-2">
+        <div className="px-4 py-4 border-t space-y-2 pointer-events-auto">
           <Button
             variant="outline"
             className="w-full justify-start gap-3"
@@ -299,7 +299,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 md:pl-64 min-w-0 relative z-0">
+      <div className="flex-1 md:pl-64 min-w-0 relative z-10">
         {/* Mobile Header */}
         <header className="md:hidden sticky top-0 z-30 bg-card border-b px-4 py-3 flex items-center gap-4">
           <Button
