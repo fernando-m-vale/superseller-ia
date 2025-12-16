@@ -33,9 +33,26 @@ export function MercadoLivreSyncButton() {
         text: `${result.synced} anúncios sincronizados com sucesso!`,
       })
     } catch (error) {
+      // Garantir que a mensagem seja sempre uma string válida
+      let errorMessage = 'Erro ao sincronizar';
+      
+      if (error instanceof Error) {
+        errorMessage = String(error.message || 'Erro ao sincronizar');
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        const errorObj = error as { message?: unknown };
+        errorMessage = String(errorObj.message || 'Erro ao sincronizar');
+      }
+      
+      // Garantir que não seja string vazia
+      if (!errorMessage || errorMessage.trim().length === 0) {
+        errorMessage = 'Erro ao sincronizar';
+      }
+      
       setSyncMessage({
         type: 'error',
-        text: error instanceof Error ? error.message : 'Erro ao sincronizar',
+        text: errorMessage,
       })
     }
   }
