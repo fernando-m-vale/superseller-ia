@@ -1,5 +1,57 @@
 Developer Log - SuperSeller IA
 
+## 2025-12-16 — Marco: IA funcional e estável em produção
+
+### O que foi feito
+- Corrigida integração com OpenAI (gpt-4o)
+- API `/api/v1/ai/analyze/:listingId` retornando 200 com dados completos
+- Implementado endpoint `/api/v1/ai/status` e `/api/v1/ai/ping`
+- Tratamento robusto de erros OpenAI (429, quota, rate limit, 5xx)
+- Billing OpenAI habilitado e nova API Key configurada
+- Correção de crash no frontend (React error #31)
+
+### Problema Crítico Resolvido
+- Frontend esperava `growthHacks: string[]`, mas API retornava objetos
+- API retornava `seoSuggestions` em formato diferente do esperado pela UI
+- UI tentava renderizar objetos diretamente, causando tela branca
+
+### Solução
+- Criado adapter no hook `use-ai-analyze.ts`
+- Interfaces alinhadas com resposta real da API
+- Renderização explícita de strings no React (`String(...)`)
+- UI agora renderiza:
+  - Score
+  - Diagnóstico
+  - Hacks de crescimento (title, description, impacto)
+  - Sugestões de SEO (título + descrição formatada)
+- Botões de copiar SEO funcionando
+
+### Testes Realizados
+- IA gera análise completa sem erros
+- UI não quebra
+- Copy de SEO funcionando
+- Falha simulada removendo accessToken retorna 401 corretamente (sem crash)
+
+### Pendências Identificadas
+- UX de sessão expirada (401):
+  - Hoje mostra erro genérico
+  - Necessário:
+    - Interceptor global de 401
+    - Limpar tokens
+    - Redirecionar para /login
+    - (Opcional) Refresh token automático
+
+### Próximo Foco
+- PRIORIDADE 0:
+  - Tratamento global de 401 no frontend
+- PRIORIDADE 1:
+  - Transformar IA em plano de ação (checklist acionável)
+  - Limites, cache e controle de custo
+- PRIORIDADE 2:
+  - UX de ativação do beta fechado
+
+
+
 ## 2025-12-15
 - Fixed OpenAI integration
 - Issue was invalid API key (401)

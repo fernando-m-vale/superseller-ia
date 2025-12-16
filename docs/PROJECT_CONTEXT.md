@@ -1,44 +1,37 @@
-# Super Seller IA — Project Context
+## Estado Atual do Projeto (Dezembro/2025)
 
-## Vision
-Super Seller IA is an AI-powered co-pilot for marketplace sellers (Mercado Livre, Shopee),
-focused on improving listing performance through diagnostics, scoring, and actionable recommendations.
+O SuperSeller IA encontra-se em estágio funcional avançado, com o core de Inteligência Artificial operacional e integrado ao fluxo principal do produto.
 
-## Current Stage
-- Closed beta
-- Real sellers with real data
-- Focus on ROI and activation
+### Status Geral
+- Frontend e Backend em produção estáveis
+- Integração com OpenAI (gpt-4o) funcionando
+- Análises de IA geram score, diagnóstico, hacks de crescimento e sugestões de SEO
+- Recomendações são persistidas no banco de dados
+- UI renderiza corretamente sem crashes (React error #31 resolvido)
 
-## Architecture
-- Frontend: Next.js 14
-- Backend: Fastify (Node.js)
-- DB: PostgreSQL (RDS)
-- Infra: AWS App Runner + Terraform
-- Auth: JWT (access + refresh)
-- AI: OpenAI (GPT-4o)
+### Fluxo de IA (Atual)
+1. Usuário acessa Anúncios
+2. Abre modal de um anúncio
+3. Aba "Inteligência Artificial"
+4. Clica em "Gerar Análise Completa"
+5. Backend executa análise com OpenAI
+6. Retorno inclui:
+   - Score (0–100)
+   - Diagnóstico textual
+   - Hacks de crescimento estruturados
+   - Sugestões de SEO (título + descrição)
+7. Frontend adapta e renderiza os dados corretamente
+8. Usuário pode copiar sugestões diretamente
 
-## Core Flows
-1. Seller connects marketplace
-2. Listings and metrics are synced
-3. Health score is calculated
-4. AI generates:
-   - critique
-   - growth hacks
-   - SEO suggestions
-5. Recommendations are saved and shown to the user
+### Decisões Técnicas Importantes
+- Uso de adapter no frontend para compatibilizar resposta da API com UI
+- Backend retorna erros da OpenAI de forma semântica (429, 401, 5xx)
+- Frontend nunca renderiza objetos diretamente (String(...) obrigatório)
+- IA é tratada como serviço crítico do produto (core)
 
-## What is working
-- Auth
-- Sync
-- Dashboards
-- AI connectivity (OpenAI OK)
-
-## Current Focus
-- Make AI insights valuable and consistent
-- Prepare closed beta (10–20 sellers)
-- Measure ROI
-
-## Things to avoid
-- Overengineering
-- Premature automation
-- Exposing secrets or debug endpoints
+### Estado do Beta
+- Produto pronto para Beta Fechado
+- Falta apenas:
+  - UX de sessão expirada (tratamento global de 401)
+  - Refinar UX de ativação e limites
+  - Preparar controle de custos e rate limit
