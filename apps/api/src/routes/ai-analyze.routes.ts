@@ -107,6 +107,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
+        if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota') || errorMessage.toLowerCase().includes('rate limit')) {
+          return reply.status(429).send({
+            error: 'Rate limit / Quota',
+            message: 'Limite da IA atingido. Tente novamente mais tarde.',
+            details: errorMessage,
+          });
+        }
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: 'Falha ao analisar anúncio com IA',
@@ -131,7 +138,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const { tenantId } = request as RequestWithAuth;
-
+        
         if (!tenantId) {
           return reply.status(401).send({
             status: 'online',
