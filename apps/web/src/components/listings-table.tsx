@@ -399,7 +399,7 @@ export function ListingsTable() {
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <h3 className="text-lg font-semibold mb-2">Erro ao carregar anúncios</h3>
         <p className="text-muted-foreground mb-4">
-          {error instanceof Error ? error.message : 'Ocorreu um erro inesperado'}
+          {String(error instanceof Error ? error.message : error || 'Ocorreu um erro inesperado')}
         </p>
         <Button onClick={() => refetch()} variant="outline">
           Tentar novamente
