@@ -1,104 +1,155 @@
-SuperSeller IA
+Super Seller IA 🚀
 
-Plataforma SaaS multi-tenant que ajuda vendedores de e-commerce a otimizar seus anúncios em marketplaces usando inteligência artificial.
+Plataforma SaaS de inteligência artificial para otimização de vendas em marketplaces.
+Conecte sua conta, receba um diagnóstico profundo e deixe a IA gerar hacks de crescimento para seus anúncios.
 
-Visão Geral
+🌟 Visão Geral
 
-O SuperSeller IA analisa métricas de performance dos anúncios (CTR, taxa de conversão, receita) e gera recomendações acionáveis para melhorar visibilidade e vendas. A plataforma suporta integração com Shopee e Mercado Livre via OAuth 2.0.
+O Super Seller IA não é apenas um dashboard. É um Copiloto de E-commerce que analisa métricas de performance (CTR, Conversão, Receita) e utiliza Inteligência Artificial Generativa (LLM) para criar recomendações acionáveis.
 
-Principais Funcionalidades
+Diferenciais:
 
-Integração com Marketplaces: Conexão OAuth 2.0 para sincronizar anúncios e métricas
+Super Seller Score: Algoritmo proprietário (0-100) que audita a saúde real da sua conta.
 
-Health Score: Pontuação de saúde (0-100) por anúncio baseada em regras de qualidade
+IA Generativa: O sistema reescreve títulos e descrições focados em SEO e conversão.
 
-Recomendações IA: Sugestões para otimizar títulos, imagens, preços e atributos
+Auto-Healing: Sincronização de dados resiliente que se recupera de falhas de conexão automaticamente.
 
-Automação: Regras configuráveis para aprovar e executar recomendações automaticamente
+🚀 Funcionalidades Principais
 
-Monitoramento: Acompanhamento de efetividade das ações aplicadas
+1. Diagnóstico Inteligente
 
-Stack Tecnológica
+Score Proprietário: Avalia Cadastro (30%), Tráfego (30%) e Disponibilidade (40%).
+
+Action Engine: Detecta oportunidades críticas (ex: "Baixa conversão com alto tráfego").
+
+2. Motor de IA (Generative AI)
+
+Integração nativa com OpenAI (GPT-4o).
+
+Gera "Growth Hacks" personalizados para cada anúncio.
+
+Sugere otimizações de Copywriting e SEO em tempo real.
+
+3. Gestão Financeira & Operacional
+
+Dashboard Financeiro: GMV, Pedidos, Ticket Médio e Curvas de Crescimento.
+
+Gestão de Anúncios: Filtros avançados, edição rápida e histórico de vendas (30 dias).
+
+Sync Automático: Webhooks e Jobs garantem dados sempre frescos.
+
+🛠️ Stack Tecnológica
+
+O projeto utiliza uma arquitetura moderna, escalável e segura na AWS.
 
 Camada
 
 Tecnologia
 
+Detalhes
+
 Frontend
 
-Next.js 14, React, TypeScript, Tailwind CSS
+Next.js 14
+
+App Router, Tailwind CSS, Shadcn/UI, Recharts.
 
 Backend
 
-Fastify, Node.js 20, TypeScript
+Node.js (Fastify)
+
+TypeScript, Zod, Prisma ORM.
 
 Banco de Dados
 
-PostgreSQL (AWS RDS) com Prisma ORM
+PostgreSQL
+
+AWS RDS (Private VPC) + Prisma.
+
+AI Core
+
+OpenAI API
+
+Modelo GPT-4o via OpenAIService.
 
 Infraestrutura
 
-AWS App Runner (Web + API), RDS Privado, NAT Gateway
+AWS App Runner
 
-CI/CD
-
-GitHub Actions com OIDC
+Serverless Containers, Scale-to-zero.
 
 IaC
 
 Terraform
 
-Estrutura do Projeto
+Infraestrutura como Código para todo o ambiente.
+
+CI/CD
+
+GitHub Actions
+
+Deploy automatizado com OIDC.
+
+🏗️ Estrutura do Monorepo
 
 superseller-ia/
 ├── apps/
-│   ├── api/          # Backend Fastify (porta 3001)
-│   └── web/          # Frontend Next.js (porta 3000)
+│   ├── api/          # Backend Fastify (Porta 3001)
+│   └── web/          # Frontend Next.js (Porta 3000)
 ├── packages/
-│   ├── core/         # Utilitários compartilhados
-│   └── ai/           # Engine de recomendações
+│   ├── core/         # Lógica compartilhada (Types, Utils)
+│   └── ai/           # (Futuro) Modelos de ML isolados
 ├── infra/
-│   └── terraform/    # Definições de infraestrutura AWS (App Runner, RDS, VPC)
-├── docs/             # Documentação técnica e Logs
-└── package.json      # Configuração do workspace pnpm
+│   └── terraform/    # Código Terraform (AWS)
+└── docs/             # Documentação de Arquitetura e Negócio
 
 
-Setup Rápido
+⚡ Setup Rápido (Desenvolvimento)
 
 Pré-requisitos
 
-Node.js 20+ (use nvm use para carregar a versão correta)
+Node.js 20+
 
 pnpm 8+
 
-PostgreSQL 14+
-
-Docker (opcional, para ambiente local)
+Docker (Opcional, para banco local)
 
 Instalação
 
-# Clone o repositório
+Clone o repositório:
+
 git clone [https://github.com/fernando-m-vale/superseller-ia.git](https://github.com/fernando-m-vale/superseller-ia.git)
 cd superseller-ia
 
-# Instale as dependências
+
+Instale dependências:
+
 pnpm install
 
-# Configure as variáveis de ambiente
-cp apps/api/.env.example apps/api/.env
-# Edite o arquivo .env com suas credenciais
 
-# Execute as migrations do banco
+Configure Variáveis de Ambiente:
+
+Copie .env.example para .env em apps/api e apps/web.
+
+Adicione sua chave da OpenAI e credenciais do Banco.
+
+Inicie o Banco de Dados:
+
+# Se usar Docker
+docker-compose up -d db
+
+# Gere o cliente Prisma e rode as migrações
 pnpm --filter @superseller/api db:generate
-pnpm --filter @superseller/api db:dev
+pnpm --filter @superseller/api db:deploy
 
 
-Executando o Projeto
+Rode a Aplicação:
 
-# Terminal 1: Inicie a API
+# Terminal 1 (API)
 pnpm --filter @superseller/api dev
 
-# Terminal 2: Inicie o frontend
+# Terminal 2 (Web)
 pnpm --filter web dev
 
 
@@ -108,23 +159,22 @@ Frontend: http://localhost:3000
 
 API: http://localhost:3001/api/v1
 
-Infraestrutura e Deploy
+🔒 Segurança & Deploy
 
-O deploy é automatizado via GitHub Actions para a AWS.
-A infraestrutura utiliza AWS App Runner para computação serverless e RDS PostgreSQL em subnets privadas para segurança. O acesso externo (APIs Mercado Livre) é garantido via NAT Gateway.
+Segredos: Gerenciados via AWS Secrets Manager. Nenhuma chave sensível no código.
 
-Para economia de custos em desenvolvimento, o NAT Gateway pode ser desabilitado via variável Terraform enable_nat_gateway = false.
+Rede: Banco de dados isolado em subnet privada. Acesso externo apenas via Bastion Host (Túnel SSH).
 
-Documentação
+Deploy: Push na main dispara o pipeline de CI/CD para o AWS App Runner.
 
-Contexto Atual
+📚 Documentação Adicional
 
-Log de Desenvolvimento
+Arquitetura & Segurança
 
-Contratos de API
+Guia de Deploy (Prod)
 
-Arquitetura
+User Stories & Backlog
 
-Licença
+Business Plan
 
-Proprietário - Todos os direitos reservados.
+© 2025 Super Seller IA - Otimizando o e-commerce com inteligência real.

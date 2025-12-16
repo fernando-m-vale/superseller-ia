@@ -1,4 +1,86 @@
 # Super Seller IA — Backlog Funcional e Visão de MVP
+Super Seller IA — Backlog Funcional e Visão de MVP (Atualizado)
+
+Versão atualizada pós-implantação da IA e Estabilização de Infra.
+
+🎯 Visão do MVP (Status Real)
+
+Plataforma que conecta Mercado Livre (Shopee em breve), coleta dados, gera Super Seller Score e usa IA Generativa para sugerir otimizações.
+
+Meta de sucesso MVP:
+
+[x] Conexão estável com Mercado Livre (Auto-refresh)
+
+[x] Dashboard com dados financeiros reais
+
+[x] IA gerando diagnósticos automáticos
+
+[ ] Conexão Shopee (Pendente)
+
+[ ] Gateway de Pagamento (Pendente)
+
+⚙️ Status do Escopo
+
+1) Conectores (APIs)
+
+[ ] Shopee — Autenticação + dados (Prioridade Alta)
+
+[x] Mercado Livre — Autenticação + Sync de 30 dias + Webhooks
+
+2) Health Score & IA
+
+[x] Super Seller Score: Algoritmo proprietário (0-100) implementado.
+
+[x] Action Queue: Lista de recomendações baseada em regras.
+
+[x] Generative AI: Integração OpenAI para análise de SEO e Hacks.
+
+3) Dashboard & UX
+
+[x] Visão Geral: GMV, Pedidos, Ticket Médio.
+
+[x] Listagem: Filtros avançados, paginação e Sheet de detalhes.
+
+[x] Alertas: Notificação visual de token expirado.
+
+📌 Backlog Restante (Rumo ao V1)
+
+Prioridade 1: Monetização
+
+[ ] Página de Planos (Starter/Pro).
+
+[ ] Integração Stripe/Asaas.
+
+[ ] Bloqueio de features (Paywall na IA).
+
+Prioridade 2: Multi-Canal
+
+[ ] OAuth Shopee.
+
+[ ] Sync de Pedidos Shopee.
+
+[ ] Unificação do Dashboard (ML + Shopee).
+
+Prioridade 3: Automação
+
+[ ] Botão "Aplicar Sugestão da IA" (Escrever no ML via API).
+
+[ ] Edição em massa de preços.
+
+🛠️ Tecnologia Atual
+
+Front: Next.js 14 + Shadcn UI
+
+Backend: Node.js (Fastify)
+
+Infra: AWS App Runner + RDS
+
+AI: OpenAI GPT-4o
+
+Deploy: Terraform + GitHub Actions
+
+
+
 
 > Versão inicial — foco em MVP enxuto, escalável e validado com sellers founders (early adopters).
 

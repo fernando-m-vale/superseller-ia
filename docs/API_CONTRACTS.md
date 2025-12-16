@@ -1,74 +1,130 @@
-# Contratos de API e Dados
-**Status:** Planejamento de Expansão
+Contratos de API e Dados
 
-## 1. Schema Atual (Referência)
-*O schema real encontra-se em `apps/api/prisma/schema.prisma`.*
-Este arquivo documenta as *extensões planejadas* para suportar as novas funcionalidades.
+Status: Atualizado (Pós-Implementação de IA e Vendas)
 
-## 2. Extensões Planejadas (Novos Models)
+1. Visão Geral do Schema
 
-### A. Módulo de Publicidade (Ads)
+O schema oficial (Single Source of Truth) está em apps/api/prisma/schema.prisma.
+Este documento destaca as estruturas críticas implementadas recentemente e os padrões de integração.
+
+2. Estruturas de Dados (Models Implementados)
+
+A. Vendas e Pedidos (Mercado Livre)
+
+Responsável pelo cálculo de GMV e histórico financeiro.
+
+model Order {
+  id              String      @id @default(uuid())
+  tenantId        String
+  marketplace     Marketplace // ENUM: MERCADOLIVRE, SHOPEE
+  externalId      String      // ID do pedido no marketplace (ex: 20000...)
+  totalAmount     Decimal     // Valor total da venda
+  status          String      // paid, shipped, delivered, cancelled
+  dateCreated     DateTime    // Data da venda original
+  
+  items           OrderItem[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([tenantId, externalId])
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  orderId     String
+  listingId   String? // Relacionamento opcional com anúncio
+  title       String
+  quantity    Int
+  unitPrice   Decimal
+  sku         String?
+  
+  order       Order   @relation(fields: [orderId], references: [id])
+}
+
+
+B. Inteligência e Qualidade
+
+Novos campos e tabelas para suportar o Super Seller Score e Recomendações.
+
+Atualização em Listing:
+
+model Listing {
+  // ... campos existentes ...
+  super_seller_score Int?   // 0 a 100
+  score_breakdown    Json?  // { cadastro: 30, trafego: 10, ... }
+  ai_analysis        Json?  // Cache da última análise do GPT
+}
+
+
+Nova Tabela Recommendation:
+
+model Recommendation {
+  id          String   @id @default(uuid())
+  tenantId    String
+  listingId   String
+  type        String   // SEO, PRICE, PHOTO, STOCK
+  priority    String   // HIGH, MEDIUM, LOW
+  status      String   // PENDING, APPLIED, DISMISSED
+  title       String   // "Melhore o título"
+  description String   // "Seu título é muito curto..."
+  ai_content  Json?    // Sugestões geradas pela IA (Novo Título, etc)
+  
+  listing     Listing  @relation(fields: [listingId], references: [id])
+}
+
+
+3. Endpoints da API (Rotas Chave)
+
+Módulo de IA (Generative)
+
+Status: GET /api/v1/ai/status
+
+Retorna: { status: 'online', keyConfigured: true, model: 'gpt-4o' }
+
+Analisar Anúncio: POST /api/v1/ai/analyze/:listingId
+
+Payload: {} (Vazio)
+
+Retorna: { score: 85, hacks: [...], suggested_title: "..." }
+
+Módulo de Recomendações
+
+Listar: GET /api/v1/recommendations?status=PENDING
+
+Gerar (Forçar Análise): POST /api/v1/recommendations/generate
+
+Aplicar/Resolver: PATCH /api/v1/recommendations/:id/apply
+
+Módulo de Sync (Dados)
+
+Sync Completo: POST /api/v1/sync/mercadolivre/full
+
+Sync Pedidos: POST /api/v1/sync/mercadolivre/orders?days=30
+
+4. Planejamento Futuro (Backlog)
+
+Módulo de Publicidade (Ads) - Planejado
+
 Para suportar gestão de Mercado Ads e Shopee Ads.
 
-```prisma
 model AdCampaign {
   id            String   @id @default(uuid())
   tenantId      String
-  marketplace   Marketplace // ENUM: MERCADOLIVRE, SHOPEE
-  externalId    String   // ID da campanha no marketplace
+  marketplace   Marketplace
+  externalId    String
   name          String
   status        String   // ACTIVE, PAUSED
   dailyBudget   Decimal
-  acosTarget    Decimal? // Advertising Cost of Sales alvo
-  roas          Decimal? // Return on Ad Spend atual
+  roas          Decimal?
   
   metrics       AdMetric[]
-  listings      Listing[] // Relacionamento com anúncios
-  createdAt     DateTime @default(now())
-}
-
-model AdMetric {
-  id            String   @id @default(uuid())
-  campaignId    String
-  date          DateTime
-  clicks        Int
-  impressions   Int
-  cost          Decimal
-  sales         Decimal
-  campaign      AdCampaign @relation(fields: [campaignId], references: [id])
 }
 
 
-Contratos de API e Dados
+5. Padrões e Convenções
 
-1. Padrões de Banco de Dados (Prisma)
+IDs Externos: Sempre armazenados como String para evitar estouro de Inteiros (ex: IDs do ML são gigantes).
 
-IMPORTANTE: O banco de dados utiliza convenção snake_case para chaves estrangeiras e campos mapeados de APIs externas.
+Valores Monetários: Sempre Decimal no Prisma e number (float) no TypeScript, cuidado com arredondamentos.
 
-Model: MarketplaceConnection
-
-Campos mapeados (TypeScript -> Banco):
-
-tenantId (No código) -> tenant_id (No Prisma/Banco)
-
-providerAccountId -> provider_account_id
-
-accessToken -> access_token
-
-refreshToken -> refresh_token
-
-expiresAt -> expires_at
-
-Sempre verifique o schema.prisma antes de criar queries prisma.create ou prisma.update.
-
-2. Rotas de Integração (Mercado Livre)
-
-Definição Final (Pós PR #57)
-
-Initiate: GET /api/v1/auth/mercadolivre/connect
-
-Response: JSON { "authUrl": "..." } ou Redirect 302 (dependendo da implementação final).
-
-Callback: GET /api/v1/auth/mercadolivre/callback
-
-Webhooks: POST /api/v1/webhooks/mercadolivre
+JSON Fields: Usar casting explícito as InputJsonValue no código ao salvar objetos complexos (ex: score_breakdown).

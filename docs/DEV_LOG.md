@@ -1,5 +1,41 @@
 Developer Log - SuperSeller IA
 
+[2025-12-15] - Estabilização de Sync e Diagnóstico de IA
+
+Status: 🟡 Sync de Dados Resolvido | 🔴 Serviço de IA Instável
+
+🛠️ Correções Realizadas (Sync e UX)
+
+Estabilidade de Conexão (Sync de Dados):
+
+Problema Original: Dados travados em 09/12 e falha silenciosa na renovação de token.
+
+Solução: Implementado TokenRefreshService (Cron Job), alerta visual de desconexão e gatilho automático de sync pós-login.
+
+Status: Resolvido. Dados atualizados e fluxo de reconexão validado.
+
+Hotfixes de Build:
+
+Corrigidos erros de linting (Unexpected any) no frontend. Pipeline de CI/CD verde.
+
+⚠️ Problema em Foco: Serviço de IA (OpenAI)
+
+Sintoma: Ao clicar em "Gerar Análise", o sistema retorna erro.
+
+Inicialmente 400 Bad Request (Corrigido com ajuste de body JSON).
+
+Atualmente 503 Service Unavailable ou erro silencioso.
+
+Diagnóstico Atual:
+O backend (Fastify) tenta iniciar o OpenAIService, mas falha. A suspeita principal é que a variável de ambiente OPENAI_API_KEY, apesar de criada no AWS Secrets Manager, não está sendo injetada corretamente no container do App Runner em tempo de execução.
+
+Ações em Andamento:
+
+Executar script de diagnóstico no console para verificar status do endpoint /api/v1/ai/status.
+
+Se confirmado keyConfigured: false, forçar a injeção da chave via AWS CLI (Devin).
+
+
 [2025-12-12] - O Cérebro da IA e a Auditoria de Negócio
 
 Status: ✅ Backend de IA Pronto | ⏸️ Planejamento de Produto
