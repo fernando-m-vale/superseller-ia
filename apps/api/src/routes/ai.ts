@@ -110,6 +110,7 @@ export const aiRoutes: FastifyPluginCallback = (app, _, done) => {
       });
       
       const metrics: ListingDailyMetric[] = metricsData.map((m) => ({
+        console.log("[AI] has OPENAI_API_KEY?", !!process.env.OPENAI_API_KEY),
         listingId: m.listing_id,
         date: m.date.toISOString().split('T')[0],
         impressions: m.impressions,
