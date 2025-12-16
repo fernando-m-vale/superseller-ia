@@ -126,6 +126,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
    * Check if the AI service is available and configured.
    * Always returns 200 OK, even if the service is not configured.
    */
+
+
+
   app.get(
     '/status',
     { preHandler: authGuard },
@@ -182,6 +185,59 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
       }
     }
   );
+
+/**
+ * GET /api/v1/ai/ping
+ *
+ * Testa conectividade com a OpenAI (rede + auth).
+ * Retorna apenas status e tempo (sem expor dados).
+ */
+app.get(
+  '/ping',
+  { preHandler: authGuard },
+  async (request: FastifyRequest, reply: FastifyReply) => {
+    const start = Date.now();
+
+    try {
+      const apiKey = process.env.OPENAI_API_KEY ?? '';
+      const hasKey = Boolean(apiKey && apiKey.trim().length > 0);
+
+      if (!hasKey) {
+        return reply.status(200).send({
+          ok: false,
+          hasKey: false,
+          status: null,
+          ms: Date.now() - start,
+          message: 'OPENAI_API_KEY não configurada no ambiente',
+        });
+      }
+
+      const res = await fetch('https://api.openai.com/v1/models', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      return reply.status(200).send({
+        ok: res.ok,
+        hasKey: true,
+        status: res.status,
+        ms: Date.now() - start,
+      });
+    } catch (err: any) {
+      return reply.status(200).send({
+        ok: false,
+        hasKey: true,
+        status: null,
+        ms: Date.now() - start,
+        error: err?.name ?? 'Error',
+        message: err?.message ?? String(err),
+      });
+    }
+  }
+);
+
 
   done();
 };
