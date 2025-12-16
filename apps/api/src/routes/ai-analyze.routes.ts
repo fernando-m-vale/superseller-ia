@@ -49,6 +49,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         console.log(`[AI-ANALYZE] Starting analysis for listing ${listingId}, tenant ${tenantId}`);
 
+        const hasOpenAiKey = Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0);
+        console.log(`[AI-ANALYZE] has OPENAI_API_KEY? ${hasOpenAiKey}`, process.env.OPENAI_API_KEY);
+
+
         const service = new OpenAIService(tenantId);
 
         if (!service.isAvailable()) {
