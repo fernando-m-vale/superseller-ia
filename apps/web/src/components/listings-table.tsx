@@ -214,7 +214,15 @@ function AIAnalysisTab({
                 }`}>
                   <span className="text-xs font-bold">{index + 1}</span>
                 </div>
-                <p className="text-sm flex-1">{hack}</p>
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-1">{String(hack.title || 'Hack de crescimento')}</p>
+                  <p className="text-sm text-muted-foreground">{String(hack.description || '')}</p>
+                  {hack.estimatedImpact && (
+                    <p className="text-xs text-muted-foreground mt-1 italic">
+                      Impacto estimado: {String(hack.estimatedImpact)}
+                    </p>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

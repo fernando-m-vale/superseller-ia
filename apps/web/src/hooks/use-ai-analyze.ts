@@ -4,18 +4,71 @@ import { useState } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 
-export interface AIAnalysisResponse {
+// Interface da resposta da API (formato bruto)
+interface AIAnalysisApiResponse {
   listingId: string
   score: number
   critique: string
-  growthHacks: string[]
+  growthHacks: Array<{
+    title: string
+    description: string
+    priority: 'high' | 'medium' | 'low'
+    estimatedImpact: string
+  }>
   seoSuggestions: {
-    title?: string
-    description?: string
+    suggestedTitle: string
+    titleRationale: string
+    suggestedDescriptionPoints: string[]
+    keywords: string[]
   }
   savedRecommendations: number
   analyzedAt: string
   model: string
+}
+
+// Interface adaptada para o frontend
+export interface AIAnalysisResponse {
+  listingId: string
+  score: number
+  critique: string
+  growthHacks: Array<{
+    title: string
+    description: string
+    priority: 'high' | 'medium' | 'low'
+    estimatedImpact: string
+  }>
+  seoSuggestions: {
+    title: string
+    description: string
+  }
+  savedRecommendations: number
+  analyzedAt: string
+  model: string
+}
+
+/**
+ * Adapter que converte a resposta da API para o formato esperado pelo frontend
+ */
+function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysisResponse {
+  // Converter seoSuggestions
+  const seoDescription = [
+    ...(apiResponse.seoSuggestions.suggestedDescriptionPoints || []),
+    ...(apiResponse.seoSuggestions.keywords?.map(k => `#${k}`) || []),
+  ].join('\n')
+
+  return {
+    listingId: apiResponse.listingId,
+    score: apiResponse.score,
+    critique: apiResponse.critique,
+    growthHacks: apiResponse.growthHacks || [],
+    seoSuggestions: {
+      title: apiResponse.seoSuggestions.suggestedTitle || '',
+      description: seoDescription,
+    },
+    savedRecommendations: apiResponse.savedRecommendations,
+    analyzedAt: apiResponse.analyzedAt,
+    model: apiResponse.model,
+  }
 }
 
 export interface AIAnalysisState {
@@ -116,8 +169,11 @@ export function useAIAnalyze(listingId: string | null) {
 
       const result = await response.json()
       
+      // Adaptar resposta da API para o formato esperado pelo frontend
+      const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
+      
       setState({
-        data: result.data,
+        data: adaptedData,
         isLoading: false,
         error: null,
       })
