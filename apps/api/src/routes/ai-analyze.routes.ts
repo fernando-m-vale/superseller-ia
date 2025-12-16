@@ -49,9 +49,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         console.log(`[AI-ANALYZE] Starting analysis for listing ${listingId}, tenant ${tenantId}`);
 
-        const hasOpenAiKey = Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim().length > 0);
-
-
         const service = new OpenAIService(tenantId);
 
         if (!service.isAvailable()) {
@@ -185,12 +182,19 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
+
+  
 /**
  * GET /api/v1/ai/ping
  *
  * Testa conectividade com a OpenAI (rede + auth).
  * Retorna apenas status e tempo (sem expor dados).
  */
+
+const enableDebugRoutes =
+  process.env.ENABLE_DEBUG_ROUTES === 'true' && process.env.NODE_ENV !== 'production';
+
+if (enableDebugRoutes) {
 app.get(
   '/ping',
   { preHandler: authGuard },
@@ -236,7 +240,7 @@ app.get(
     }
   }
 );
-
+}
 
   done();
 };
