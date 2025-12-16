@@ -113,7 +113,7 @@ function AIAnalysisTab({
         <AlertCircle className="h-12 w-12 text-destructive mb-4" />
         <h3 className="text-lg font-semibold mb-2">Erro ao gerar análise</h3>
         <p className="text-muted-foreground mb-2 max-w-md">
-          {error}
+          {String(error || 'Erro desconhecido')}
         </p>
         <p className="text-xs text-muted-foreground mb-6">
           Se o problema persistir, entre em contato com o suporte.

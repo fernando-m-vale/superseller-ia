@@ -90,30 +90,56 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
+        // Detectar erros da OpenAI SDK (retorna erros com status, statusCode, response, etc.)
+        const openAIError = error as any;
+        const statusCode = openAIError?.status || openAIError?.statusCode || openAIError?.response?.status;
         const errorMessage = error instanceof Error ? error.message : 'Erro interno';
+        const errorType = openAIError?.type || openAIError?.code || '';
         
+        // Detectar 429 (Rate Limit / Quota) de múltiplas formas
+        const isRateLimit = 
+          statusCode === 429 ||
+          errorMessage.toLowerCase().includes('429') ||
+          errorMessage.toLowerCase().includes('quota') ||
+          errorMessage.toLowerCase().includes('rate limit') ||
+          errorMessage.toLowerCase().includes('rate_limit') ||
+          errorType === 'insufficient_quota' ||
+          errorType === 'rate_limit_exceeded' ||
+          (openAIError?.response?.data?.error?.code === 'rate_limit_exceeded') ||
+          (openAIError?.response?.data?.error?.type === 'insufficient_quota');
+
+        if (isRateLimit) {
+          return reply.status(429).send({
+            error: 'Rate limit / Quota',
+            message: 'Limite de uso da IA atingido. Tente novamente mais tarde.',
+            details: errorMessage,
+          });
+        }
+
         // Check for specific OpenAI errors
-        if (errorMessage.includes('API key')) {
+        if (errorMessage.includes('API key') || statusCode === 401) {
           return reply.status(503).send({
             error: 'Service Unavailable',
             message: 'Serviço de IA não configurado corretamente.',
           });
         }
 
-        if (errorMessage.includes('not found')) {
+        if (errorMessage.includes('not found') || statusCode === 404) {
           return reply.status(404).send({
             error: 'Not Found',
             message: errorMessage,
           });
         }
 
-        if (errorMessage.includes('429') || errorMessage.toLowerCase().includes('quota') || errorMessage.toLowerCase().includes('rate limit')) {
-          return reply.status(429).send({
-            error: 'Rate limit / Quota',
-            message: 'Limite da IA atingido. Tente novamente mais tarde.',
+        // Outros erros da OpenAI (500, 502, 503, 504)
+        if (statusCode && statusCode >= 500 && statusCode <= 504) {
+          return reply.status(statusCode).send({
+            error: 'OpenAI Service Error',
+            message: 'Erro no serviço de IA. Tente novamente em alguns instantes.',
             details: errorMessage,
           });
         }
+
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: 'Falha ao analisar anúncio com IA',

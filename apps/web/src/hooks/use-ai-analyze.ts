@@ -92,7 +92,9 @@ export function useAIAnalyze(listingId: string | null) {
         // Mensagens específicas por código de status
         let errorMessage = 'Não foi possível gerar a análise. Tente novamente em alguns instantes.'
         
-        if (statusCode === 500) {
+        if (statusCode === 429) {
+          errorMessage = 'Limite de uso da IA atingido. Tente novamente mais tarde.'
+        } else if (statusCode === 500) {
           errorMessage = 'Erro interno do servidor. Nossa equipe foi notificada. Tente novamente em alguns instantes.'
         } else if (statusCode === 504) {
           errorMessage = 'Tempo de resposta excedido. O serviço de IA pode estar sobrecarregado. Tente novamente em alguns instantes.'
@@ -103,7 +105,7 @@ export function useAIAnalyze(listingId: string | null) {
         } else if (statusCode === 404) {
           errorMessage = 'Anúncio não encontrado. Verifique se o anúncio ainda existe.'
         } else if (errorData.message) {
-          errorMessage = errorData.message
+          errorMessage = String(errorData.message) // Garantir que seja string
         }
 
         const error: ErrorWithStatusCode = new Error(errorMessage)
@@ -130,9 +132,23 @@ export function useAIAnalyze(listingId: string | null) {
         errorData: errorWithStatus.errorData,
       })
 
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Não foi possível gerar a análise. Tente novamente em alguns instantes.'
+      // Garantir que errorMessage seja sempre uma string válida
+      let errorMessage: string
+      if (error instanceof Error) {
+        errorMessage = String(error.message || 'Erro desconhecido')
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        const errorObj = error as { message?: unknown }
+        errorMessage = String(errorObj.message || 'Erro desconhecido')
+      } else {
+        errorMessage = 'Não foi possível gerar a análise. Tente novamente em alguns instantes.'
+      }
+      
+      // Garantir que não seja string vazia
+      if (!errorMessage || errorMessage.trim().length === 0) {
+        errorMessage = 'Não foi possível gerar a análise. Tente novamente em alguns instantes.'
+      }
       
       setState({
         data: null,
