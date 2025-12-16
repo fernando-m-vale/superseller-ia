@@ -1,5 +1,12 @@
 Developer Log - SuperSeller IA
 
+## 2025-12-15
+- Fixed OpenAI integration
+- Issue was invalid API key (401)
+- Added /ai/ping for diagnostics
+- AI is now responding in production
+
+
 [2025-12-15] - Estabilização de Sync e Diagnóstico de IA
 
 Status: 🟡 Sync de Dados Resolvido | 🔴 Serviço de IA Instável
