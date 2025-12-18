@@ -30,7 +30,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
    * - SEO suggestions (title/description)
    * 
    * The results are saved as recommendations in the database.
+   * Uses canonical payload V1 with 30-day metrics by default.
    */
+  const PERIOD_DAYS = 30; // Default period for metrics aggregation
+
   app.post<{ Params: { listingId: string } }>(
     '/analyze/:listingId',
     { preHandler: authGuard },
@@ -54,6 +57,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           userId,
           tenantId,
           listingId,
+          periodDays: PERIOD_DAYS,
         }, 'Starting AI analysis');
 
         const service = new OpenAIService(tenantId);
@@ -65,7 +69,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        const result = await service.analyzeAndSaveRecommendations(listingId);
+        const result = await service.analyzeAndSaveRecommendations(
+          listingId,
+          userId,
+          requestId,
+          PERIOD_DAYS
+        );
 
         request.log.info(
           {
@@ -76,6 +85,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             score: result.analysis.score,
             growthHacksCount: result.analysis.growthHacks.length,
             savedRecommendations: result.savedRecommendations,
+            performanceSource: result.dataQuality.sources.performance,
+            completenessScore: result.dataQuality.completenessScore,
           },
           'AI analysis complete'
         );
