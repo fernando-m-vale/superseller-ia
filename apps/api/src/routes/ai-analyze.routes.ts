@@ -8,6 +8,7 @@ import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { OpenAIService } from '../services/OpenAIService';
 import { authGuard } from '../plugins/auth';
+import { sanitizeOpenAIError, createSafeErrorMessage } from '../utils/sanitize-error';
 
 interface RequestWithAuth extends FastifyRequest {
   userId?: string;
@@ -47,7 +48,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const params = AnalyzeParamsSchema.parse(request.params);
         const { listingId } = params;
 
-        console.log(`[AI-ANALYZE] Starting analysis for listing ${listingId}, tenant ${tenantId}`);
+        request.log.info({ listingId, tenantId }, 'Starting AI analysis');
 
         const service = new OpenAIService(tenantId);
 
@@ -60,11 +61,16 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const result = await service.analyzeAndSaveRecommendations(listingId);
 
-        console.log(`[AI-ANALYZE] Analysis complete for listing ${listingId}:`, {
-          score: result.analysis.score,
-          growthHacks: result.analysis.growthHacks.length,
-          savedRecommendations: result.savedRecommendations,
-        });
+        request.log.info(
+          {
+            listingId,
+            tenantId,
+            score: result.analysis.score,
+            growthHacksCount: result.analysis.growthHacks.length,
+            savedRecommendations: result.savedRecommendations,
+          },
+          'AI analysis complete'
+        );
 
         return reply.status(200).send({
           message: 'Análise concluída com sucesso',
@@ -80,70 +86,48 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           },
         });
       } catch (error) {
-        console.error('[AI-ANALYZE] Error analyzing listing:', error);
+        const { listingId } = (request.params as { listingId: string }) || {};
+        const { tenantId } = request as RequestWithAuth;
+
+        // Log erro sanitizado (sem tokens/secrets)
+        request.log.error({ listingId, tenantId, err: error }, 'Error analyzing listing');
 
         if (error instanceof z.ZodError) {
           return reply.status(400).send({
             error: 'Validation Error',
             message: 'ID do anúncio inválido',
-            details: error.errors,
           });
         }
 
-        // Detectar erros da OpenAI SDK (retorna erros com status, statusCode, response, etc.)
-        const openAIError = error as any;
-        const statusCode = openAIError?.status || openAIError?.statusCode || openAIError?.response?.status;
-        const errorMessage = error instanceof Error ? error.message : 'Erro interno';
-        const errorType = openAIError?.type || openAIError?.code || '';
+        // Detectar erros da OpenAI SDK
+        const openAIError = error as Record<string, unknown>;
+        const response = openAIError?.response as Record<string, unknown> | undefined;
+        const statusCode = (openAIError?.status || openAIError?.statusCode || response?.status) as number | undefined;
+        const errorType = (openAIError?.type || openAIError?.code) as string | undefined;
+        const responseData = response?.data as Record<string, unknown> | undefined;
+        const responseError = responseData?.error as Record<string, unknown> | undefined;
         
-        // Detectar 429 (Rate Limit / Quota) de múltiplas formas
+        // Detectar 429 (Rate Limit / Quota)
         const isRateLimit = 
           statusCode === 429 ||
-          errorMessage.toLowerCase().includes('429') ||
-          errorMessage.toLowerCase().includes('quota') ||
-          errorMessage.toLowerCase().includes('rate limit') ||
-          errorMessage.toLowerCase().includes('rate_limit') ||
           errorType === 'insufficient_quota' ||
           errorType === 'rate_limit_exceeded' ||
-          (openAIError?.response?.data?.error?.code === 'rate_limit_exceeded') ||
-          (openAIError?.response?.data?.error?.type === 'insufficient_quota');
+          responseError?.code === 'rate_limit_exceeded';
 
         if (isRateLimit) {
           return reply.status(429).send({
             error: 'Rate limit / Quota',
             message: 'Limite de uso da IA atingido. Tente novamente mais tarde.',
-            details: errorMessage,
           });
         }
 
-        // Check for specific OpenAI errors
-        if (errorMessage.includes('API key') || statusCode === 401) {
-          return reply.status(503).send({
-            error: 'Service Unavailable',
-            message: 'Serviço de IA não configurado corretamente.',
-          });
-        }
+        // Sanitizar erro da OpenAI
+        const sanitized = sanitizeOpenAIError(error);
 
-        if (errorMessage.includes('not found') || statusCode === 404) {
-          return reply.status(404).send({
-            error: 'Not Found',
-            message: errorMessage,
-          });
-        }
-
-        // Outros erros da OpenAI (500, 502, 503, 504)
-        if (statusCode && statusCode >= 500 && statusCode <= 504) {
-          return reply.status(statusCode).send({
-            error: 'OpenAI Service Error',
-            message: 'Erro no serviço de IA. Tente novamente em alguns instantes.',
-            details: errorMessage,
-          });
-        }
-
-        return reply.status(500).send({
+        // Retornar erro sanitizado (sem detalhes internos)
+        return reply.status(sanitized.statusCode || 500).send({
           error: 'Internal Server Error',
-          message: 'Falha ao analisar anúncio com IA',
-          details: errorMessage,
+          message: sanitized.message,
         });
       }
     }
@@ -185,7 +169,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           const service = new OpenAIService(tenantId);
           isAvailable = service.isAvailable();
         } catch (serviceError) {
-          console.error('[AI-STATUS] Erro ao verificar disponibilidade do serviço:', serviceError);
+          const { tenantId: tenantIdForLog } = request as RequestWithAuth;
+          request.log.warn({ tenantId: tenantIdForLog, err: serviceError }, 'Error checking service availability');
           // Continuar mesmo se houver erro, retornando keyConfigured
         }
 
@@ -197,11 +182,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           model: isAvailable ? 'gpt-4o' : null,
           message: isAvailable
             ? 'Serviço de IA disponível e configurado'
-            : 'Serviço de IA não configurado. OPENAI_API_KEY não definida.',
+            : 'Serviço de IA não configurado',
         });
       } catch (error) {
         // Garantir que sempre retornamos 200 OK mesmo em caso de erro inesperado
-        console.error('[AI-STATUS] Erro inesperado no endpoint de status:', error);
+        const { tenantId: tenantIdForLog } = request as RequestWithAuth;
+        request.log.error({ tenantId: tenantIdForLog, err: error }, 'Unexpected error in status endpoint');
         
         return reply.status(200).send({
           status: 'online',
@@ -209,7 +195,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           available: false,
           model: null,
           message: 'Erro ao verificar status do serviço de IA',
-          error: error instanceof Error ? error.message : 'Erro desconhecido',
         });
       }
     }
@@ -224,55 +209,62 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
  * Retorna apenas status e tempo (sem expor dados).
  */
 
-const enableDebugRoutes =
-  process.env.ENABLE_DEBUG_ROUTES === 'true' && process.env.NODE_ENV !== 'production';
+// Endpoint de debug: /api/v1/ai/ping
+// Desabilitado por padrão por segurança. Habilitar apenas em desenvolvimento com ENABLE_AI_PING=true
+const enableAIPing = process.env.ENABLE_AI_PING === 'true' && process.env.NODE_ENV !== 'production';
 
-if (enableDebugRoutes) {
-app.get(
-  '/ping',
-  { preHandler: authGuard },
-  async (request: FastifyRequest, reply: FastifyReply) => {
-    const start = Date.now();
+if (enableAIPing) {
+  app.get(
+    '/ping',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const start = Date.now();
+      try {
+        const { tenantId } = request as RequestWithAuth;
+        const hasKey = Boolean(process.env.OPENAI_API_KEY?.trim());
 
-    try {
-      const apiKey = process.env.OPENAI_API_KEY ?? '';
-      const hasKey = Boolean(apiKey && apiKey.trim().length > 0);
+        if (!hasKey) {
+          return reply.status(200).send({
+            ok: false,
+            hasKey: false,
+            status: null,
+            ms: Date.now() - start,
+          });
+        }
 
-      if (!hasKey) {
+        const res = await fetch('https://api.openai.com/v1/models', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+        });
+
+        const { tenantId: tenantIdForLog } = request as RequestWithAuth;
+        request.log.debug({ tenantId: tenantIdForLog, status: res.status, ms: Date.now() - start }, 'AI ping check');
+
+        return reply.status(200).send({
+          ok: res.ok,
+          hasKey: true,
+          status: res.status,
+          ms: Date.now() - start,
+        });
+      } catch (err) {
+        const { tenantId: tenantIdForLog } = request as RequestWithAuth;
+        request.log.warn({ tenantId: tenantIdForLog, err }, 'AI ping error');
         return reply.status(200).send({
           ok: false,
-          hasKey: false,
+          hasKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
           status: null,
           ms: Date.now() - start,
-          message: 'OPENAI_API_KEY não configurada no ambiente',
         });
       }
-
-      const res = await fetch('https://api.openai.com/v1/models', {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-
-      return reply.status(200).send({
-        ok: res.ok,
-        hasKey: true,
-        status: res.status,
-        ms: Date.now() - start,
-      });
-    } catch (err: any) {
-      return reply.status(200).send({
-        ok: false,
-        hasKey: true,
-        status: null,
-        ms: Date.now() - start,
-        error: err?.name ?? 'Error',
-        message: err?.message ?? String(err),
-      });
     }
-  }
-);
+  );
+} else {
+  // Retornar 404 quando desabilitado
+  app.get('/ping', async (request: FastifyRequest, reply: FastifyReply) => {
+    return reply.status(404).send({ error: 'Not Found' });
+  });
 }
 
   done();

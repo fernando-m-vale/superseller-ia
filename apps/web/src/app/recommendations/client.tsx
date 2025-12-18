@@ -84,7 +84,8 @@ export default function RecommendationsPage() {
       })
       refetch()
     } catch (error) {
-      console.error('Erro ao aplicar recomendação:', error)
+      // Log erro sem detalhes sensíveis
+      console.error('Erro ao aplicar recomendação')
       toast({
         variant: 'destructive',
         title: 'Erro',

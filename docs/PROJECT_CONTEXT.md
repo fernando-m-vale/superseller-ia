@@ -35,3 +35,48 @@ O SuperSeller IA encontra-se em estágio funcional avançado, com o core de Inte
   - UX de sessão expirada (tratamento global de 401)
   - Refinar UX de ativação e limites
   - Preparar controle de custos e rate limit
+
+
+## Estado atual — PRIORIDADE 0 (Higiene e segurança)
+
+### Decisão: desativar página `/ai` (temporário)
+- Motivo: `/ai` chamava rota inexistente no backend (`GET /api/v1/ai/recommendations?days=7`) e exibia “Route not found” mesmo autenticado.
+- A IA que gera valor está no fluxo de anúncios: modal do anúncio → aba **Inteligência Artificial** → “Gerar Análise Completa”.
+
+### Implementação desejada
+- Frontend: `apps/web/src/app/ai/page.tsx`
+  - Remover/evitar fetches para `/ai/recommendations` e `/ai/actions`.
+  - Renderizar conteúdo estático com instrução: usar IA dentro dos anúncios.
+- Navegação:
+  - Remover link/menu para `/ai` ou marcar como “IA (em breve)” sem permitir UX quebrada.
+
+
+### Atualização (2025-12-18) — Sessão expirada (401) padronizada + /ai desativado (informativo)
+
+#### Sessão expirada (401) — resolvido (global)
+- Implementado tratamento centralizado de 401 no frontend:
+  - Para axios: interceptor chama `handleUnauthorized()` e força logout seguro (limpa tokens + redirect /login).
+  - Para fetch: wrapper `apiFetch()` injeta Authorization e chama `handleUnauthorized()` em 401.
+- UX no login:
+  - Página `/login` exibe mensagem clara quando `auth:reason=session_expired`.
+
+**Resultado:** toda chamada autenticada agora tem comportamento consistente ao expirar o token (sem crash, sem “tela branca”).
+
+#### IA no produto — fluxo oficial consolidado
+- A IA **permanece integrada no fluxo de Anúncios**:
+  1) Anúncios → abrir modal do anúncio  
+  2) Aba “Inteligência Artificial”  
+  3) “Gerar Análise Completa” (score, diagnóstico, hacks e SEO)  
+  4) Copiar sugestões (título/descrição)  
+- A rota `/ai` foi **desativada como página “dinâmica”** e virou **página informativa** (instruções), para evitar dependência de endpoints inexistentes.
+
+#### Estado atual do menu “Recomendações”
+- Ainda existe no menu lateral.
+- Página está instável (erro 500 no carregamento).
+- Diretriz de curto prazo:
+  - Ocultar/retirar “Recomendações” do menu **até estabilizar backend**, ou manter rota com placeholder “Em breve / Em manutenção” para não quebrar UX.
+
+#### Commits relacionados (rastreabilidade)
+- `3a29040` — global 401 session expired handling (axios + UX login)
+- `10c10a4` — global 401 handling para fetch (apiFetch + migrações)
+- `d6874e6` — desativação da página /ai (informativa)

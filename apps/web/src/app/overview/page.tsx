@@ -63,7 +63,8 @@ function OverviewContent() {
         window.location.href = data.authUrl;
       }
     } catch (error) {
-      console.error('Erro ao reconectar:', error);
+      // Log erro sem detalhes sensíveis
+      console.error('Erro ao reconectar');
     }
   };
 

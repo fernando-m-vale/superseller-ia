@@ -124,7 +124,8 @@ function AIAnalysisTab({
               await onAnalyze()
             } catch (err) {
               // Erro já foi tratado no hook, apenas logar para debugging
-              console.error('[AI-ANALYZE] Erro ao tentar novamente:', err)
+              // Log erro sem detalhes sensíveis
+              console.error('[AI-ANALYZE] Erro ao tentar novamente')
             }
           }} 
           variant="outline"
@@ -360,7 +361,8 @@ export function ListingsTable() {
       refetchRecommendations()
       refetchSelectedRecommendations()
     } catch (error) {
-      console.error('Erro ao aplicar recomendação:', error)
+      // Log erro sem detalhes sensíveis
+      console.error('Erro ao aplicar recomendação')
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -719,7 +721,8 @@ export function ListingsTable() {
                     await triggerAIAnalysis()
                   } catch (error) {
                     // Erro já foi tratado no hook, apenas logar para debugging
-                    console.error('[AI-ANALYZE] Erro ao disparar análise:', error)
+                    // Log erro sem detalhes sensíveis
+                    console.error('[AI-ANALYZE] Erro ao disparar análise')
                     // Não mostrar toast de erro aqui, o componente AIAnalysisTab já exibe o erro
                   }
                 }}

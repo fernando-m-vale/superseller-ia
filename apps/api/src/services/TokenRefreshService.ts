@@ -23,7 +23,10 @@ export class TokenRefreshService {
     const now = new Date();
     const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 horas
 
-    console.log('[TOKEN-REFRESH] Iniciando refresh proativo de tokens...');
+    // Log apenas em desenvolvimento
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[TOKEN-REFRESH] Iniciando refresh proativo de tokens...');
+    }
 
     // Buscar conexões que expiram nas próximas 2 horas
     const expiringConnections = await prisma.marketplaceConnection.findMany({
@@ -38,7 +41,10 @@ export class TokenRefreshService {
       },
     });
 
-    console.log(`[TOKEN-REFRESH] Encontradas ${expiringConnections.length} conexões para refresh`);
+    // Log apenas contagem, sem detalhes sensíveis
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[TOKEN-REFRESH] Encontradas ${expiringConnections.length} conexões para refresh`);
+    }
 
     let refreshed = 0;
     let failed = 0;
@@ -48,12 +54,16 @@ export class TokenRefreshService {
       try {
         await this.refreshToken(connection.id, connection.refresh_token!);
         refreshed++;
-        console.log(`[TOKEN-REFRESH] ✅ Token renovado para conexão ${connection.id} (tenant: ${connection.tenant_id})`);
+        // Log apenas em desenvolvimento, sem tokens
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[TOKEN-REFRESH] Token renovado para conexão ${connection.id} (tenant: ${connection.tenant_id})`);
+        }
       } catch (error) {
         failed++;
         const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
         errors.push(`Conexão ${connection.id}: ${errorMsg}`);
-        console.error(`[TOKEN-REFRESH] ❌ Falha ao renovar token para conexão ${connection.id}:`, errorMsg);
+        // Log erro sem detalhes sensíveis
+        console.error(`[TOKEN-REFRESH] Falha ao renovar token para conexão ${connection.id}`);
       }
     }
 

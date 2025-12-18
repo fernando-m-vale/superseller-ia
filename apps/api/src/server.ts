@@ -10,8 +10,9 @@ import { syncRoutes } from './routes/sync.routes';
 import { recommendationsRoutes } from './routes/recommendations.routes';
 import { aiAnalyzeRoutes } from './routes/ai-analyze.routes';
 import { TokenRefreshService } from './services/TokenRefreshService';
+import { loggerConfig } from './utils/logger-config';
 
-const app = fastify({ logger: true });
+const app = fastify({ logger: loggerConfig });
 
 app.register(cors, { origin: '*' });
 
@@ -26,25 +27,28 @@ app.get('/api/v1/health', async () => ({ status: 'ok', timestamp: new Date().toI
  * Executa a cada hora
  */
 function scheduleTokenRefresh() {
-  console.log('[TOKEN-REFRESH] Agendando refresh proativo de tokens (executa a cada hora)...');
+  app.log.info('Scheduling proactive token refresh (runs every hour)');
   
   // Executar imediatamente na inicialização
   TokenRefreshService.refreshExpiringTokens().catch((err: unknown) => {
-    console.error('[TOKEN-REFRESH] Erro no refresh inicial:', err);
+    app.log.error({ err }, 'Error in initial token refresh');
   });
 
   // Executar a cada hora (3600000 ms)
   setInterval(() => {
-    console.log('[TOKEN-REFRESH] Executando refresh proativo de tokens...');
+    app.log.debug('Executing scheduled token refresh');
     TokenRefreshService.refreshExpiringTokens().catch((err: unknown) => {
-      console.error('[TOKEN-REFRESH] Erro no refresh agendado:', err);
+      app.log.error({ err }, 'Error in scheduled token refresh');
     });
   }, 60 * 60 * 1000); // 1 hora
 }
 
 async function main() {
   try {
-    console.log('--- [DEBUG] Server Starting ---');
+    // Log apenas em desenvolvimento
+    if (process.env.NODE_ENV !== 'production') {
+      app.log.debug('Server starting...');
+    }
 
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
@@ -58,17 +62,19 @@ async function main() {
     await app.register(aiAnalyzeRoutes, { prefix: '/api/v1/ai' });
 
     await app.ready();
-    console.log('\n--- 🗺️  ROTA MAP ---');
-    console.log(app.printRoutes());
-    console.log('-------------------\n');
+    
+    // Log de rotas apenas em desenvolvimento
+    if (process.env.NODE_ENV !== 'production') {
+      app.log.debug({ routes: app.printRoutes() }, 'Routes registered');
+    }
 
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
-    console.log(`🚀 HTTP Server running on port ${env.PORT}`);
+    app.log.info({ port: env.PORT }, 'HTTP Server running');
 
     // Iniciar cron job de refresh proativo de tokens (executa a cada hora)
     scheduleTokenRefresh();
   } catch (err) {
-    console.error('FATAL ERROR STARTING SERVER:', err);
+    app.log.fatal({ err }, 'FATAL ERROR STARTING SERVER');
     process.exit(1);
   }
 }

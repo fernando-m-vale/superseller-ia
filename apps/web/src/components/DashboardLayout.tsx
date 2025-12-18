@@ -69,7 +69,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         window.location.href = data.authUrl
       }
     } catch (error) {
-      console.error('Erro ao conectar conta:', error)
+      // Log erro sem detalhes sensíveis
+      console.error('Erro ao conectar conta')
       // Fallback: redirecionar para overview onde tem o botão de conectar
       router.push('/overview')
     }

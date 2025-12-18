@@ -1,5 +1,120 @@
 Developer Log - SuperSeller IA
 
+## 2025-12-18 — PRIORIDADE 0 concluída (401 global) + /ai desativado (página informativa)
+
+### Status
+✅ Tratamento global de sessão expirada (401) implementado no frontend (axios + fetch)  
+🟡 /ai (página antiga de recomendações) desativada e substituída por instruções (para evitar rotas inexistentes)  
+🔴 Menu "Recomendações" ainda aparece e a página retorna erro 500 (backlog imediato)
+
+---
+
+### O que foi feito (PRIORIDADE 0)
+
+#### 1) Tratamento global de 401 (axios)
+- Criado `apps/web/src/lib/auth-401.ts` com `handleUnauthorized()`:
+  - single-flight guard (evita múltiplos redirects)
+  - limpeza de tokens (cookie + localStorage)
+  - flag `auth:reason=session_expired`
+  - redirect para `/login`
+- Atualizado `apps/web/src/lib/axios.ts`:
+  - interceptor de response chama `handleUnauthorized()` em `401`
+- Atualizado `apps/web/src/app/login/page.tsx`:
+  - lê `auth:reason` e exibe mensagem “Sua sessão expirou. Faça login novamente.”
+  - remove a flag após exibir
+
+Commit: `3a29040` — `fix(web): global 401 session expired handling`
+
+#### 2) Tratamento global de 401 (fetch)
+- Criado `apps/web/src/lib/api-fetch.ts` com wrapper `apiFetch()`:
+  - anexa Authorization automaticamente
+  - chama `handleUnauthorized()` quando `response.status === 401`
+  - retorna a Response (não “engole”)
+- Migrações:
+  - `apps/web/src/lib/marketplaces.ts` (3 funções)
+  - `apps/web/src/app/ai/page.tsx` (4 chamadas – enquanto ainda existiam)
+  - `apps/web/src/lib/auth.ts` (apenas `/auth/me`)
+
+Commit: `10c10a4` — `fix(web): finish global 401 handling for fetch-based calls`
+
+---
+
+### Ajuste de produto/rota: desativar /ai (página “dinâmica” antiga)
+**Motivo:** a rota `/ai` estava chamando endpoints inexistentes e retornando erro “Route ... not found”.  
+**Ação:** `apps/web/src/app/ai/page.tsx` virou uma página informativa que orienta usar IA dentro do modal de Anúncios.  
+**Checklist:** removido CTA que apontava para `/ai`.
+
+Commit: `d6874e6` — `fix(web): disable /ai page (route mismatch)`
+
+---
+
+### Testes manuais (produção)
+- 401 global:
+  - ao remover/invalidar token, usuário é redirecionado para `/login` ✅
+  - mensagem de sessão expirada exibida ✅
+- IA nos anúncios:
+  - modal do anúncio → aba IA → “Gerar Análise Completa” funciona ✅
+  - copiar Title/Description funciona ✅
+- /ai:
+  - abre e mostra orientações (sem chamadas de API) ✅
+
+---
+
+### Problema atual (Backlog imediato)
+- Menu **Recomendações** ainda existe e a tela falha com **500**.
+- Decisão de curto prazo (recomendado):
+  - **ocultar “Recomendações” do menu** até o backend estabilizar (feature flag ou remoção temporária),
+  - OU substituir a página por placeholder “Em manutenção / em breve” para evitar UX quebrada.
+
+Próximo passo sugerido: “Prioridade 0.1 — Remover/ocultar menu Recomendações + placeholder de rota”.
+
+
+### 2025-12-18 — PRIORIDADE 0: Higiene / Remover rota quebrada (/ai)
+
+**Contexto**
+- Página `/ai` estava quebrada mesmo com sessão válida.
+- Erro exibido: `Route GET:/api/v1/ai/recommendations?days=7 not found`.
+- Diagnóstico: mismatch/rota inexistente no backend (não é problema de auth).
+
+**Ação**
+- Decidido desativar a página `/ai` temporariamente.
+- Substituir conteúdo por mensagem orientando usuário a usar IA no modal de anúncios (aba “Inteligência Artificial”).
+- Remover (ou marcar como “em breve”) o link de navegação para `/ai` se existir.
+
+**Resultado esperado**
+- `/ai` não faz chamadas a endpoints inexistentes.
+- Sem erro “Route not found” e sem tela branca.
+- UX clara redirecionando para o fluxo real (IA nos anúncios).
+
+
+## 2025-12-17 — PRIORIDADE 0: tratamento global de sessão expirada (401) no frontend (Axios)
+
+### Objetivo
+Melhorar higiene/segurança e UX do beta: ao receber 401 (token expirado/inválido), limpar sessão e redirecionar para login com mensagem clara.
+
+### Implementação
+- Criado handler centralizado para 401 com single-flight guard (evita loops/múltiplas execuções).
+- Limpeza completa de tokens (cookie + localStorage).
+- Flag de motivo para UX (`auth:reason=session_expired`).
+- Redirecionamento automático para `/login`.
+- Login exibe mensagem amigável quando sessão expira.
+
+### Arquivos
+- `apps/web/src/lib/auth-401.ts` (novo)
+- `apps/web/src/lib/axios.ts` (interceptor 401 → handleUnauthorized)
+- `apps/web/src/app/login/page.tsx` (mensagem de sessão expirada)
+
+### Commit
+- `3a29040` — `fix(web): global 401 session expired handling`
+
+### Testes (produção)
+- Teste A: remover `accessToken` e acionar request → redirect para `/login` OK
+- Teste B: `accessToken` inválido → mesmo comportamento OK
+
+### Pendência imediata
+- Completar camada fetch: criar `apiFetch()` com tratamento 401 e migrar chamadas diretas (`marketplaces.ts`, `app/ai/page.tsx`, `auth/me`).
+
+
 ## 2025-12-16 — Marco: IA funcional e estável em produção
 
 ### O que foi feito

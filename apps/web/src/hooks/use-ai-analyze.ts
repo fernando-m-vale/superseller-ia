@@ -133,13 +133,10 @@ export function useAIAnalyze(listingId: string | null) {
           errorData = { message: 'Erro desconhecido' }
         }
 
-        // Log específico do código de erro
+        // Log erro sem detalhes sensíveis (sem response completo)
         console.error('[AI-ANALYZE] Erro na análise:', {
           statusCode,
           listingId,
-          error: errorData.error || errorData.message,
-          details: errorData.details,
-          response: errorData,
         })
 
         // Mensagens específicas por código de status
@@ -178,14 +175,11 @@ export function useAIAnalyze(listingId: string | null) {
         error: null,
       })
     } catch (error) {
-      // Log do erro completo para debugging
+      // Log erro sem detalhes sensíveis
       const errorWithStatus = error as ErrorWithStatusCode
       console.error('[AI-ANALYZE] Erro capturado:', {
-        error,
         listingId,
-        message: error instanceof Error ? error.message : 'Erro desconhecido',
         statusCode: errorWithStatus.statusCode,
-        errorData: errorWithStatus.errorData,
       })
 
       // Garantir que errorMessage seja sempre uma string válida
