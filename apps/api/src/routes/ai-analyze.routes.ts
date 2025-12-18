@@ -35,9 +35,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
     '/analyze/:listingId',
     { preHandler: authGuard },
     async (request: FastifyRequest<{ Params: { listingId: string } }>, reply: FastifyReply) => {
-      try {
-        const { tenantId } = request as RequestWithAuth;
+      // Declarar variáveis de contexto uma vez no topo do handler
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
 
+      try {
         if (!tenantId) {
           return reply.status(401).send({
             error: 'Unauthorized',
@@ -47,7 +48,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const params = AnalyzeParamsSchema.parse(request.params);
         const { listingId } = params;
-        const { requestId, userId } = request;
 
         request.log.info({ 
           requestId,
@@ -67,7 +67,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const result = await service.analyzeAndSaveRecommendations(listingId);
 
-        const { requestId, userId } = request;
         request.log.info(
           {
             requestId,
@@ -96,9 +95,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       } catch (error) {
         const { listingId } = (request.params as { listingId: string }) || {};
-        const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
 
         // Log erro sanitizado (sem tokens/secrets)
+        // Reutilizar variáveis já declaradas no topo do handler
         request.log.error({ 
           requestId,
           userId,
@@ -161,9 +160,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
     '/status',
     { preHandler: authGuard },
     async (request: FastifyRequest, reply: FastifyReply) => {
+      // Declarar variáveis de contexto uma vez no topo do handler
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
       try {
-        const { tenantId } = request as RequestWithAuth;
-        
         if (!tenantId) {
           return reply.status(401).send({
             status: 'online',
@@ -184,8 +184,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           const service = new OpenAIService(tenantId);
           isAvailable = service.isAvailable();
         } catch (serviceError) {
-          const { tenantId: tenantIdForLog } = request as RequestWithAuth;
-          request.log.warn({ tenantId: tenantIdForLog, err: serviceError }, 'Error checking service availability');
+          request.log.warn({ requestId, userId, tenantId, err: serviceError }, 'Error checking service availability');
           // Continuar mesmo se houver erro, retornando keyConfigured
         }
 
@@ -201,8 +200,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       } catch (error) {
         // Garantir que sempre retornamos 200 OK mesmo em caso de erro inesperado
-        const { tenantId: tenantIdForLog } = request as RequestWithAuth;
-        request.log.error({ tenantId: tenantIdForLog, err: error }, 'Unexpected error in status endpoint');
+        // Reutilizar variáveis já declaradas no topo do handler
+        request.log.error({ requestId, userId, tenantId, err: error }, 'Unexpected error in status endpoint');
         
         return reply.status(200).send({
           status: 'online',
@@ -234,8 +233,10 @@ if (enableAIPing) {
     { preHandler: authGuard },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const start = Date.now();
+      // Declarar variáveis de contexto uma vez no topo do handler
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
       try {
-        const { tenantId } = request as RequestWithAuth;
         const hasKey = Boolean(process.env.OPENAI_API_KEY?.trim());
 
         if (!hasKey) {
@@ -254,8 +255,7 @@ if (enableAIPing) {
           },
         });
 
-        const { tenantId: tenantIdForLog } = request as RequestWithAuth;
-        request.log.debug({ tenantId: tenantIdForLog, status: res.status, ms: Date.now() - start }, 'AI ping check');
+        request.log.debug({ requestId, userId, tenantId, status: res.status, ms: Date.now() - start }, 'AI ping check');
 
         return reply.status(200).send({
           ok: res.ok,
@@ -264,8 +264,8 @@ if (enableAIPing) {
           ms: Date.now() - start,
         });
       } catch (err) {
-        const { tenantId: tenantIdForLog } = request as RequestWithAuth;
-        request.log.warn({ tenantId: tenantIdForLog, err }, 'AI ping error');
+        // Reutilizar variáveis já declaradas no topo do handler
+        request.log.warn({ requestId, userId, tenantId, err }, 'AI ping error');
         return reply.status(200).send({
           ok: false,
           hasKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
