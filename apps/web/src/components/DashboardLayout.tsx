@@ -21,10 +21,15 @@ import { clearTokens, getAccessToken } from '@/lib/auth'
 import { useAuth } from '@/hooks/use-auth'
 import { getApiBaseUrl } from '@/lib/api'
 
+// Feature flag: Temporariamente desativado por instabilidade no backend (erro 500)
+// Para reativar, alterar para true
+const ENABLE_RECOMMENDATIONS = false
+
 const menuItems = [
   { href: '/overview', label: 'Visão Geral', icon: LayoutDashboard },
   { href: '/listings', label: 'Anúncios', icon: Package },
-  { href: '/recommendations', label: 'Recomendações', icon: Lightbulb },
+  // Recomendações temporariamente desativada - ver ENABLE_RECOMMENDATIONS acima
+  ...(ENABLE_RECOMMENDATIONS ? [{ href: '/recommendations', label: 'Recomendações', icon: Lightbulb }] : []),
 ]
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
