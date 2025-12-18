@@ -1,5 +1,74 @@
 Developer Log - SuperSeller IA
 
+# Dev Log — SuperSeller IA
+
+## 2025-12-18
+
+### PRIORIDADE 0 — Higiene, Segurança e Estabilidade ✅
+- Logs sensíveis removidos (backend + frontend)
+- Logger Fastify com redaction configurado
+- Sanitização de erros (OpenAI e internos)
+- Tratamento global de 401:
+  - Axios interceptor
+  - Wrapper global para fetch (`apiFetch`)
+- UX protegida contra React error #31
+- Páginas instáveis desativadas:
+  - `/ai` (mantida versão informativa)
+  - `/recommendations` (menu escondido via feature flag)
+
+---
+
+### PRIORIDADE 1 — IA com dados reais (em andamento)
+
+#### Diagnóstico Inicial
+- IA acusava ausência de fotos, descrição, visitas e vendas
+- SQL confirmou:
+  - `listing_metrics_daily` vazia inicialmente
+  - Agregados do listing zerados ou inconsistentes
+
+#### Implementações
+- Criado endpoint manual de sync de métricas:
+  - `POST /api/v1/sync/mercadolivre/metrics?days=30`
+- Execução manual confirmada:
+  - `listingsProcessed = 15`
+  - `metricsCreated = 270`
+- Métricas agora existem no banco:
+  - Período: 2025-11-18 → 2025-12-17
+
+#### Problemas Ainda Abertos
+- Nenhum listing retorna simultaneamente:
+  - `pictures_count > 0`
+  - `visits_30d > 0`
+- SQL A (top anúncios com mídia + performance) não retorna resultados
+- SQL de mídia/performance do listing retorna dados vazios
+- Forte indício de:
+  - Sync de listings não populando mídia/performance corretamente
+  - ou dados sendo sobrescritos com zero
+  - ou métricas gravadas para subset de listings
+
+#### Decisão Importante
+- NÃO gerar métricas diárias artificiais
+- Apenas dados reais ou snapshots honestos
+- IA deve refletir dataQuality real (sem inventar dados)
+
+---
+
+### Próximos Passos Planejados (para 2025-12-19)
+
+1. Executar SQLs de diagnóstico:
+   - Distribuição de mídia no `listings`
+   - Top performance em `listing_metrics_daily`
+   - Join entre métricas e listings
+2. Identificar:
+   - Se métricas existem mas não conectam aos listings
+   - Se listings nunca recebem mídia/performance
+3. Rodar (ou criar) sync completo de listings:
+   - Reidratar `pictures_count`, `has_video`, `description`
+   - Popular `visits_last_7d`, `sales_last_7d` sem sobrescrita indevida
+4. Reexecutar sync de métricas
+5. Validar IA em um anúncio “bom” (canário)
+
+
 ## 2025-12-18 — PRIORIDADE 0 concluída (401 global) + /ai desativado (página informativa)
 
 ### Status

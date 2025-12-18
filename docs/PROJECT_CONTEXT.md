@@ -1,82 +1,68 @@
-## Estado Atual do Projeto (Dezembro/2025)
+# SuperSeller IA — Project Context (Atualizado em 2025-12-18)
 
-O SuperSeller IA encontra-se em estágio funcional avançado, com o core de Inteligência Artificial operacional e integrado ao fluxo principal do produto.
+## Visão Geral
+SuperSeller IA é uma plataforma SaaS que utiliza dados reais de marketplaces (inicialmente Mercado Livre)
+para gerar diagnósticos, recomendações e ações inteligentes que aumentam visibilidade, conversão e vendas
+de anúncios e contas de sellers.
 
-### Status Geral
-- Frontend e Backend em produção estáveis
-- Integração com OpenAI (gpt-4o) funcionando
-- Análises de IA geram score, diagnóstico, hacks de crescimento e sugestões de SEO
-- Recomendações são persistidas no banco de dados
-- UI renderiza corretamente sem crashes (React error #31 resolvido)
+O core do produto é a **Inteligência Artificial aplicada a dados reais do seller**, não regras genéricas.
 
-### Fluxo de IA (Atual)
-1. Usuário acessa Anúncios
-2. Abre modal de um anúncio
-3. Aba "Inteligência Artificial"
-4. Clica em "Gerar Análise Completa"
-5. Backend executa análise com OpenAI
-6. Retorno inclui:
-   - Score (0–100)
-   - Diagnóstico textual
-   - Hacks de crescimento estruturados
-   - Sugestões de SEO (título + descrição)
-7. Frontend adapta e renderiza os dados corretamente
-8. Usuário pode copiar sugestões diretamente
+---
 
-### Decisões Técnicas Importantes
-- Uso de adapter no frontend para compatibilizar resposta da API com UI
-- Backend retorna erros da OpenAI de forma semântica (429, 401, 5xx)
-- Frontend nunca renderiza objetos diretamente (String(...) obrigatório)
-- IA é tratada como serviço crítico do produto (core)
+## Status Atual do Projeto
 
-### Estado do Beta
-- Produto pronto para Beta Fechado
-- Falta apenas:
-  - UX de sessão expirada (tratamento global de 401)
-  - Refinar UX de ativação e limites
-  - Preparar controle de custos e rate limit
+### Infra & Segurança (PRIORIDADE 0) — ✅ CONCLUÍDA
+- Logging sanitizado (backend + frontend)
+- Redaction de secrets, tokens, headers sensíveis
+- Stack traces removidos em produção
+- Tratamento global de 401 (axios + fetch)
+- UX protegida contra crashes (React error #31 eliminado)
+- Endpoints de debug protegidos por feature flag
+- Páginas instáveis desativadas:
+  - `/ai` (mantida apenas versão informativa)
+  - `/recommendations` (feature flag off no menu)
 
+---
 
-## Estado atual — PRIORIDADE 0 (Higiene e segurança)
+## Inteligência Artificial — Estado Atual
 
-### Decisão: desativar página `/ai` (temporário)
-- Motivo: `/ai` chamava rota inexistente no backend (`GET /api/v1/ai/recommendations?days=7`) e exibia “Route not found” mesmo autenticado.
-- A IA que gera valor está no fluxo de anúncios: modal do anúncio → aba **Inteligência Artificial** → “Gerar Análise Completa”.
+### Pipeline de Dados
+- `listings`: dados básicos do anúncio (título, descrição, mídia, agregados)
+- `listing_metrics_daily`: métricas diárias (visits, orders, gmv, impressions, clicks)
 
-### Implementação desejada
-- Frontend: `apps/web/src/app/ai/page.tsx`
-  - Remover/evitar fetches para `/ai/recommendations` e `/ai/actions`.
-  - Renderizar conteúdo estático com instrução: usar IA dentro dos anúncios.
-- Navegação:
-  - Remover link/menu para `/ai` ou marcar como “IA (em breve)” sem permitir UX quebrada.
+### Situação Identificada
+- A IA gerava análises incorretas (“sem fotos”, “sem visitas”) porque:
+  - `listing_metrics_daily` estava vazia
+  - campos agregados (`pictures_count`, `has_video`, `visits_last_7d`, `sales_last_7d`)
+    estavam zerados ou sendo sobrescritos com 0
+- Sync de métricas foi implementado e executado manualmente:
+  - `POST /api/v1/sync/mercadolivre/metrics?days=30`
+  - Resultado: `metricsCreated=270`, `listingsProcessed=15`
 
+### Situação Atual (Importante)
+- Existem métricas no banco, mas:
+  - Nem todos os listings recebem métricas
+  - Nenhum listing retorna simultaneamente:
+    - `pictures_count > 0`
+    - `visits_30d > 0`
+- Indício forte de problema no **sync de listings (mídia/performance)** ou sobrescrita indevida
+- Decisão tomada: **NÃO criar métricas diárias artificiais**
+  - Apenas dados reais ou snapshots honestos
+  - IA deve usar fallback + dataQuality quando necessário
 
-### Atualização (2025-12-18) — Sessão expirada (401) padronizada + /ai desativado (informativo)
+---
 
-#### Sessão expirada (401) — resolvido (global)
-- Implementado tratamento centralizado de 401 no frontend:
-  - Para axios: interceptor chama `handleUnauthorized()` e força logout seguro (limpa tokens + redirect /login).
-  - Para fetch: wrapper `apiFetch()` injeta Authorization e chama `handleUnauthorized()` em 401.
-- UX no login:
-  - Página `/login` exibe mensagem clara quando `auth:reason=session_expired`.
+## Decisão Estratégica
+- PRIORIDADE 1 seguirá abordagem **DB-first**:
+  - Corrigir ingestão e persistência de dados
+  - Só depois evoluir prompt e inteligência da IA
+- Análises avançadas (concorrência, ads, score da conta) ficam no backlog
 
-**Resultado:** toda chamada autenticada agora tem comportamento consistente ao expirar o token (sem crash, sem “tela branca”).
+---
 
-#### IA no produto — fluxo oficial consolidado
-- A IA **permanece integrada no fluxo de Anúncios**:
-  1) Anúncios → abrir modal do anúncio  
-  2) Aba “Inteligência Artificial”  
-  3) “Gerar Análise Completa” (score, diagnóstico, hacks e SEO)  
-  4) Copiar sugestões (título/descrição)  
-- A rota `/ai` foi **desativada como página “dinâmica”** e virou **página informativa** (instruções), para evitar dependência de endpoints inexistentes.
-
-#### Estado atual do menu “Recomendações”
-- Ainda existe no menu lateral.
-- Página está instável (erro 500 no carregamento).
-- Diretriz de curto prazo:
-  - Ocultar/retirar “Recomendações” do menu **até estabilizar backend**, ou manter rota com placeholder “Em breve / Em manutenção” para não quebrar UX.
-
-#### Commits relacionados (rastreabilidade)
-- `3a29040` — global 401 session expired handling (axios + UX login)
-- `10c10a4` — global 401 handling para fetch (apiFetch + migrações)
-- `d6874e6` — desativação da página /ai (informativa)
+## Próximo Foco (amanhã)
+- Validar ingestão real de mídia e performance
+- Identificar se o problema está:
+  - no sync de listings
+  - no join/mapeamento
+  - ou na origem (API do Mercado Livre)
