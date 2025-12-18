@@ -18,6 +18,11 @@ const OrdersSyncQuerySchema = z.object({
   days: z.coerce.number().min(1).max(90).default(30),
 });
 
+// Schema para validar query params de sync de métricas
+const MetricsSyncQuerySchema = z.object({
+  days: z.coerce.number().min(1).max(90).default(30),
+});
+
 export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   // Configurar para aceitar body vazio em rotas POST
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -399,6 +404,118 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/mercadolivre/metrics
+   * 
+   * Dispara sincronização manual das métricas diárias dos anúncios do Mercado Livre.
+   * Query params:
+   *   - days: Número de dias para buscar (default: 30, max: 90)
+   * 
+   * Esta rota é temporária para permitir ingestão manual de métricas.
+   * As métricas são aproximadas baseadas em dados agregados da API do ML.
+   */
+  app.post(
+    '/mercadolivre/metrics',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const query = MetricsSyncQuerySchema.parse(request.query);
+        const daysBack = query.days;
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          days: daysBack,
+        }, 'Requisição de sync de métricas recebida');
+
+        // Instanciar service e executar sync
+        const syncService = new MercadoLivreSyncService(tenantId);
+        const result = await syncService.syncListingMetricsDaily(daysBack);
+
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = result.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        // Retornar resultado
+        if (result.success) {
+          app.log.info({
+            requestId,
+            userId,
+            tenantId,
+            listingsProcessed: result.listingsProcessed,
+            metricsCreated: result.metricsCreated,
+            duration: result.duration,
+          }, 'Sync de métricas concluído com sucesso');
+
+          return reply.status(200).send({
+            message: 'Sincronização de métricas concluída com sucesso',
+            data: {
+              listingsProcessed: result.listingsProcessed,
+              metricsCreated: result.metricsCreated,
+              duration: `${result.duration}ms`,
+            },
+          });
+        } else {
+          app.log.warn({
+            requestId,
+            userId,
+            tenantId,
+            listingsProcessed: result.listingsProcessed,
+            metricsCreated: result.metricsCreated,
+            errors: result.errors,
+          }, 'Sync de métricas concluído com erros');
+
+          return reply.status(207).send({
+            message: 'Sincronização de métricas concluída com erros',
+            data: {
+              listingsProcessed: result.listingsProcessed,
+              metricsCreated: result.metricsCreated,
+              duration: `${result.duration}ms`,
+              errors: result.errors,
+            },
+          });
+        }
+      } catch (error: any) {
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro na sincronização de métricas');
+        return reply.status(500).send({
+          error: 'Falha na sincronização de métricas',
+          message: error instanceof Error ? error.message : 'Erro interno',
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/sync/status
    * 
    * Endpoint auxiliar para verificar se o serviço de sync está disponível
@@ -411,6 +528,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
       endpoints: [
         'POST /mercadolivre - Sync de anúncios',
         'POST /mercadolivre/orders - Sync de pedidos',
+        'POST /mercadolivre/metrics - Sync de métricas diárias',
         'POST /mercadolivre/full - Sync completo',
         'POST /recalculate-scores - Recalcular Super Seller Score',
       ],

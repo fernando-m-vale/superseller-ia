@@ -578,7 +578,12 @@ export class MercadoLivreSyncService {
           },
         });
 
-        const listingData = {
+        // Não sobrescrever visits_last_7d/sales_last_7d com 0 se não houver dados da API
+        // Manter valores existentes se a API não retornar esses campos
+        const visitsFromAPI = item.visits;
+        const salesFromAPI = item.sold_quantity;
+        
+        const listingData: any = {
           title: item.title,
           description,
           price: item.price,
@@ -596,9 +601,16 @@ export class MercadoLivreSyncService {
           thumbnail_url: item.thumbnail,
           pictures_count: picturesCount,
           has_video: hasVideo,
-          visits_last_7d: item.visits || 0,
-          sales_last_7d: item.sold_quantity || 0,
         };
+
+        // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos
+        // Isso evita sobrescrever com 0 quando não há dados
+        if (visitsFromAPI !== undefined && visitsFromAPI !== null) {
+          listingData.visits_last_7d = visitsFromAPI;
+        }
+        if (salesFromAPI !== undefined && salesFromAPI !== null) {
+          listingData.sales_last_7d = salesFromAPI;
+        }
 
         if (existing) {
           await prisma.listing.update({
@@ -737,6 +749,195 @@ export class MercadoLivreSyncService {
       chunks.push(array.slice(i, i + size));
     }
     return chunks;
+  }
+
+  /**
+   * Sincroniza métricas diárias dos anúncios do Mercado Livre
+   * 
+   * Busca métricas dos últimos periodDays e persiste em listing_metrics_daily.
+   * Como a API do ML não fornece métricas diárias diretamente, usa aproximação
+   * baseada em dados agregados e distribuição proporcional.
+   * 
+   * @param periodDays Período em dias para buscar métricas (padrão: 30)
+   */
+  async syncListingMetricsDaily(periodDays: number = 30): Promise<{
+    success: boolean;
+    listingsProcessed: number;
+    metricsCreated: number;
+    errors: string[];
+    duration: number;
+  }> {
+    const startTime = Date.now();
+    const result = {
+      success: false,
+      listingsProcessed: 0,
+      metricsCreated: 0,
+      errors: [] as string[],
+      duration: 0,
+    };
+
+    try {
+      console.log(`[ML-METRICS] Iniciando sync de métricas diárias para tenant: ${this.tenantId} (${periodDays} dias)`);
+
+      // 1. Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      // 2. Buscar todos os listings ativos do tenant
+      const listings = await prisma.listing.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+          status: ListingStatus.active,
+        },
+      });
+
+      console.log(`[ML-METRICS] Encontrados ${listings.length} anúncios ativos`);
+
+      if (listings.length === 0) {
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        return result;
+      }
+
+      // 3. Para cada listing, buscar métricas e persistir
+      const since = new Date();
+      since.setDate(since.getDate() - periodDays);
+      since.setHours(0, 0, 0, 0);
+
+      for (const listing of listings) {
+        try {
+          // Buscar dados atualizados do item na API do ML
+          const itemData = await this.executeWithRetryOn401(async () => {
+            const response = await axios.get(`${ML_API_BASE}/items/${listing.listing_id_ext}`, {
+              headers: { Authorization: `Bearer ${this.accessToken}` },
+            });
+            return response.data as MercadoLivreItem;
+          });
+
+          // Extrair métricas agregadas
+          const totalVisits = itemData.visits || listing.visits_last_7d || 0;
+          const totalSales = itemData.sold_quantity || listing.sales_last_7d || 0;
+
+          // Se não houver métricas, pular este listing
+          if (totalVisits === 0 && totalSales === 0) {
+            console.log(`[ML-METRICS] Listing ${listing.id} não tem métricas, pulando`);
+            result.listingsProcessed++;
+            continue;
+          }
+
+          // Calcular métricas diárias aproximadas
+          // Distribuir proporcionalmente pelos últimos periodDays dias
+          // Usar distribuição simples (uniforme) como aproximação inicial
+          const daysWithData = periodDays;
+          const visitsPerDay = Math.floor(totalVisits / daysWithData);
+          const salesPerDay = Math.floor(totalSales / daysWithData);
+          const remainderVisits = totalVisits % daysWithData;
+          const remainderSales = totalSales % daysWithData;
+
+          // Criar métricas diárias
+          let metricsCreatedForListing = 0;
+          for (let i = 0; i < daysWithData; i++) {
+            const date = new Date(since);
+            date.setDate(date.getDate() + i);
+            date.setHours(0, 0, 0, 0);
+
+            // Distribuir resto nos primeiros dias
+            const visits = visitsPerDay + (i < remainderVisits ? 1 : 0);
+            const sales = salesPerDay + (i < remainderSales ? 1 : 0);
+
+            // Calcular conversão e CTR aproximados
+            const conversion = visits > 0 ? sales / visits : 0;
+            const impressions = visits * 10; // Aproximação: 10 impressões por visita
+            const clicks = visits;
+            const ctr = impressions > 0 ? clicks / impressions : 0;
+            const gmv = sales * Number(listing.price);
+
+            // Upsert métrica diária
+            await prisma.listingMetricsDaily.upsert({
+              where: {
+                tenant_id_listing_id_date: {
+                  tenant_id: this.tenantId,
+                  listing_id: listing.id,
+                  date: date,
+                },
+              },
+              update: {
+                visits,
+                orders: sales,
+                conversion: conversion,
+                impressions,
+                clicks,
+                ctr: ctr,
+                gmv: gmv,
+              },
+              create: {
+                tenant_id: this.tenantId,
+                listing_id: listing.id,
+                date: date,
+                visits,
+                orders: sales,
+                conversion: conversion,
+                impressions,
+                clicks,
+                ctr: ctr,
+                gmv: gmv,
+              },
+            });
+
+            metricsCreatedForListing++;
+          }
+
+          // Atualizar visits_last_7d e sales_last_7d no listing com base nas métricas
+          // Calcular últimos 7 dias das métricas diárias
+          const last7Days = new Date();
+          last7Days.setDate(last7Days.getDate() - 7);
+          last7Days.setHours(0, 0, 0, 0);
+
+          const last7DaysMetrics = await prisma.listingMetricsDaily.findMany({
+            where: {
+              tenant_id: this.tenantId,
+              listing_id: listing.id,
+              date: {
+                gte: last7Days,
+              },
+            },
+          });
+
+          const visitsLast7d = last7DaysMetrics.reduce((sum, m) => sum + m.visits, 0);
+          const salesLast7d = last7DaysMetrics.reduce((sum, m) => sum + m.orders, 0);
+
+          await prisma.listing.update({
+            where: { id: listing.id },
+            data: {
+              visits_last_7d: visitsLast7d,
+              sales_last_7d: salesLast7d,
+            },
+          });
+
+          result.metricsCreated += metricsCreatedForListing;
+          result.listingsProcessed++;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+          result.errors.push(`Listing ${listing.id}: ${errorMsg}`);
+          console.error(`[ML-METRICS] Erro ao processar listing ${listing.id}:`, errorMsg);
+        }
+      }
+
+      result.success = result.errors.length === 0;
+      result.duration = Date.now() - startTime;
+
+      console.log(`[ML-METRICS] Sync concluído em ${result.duration}ms`);
+      console.log(`[ML-METRICS] Processados: ${result.listingsProcessed}, Métricas criadas: ${result.metricsCreated}`);
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      result.errors.push(errorMsg);
+      result.duration = Date.now() - startTime;
+      console.error('[ML-METRICS] Erro fatal no sync de métricas:', errorMsg);
+      return result;
+    }
   }
 }
 
