@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,8 @@ import { login } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -22,6 +24,19 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Verificar se a sessão expirou ao montar o componente
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const reason = localStorage.getItem('auth:reason');
+      if (reason === 'session_expired') {
+        setSessionExpired(true);
+        // Limpar a flag após exibir a mensagem
+        localStorage.removeItem('auth:reason');
+      }
+    }
+  }, []);
 
   const {
     register,
@@ -55,6 +70,14 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {sessionExpired && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Sua sessão expirou. Faça login novamente.
+              </AlertDescription>
+            </Alert>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">

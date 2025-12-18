@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { getApiBaseUrl } from './api'; // Reutilizando sua config existente
+import { handleUnauthorized } from './auth-401';
 
 export const api = axios.create({
   baseURL: getApiBaseUrl(),
@@ -31,11 +32,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Opcional: Redirecionar para login se não for a página de login
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        // window.location.href = '/login'; 
-        console.warn('Sessão expirada ou token inválido');
-      }
+      handleUnauthorized();
     }
     return Promise.reject(error);
   }
