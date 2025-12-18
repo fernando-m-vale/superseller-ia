@@ -62,7 +62,7 @@ function OverviewContent() {
       if (data.authUrl) {
         window.location.href = data.authUrl;
       }
-    } catch (error) {
+    } catch {
       // Log erro sem detalhes sensíveis
       console.error('Erro ao reconectar');
     }

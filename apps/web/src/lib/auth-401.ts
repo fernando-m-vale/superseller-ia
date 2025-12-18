@@ -47,7 +47,7 @@ export function handleUnauthorized(): void {
 
     // Redirecionar para login
     window.location.href = '/login';
-  } catch (error) {
+  } catch {
     // Em caso de erro, tentar redirecionar mesmo assim
     // Log sem detalhes sensíveis
     console.error('[AUTH-401] Erro ao processar sessão expirada');

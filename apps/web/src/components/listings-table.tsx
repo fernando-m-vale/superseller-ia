@@ -122,7 +122,7 @@ function AIAnalysisTab({
           onClick={async () => {
             try {
               await onAnalyze()
-            } catch (err) {
+            } catch {
               // Erro já foi tratado no hook, apenas logar para debugging
               // Log erro sem detalhes sensíveis
               console.error('[AI-ANALYZE] Erro ao tentar novamente')
@@ -360,7 +360,7 @@ export function ListingsTable() {
       // Atualizar listas localmente
       refetchRecommendations()
       refetchSelectedRecommendations()
-    } catch (error) {
+    } catch {
       // Log erro sem detalhes sensíveis
       console.error('Erro ao aplicar recomendação')
       toast({
@@ -719,7 +719,7 @@ export function ListingsTable() {
                 onAnalyze={async () => {
                   try {
                     await triggerAIAnalysis()
-                  } catch (error) {
+                  } catch {
                     // Erro já foi tratado no hook, apenas logar para debugging
                     // Log erro sem detalhes sensíveis
                     console.error('[AI-ANALYZE] Erro ao disparar análise')

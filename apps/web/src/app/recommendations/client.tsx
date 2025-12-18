@@ -83,7 +83,7 @@ export default function RecommendationsPage() {
         description: 'A recomendação foi marcada como concluída.',
       })
       refetch()
-    } catch (error) {
+    } catch {
       // Log erro sem detalhes sensíveis
       console.error('Erro ao aplicar recomendação')
       toast({
