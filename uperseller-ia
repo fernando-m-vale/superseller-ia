@@ -1,0 +1,28 @@
+[33mcommit 4298698f84d8b8d7ebe8d6397c718e48a49fb78c[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: fernando-m-vale <femvale@gmail.com>
+Date:   Thu Dec 18 15:04:22 2025 -0300
+
+    fix(web): remove unused error variables (lint)
+    
+    Corrigir erros de lint 'no-unused-vars' relacionados a variáveis de erro não utilizadas:
+    
+    - apps/web/src/app/overview/page.tsx: catch (error) -> catch {}
+    - apps/web/src/app/recommendations/client.tsx: catch (error) -> catch {}
+    - apps/web/src/components/DashboardLayout.tsx: catch (error) -> catch {}
+    - apps/web/src/components/listings-table.tsx:
+      - catch (err) -> catch {} (linha ~125)
+      - catch (error) -> catch {} (linha ~363)
+      - catch (error) -> catch {} (linha ~722)
+    - apps/web/src/lib/auth-401.ts: catch (error) -> catch {}
+    
+    Garantias:
+    - Nenhum log sensível reintroduzido
+    - Logs mantêm apenas mensagens genéricas sem objetos de erro
+    - Lint e build passam sem erros
+
+ apps/web/src/app/overview/page.tsx          | 2 [32m+[m[31m-[m
+ apps/web/src/app/recommendations/client.tsx | 2 [32m+[m[31m-[m
+ apps/web/src/components/DashboardLayout.tsx | 2 [32m+[m[31m-[m
+ apps/web/src/components/listings-table.tsx  | 6 [32m+++[m[31m---[m
+ apps/web/src/lib/auth-401.ts                | 2 [32m+[m[31m-[m
+ 5 files changed, 7 insertions(+), 7 deletions(-)

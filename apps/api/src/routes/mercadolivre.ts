@@ -248,7 +248,12 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
 
       } catch (error) {
         app.log.error({ err: error }, 'Failed to complete Mercado Livre connection');
-        return reply.status(500).send({ error: 'Failed to complete Mercado Livre connection', details: String(error) });
+        // Em produção, não retornar detalhes do erro
+        const isProduction = process.env.NODE_ENV === 'production';
+        return reply.status(500).send({ 
+          error: 'Failed to complete Mercado Livre connection',
+          message: isProduction ? 'Erro ao completar conexão' : String(error),
+        });
       }
     });
 

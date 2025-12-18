@@ -117,3 +117,35 @@ export function createSafeErrorMessage(error: unknown): string {
   return sanitized.message;
 }
 
+/**
+ * Cria resposta de erro segura para retornar ao cliente
+ * Em produção, remove stack traces e detalhes sensíveis
+ */
+export function createSafeErrorResponse(error: unknown, statusCode: number = 500): {
+  error: string;
+  message: string;
+  details?: unknown;
+} {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const sanitized = sanitizeError(error, !isProduction);
+  
+  const response: {
+    error: string;
+    message: string;
+    details?: unknown;
+  } = {
+    error: 'Internal Server Error',
+    message: sanitized.message,
+  };
+
+  // Em desenvolvimento, incluir detalhes de validação (ZodError) se não for produção
+  if (!isProduction && error instanceof Error && 'errors' in error) {
+    const zodError = error as { errors?: unknown[] };
+    if (zodError.errors && Array.isArray(zodError.errors)) {
+      response.details = zodError.errors;
+    }
+  }
+
+  return response;
+}
+

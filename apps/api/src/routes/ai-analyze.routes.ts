@@ -47,8 +47,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const params = AnalyzeParamsSchema.parse(request.params);
         const { listingId } = params;
+        const { requestId, userId } = request;
 
-        request.log.info({ listingId, tenantId }, 'Starting AI analysis');
+        request.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          listingId,
+        }, 'Starting AI analysis');
 
         const service = new OpenAIService(tenantId);
 
@@ -61,10 +67,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const result = await service.analyzeAndSaveRecommendations(listingId);
 
+        const { requestId, userId } = request;
         request.log.info(
           {
-            listingId,
+            requestId,
+            userId,
             tenantId,
+            listingId,
             score: result.analysis.score,
             growthHacksCount: result.analysis.growthHacks.length,
             savedRecommendations: result.savedRecommendations,
@@ -87,10 +96,16 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       } catch (error) {
         const { listingId } = (request.params as { listingId: string }) || {};
-        const { tenantId } = request as RequestWithAuth;
+        const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
 
         // Log erro sanitizado (sem tokens/secrets)
-        request.log.error({ listingId, tenantId, err: error }, 'Error analyzing listing');
+        request.log.error({ 
+          requestId,
+          userId,
+          tenantId,
+          listingId,
+          err: error 
+        }, 'Error analyzing listing');
 
         if (error instanceof z.ZodError) {
           return reply.status(400).send({

@@ -11,10 +11,13 @@ import { recommendationsRoutes } from './routes/recommendations.routes';
 import { aiAnalyzeRoutes } from './routes/ai-analyze.routes';
 import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
+import { requestIdPlugin } from './plugins/request-id';
 
 const app = fastify({ logger: loggerConfig });
 
 app.register(cors, { origin: '*' });
+// Registrar plugin de requestId antes de outras rotas
+app.register(requestIdPlugin);
 
 // ✅ CORREÇÃO CRÍTICA: Rota '/health' na raiz para o AWS App Runner
 app.get('/health', async () => ({ status: 'ok' }));
