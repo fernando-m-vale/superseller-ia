@@ -1,5 +1,6 @@
 import { getAccessToken } from './auth';
 import { getApiBaseUrl } from './api';
+import { apiFetch } from './api-fetch';
 
 const API_URL = getApiBaseUrl();
 
@@ -38,15 +39,17 @@ export const getMercadoLivreAuthUrl = async (): Promise<string> => {
     throw new Error('User not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/auth/mercadolivre/connect`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await apiFetch(`${API_URL}/auth/mercadolivre/connect`);
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to get Mercado Livre auth URL');
+    let errorMessage = 'Failed to get Mercado Livre auth URL';
+    try {
+      const error = await response.json();
+      errorMessage = String(error.error || error.message || errorMessage);
+    } catch {
+      // Se não conseguir parsear JSON, usar mensagem padrão
+    }
+    throw new Error(errorMessage);
   }
 
   const data: MercadoLivreAuthResponse = await response.json();
@@ -64,11 +67,7 @@ export const getMercadoLivreHealth = async (): Promise<MercadoLivreHealthRespons
   }
 
   try {
-    const response = await fetch(`${API_URL}/auth/mercadolivre/status`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await apiFetch(`${API_URL}/auth/mercadolivre/status`);
 
     if (!response.ok) {
       return {
@@ -93,10 +92,9 @@ export const syncMercadoLivreListings = async (): Promise<MercadoLivreSyncRespon
     throw new Error('User not authenticated');
   }
 
-  const response = await fetch(`${API_URL}/sync/mercadolivre`, {
+  const response = await apiFetch(`${API_URL}/sync/mercadolivre`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({}), // Fastify strict mode requires a valid JSON body
@@ -116,13 +114,12 @@ export const syncMercadoLivreListings = async (): Promise<MercadoLivreSyncRespon
       );
     } catch {
       // Se não conseguir parsear JSON, usar mensagem padrão baseada no status
-      if (response.status === 401) {
-        errorMessage = 'Erro de autenticação. Por favor, faça login novamente.';
-      } else if (response.status === 404) {
+      if (response.status === 404) {
         errorMessage = 'Endpoint não encontrado. Entre em contato com o suporte.';
       } else if (response.status >= 500) {
         errorMessage = 'Erro interno do servidor. Tente novamente mais tarde.';
       }
+      // 401 já é tratado pelo apiFetch via handleUnauthorized()
     }
     
     throw new Error(errorMessage);

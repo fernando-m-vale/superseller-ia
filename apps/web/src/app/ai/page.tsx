@@ -6,6 +6,7 @@ import { RecommendationsTable } from './components/RecommendationsTable';
 import { ImpactChart } from './components/ImpactChart';
 import { AuthGuard } from '@/components/AuthGuard';
 import { getApiBaseUrl } from '@/lib/api';
+import { apiFetch } from '@/lib/api-fetch';
 
 const API_URL = getApiBaseUrl();
 
@@ -34,14 +35,21 @@ function AIRecommendationsContent() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${API_URL}/ai/recommendations?days=7`, {
+      const response = await apiFetch(`${API_URL}/ai/recommendations?days=7`, {
         headers: {
           'x-tenant-id': 'demo-tenant',
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch recommendations: ${response.statusText}`);
+        let errorMessage = 'Falha ao buscar recomendações';
+        try {
+          const errorData = await response.json();
+          errorMessage = String(errorData.message || errorData.error || errorMessage);
+        } catch {
+          errorMessage = `Falha ao buscar recomendações: ${response.statusText || response.status}`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data: AIRecommendationsResponse = await response.json();
@@ -73,7 +81,8 @@ function AIRecommendationsContent() {
       setRecommendations(enrichedRecommendations);
       localStorage.setItem('ai-recommendations', JSON.stringify(enrichedRecommendations));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      const errorMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro desconhecido ao buscar recomendações';
+      setError(String(errorMessage));
       console.error('Error fetching recommendations:', err);
     } finally {
       setLoading(false);
@@ -88,7 +97,7 @@ function AIRecommendationsContent() {
     localStorage.setItem('ai-recommendations', JSON.stringify(updatedRecommendations));
 
     try {
-      await fetch(`${API_URL}/ai/actions`, {
+      await apiFetch(`${API_URL}/ai/actions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,7 +121,7 @@ function AIRecommendationsContent() {
     localStorage.setItem('ai-recommendations', JSON.stringify(updatedRecommendations));
 
     try {
-      await fetch(`${API_URL}/ai/actions`, {
+      await apiFetch(`${API_URL}/ai/actions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,7 +145,7 @@ function AIRecommendationsContent() {
     localStorage.setItem('ai-recommendations', JSON.stringify(updatedRecommendations));
 
     try {
-      await fetch(`${API_URL}/ai/actions`, {
+      await apiFetch(`${API_URL}/ai/actions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -168,12 +177,12 @@ function AIRecommendationsContent() {
       <div className="container mx-auto p-6">
         <h1 className="text-3xl font-bold mb-6">AI Recommendations</h1>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">Error: {error}</p>
+          <p className="text-red-800">Erro: {String(error || 'Erro desconhecido')}</p>
           <button
             onClick={fetchRecommendations}
             className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
-            Retry
+            Tentar novamente
           </button>
         </div>
       </div>

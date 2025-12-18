@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './api';
+import { apiFetch } from './api-fetch';
 
 const API_URL = getApiBaseUrl();
 
@@ -65,8 +66,14 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Login failed');
+    let errorMessage = 'Login failed';
+    try {
+      const error = await response.json();
+      errorMessage = String(error.error || error.message || errorMessage);
+    } catch {
+      // Se não conseguir parsear JSON, usar mensagem padrão
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
@@ -84,8 +91,14 @@ export const register = async (credentials: RegisterCredentials): Promise<AuthRe
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Registration failed');
+    let errorMessage = 'Registration failed';
+    try {
+      const error = await response.json();
+      errorMessage = String(error.error || error.message || errorMessage);
+    } catch {
+      // Se não conseguir parsear JSON, usar mensagem padrão
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
@@ -101,11 +114,7 @@ export const getCurrentUser = async (): Promise<AuthUser | null> => {
   }
 
   try {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const response = await apiFetch(`${API_URL}/auth/me`);
 
     if (!response.ok) {
       clearTokens();
