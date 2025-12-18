@@ -44,10 +44,6 @@ const CHECKLIST_ITEMS: ChecklistItem[] = [
     key: 'enableAutoRecommendations',
     title: 'Ativar recomendações automáticas',
     description: 'Habilite sugestões inteligentes para otimizar seus anúncios',
-    cta: {
-      label: 'Ver recomendações',
-      href: '/ai',
-    },
   },
 ]
 

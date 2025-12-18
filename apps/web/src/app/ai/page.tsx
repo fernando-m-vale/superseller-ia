@@ -1,216 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { AIRecommendation, ActionStatus, AIRecommendationsResponse } from '@/types/ai';
-import { RecommendationsTable } from './components/RecommendationsTable';
-import { ImpactChart } from './components/ImpactChart';
 import { AuthGuard } from '@/components/AuthGuard';
-import { getApiBaseUrl } from '@/lib/api';
-import { apiFetch } from '@/lib/api-fetch';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Sparkles } from 'lucide-react';
 
-const API_URL = getApiBaseUrl();
-
-function AIRecommendationsContent() {
-  const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const savedRecommendations = localStorage.getItem('ai-recommendations');
-    if (savedRecommendations) {
-      try {
-        setRecommendations(JSON.parse(savedRecommendations));
-      } catch (e) {
-        console.error('Failed to parse saved recommendations:', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRecommendations();
-  }, []);
-
-  const fetchRecommendations = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await apiFetch(`${API_URL}/ai/recommendations?days=7`, {
-        headers: {
-          'x-tenant-id': 'demo-tenant',
-        },
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Falha ao buscar recomendações';
-        try {
-          const errorData = await response.json();
-          errorMessage = String(errorData.message || errorData.error || errorMessage);
-        } catch {
-          errorMessage = `Falha ao buscar recomendações: ${response.statusText || response.status}`;
-        }
-        throw new Error(errorMessage);
-      }
-
-      const data: AIRecommendationsResponse = await response.json();
-
-      const enrichedRecommendations: AIRecommendation[] = data.items.map((item, index) => ({
-        ...item,
-        id: `${item.listingId}-${item.type}-${index}`,
-        status: 'pending' as ActionStatus,
-        createdAt: data.generatedAt,
-      }));
-
-      const savedRecommendations = localStorage.getItem('ai-recommendations');
-      if (savedRecommendations) {
-        try {
-          const saved: AIRecommendation[] = JSON.parse(savedRecommendations);
-          const savedMap = new Map(saved.map(r => [r.id, r]));
-
-          enrichedRecommendations.forEach(rec => {
-            const savedRec = savedMap.get(rec.id);
-            if (savedRec) {
-              rec.status = savedRec.status;
-            }
-          });
-        } catch (e) {
-          console.error('Failed to merge saved recommendations:', e);
-        }
-      }
-
-      setRecommendations(enrichedRecommendations);
-      localStorage.setItem('ai-recommendations', JSON.stringify(enrichedRecommendations));
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erro desconhecido ao buscar recomendações';
-      setError(String(errorMessage));
-      console.error('Error fetching recommendations:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApprove = async (id: string) => {
-    const updatedRecommendations = recommendations.map(rec =>
-      rec.id === id ? { ...rec, status: 'approved' as ActionStatus } : rec
-    );
-    setRecommendations(updatedRecommendations);
-    localStorage.setItem('ai-recommendations', JSON.stringify(updatedRecommendations));
-
-    try {
-      await apiFetch(`${API_URL}/ai/actions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': 'demo-tenant',
-        },
-        body: JSON.stringify({
-          recommendationId: id,
-          action: 'approve',
-        }),
-      });
-    } catch (err) {
-      console.error('Failed to sync approval to backend:', err);
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    const updatedRecommendations = recommendations.map(rec =>
-      rec.id === id ? { ...rec, status: 'rejected' as ActionStatus } : rec
-    );
-    setRecommendations(updatedRecommendations);
-    localStorage.setItem('ai-recommendations', JSON.stringify(updatedRecommendations));
-
-    try {
-      await apiFetch(`${API_URL}/ai/actions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': 'demo-tenant',
-        },
-        body: JSON.stringify({
-          recommendationId: id,
-          action: 'reject',
-        }),
-      });
-    } catch (err) {
-      console.error('Failed to sync rejection to backend:', err);
-    }
-  };
-
-  const handleExecute = async (id: string) => {
-    const updatedRecommendations = recommendations.map(rec =>
-      rec.id === id ? { ...rec, status: 'executed' as ActionStatus } : rec
-    );
-    setRecommendations(updatedRecommendations);
-    localStorage.setItem('ai-recommendations', JSON.stringify(updatedRecommendations));
-
-    try {
-      await apiFetch(`${API_URL}/ai/actions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-id': 'demo-tenant',
-        },
-        body: JSON.stringify({
-          recommendationId: id,
-          action: 'execute',
-        }),
-      });
-    } catch (err) {
-      console.error('Failed to sync execution to backend:', err);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-6">AI Recommendations</h1>
-        <div className="flex items-center justify-center h-64">
-          <p className="text-gray-500">Loading recommendations...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-6">AI Recommendations</h1>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">Erro: {String(error || 'Erro desconhecido')}</p>
-          <button
-            onClick={fetchRecommendations}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-          >
-            Tentar novamente
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+function AIPageContent() {
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">AI Recommendations</h1>
-
+    <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-8">
-        <ImpactChart recommendations={recommendations} />
+        <h1 className="text-3xl font-bold mb-2">Inteligência Artificial</h1>
+        <p className="text-muted-foreground">
+          Análise inteligente e recomendações para otimizar seus anúncios
+        </p>
       </div>
 
-      <RecommendationsTable
-        recommendations={recommendations}
-        onApprove={handleApprove}
-        onReject={handleReject}
-        onExecute={handleExecute}
-      />
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <CardTitle>Análise de IA Disponível nos Anúncios</CardTitle>
+          </div>
+          <CardDescription>
+            A funcionalidade de Inteligência Artificial está integrada diretamente nos seus anúncios
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="prose prose-sm max-w-none">
+            <p className="text-muted-foreground leading-relaxed">
+              Para gerar análises e ver recomendações de IA:
+            </p>
+            <ol className="list-decimal list-inside space-y-2 text-muted-foreground ml-4">
+              <li>Acesse a página de <strong>Anúncios</strong></li>
+              <li>Abra um anúncio clicando nele</li>
+              <li>Na aba <strong>Inteligência Artificial</strong>, clique em &quot;Gerar Análise Completa&quot;</li>
+              <li>Visualize o score, diagnóstico, hacks de crescimento e sugestões de SEO</li>
+            </ol>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-export default function AIRecommendationsPage() {
+export default function AIPage() {
   return (
     <AuthGuard>
-      <AIRecommendationsContent />
+      <AIPageContent />
     </AuthGuard>
   );
 }
