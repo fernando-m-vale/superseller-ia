@@ -475,6 +475,64 @@ export class MercadoLivreSyncService {
   }
 
   /**
+   * Re-sincroniza listings específicos do Mercado Livre
+   * 
+   * Útil para atualizar campos de cadastro (description, pictures_count, etc)
+   * de listings já existentes.
+   * 
+   * @param listingIds Lista de IDs externos (listing_id_ext) dos listings a re-sincronizar
+   */
+  async resyncListings(listingIds: string[]): Promise<{
+    success: boolean;
+    itemsProcessed: number;
+    itemsUpdated: number;
+    errors: string[];
+  }> {
+    const result = {
+      success: false,
+      itemsProcessed: 0,
+      itemsUpdated: 0,
+      errors: [] as string[],
+    };
+
+    try {
+      // Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      if (listingIds.length === 0) {
+        result.success = true;
+        return result;
+      }
+
+      // Processar em lotes de 20
+      const chunks = this.chunkArray(listingIds, 20);
+
+      for (const chunk of chunks) {
+        try {
+          const items = await this.fetchItemsDetails(chunk);
+          const { updated } = await this.upsertListings(items);
+          
+          result.itemsProcessed += items.length;
+          result.itemsUpdated += updated;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+          result.errors.push(`Lote com ${chunk.length} itens: ${errorMsg}`);
+          console.error(`[ML-SYNC] Erro no lote de re-sync:`, errorMsg);
+        }
+      }
+
+      result.success = result.errors.length === 0;
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      result.errors.push(errorMsg);
+      console.error('[ML-SYNC] Erro fatal no re-sync de listings:', errorMsg);
+      return result;
+    }
+  }
+
+  /**
    * Busca detalhes de múltiplos itens (até 20 por vez)
    * Usa retry automático em caso de 401
    * Também busca descrições completas via endpoint específico
@@ -526,6 +584,9 @@ export class MercadoLivreSyncService {
 
   /**
    * Faz upsert dos listings no banco
+   * 
+   * Garante que campos de mídia/descrição sejam preenchidos corretamente do ML API
+   * e NUNCA sobrescreve com valores vazios/0 quando API não retornar dados.
    */
   private async upsertListings(items: MercadoLivreItem[]): Promise<{ created: number; updated: number }> {
     let created = 0;
@@ -537,35 +598,52 @@ export class MercadoLivreSyncService {
       
       // Extrair descrição do primeiro item de descriptions (se existir)
       // Priorizar plain_text completo (vindo de /items/{id}/description)
-      const description = item.descriptions?.[0]?.plain_text || null;
+      const descriptionFromAPI = item.descriptions?.[0]?.plain_text || null;
       
       // Contar fotos - garantir que pictures é um array válido
-      const picturesCount = Array.isArray(item.pictures) ? item.pictures.length : 0;
+      const picturesCountFromAPI = Array.isArray(item.pictures) ? item.pictures.length : undefined;
       
-      // Log para debug de falsos positivos
-      console.log(`[ML-SYNC] Item ${item.id}: pictures=${picturesCount}, description_length=${description?.length || 0}`);
+      // Thumbnail: usar item.thumbnail OU primeira imagem de pictures
+      let thumbnailFromAPI: string | undefined = item.thumbnail;
+      if (!thumbnailFromAPI && Array.isArray(item.pictures) && item.pictures.length > 0) {
+        // Tentar pegar a primeira imagem com URL válida
+        const firstPicture = item.pictures.find(p => p.url);
+        if (firstPicture?.url) {
+          thumbnailFromAPI = firstPicture.url;
+        }
+      }
       
-      // Verificar se tem vídeo
-      const hasVideo = !!item.video_id;
+      // Verificar se tem vídeo - procurar por video_id ou campo relacionado
+      const hasVideoFromAPI = !!item.video_id;
       
-      // Dados para o Super Seller Score
+      // Log seguro (sem tokens) para diagnóstico
+      const logData = {
+        tenantId: this.tenantId,
+        listingIdExt: item.id,
+        picturesCount: picturesCountFromAPI ?? 'not_provided',
+        hasVideo: hasVideoFromAPI,
+        hasDescription: descriptionFromAPI ? descriptionFromAPI.length > 0 : false,
+        descriptionLength: descriptionFromAPI?.length ?? 0,
+        thumbnailProvided: !!thumbnailFromAPI,
+      };
+      console.log(`[ML-SYNC] Item ${item.id}:`, JSON.stringify(logData));
+      
+      // Dados para o Super Seller Score (usar valores da API ou fallback seguro)
       const listingForScore = {
         id: item.id,
         title: item.title,
-        description,
+        description: descriptionFromAPI || '',
         price: item.price,
         stock: item.available_quantity,
         status: status,
-        thumbnail_url: item.thumbnail,
-        pictures_count: picturesCount,
+        thumbnail_url: thumbnailFromAPI || null,
+        pictures_count: picturesCountFromAPI ?? 0,
         visits_last_7d: item.visits || 0,
         sales_last_7d: item.sold_quantity || 0,
       };
       
       // Calcular Super Seller Score
       const scoreResult = ScoreCalculator.calculate(listingForScore);
-      
-      console.log(`[ML-SYNC] Super Seller Score para ${item.id}: ${scoreResult.total} (Cadastro: ${scoreResult.cadastro}, Tráfego: ${scoreResult.trafego}, Disponibilidade: ${scoreResult.disponibilidade})`);
 
       try {
         const existing = await prisma.listing.findUnique({
@@ -578,18 +656,13 @@ export class MercadoLivreSyncService {
           },
         });
 
-        // Não sobrescrever visits_last_7d/sales_last_7d com 0 se não houver dados da API
-        // Manter valores existentes se a API não retornar esses campos
-        const visitsFromAPI = item.visits;
-        const salesFromAPI = item.sold_quantity;
-        
+        // Construir objeto de dados para update/create
+        // REGRA: Só atualizar campos se API retornar valores válidos (não vazios/0/undefined)
         const listingData: any = {
-          title: item.title,
-          description,
-          price: item.price,
-          stock: item.available_quantity,
-          status,
-          category: item.category_id,
+          title: item.title, // Sempre atualizar título
+          price: item.price, // Sempre atualizar preço
+          stock: item.available_quantity, // Sempre atualizar estoque
+          status, // Sempre atualizar status
           health_score: healthScore, // Legado - score da API ML
           super_seller_score: scoreResult.total, // Novo score proprietário
           score_breakdown: {
@@ -598,19 +671,73 @@ export class MercadoLivreSyncService {
             disponibilidade: scoreResult.disponibilidade,
             details: scoreResult.details,
           } as any, // Cast para InputJsonValue do Prisma
-          thumbnail_url: item.thumbnail,
-          pictures_count: picturesCount,
-          has_video: hasVideo,
         };
+
+        // Atualizar category apenas se vier da API
+        if (item.category_id) {
+          listingData.category = item.category_id;
+        }
+
+        // Atualizar description apenas se vier string não vazia da API
+        if (descriptionFromAPI && descriptionFromAPI.trim().length > 0) {
+          listingData.description = descriptionFromAPI.trim();
+        } else if (!existing) {
+          // Se é criação e não tem descrição, setar null explicitamente
+          listingData.description = null;
+        }
+        // Se é update e não veio descrição, NÃO atualizar (manter valor existente)
+
+        // Atualizar pictures_count apenas se API retornar número válido
+        if (picturesCountFromAPI !== undefined && picturesCountFromAPI !== null) {
+          listingData.pictures_count = picturesCountFromAPI;
+        } else if (!existing) {
+          // Se é criação e não tem pictures, setar 0
+          listingData.pictures_count = 0;
+        }
+        // Se é update e não veio pictures, NÃO atualizar (manter valor existente)
+
+        // Atualizar thumbnail_url apenas se vier da API
+        if (thumbnailFromAPI) {
+          listingData.thumbnail_url = thumbnailFromAPI;
+        } else if (!existing) {
+          // Se é criação e não tem thumbnail, setar null
+          listingData.thumbnail_url = null;
+        }
+        // Se é update e não veio thumbnail, NÃO atualizar (manter valor existente)
+
+        // Atualizar has_video apenas se conseguirmos determinar explicitamente
+        if (hasVideoFromAPI !== undefined) {
+          listingData.has_video = hasVideoFromAPI;
+        } else if (!existing) {
+          // Se é criação e não conseguimos determinar, setar false
+          listingData.has_video = false;
+        }
+        // Se é update e não conseguimos determinar, NÃO atualizar (manter valor existente)
 
         // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos
         // Isso evita sobrescrever com 0 quando não há dados
-        if (visitsFromAPI !== undefined && visitsFromAPI !== null) {
+        const visitsFromAPI = item.visits;
+        const salesFromAPI = item.sold_quantity;
+        
+        if (visitsFromAPI !== undefined && visitsFromAPI !== null && visitsFromAPI >= 0) {
           listingData.visits_last_7d = visitsFromAPI;
+        } else if (!existing) {
+          // Se é criação e não veio visits, setar 0
+          listingData.visits_last_7d = 0;
         }
-        if (salesFromAPI !== undefined && salesFromAPI !== null) {
+        // Se é update e não veio visits, NÃO atualizar (manter valor existente)
+
+        if (salesFromAPI !== undefined && salesFromAPI !== null && salesFromAPI >= 0) {
           listingData.sales_last_7d = salesFromAPI;
+        } else if (!existing) {
+          // Se é criação e não veio sales, setar 0
+          listingData.sales_last_7d = 0;
         }
+        // Se é update e não veio sales, NÃO atualizar (manter valor existente)
+
+        // Log seguro dos campos atualizados
+        const updatedFields = Object.keys(listingData).filter(k => k !== 'score_breakdown');
+        console.log(`[ML-SYNC] Listing ${item.id} (${existing ? 'updated' : 'created'}): fields=${updatedFields.join(',')}`);
 
         if (existing) {
           await prisma.listing.update({

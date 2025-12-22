@@ -386,7 +386,7 @@ export class MercadoLivreOrdersService {
     console.log(`[ML-ORDERS] ========== INICIANDO FETCH DE PEDIDOS ==========`);
     console.log(`[ML-ORDERS] Seller ID: ${this.providerAccountId}`);
     console.log(`[ML-ORDERS] Data From: ${dateFrom}`);
-    console.log(`[ML-ORDERS] Token (primeiros 20 chars): ${this.accessToken.substring(0, 20)}...`);
+    // Log seguro: não expor token
 
     while (true) {
       const orders = await this.executeWithRetryOn401(async () => {

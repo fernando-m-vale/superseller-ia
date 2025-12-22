@@ -404,6 +404,130 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/mercadolivre/listings
+   * 
+   * Re-sincroniza detalhes dos anúncios do Mercado Livre para atualizar campos de cadastro
+   * (description, pictures_count, has_video, thumbnail_url).
+   * 
+   * Útil para corrigir listings que foram criados sem esses dados ou após mudanças no ML.
+   * 
+   * Query params:
+   *   - limit: Número máximo de listings para processar (default: 50, max: 200)
+   */
+  app.post(
+    '/mercadolivre/listings',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const limit = Math.min(
+          Math.max(1, Number(request.query?.limit) || 50),
+          200
+        );
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          limit,
+        }, 'Requisição de re-sync de listings recebida');
+
+        // Buscar listings do tenant (limitados)
+        const listings = await prisma.listing.findMany({
+          where: {
+            tenant_id: tenantId,
+            marketplace: 'mercadolivre',
+          },
+          take: limit,
+          orderBy: {
+            updated_at: 'asc', // Processar os mais antigos primeiro
+          },
+        });
+
+        app.log.info({
+          requestId,
+          tenantId,
+          listingsFound: listings.length,
+        }, 'Listings encontrados para re-sync');
+
+        if (listings.length === 0) {
+          return reply.status(200).send({
+            message: 'Nenhum listing encontrado para re-sincronizar',
+            data: {
+              listingsProcessed: 0,
+              listingsUpdated: 0,
+              errorsCount: 0,
+            },
+          });
+        }
+
+        // Instanciar service e executar re-sync apenas dos listings encontrados
+        const syncService = new MercadoLivreSyncService(tenantId);
+        
+        // Buscar IDs externos dos listings
+        const itemIds = listings.map(l => l.listing_id_ext);
+        
+        // Executar re-sync
+        const result = await syncService.resyncListings(itemIds);
+
+        app.log.info({
+          requestId,
+          userId,
+          tenantId,
+          listingsProcessed: result.itemsProcessed,
+          listingsUpdated: result.itemsUpdated,
+          errorsCount: result.errors.length,
+        }, 'Re-sync de listings concluído');
+
+        if (result.success) {
+          return reply.status(200).send({
+            message: 'Re-sincronização de listings concluída com sucesso',
+            data: {
+              listingsProcessed: result.itemsProcessed,
+              listingsUpdated: result.itemsUpdated,
+              errorsCount: result.errors.length,
+            },
+          });
+        } else {
+          return reply.status(207).send({
+            message: 'Re-sincronização de listings concluída com erros',
+            data: {
+              listingsProcessed: result.itemsProcessed,
+              listingsUpdated: result.itemsUpdated,
+              errorsCount: result.errors.length,
+              errors: result.errors.slice(0, 10), // Limitar a 10 erros
+            },
+          });
+        }
+      } catch (error: any) {
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro na re-sincronização de listings');
+        return reply.status(500).send({
+          error: 'Falha na re-sincronização de listings',
+          message: error instanceof Error ? error.message : 'Erro interno',
+        });
+      }
+    }
+  );
+
+  /**
    * POST /api/v1/sync/mercadolivre/metrics
    * 
    * Dispara sincronização manual das métricas diárias dos anúncios do Mercado Livre.
