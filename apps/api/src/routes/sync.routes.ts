@@ -23,6 +23,11 @@ const MetricsSyncQuerySchema = z.object({
   days: z.coerce.number().min(1).max(90).default(30),
 });
 
+// Schema para validar query params de re-sync de listings
+const ResyncListingsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+
 export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   // Configurar para aceitar body vazio em rotas POST
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -412,7 +417,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
    * Útil para corrigir listings que foram criados sem esses dados ou após mudanças no ML.
    * 
    * Query params:
-   *   - limit: Número máximo de listings para processar (default: 50, max: 200)
+   *   - limit: Número máximo de listings para processar (default: 100, max: 500)
    */
   app.post(
     '/mercadolivre/listings',
@@ -428,17 +433,31 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Validar query params
-        const limit = Math.min(
-          Math.max(1, Number(request.query?.limit) || 50),
-          200
-        );
+        // Validar query params com Zod
+        const parsed = ResyncListingsQuerySchema.safeParse(request.query);
+        if (!parsed.success) {
+          app.log.warn({ 
+            requestId,
+            userId,
+            tenantId,
+            query: request.query,
+            errors: parsed.error.flatten(),
+          }, 'Query params inválidos para re-sync de listings');
+          
+          return reply.status(400).send({
+            error: 'Invalid query parameters',
+            message: 'Parâmetros de query inválidos',
+            details: parsed.error.flatten(),
+          });
+        }
+
+        const effectiveLimit = parsed.data.limit ?? 100;
 
         app.log.info({ 
           requestId,
           userId,
           tenantId,
-          limit,
+          limit: effectiveLimit,
         }, 'Requisição de re-sync de listings recebida');
 
         // Buscar listings do tenant (limitados)
@@ -447,7 +466,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             tenant_id: tenantId,
             marketplace: 'mercadolivre',
           },
-          take: limit,
+          take: effectiveLimit,
           orderBy: {
             updated_at: 'asc', // Processar os mais antigos primeiro
           },
