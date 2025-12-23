@@ -2,6 +2,52 @@ Developer Log - SuperSeller IA
 
 # Dev Log — SuperSeller IA
 
+## 2025-12-22 — PRIORIDADE 1 (Dados reais para IA) + estado do modal
+
+### Objetivo do dia
+- Confirmar se a “alucinação” da IA era falta de dados no banco ou problema de payload/prompt.
+- Reidratar listings (cadastro/mídia) e validar performance em `listing_metrics_daily`.
+
+### Evidências (DB)
+- `listing_metrics_daily` possui dados no período ~ 2025-11-22 → 2025-12-17
+- Canário (tenant_id `6c00e0e6-7c94-48cf-a77d-2ef1a2499794`):
+  - Top por GMV/Orders encontrado (print): `listing_id = 92f52f51-9f44-4aed-8674-1942b7871ae0`
+  - Métricas: `orders_30d > 0`, `gmv_30d > 0`, porém `visits_30d` aparece 0 (suspeito)
+
+### Ações executadas
+1) Sync de métricas (manual)
+- Endpoint: `POST /api/v1/sync/mercadolivre/metrics?days=30`
+- Resultado (exemplo): `{ listingsProcessed=15; metricsCreated=270; duration=1519ms }`
+
+2) Re-sync de listings (cadastro/mídia)
+- Endpoint novo: `POST /api/v1/sync/mercadolivre/listings?limit=50`
+- Após execução:
+  - `pictures_count` e `description` passaram a preencher corretamente no canário
+  - `has_video` continuou vazio/false (pendência)
+
+### Validação no app (modal do anúncio)
+- Aba "Inteligência Artificial": ✅ melhorou (Score alto e diagnóstico coerente com descrição/imagens)
+- Ainda falha em “avaliar vídeo” (provável `has_video` não populado)
+- Sugestões/hacks ainda genéricos e pouco profundos (próxima etapa: evoluir prompt)
+- Aba "Recomendações": ❌ permanece inconsistente (ainda considera sem fotos/visitas/descrição)
+  - Conclusão: esta aba está desatualizada e conflita com a IA tab → virar item de UX (remover/unificar)
+
+### Próximos passos (amanhã)
+P1) Corrigir `has_video` no sync de listings
+- Confirmar qual campo real do ML representa vídeo (`video_id` etc.)
+- Garantir update “não sobrescreve com vazio”
+
+P2) Investigar por que `visits_30d` pode estar 0 quando orders/gmv > 0
+- Verificar fonte/endpoint de visitas
+- Se o ML não fornecer visitas: modelar como “unknown” e refletir em `dataQuality`
+
+P3) UX: unificar modal (remover aba "Recomendações")
+- Manter apenas IA tab como fonte de verdade
+
+P4) Iniciar PRIORIDADE 1.4 — IA Score Model (fórmula explicável + benchmark por categoria)
+
+
+
 ## 2025-12-18
 
 ### PRIORIDADE 0 — Higiene, Segurança e Estabilidade ✅
