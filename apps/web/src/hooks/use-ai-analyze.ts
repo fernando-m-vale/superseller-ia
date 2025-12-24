@@ -8,6 +8,20 @@ import { getAccessToken } from '@/lib/auth'
 interface AIAnalysisApiResponse {
   listingId: string
   score: number
+  scoreBreakdown?: {
+    cadastro: number
+    midia: number
+    performance: number
+    seo: number
+    competitividade: number
+  }
+  potentialGain?: {
+    cadastro?: string
+    midia?: string
+    performance?: string
+    seo?: string
+    competitividade?: string
+  }
   critique: string
   growthHacks: Array<{
     title: string
@@ -24,12 +38,39 @@ interface AIAnalysisApiResponse {
   savedRecommendations: number
   analyzedAt: string
   model: string
+  metrics30d?: {
+    visits: number
+    orders: number
+    revenue: number | null
+    conversionRate: number | null
+    ctr: number | null
+  }
+  dataQuality?: {
+    completenessScore: number
+    sources: {
+      performance: 'listing_metrics_daily' | 'listing_aggregates'
+    }
+  }
 }
 
 // Interface adaptada para o frontend
 export interface AIAnalysisResponse {
   listingId: string
   score: number
+  scoreBreakdown?: {
+    cadastro: number
+    midia: number
+    performance: number
+    seo: number
+    competitividade: number
+  }
+  potentialGain?: {
+    cadastro?: string
+    midia?: string
+    performance?: string
+    seo?: string
+    competitividade?: string
+  }
   critique: string
   growthHacks: Array<{
     title: string
@@ -44,6 +85,19 @@ export interface AIAnalysisResponse {
   savedRecommendations: number
   analyzedAt: string
   model: string
+  metrics30d?: {
+    visits: number
+    orders: number
+    revenue: number | null
+    conversionRate: number | null
+    ctr: number | null
+  }
+  dataQuality?: {
+    completenessScore: number
+    sources: {
+      performance: 'listing_metrics_daily' | 'listing_aggregates'
+    }
+  }
 }
 
 /**
@@ -59,6 +113,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
   return {
     listingId: apiResponse.listingId,
     score: apiResponse.score,
+    scoreBreakdown: apiResponse.scoreBreakdown,
+    potentialGain: apiResponse.potentialGain,
     critique: apiResponse.critique,
     growthHacks: apiResponse.growthHacks || [],
     seoSuggestions: {
@@ -68,6 +124,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     savedRecommendations: apiResponse.savedRecommendations,
     analyzedAt: apiResponse.analyzedAt,
     model: apiResponse.model,
+    metrics30d: apiResponse.metrics30d,
+    dataQuality: apiResponse.dataQuality,
   }
 }
 

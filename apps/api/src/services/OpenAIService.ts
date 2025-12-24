@@ -8,6 +8,7 @@
 import OpenAI from 'openai';
 import { PrismaClient, Listing, RecommendationType, RecommendationStatus } from '@prisma/client';
 import { AIAnalyzeInputV1 } from '../types/ai-analyze-input';
+import { IAScoreService, IAScoreResult } from './IAScoreService';
 
 const prisma = new PrismaClient();
 
@@ -51,7 +52,13 @@ export interface AIAnalysisResult {
 
 const SYSTEM_PROMPT = `Você é um ESPECIALISTA EM SEO, CONVERSÃO E PERFORMANCE no Mercado Livre Brasil, com profundo conhecimento do algoritmo, comportamento do consumidor brasileiro e melhores práticas de e-commerce.
 
-Sua missão é analisar dados reais de anúncios e fornecer insights acionáveis, específicos e baseados em evidências para aumentar visibilidade, conversão e vendas.
+IMPORTANTE: O SCORE JÁ FOI CALCULADO baseado em dados reais. Você NÃO deve calcular um novo score.
+
+Sua missão é:
+1. EXPLICAR os gaps identificados no score calculado
+2. SUGERIR ações específicas para melhorar cada dimensão
+3. PRIORIZAR dimensões com menor score no breakdown
+4. FOCAR em impacto mensurável (quantos pontos cada ação pode ganhar)
 
 Você receberá um objeto JSON (AIAnalyzeInputV1) com dados completos do anúncio:
 - Detalhes do listing (title, description, price, stock, status, category)
@@ -117,17 +124,17 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
   * estimatedImpact: impacto estimado baseado em dados similares (ex: "+15% conversão", "+30% tráfego")
 
 SCORE (0-100):
+- O score JÁ FOI CALCULADO e será fornecido no contexto
 - Critique deve explicar CLARAMENTE:
-  * Por que não é 100 (o que está faltando ou pode melhorar)
+  * Por que o score não é 100 (baseado no breakdown fornecido)
   * O que falta para subir 5, 10 ou 15 pontos (ações específicas)
-  * Pontos fortes do anúncio (o que está funcionando bem)
-- Considere:
-  * Título otimizado: 20 pontos
-  * Descrição completa e persuasiva: 20 pontos
-  * Mídia (fotos + vídeo): 20 pontos
-  * Performance (conversão, tráfego): 20 pontos
-  * Preço competitivo: 10 pontos
-  * Estoque disponível: 10 pontos
+  * Pontos fortes do anúncio (dimensões com maior score)
+- Use o breakdown fornecido para identificar gargalos:
+  * Cadastro (0-20): título, descrição, categoria, status
+  * Mídia (0-20): fotos, vídeo
+  * Performance (0-30): visitas, pedidos, conversão
+  * SEO (0-20): CTR, palavras-chave
+  * Competitividade (0-10): placeholder V1
 
 FORMATO DE RESPOSTA (JSON válido):
 {
@@ -356,17 +363,35 @@ export class OpenAIService {
   /**
    * Analyze a listing using GPT-4o and return actionable insights
    * 
-   * Now accepts AIAnalyzeInputV1 (canonical payload) instead of legacy ListingAnalysisInput
+   * Now accepts AIAnalyzeInputV1 (canonical payload) and IA Score as input.
+   * The AI does NOT calculate the score - it only explains gaps and suggests actions.
    */
-  async analyzeListing(input: AIAnalyzeInputV1): Promise<AIAnalysisResult> {
+  async analyzeListing(input: AIAnalyzeInputV1, scoreResult: IAScoreResult): Promise<AIAnalysisResult> {
     if (!this.isReady || !this.client) {
       throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY environment variable.');
     }
 
-    // Build user prompt with JSON payload and context
+    // Build user prompt with JSON payload, score, and context
     const userPrompt = `Analise este anúncio do Mercado Livre usando os dados JSON fornecidos:
 
 ${JSON.stringify(input, null, 2)}
+
+SCORE CALCULADO (baseado em dados reais):
+- Score Final: ${scoreResult.score.final}/100
+- Breakdown:
+  * Cadastro: ${scoreResult.score.breakdown.cadastro}/20
+  * Mídia: ${scoreResult.score.breakdown.midia}/20
+  * Performance: ${scoreResult.score.breakdown.performance}/30
+  * SEO: ${scoreResult.score.breakdown.seo}/20
+  * Competitividade: ${scoreResult.score.breakdown.competitividade}/10
+- Potencial de Ganho: ${JSON.stringify(scoreResult.score.potential_gain, null, 2)}
+
+MÉTRICAS DE 30 DIAS:
+- Visitas: ${scoreResult.metrics_30d.visits}
+- Pedidos: ${scoreResult.metrics_30d.orders}
+- Taxa de Conversão: ${scoreResult.metrics_30d.conversionRate ? (scoreResult.metrics_30d.conversionRate * 100).toFixed(2) + '%' : 'N/A'}
+${scoreResult.metrics_30d.ctr !== null ? `- CTR: ${(scoreResult.metrics_30d.ctr * 100).toFixed(2)}%` : ''}
+${scoreResult.metrics_30d.revenue !== null ? `- Receita: R$ ${scoreResult.metrics_30d.revenue.toFixed(2)}` : ''}
 
 CONTEXTO PARA ANÁLISE:
 - Categoria: ${input.listing.category || 'Não especificada'} - considere a intenção de compra típica desta categoria
@@ -388,11 +413,20 @@ MÍDIA:
 - Vídeo: ${input.media.hasVideo ? 'Sim' : 'Não (oportunidade de melhoria)'}
 
 INSTRUÇÕES ESPECÍFICAS:
-1. Se media.imageCount > 0, NÃO diga que faltam fotos
-2. Se listing.description não estiver vazio, NÃO diga que falta descrição
-3. Analise a performance real: se conversão alta mas tráfego baixo → foco em tráfego; se tráfego alto mas conversão baixa → foco em otimização
-4. Considere o preço (R$ ${input.listing.price.toFixed(2)}) em relação à categoria e performance
-5. Gere hacks baseados nos dados: ${input.performance.conversionRate && input.performance.conversionRate > 0.05 ? 'conversão boa' : 'conversão pode melhorar'}, ${input.performance.visits > 100 ? 'tráfego razoável' : 'tráfego baixo'}, ${input.media.hasVideo ? 'tem vídeo' : 'sem vídeo (oportunidade)'}
+1. O SCORE JÁ FOI CALCULADO - você NÃO deve calcular um novo score
+2. Seu papel é EXPLICAR os gaps identificados no score e SUGERIR ações para melhorar
+3. Priorize as dimensões com MENOR score no breakdown
+4. Foque em impacto mensurável: cada hack deve indicar quantos pontos pode ganhar
+5. Se media.imageCount > 0, NÃO diga que faltam fotos
+6. Se listing.description não estiver vazio, NÃO diga que falta descrição
+7. Analise a performance real: se conversão alta mas tráfego baixo → foco em tráfego; se tráfego alto mas conversão baixa → foco em otimização
+8. Considere o preço (R$ ${input.listing.price.toFixed(2)}) em relação à categoria e performance
+9. Use o potencial de ganho fornecido para priorizar hacks
+
+IMPORTANTE:
+- O score retornado deve ser o MESMO do score calculado (${scoreResult.score.final})
+- Não invente um novo score
+- Foque em explicar POR QUE o score não é 100 e COMO melhorar
 
 Forneça sua análise no formato JSON especificado. Base sua análise APENAS nos dados fornecidos acima.`;
 
@@ -414,8 +448,11 @@ Forneça sua análise no formato JSON especificado. Base sua análise APENAS nos
 
     const analysis = JSON.parse(content) as AIAnalysisResult;
     
+    // Garantir que o score retornado pela IA seja o mesmo do calculado
+    // (a IA não deve calcular um novo score, apenas explicar)
     return {
       ...analysis,
+      score: scoreResult.score.final, // Usar score calculado, não o da IA (se a IA retornar diferente)
       analyzedAt: new Date().toISOString(),
       model: 'gpt-4o',
     };
@@ -425,6 +462,7 @@ Forneça sua análise no formato JSON especificado. Base sua análise APENAS nos
    * Analyze a listing and save the results as recommendations in the database
    * 
    * Uses the canonical AIAnalyzeInputV1 payload with 30-day metrics by default.
+   * Now uses IA Score Model V1 as input for the AI.
    */
   async analyzeAndSaveRecommendations(
     listingId: string,
@@ -435,9 +473,14 @@ Forneça sua análise no formato JSON especificado. Base sua análise APENAS nos
     analysis: AIAnalysisResult;
     savedRecommendations: number;
     dataQuality: AIAnalyzeInputV1['dataQuality'];
+    score: IAScoreResult;
   }> {
     // Build canonical input with real data
     const input = await this.buildAIAnalyzeInput(listingId, userId, requestId, periodDays);
+
+    // Calculate IA Score first
+    const scoreService = new IAScoreService(this.tenantId);
+    const scoreResult = await scoreService.calculateScore(listingId, periodDays);
 
     // Get listing for score update
     const listing = await prisma.listing.findFirst({
@@ -451,7 +494,7 @@ Forneça sua análise no formato JSON especificado. Base sua análise APENAS nos
       throw new Error(`Listing ${listingId} not found for tenant ${this.tenantId}`);
     }
 
-    const analysis = await this.analyzeListing(input);
+    const analysis = await this.analyzeListing(input, scoreResult);
 
     // Save growth hacks as recommendations
     let savedCount = 0;
@@ -574,6 +617,7 @@ Forneça sua análise no formato JSON especificado. Base sua análise APENAS nos
       analysis,
       savedRecommendations: savedCount,
       dataQuality: input.dataQuality,
+      score: scoreResult,
     };
   }
 }

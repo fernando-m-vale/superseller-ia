@@ -24,7 +24,7 @@ import {
 import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb, Sparkles, Copy, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { useListingRecommendations, applyRecommendation } from '@/hooks/use-recommendations'
+// Removido: applyRecommendation não é mais necessário (aba Recomendações removida)
 import { useAIAnalyze } from '@/hooks/use-ai-analyze'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -155,19 +155,28 @@ function AIAnalysisTab({
     return 'bg-red-100'
   }
 
+  // Encontrar maior gargalo (menor score no breakdown)
+  const breakdown = analysis.scoreBreakdown;
+  const potentialGain = analysis.potentialGain;
+  const lowestDimension = breakdown ? Object.entries(breakdown).reduce((min, [key, value]) => {
+    const [, minValue] = min;
+    return value < minValue ? [key, value] : min;
+  }, ['cadastro', breakdown.cadastro] as [string, number]) : null;
+
   return (
     <div className="space-y-6">
       {/* Score IA */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Score IA</CardTitle>
+            <CardTitle className="text-lg">IA Score</CardTitle>
             <Badge className={`${getScoreBgColor(analysis.score)} ${getScoreColor(analysis.score)} text-lg font-bold px-4 py-1`}>
               {analysis.score}/100
             </Badge>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* Barra principal */}
           <div className="w-full bg-muted rounded-full h-3 mb-4">
             <div
               className={`h-3 rounded-full transition-all ${
@@ -182,7 +191,76 @@ function AIAnalysisTab({
               style={{ width: `${analysis.score}%` }}
             />
           </div>
-          <p className="text-sm text-muted-foreground">
+
+          {/* Breakdown por dimensão */}
+          {breakdown && (
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold">Breakdown por Dimensão</h4>
+              {Object.entries(breakdown).map(([dimension, score]) => {
+                const maxScore = dimension === 'cadastro' || dimension === 'midia' || dimension === 'seo' ? 20
+                  : dimension === 'performance' ? 30
+                  : 10; // competitividade
+                const percentage = (score / maxScore) * 100;
+                const gain = potentialGain?.[dimension as keyof typeof potentialGain];
+                const isLowest = lowestDimension && lowestDimension[0] === dimension;
+
+                return (
+                  <div key={dimension} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium capitalize">
+                        {dimension === 'cadastro' ? '📝 Cadastro' :
+                         dimension === 'midia' ? '🖼️ Mídia' :
+                         dimension === 'performance' ? '📈 Performance' :
+                         dimension === 'seo' ? '🔍 SEO' :
+                         '🏆 Competitividade'}
+                        {isLowest && <span className="ml-2 text-orange-600 font-bold">(Maior Gargalo)</span>}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={score < maxScore * 0.5 ? 'text-red-600' : score < maxScore * 0.7 ? 'text-yellow-600' : 'text-green-600'}>
+                          {score}/{maxScore}
+                        </span>
+                        {gain && (
+                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
+                            +{gain}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          percentage >= 70
+                            ? 'bg-green-600'
+                            : percentage >= 50
+                            ? 'bg-yellow-600'
+                            : 'bg-red-600'
+                        }`}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Insight automático */}
+          {lowestDimension && (
+            <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-md">
+              <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
+                💡 Maior Gargalo: {lowestDimension[0] === 'cadastro' ? 'Cadastro' :
+                                   lowestDimension[0] === 'midia' ? 'Mídia' :
+                                   lowestDimension[0] === 'performance' ? 'Performance' :
+                                   lowestDimension[0] === 'seo' ? 'SEO' :
+                                   'Competitividade'} ({lowestDimension[1]}/{breakdown?.[lowestDimension[0] as keyof typeof breakdown] || 0})
+              </p>
+              <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
+                Foque em melhorar esta dimensão para aumentar o score geral mais rapidamente.
+              </p>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground pt-2 border-t">
             Análise gerada em {new Date(analysis.analyzedAt).toLocaleString('pt-BR')} usando {analysis.model}
           </p>
         </CardContent>
@@ -322,8 +400,8 @@ export function ListingsTable() {
   const { data, isLoading, error, refetch } = useListings(filters)
   const { toast } = useToast()
   
-  // Buscar todas as recomendações pendentes do tenant
-  const { data: recommendationsData, refetch: refetchRecommendations } = useRecommendations({ status: 'pending', limit: 100 })
+  // Buscar todas as recomendações pendentes do tenant (apenas para contagem na tabela)
+  const { data: recommendationsData } = useRecommendations({ status: 'pending', limit: 100 })
   
   // Criar um mapa de listingId -> recomendações para lookup rápido
   const recommendationsByListing = new Map<string, Recommendation[]>()
@@ -333,12 +411,13 @@ export function ListingsTable() {
     recommendationsByListing.set(rec.listingId, existing)
   })
 
-  // Buscar recomendações do listing selecionado
-  const { recommendations: selectedRecommendations, refetch: refetchSelectedRecommendations } = useListingRecommendations(selectedListingId)
+  // Removido: recomendações não são mais exibidas no modal (apenas IA)
   
   // Hook para análise de IA
   const { data: aiAnalysis, isLoading: aiLoading, error: aiError, analyze: triggerAIAnalysis } = useAIAnalyze(selectedListingId)
-  const [activeTab, setActiveTab] = useState<'recommendations' | 'ai'>('recommendations')
+  
+  // Removido uso de selectedRecommendations - não mais necessário
+  // Removida aba de Recomendações - mantendo apenas IA
   const [copiedText, setCopiedText] = useState<string | null>(null)
 
   const handleOpenRecommendations = (listingId: string) => {
@@ -346,30 +425,7 @@ export function ListingsTable() {
     setSheetOpen(true)
   }
 
-  const handleApplyRecommendation = async (recId: string) => {
-    try {
-      await applyRecommendation(recId)
-      
-      // Toast de sucesso
-      toast({
-        variant: 'success',
-        title: 'Recomendação aplicada!',
-        description: 'A recomendação foi marcada como concluída.',
-      })
-      
-      // Atualizar listas localmente
-      refetchRecommendations()
-      refetchSelectedRecommendations()
-    } catch {
-      // Log erro sem detalhes sensíveis
-      console.error('Erro ao aplicar recomendação')
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível marcar a recomendação como feita. Tente novamente.',
-      })
-    }
-  }
+  // Removido: handleApplyRecommendation não é mais necessário (aba Recomendações removida)
 
   const handleSearch = (q: string) => {
     setFilters(prev => ({ ...prev, q: q || undefined, page: 1 }))
@@ -636,80 +692,13 @@ export function ListingsTable() {
             </SheetDescription>
           </SheetHeader>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'recommendations' | 'ai')} className="mt-6">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="recommendations">
-                <Lightbulb className="h-4 w-4 mr-2" />
-                Recomendações ({selectedRecommendations.length})
-              </TabsTrigger>
+          <Tabs value="ai" className="mt-6">
+            <TabsList className="grid w-full grid-cols-1">
               <TabsTrigger value="ai">
                 <Sparkles className="h-4 w-4 mr-2" />
                 Inteligência Artificial
               </TabsTrigger>
             </TabsList>
-
-            <TabsContent value="recommendations" className="mt-4">
-              <div className="space-y-4">
-            {selectedRecommendations.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Lightbulb className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhuma recomendação disponível para este anúncio.</p>
-              </div>
-            ) : (
-              selectedRecommendations
-                .sort((a, b) => b.priority - a.priority)
-                .map((rec) => (
-                  <div
-                    key={rec.id}
-                    className="p-4 border rounded-lg space-y-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge
-                            variant={
-                              rec.priority >= 90
-                                ? 'destructive'
-                                : rec.priority >= 70
-                                  ? 'default'
-                                  : 'secondary'
-                            }
-                          >
-                            {rec.type}
-                          </Badge>
-                          {rec.priority >= 90 && (
-                            <Badge variant="outline" className="text-red-600 border-red-600">
-                              Crítico
-                            </Badge>
-                          )}
-                        </div>
-                        <h4 className="font-semibold text-sm mb-1">{rec.title}</h4>
-                        <p className="text-sm text-muted-foreground">{rec.description}</p>
-                        {rec.impactEstimate && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            💡 {rec.impactEstimate}
-                          </p>
-                        )}
-                        {rec.scoreImpact && (
-                          <p className="text-xs text-muted-foreground">
-                            📈 Potencial de ganho: +{rec.scoreImpact} pontos no Super Seller Score
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => handleApplyRecommendation(rec.id)}
-                    >
-                      Marcar como Feito
-                    </Button>
-                  </div>
-                ))
-            )}
-              </div>
-            </TabsContent>
 
             <TabsContent value="ai" className="mt-4">
               <AIAnalysisTab

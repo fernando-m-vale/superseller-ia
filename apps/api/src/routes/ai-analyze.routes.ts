@@ -7,6 +7,7 @@
 import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { OpenAIService } from '../services/OpenAIService';
+import { IAScoreService } from '../services/IAScoreService';
 import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError, createSafeErrorMessage } from '../utils/sanitize-error';
 
@@ -33,6 +34,85 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
    * Uses canonical payload V1 with 30-day metrics by default.
    */
   const PERIOD_DAYS = 30; // Default period for metrics aggregation
+
+  /**
+   * GET /api/v1/ai/score/:listingId
+   * 
+   * Calcula e retorna o IA Score Model V1 para um listing.
+   * Score explicável, baseado em dados reais, sem alucinação.
+   */
+  app.get<{ Params: { listingId: string } }>(
+    '/score/:listingId',
+    { preHandler: authGuard },
+    async (request: FastifyRequest<{ Params: { listingId: string } }>, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado',
+          });
+        }
+
+        const params = AnalyzeParamsSchema.parse(request.params);
+        const { listingId } = params;
+
+        request.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          listingId,
+          periodDays: PERIOD_DAYS,
+        }, 'Calculating IA Score');
+
+        const scoreService = new IAScoreService(tenantId);
+        const result = await scoreService.calculateScore(listingId, PERIOD_DAYS);
+
+        request.log.info(
+          {
+            requestId,
+            userId,
+            tenantId,
+            listingId,
+            finalScore: result.score.final,
+            breakdown: result.score.breakdown,
+            performanceSource: result.dataQuality.sources.performance,
+            completenessScore: result.dataQuality.completenessScore,
+          },
+          'IA Score calculated'
+        );
+
+        return reply.status(200).send({
+          message: 'Score calculado com sucesso',
+          data: result,
+        });
+      } catch (error) {
+        const { listingId } = (request.params as { listingId: string }) || {};
+
+        request.log.error({ 
+          requestId,
+          userId,
+          tenantId,
+          listingId,
+          err: error 
+        }, 'Error calculating IA Score');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'ID do anúncio inválido',
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao calcular score';
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: errorMessage,
+        });
+      }
+    }
+  );
 
   app.post<{ Params: { listingId: string } }>(
     '/analyze/:listingId',
@@ -95,13 +175,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           message: 'Análise concluída com sucesso',
           data: {
             listingId,
-            score: result.analysis.score,
+            score: result.score.score.final,
+            scoreBreakdown: result.score.score.breakdown,
+            potentialGain: result.score.score.potential_gain,
             critique: result.analysis.critique,
             growthHacks: result.analysis.growthHacks,
             seoSuggestions: result.analysis.seoSuggestions,
             savedRecommendations: result.savedRecommendations,
             analyzedAt: result.analysis.analyzedAt,
             model: result.analysis.model,
+            metrics30d: result.score.metrics_30d,
+            dataQuality: result.dataQuality,
           },
         });
       } catch (error) {
