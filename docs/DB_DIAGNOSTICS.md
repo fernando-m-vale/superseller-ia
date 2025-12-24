@@ -10,6 +10,9 @@ Objetivo:
 
 ---
 
+Status: Válido e atualizado após correções de sync e métricas.
+
+
 ## 1. Identidades canário (usar sempre para testes)
 
 ### Tenant (produção)

@@ -231,6 +231,18 @@ Endpoint: `POST /api/v1/ai/analyze/:listingId`
 }
 ```
 
+## IA Score Integration
+
+O payload da IA inclui o IA Score calculado no backend.
+
+A IA NÃO calcula score.
+A IA apenas:
+- Explica gaps
+- Prioriza ações
+- Sugere melhorias
+
+
+
 ## Próximos Passos
 
 - [ ] Adicionar mais indicadores de qualidade (ex: dados desatualizados)

@@ -2,6 +2,24 @@ Developer Log - SuperSeller IA
 
 # Dev Log — SuperSeller IA
 
+## 2025-12-24 — Marco: IA Score Model
+
+### Concluído
+- Correção total do sync de listings
+- Implementação de métricas diárias
+- Payload estruturado para IA
+- Eliminação de alucinação
+- UX estável e segura
+
+### Em andamento
+- IA Score Model V1 (backend + frontend + IA)
+
+### Próximo Sprint
+- Benchmark por categoria
+- Hacks data-driven
+- IA vs Concorrentes
+
+
 ## 2025-12-22 — PRIORIDADE 1 (Dados reais para IA) + estado do modal
 
 ### Objetivo do dia

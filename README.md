@@ -7,6 +7,14 @@ Conecte sua conta, receba um diagnóstico profundo e deixe a IA gerar hacks de c
 
 O Super Seller IA não é apenas um dashboard. É um Copiloto de E-commerce que analisa métricas de performance (CTR, Conversão, Receita) e utiliza Inteligência Artificial Generativa (LLM) para criar recomendações acionáveis.
 
+## What makes SuperSeller IA different?
+
+- Data-first (no guesses)
+- Explainable AI Score
+- Marketplace-specific intelligence
+- Focus on revenue, not vanity metrics
+
+
 Diferenciais:
 
 Super Seller Score: Algoritmo proprietário (0-100) que audita a saúde real da sua conta.
