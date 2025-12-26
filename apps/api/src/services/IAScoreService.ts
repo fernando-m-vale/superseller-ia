@@ -175,9 +175,9 @@ export class IAScoreService {
       metrics_30d: {
         visits,
         orders,
-        revenue,
-        conversionRate,
-        ctr: avgCtr,
+        revenue: revenue !== null ? Number(revenue) : null, // Garantir serialização JSON
+        conversionRate: conversionRate !== null ? Number(conversionRate) : null, // Garantir serialização JSON
+        ctr: avgCtr !== null ? Number(avgCtr) : null, // Garantir serialização JSON
       },
       dataQuality: {
         completenessScore,

@@ -2,6 +2,7 @@ import axios, { AxiosError } from 'axios';
 import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus } from '@prisma/client';
 import { ScoreCalculator } from './ScoreCalculator';
 import { RecommendationService } from './RecommendationService';
+import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
 
 const prisma = new PrismaClient();
 
@@ -614,22 +615,19 @@ export class MercadoLivreSyncService {
         }
       }
       
-      // Verificar se tem vídeo - procurar por video_id ou campo relacionado
-      // ML pode retornar video_id como string (ex: "gqkEN9poKM;youtube") ou null
-      // Também pode ter array videos com objetos { id, type }
-      let hasVideoFromAPI: boolean | undefined = undefined;
+      // Verificar se tem vídeo usando helper robusto
+      const videoExtraction = extractHasVideoFromMlItem(item);
+      const hasVideoFromAPI = videoExtraction.hasVideo;
       
-      if (item.video_id && typeof item.video_id === 'string' && item.video_id.trim().length > 0) {
-        // video_id presente e não vazio
-        hasVideoFromAPI = true;
-      } else if (Array.isArray(item.videos) && item.videos.length > 0) {
-        // Array videos presente e não vazio
-        hasVideoFromAPI = true;
-      } else if (item.video_id === null || item.video_id === '') {
-        // Explicitamente null ou string vazia = sem vídeo
-        hasVideoFromAPI = false;
+      // Log seguro com evidências (sem tokens) - apenas em dev
+      if (process.env.NODE_ENV !== 'production' && videoExtraction.evidence.length > 0) {
+        console.log(`[ML-SYNC] Video extraction for ${item.id}:`, {
+          tenantId: this.tenantId,
+          hasVideo: hasVideoFromAPI,
+          evidenceCount: videoExtraction.evidence.length,
+          evidence: videoExtraction.evidence.slice(0, 3), // Limitar evidências no log
+        });
       }
-      // Se video_id for undefined, mantém undefined (não atualiza campo existente)
       
       // Log seguro (sem tokens) para diagnóstico
       const logData = {
@@ -720,14 +718,9 @@ export class MercadoLivreSyncService {
         }
         // Se é update e não veio thumbnail, NÃO atualizar (manter valor existente)
 
-        // Atualizar has_video apenas se conseguirmos determinar explicitamente
-        if (hasVideoFromAPI !== undefined) {
-          listingData.has_video = hasVideoFromAPI;
-        } else if (!existing) {
-          // Se é criação e não conseguimos determinar, setar false
-          listingData.has_video = false;
-        }
-        // Se é update e não conseguimos determinar, NÃO atualizar (manter valor existente)
+        // Atualizar has_video sempre (true/false) desde que o item tenha sido buscado com sucesso
+        // O helper extractHasVideoFromMlItem sempre retorna boolean
+        listingData.has_video = hasVideoFromAPI;
 
         // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos
         // Isso evita sobrescrever com 0 quando não há dados
