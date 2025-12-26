@@ -2,6 +2,47 @@ Developer Log - SuperSeller IA
 
 # Dev Log — SuperSeller IA
 
+## 26/12/2025 — Fase 1.1 (Score Model + Correções + Diagnóstico Vídeo)
+
+### Entregas confirmadas
+- IA Score Model V1 implementado e validado:
+  - Endpoint: `GET /api/v1/ai/score/:listingId`
+  - Exemplo de retorno validado manualmente: `final=55`, breakdown coerente; metrics_30d retornando.
+- Sync de cadastro do listing validado via SQL:
+  - Descrição: total 46, null_desc 0, empty_desc 0, very_short_desc 0, ok_desc 46.
+  - Pictures_count: total 46, with_pics 46.
+
+### Problema aberto (bloqueador parcial)
+- `has_video` permanece sempre `false` / `with_video = 0` para tenant `6c00e0e6-7c94-48cf-a77d-2ef1a2499794`.
+- Re-sync executado com sucesso:
+  - `POST /api/v1/sync/mercadolivre/listings?limit=50`
+  - retorno: `listingsProcessed=46`, `listingsUpdated=46`, `errorsCount=0`
+- Mesmo assim, SQL continua:
+  - `SELECT COUNT(*) total, SUM(CASE WHEN has_video THEN 1 ELSE 0 END) with_video FROM listings ...` -> `with_video=0`
+
+### Evidências coletadas
+- Testes PowerShell diretos no endpoint público do Mercado Livre falharam sem OAuth:
+  - `GET https://api.mercadolibre.com/items/MLB4217107417` -> 403 `PolicyAgent / PA_UNAUTHORIZED_RESULT_FROM_POLICIES`
+  - Outros IDs também 403.
+  - (Um teste anterior retornou “resource not found” em chamada diferente; provável erro de rota/ID naquele momento.)
+- Conclusão: precisamos testar o ML com access_token OAuth real da conta conectada.
+
+### Plano de validação (próxima sessão)
+1) SQL: localizar e extrair `access_token` do Mercado Livre no banco (NÃO compartilhar token).
+2) PowerShell: chamar com OAuth:
+   - `GET https://api.mercadolibre.com/items/{MLB...}` com header `Authorization: Bearer <token>`
+   - `GET https://api.mercadolibre.com/items/{MLB...}/description` idem
+3) Inspecionar no JSON se existe:
+   - `video_id`, `videos`, keys contendo “video”, tags/attributes.
+4) Decisão:
+   - Se existir evidência no payload -> corrigir sync/mapeamento/gravação em `has_video`.
+   - Se não existir -> ajustar modelo/UX: tratar `has_video` como desconhecido e remover penalidade/heurística no score.
+
+### IDs/tenant relevantes
+- tenant_id: `6c00e0e6-7c94-48cf-a77d-2ef1a2499794`
+- itemIdExt (exemplo com vídeo na UI): `MLB4217107417`
+
+
 ## 2025-12-24 — Marco: IA Score Model
 
 ### Concluído

@@ -213,3 +213,59 @@ Confirmar:
 ❌ Aba “Recomendações” do modal usa fonte antiga e deve ser removida
 
 🔜 Próximo foco: IA Score Model + Prompt avançado
+
+## Runbook — Diagnóstico de Vídeo (has_video) Mercado Livre
+
+### Objetivo
+Validar se a API do Mercado Livre retorna evidência de vídeo (video_id/videos/etc.) para um item que possui vídeo na UI.
+Se a API não retornar, `has_video` não pode ser considerado fonte confiável.
+
+### Pré-requisitos
+- Ter um `access_token` OAuth válido da conexão Mercado Livre do tenant.
+- Não expor tokens em logs/screenshots/prints.
+
+### Passo 1 — Obter access_token do ML no banco
+```sql
+SELECT
+  provider_account_id,
+  type,
+  status,
+  expires_at,
+  updated_at
+FROM marketplace_connections
+WHERE tenant_id = '<TENANT_ID>'
+  AND type = 'mercadolivre'
+ORDER BY updated_at DESC
+LIMIT 5;
+
+Passo 2 — Testar item autenticado (PowerShell)
+SELECT access_token
+FROM marketplace_connections
+WHERE tenant_id = '<TENANT_ID>'
+  AND type = 'mercadolivre'
+ORDER BY updated_at DESC
+LIMIT 1;
+
+Passo 3 — Checar descrição autenticada (PowerShell)
+Invoke-RestMethod -Method Get -Uri "https://api.mercadolibre.com/items/$itemId/description" -Headers @{
+  Authorization = "Bearer $mlAccessToken"
+  "User-Agent"  = "SuperSellerIA/1.0"
+}
+
+Passo 4 — Verificação de evidências de vídeo no JSON retornado
+
+Validar presença de qualquer um:
+
+video_id
+
+videos
+
+keys contendo “video”
+
+attributes/tags relacionados a vídeo
+
+Resultado esperado
+
+Se houver evidência: corrigir gravação do has_video no sync.
+
+Se não houver evidência: tratar has_video como desconhecido e remover/mitigar penalização no score/modelo.
