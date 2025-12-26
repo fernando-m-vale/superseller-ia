@@ -22,7 +22,8 @@ interface MercadoLivreItem {
   listing_type_id?: string; // gold_special, gold_pro, etc
   pictures?: Array<{ id: string; url?: string; size?: string }>;
   attributes?: Array<{ id: string; value_name: string }>;
-  video_id?: string;
+  video_id?: string | null;
+  videos?: Array<{ id: string; type?: string }>;
   descriptions?: Array<{ id: string; plain_text?: string }>;
   shipping?: {
     free_shipping?: boolean;
@@ -614,7 +615,21 @@ export class MercadoLivreSyncService {
       }
       
       // Verificar se tem vídeo - procurar por video_id ou campo relacionado
-      const hasVideoFromAPI = !!item.video_id;
+      // ML pode retornar video_id como string (ex: "gqkEN9poKM;youtube") ou null
+      // Também pode ter array videos com objetos { id, type }
+      let hasVideoFromAPI: boolean | undefined = undefined;
+      
+      if (item.video_id && typeof item.video_id === 'string' && item.video_id.trim().length > 0) {
+        // video_id presente e não vazio
+        hasVideoFromAPI = true;
+      } else if (Array.isArray(item.videos) && item.videos.length > 0) {
+        // Array videos presente e não vazio
+        hasVideoFromAPI = true;
+      } else if (item.video_id === null || item.video_id === '') {
+        // Explicitamente null ou string vazia = sem vídeo
+        hasVideoFromAPI = false;
+      }
+      // Se video_id for undefined, mantém undefined (não atualiza campo existente)
       
       // Log seguro (sem tokens) para diagnóstico
       const logData = {

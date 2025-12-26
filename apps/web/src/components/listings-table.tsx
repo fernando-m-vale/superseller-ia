@@ -155,13 +155,37 @@ function AIAnalysisTab({
     return 'bg-red-100'
   }
 
-  // Encontrar maior gargalo (menor score no breakdown)
+  // Máximos por dimensão
+  const maxScores: Record<string, number> = {
+    cadastro: 20,
+    midia: 20,
+    performance: 30,
+    seo: 20,
+    competitividade: 10,
+  };
+
+  // Encontrar maior gargalo (menor % relativo no breakdown)
   const breakdown = analysis.scoreBreakdown;
   const potentialGain = analysis.potentialGain;
-  const lowestDimension = breakdown ? Object.entries(breakdown).reduce((min, [key, value]) => {
-    const [, minValue] = min;
-    return value < minValue ? [key, value] : min;
-  }, ['cadastro', breakdown.cadastro] as [string, number]) : null;
+
+  // Calcular menor % relativo (gargalo)
+  const lowestDimension = breakdown ? (() => {
+    let minKey = 'cadastro';
+    let minValue = breakdown.cadastro;
+    let minPercent = (breakdown.cadastro / maxScores.cadastro) * 100;
+    
+    Object.entries(breakdown).forEach(([key, value]) => {
+      const maxScore = maxScores[key] || 100;
+      const percent = maxScore > 0 ? (value / maxScore) * 100 : 0;
+      if (percent < minPercent) {
+        minKey = key;
+        minValue = value;
+        minPercent = percent;
+      }
+    });
+    
+    return [minKey, minValue, minPercent] as [string, number, number];
+  })() : null;
 
   return (
     <div className="space-y-6">
@@ -197,10 +221,10 @@ function AIAnalysisTab({
             <div className="space-y-3">
               <h4 className="text-sm font-semibold">Breakdown por Dimensão</h4>
               {Object.entries(breakdown).map(([dimension, score]) => {
-                const maxScore = dimension === 'cadastro' || dimension === 'midia' || dimension === 'seo' ? 20
-                  : dimension === 'performance' ? 30
-                  : 10; // competitividade
-                const percentage = (score / maxScore) * 100;
+                const maxScore = maxScores[dimension] || 100;
+                // Garantir clamp: score nunca pode passar do max
+                const clampedScore = Math.min(score, maxScore);
+                const percentage = maxScore > 0 ? (clampedScore / maxScore) * 100 : 0;
                 const gain = potentialGain?.[dimension as keyof typeof potentialGain];
                 const isLowest = lowestDimension && lowestDimension[0] === dimension;
 
@@ -216,8 +240,8 @@ function AIAnalysisTab({
                         {isLowest && <span className="ml-2 text-orange-600 font-bold">(Maior Gargalo)</span>}
                       </span>
                       <div className="flex items-center gap-2">
-                        <span className={score < maxScore * 0.5 ? 'text-red-600' : score < maxScore * 0.7 ? 'text-yellow-600' : 'text-green-600'}>
-                          {score}/{maxScore}
+                        <span className={percentage < 50 ? 'text-red-600' : percentage < 70 ? 'text-yellow-600' : 'text-green-600'}>
+                          {clampedScore}/{maxScore}
                         </span>
                         {gain && (
                           <Badge variant="outline" className="text-xs text-green-600 border-green-600">
@@ -235,7 +259,7 @@ function AIAnalysisTab({
                             ? 'bg-yellow-600'
                             : 'bg-red-600'
                         }`}
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${Math.min(100, percentage)}%` }}
                       />
                     </div>
                   </div>
@@ -245,17 +269,26 @@ function AIAnalysisTab({
           )}
 
           {/* Insight automático */}
-          {lowestDimension && (
+          {lowestDimension && breakdown && (
             <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-md">
               <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
                 💡 Maior Gargalo: {lowestDimension[0] === 'cadastro' ? 'Cadastro' :
                                    lowestDimension[0] === 'midia' ? 'Mídia' :
                                    lowestDimension[0] === 'performance' ? 'Performance' :
                                    lowestDimension[0] === 'seo' ? 'SEO' :
-                                   'Competitividade'} ({lowestDimension[1]}/{breakdown?.[lowestDimension[0] as keyof typeof breakdown] || 0})
+                                   'Competitividade'} ({lowestDimension[1]}/{maxScores[lowestDimension[0]] || 0}) - {lowestDimension[2]?.toFixed(0) || 0}%
               </p>
               <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
                 Foque em melhorar esta dimensão para aumentar o score geral mais rapidamente.
+              </p>
+            </div>
+          )}
+
+          {/* Fallback se breakdown estiver incompleto */}
+          {!breakdown && (
+            <div className="mt-4 p-3 bg-muted rounded-md">
+              <p className="text-sm text-muted-foreground">
+                Breakdown de score não disponível. Score geral: {analysis.score}/100
               </p>
             </div>
           )}

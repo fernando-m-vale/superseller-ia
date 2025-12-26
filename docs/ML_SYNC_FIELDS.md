@@ -49,7 +49,7 @@ Estes campos **NÃO são atualizados** se a API não retornar valores válidos, 
 | `item.descriptions[0].plain_text` (via `/items/{id}/description`) | `listings.description` | String? | Atualizado apenas se string não vazia (`trim().length > 0`) |
 | `item.pictures.length` | `listings.pictures_count` | Int? | Atualizado apenas se número válido (`>= 0`) |
 | `item.thumbnail` OU `item.pictures[0].url` | `listings.thumbnail_url` | String? | Atualizado apenas se URL presente |
-| `item.video_id` | `listings.has_video` | Boolean? | Atualizado apenas se `video_id` presente (true) ou ausente explicitamente (false) |
+| `item.video_id` OU `item.videos[]` | `listings.has_video` | Boolean? | Atualizado apenas se `video_id` presente (string não vazia) ou `videos` array não vazio (true), ou explicitamente null/empty (false). Se `undefined`, não atualiza campo existente. |
 | `item.visits` | `listings.visits_last_7d` | Int? | Atualizado apenas se número válido (`>= 0`) |
 | `item.sold_quantity` | `listings.sales_last_7d` | Int? | Atualizado apenas se número válido (`>= 0`) |
 
@@ -68,8 +68,10 @@ Estes campos **NÃO são atualizados** se a API não retornar valores válidos, 
    - Se é criação, seta `null` se não houver thumbnail
 
 4. **Has Video**:
-   - Se API não retornar `video_id`, **não atualiza** campo existente (mantém valor anterior)
-   - Se é criação, seta `false` se não conseguir determinar
+   - Detecção robusta: verifica `item.video_id` (string não vazia) OU `item.videos` (array não vazio)
+   - Se `video_id` for `null` ou string vazia, seta `false`
+   - Se `video_id` for `undefined`, **não atualiza** campo existente (mantém valor anterior)
+   - Se é criação e não conseguir determinar, seta `false`
 
 5. **Visits/Sales Last 7d**:
    - Se API retornar `undefined`, `null` ou valor negativo, **não atualiza** campo existente

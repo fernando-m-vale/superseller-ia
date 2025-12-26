@@ -44,7 +44,9 @@ Criar um score explicável, baseado em dados reais, que represente a qualidade e
 - semantic_score: 10 pontos (placeholder V1)
 
 ### Competitividade (0-10)
-- Placeholder V1: 50 pontos fixos (5/10)
+- Placeholder V1: 5 pontos fixos (50% do máximo)
+- V2: benchmark por categoria
+- V3: comparação com concorrentes
 
 ## Fontes de Dados
 - `listings` (cadastro, mídia)
@@ -68,11 +70,18 @@ O sistema calcula automaticamente o potencial de ganho por dimensão:
 - Cadastro: +5 a +10 (título/descrição)
 - SEO: +5 a +10 (CTR/palavras-chave)
 
+## Validações e Clamps
+
+- **Clamp por dimensão:** Cada score de dimensão é limitado ao seu máximo (cadastro ≤ 20, mídia ≤ 20, performance ≤ 30, seo ≤ 20, competitividade ≤ 10)
+- **Clamp do score final:** Score total sempre entre 0-100
+- **Coerência:** Score total = soma das dimensões (não pode exceder 100)
+
 ## Princípios
 - **Explicável:** Cada dimensão tem regras claras
 - **Determinístico:** Mesmos dados = mesmo score
 - **Anti-alucinação:** Baseado apenas em dados reais
 - **Orientado a impacto:** Foco em ações que aumentam o score
+- **Consistente:** Scores sempre dentro dos limites esperados
 
 ## Endpoints
 

@@ -139,20 +139,21 @@ export class IAScoreService {
 
     // Calcular dimensões
     const breakdown: IAScoreBreakdown = {
-      cadastro: this.calculateCadastroScore(listing),
-      midia: this.calculateMidiaScore(listing),
-      performance: this.calculatePerformanceScore(visits, orders, conversionRate),
-      seo: this.calculateSEOScore(avgCtr),
-      competitividade: 50, // Placeholder V1 (fixo)
+      cadastro: this.clampScore(this.calculateCadastroScore(listing), 0, 20),
+      midia: this.clampScore(this.calculateMidiaScore(listing), 0, 20),
+      performance: this.clampScore(this.calculatePerformanceScore(visits, orders, conversionRate), 0, 30),
+      seo: this.clampScore(this.calculateSEOScore(avgCtr), 0, 20),
+      competitividade: this.clampScore(this.calculateCompetitividadeScore(), 0, 10), // Placeholder V1: 5 (50% do máximo)
     };
 
-    // Calcular score final (soma ponderada)
-    const final = 
+    // Calcular score final (soma ponderada) e garantir clamp <= 100
+    const final = Math.min(100, 
       breakdown.cadastro +
       breakdown.midia +
       breakdown.performance +
       breakdown.seo +
-      breakdown.competitividade;
+      breakdown.competitividade
+    );
 
     // Calcular potencial de ganho
     const potentialGain = this.calculatePotentialGain(breakdown, listing);
@@ -167,7 +168,7 @@ export class IAScoreService {
 
     return {
       score: {
-        final: Math.round(final),
+        final: Math.round(Math.max(0, Math.min(100, final))), // Clamp final entre 0-100
         breakdown,
         potential_gain: potentialGain,
       },
@@ -335,6 +336,25 @@ export class IAScoreService {
   }
 
   /**
+   * Calcula score de Competitividade (0-10)
+   * 
+   * Placeholder V1: retorna 5 (50% do máximo)
+   * V2: benchmark por categoria
+   * V3: comparação com concorrentes
+   */
+  private calculateCompetitividadeScore(): number {
+    // Placeholder V1: 50% do máximo (5/10)
+    return 5;
+  }
+
+  /**
+   * Clamp score entre min e max
+   */
+  private clampScore(score: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, score));
+  }
+
+  /**
    * Calcula potencial de ganho por dimensão
    */
   private calculatePotentialGain(
@@ -389,6 +409,16 @@ export class IAScoreService {
         gain.seo = '+10';
       } else {
         gain.seo = '+5';
+      }
+    }
+
+    // Competitividade (placeholder V1: sempre pode melhorar)
+    if (breakdown.competitividade < 10) {
+      const missing = 10 - breakdown.competitividade;
+      if (missing >= 5) {
+        gain.competitividade = '+5';
+      } else {
+        gain.competitividade = '+2';
       }
     }
 
