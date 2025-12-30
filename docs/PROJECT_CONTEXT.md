@@ -1,59 +1,106 @@
-# SuperSeller IA — Project Context (Atualizado em 2025-12-18)
+# SuperSeller IA — Project Context (Atualizado)
 
 ## Visão Geral
-SuperSeller IA é uma plataforma SaaS que utiliza dados reais de marketplaces (inicialmente Mercado Livre)
-para gerar diagnósticos, recomendações e ações inteligentes que aumentam visibilidade, conversão e vendas
-de anúncios e contas de sellers.
+O SuperSeller IA é uma plataforma de inteligência artificial voltada para sellers de marketplaces (inicialmente Mercado Livre), com o objetivo de diagnosticar anúncios, gerar um IA Score e recomendar ações práticas para aumentar visibilidade, conversão e vendas.
 
-O core do produto é a **Inteligência Artificial aplicada a dados reais do seller**, não regras genéricas.
+O projeto combina:
+- Coleta de dados via APIs oficiais (Mercado Livre)
+- Persistência estruturada (PostgreSQL)
+- Análise por IA (score, diagnóstico e recomendações)
+- Interface visual orientada à tomada de decisão do seller
 
 ---
 
-# SuperSeller IA — Project Context
+## Estado Atual do Projeto (Dez/2025)
 
-## Fase Atual
-FASE 2 — Inteligência de Produto
+### 1. Listings (Cadastro)
+- ✅ Títulos e descrições estão sendo corretamente ingeridos
+- ✅ Campo `description` validado no banco:
+  - 100% dos anúncios com descrição válida (>= 120 caracteres)
+- ✅ `pictures_count` confiável
+- ✅ Cadastro considerado estável para IA Score
 
-As fases de correção de dados e sincronização foram concluídas.
+---
 
-## Status Atual (última atualização: 26/12/2025)
+### 2. Mídia (Vídeo x Clips)
 
-### O que já foi concluído (Fase 1 – Dados/Confiabilidade)
-- ✅ Sync Mercado Livre (cadastro do listing) corrigido:
-  - `pictures_count` preenchendo corretamente
-  - `description` preenchendo corretamente (validação: 46/46 ok_desc, sem null/empty)
-  - `thumbnail_url` ok
-- ✅ `listing_metrics_daily` existe e está populado (últimos 30 dias) após execução do sync de métricas:
-  - endpoint utilizado: `POST /api/v1/sync/mercadolivre/metrics?days=30`
-- ✅ IA Payload evoluído para usar métricas agregadas 30d preferencialmente via `listing_metrics_daily` + `dataQuality.sources.performance`
-- ✅ UX unificada: aba “Recomendações” removida no modal; mantida apenas “Inteligência Artificial”
-- ✅ IA Score Model V1 implementado (determinístico, por dimensões):
-  - Cadastro 20%, Mídia 20%, Performance 30%, SEO 20%, Competitividade 10%
-  - Com clamps por dimensão e clamp final 0–100
-  - Endpoint de score: `GET /api/v1/ai/score/:listingId`
-- ✅ Retorno do endpoint de score validado manualmente (exemplo):
-  - `final: 55`, breakdown consistente
-  - `metrics_30d` retornando (visits/orders/revenue; ctr/conversion podem ser null se não houver base)
+#### Vídeo
+- Campo `has_video` baseado **exclusivamente** em evidência real da API (`video_id`, `videos[]`)
+- Para o listing MLB4217107417:
+  - `video_id = null`
+  - `has_video = false`
+- A API **não detecta clips como vídeo**
 
-### Pendência crítica (Fase 1.1 – Vídeo)
-- ❌ `has_video` continua 0 em produção (SQL `with_video = 0`), mesmo após re-sync.
-- Foram implementadas duas tentativas:
-  1) Hotfix 1.1: mapeamento `video_id`/`videos` com regras seguras (não sobrescrever undefined; tratar vazio como false)
-  2) Fix “definitivo”: helper `extractHasVideoFromMlItem()` buscando evidências em múltiplos campos (video_id, videos[], keys com "video", attributes, tags) e endpoint de debug (apenas dev) para inspecionar payload whitelisted do ML.
-- Suspeita atual: o Mercado Livre pode não expor informação de vídeo via API em alguns itens ou exige chamada autenticada; chamadas diretas sem token retornam:
-  - 403 `PolicyAgent / PA_UNAUTHORIZED_RESULT_FROM_POLICIES` em `/items/{id}` (PowerShell sem OAuth)
-  - “resource not found” em alguns testes anteriores (provável URL/rota/ID inválido em tentativa)
+#### Clips
+- Mercado Livre possui “Clips”, **mas eles não são detectáveis via Items API**
+- Implementação atual:
+  - `has_clips = NULL` → status “não detectável via API”
+  - `clips_source` e `clips_checked_at` preparados para futuro
+- UI e IA foram ajustadas para:
+  - ❌ Nunca afirmar ausência de clips quando `has_clips = NULL`
+  - ✔️ Orientar seller a validar no painel do ML
 
-### Decisão de diagnóstico para próxima sessão (Amanhã)
-Objetivo: confirmar se o ML retorna evidência de vídeo quando chamado com OAuth do seller/app.
-1) Buscar `access_token` do Mercado Livre no banco (`marketplace_connections` / conexão do tenant)
-2) Executar `/items/{MLB...}` com header `Authorization: Bearer <access_token>`
-3) Verificar no JSON se existe `video_id`, `videos`, ou qualquer campo relacionado a vídeo
-4) Concluir:
-   - (A) Se o payload tem evidência -> bug no sync/mapeamento (corrigir gravação em `has_video`)
-   - (B) Se o payload não tem evidência -> decisão de produto: `has_video` deve virar tri-state/unknown ou sair do score/peso (não confiar em “UI do ML”)
+---
 
-### Próximos passos planejados (Fase 2 – Inteligência)
-- Prioridade 1.2: consolidada (UX unificada no modal)
-- Prioridade 1.3: prompt avançado da IA (Cursor) – em andamento/iterativo
-- Próximo Sprint: Benchmark por categoria + IA vs Concorrentes + IA para Ads (ROAS-driven) (após fechar `has_video`)
+### 3. Performance (Ponto mais crítico)
+
+#### Orders e GMV
+- ❌ NÃO usar mais `sold_quantity` (lifetime)
+- ✅ Orders e GMV 30d agora vêm da **Orders API**
+- Persistência:
+  - 1 linha agregada por período (`period_days = 30`)
+  - `source = ml_orders_period`
+- Orders e GMV batem com o painel do Mercado Livre
+
+#### Visitas
+- API de visitas não retorna dados via Items API
+- Situação atual:
+  - `visits = NULL` (unknown) para todos os anúncios
+- Importante:
+  - `NULL` ≠ `0`
+  - Zero só deve ser usado quando for **zero real**
+
+---
+
+### 4. IA Score e Diagnóstico
+
+- IA Score funcional e estável
+- Breakdown atual:
+  - Cadastro: OK
+  - Mídia: penaliza ausência de vídeo real
+  - Performance: gargalo principal
+- Ajustes feitos:
+  - IA **não afirma mais “zero visitas” quando visits = NULL**
+  - IA distingue claramente:
+    - Vídeo
+    - Clips
+    - Não detectável via API
+
+---
+
+### 5. Frontend (Estado atual)
+
+#### Funcional
+- Modal de IA renderiza score, diagnóstico, SEO e descrição
+- Copy de mídia corrigida (vídeo x clips)
+
+#### Bugs conhecidos
+1. **IA ainda menciona “visitas zeradas” em alguns fluxos**
+   - Indício de `null → 0` em frontend ou payload
+2. **Modal reaproveita análise anterior**
+   - Ao abrir outro anúncio, mostra análise do anterior
+   - Necessário F5 para resetar
+
+---
+
+## Referências Oficiais
+- Mercado Livre — Visits API  
+  https://developers.mercadolivre.com.br/pt_br/recurso-visits
+
+---
+
+## Status Geral
+- ✅ Backend: ingestão de cadastro, mídia e orders estável
+- ⚠️ Performance: visitas ainda não ingeridas
+- ⚠️ Frontend: bugs de state/cache no modal
+- 🚧 Próximo foco: visitas + UX do modal

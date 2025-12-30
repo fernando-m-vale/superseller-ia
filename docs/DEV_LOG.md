@@ -1,6 +1,74 @@
 Developer Log - SuperSeller IA
 
-# Dev Log — SuperSeller IA
+# SuperSeller IA — Dev Log
+
+## 2025-12-30
+
+### ✅ Concluído
+
+#### Cadastro / Descrição
+- Validação SQL confirmou:
+  - 46 anúncios
+  - 0 descrições nulas
+  - 100% com descrição >= 120 caracteres
+
+#### Mídia
+- Separação conceitual e técnica:
+  - Vídeo ≠ Clips
+- Migração aplicada:
+  - has_clips
+  - clips_source
+  - clips_checked_at
+- UI e IA atualizadas para “não detectável via API”
+
+#### Performance — Orders e GMV
+- Correção definitiva:
+  - Orders API como fonte única para orders_30d e gmv_30d
+  - `sold_quantity` descartado
+- Persistência honesta:
+  - 1 linha agregada (period_days = 30)
+  - source = ml_orders_period
+
+---
+
+### ⚠️ Problemas Identificados
+
+#### Visitas
+- visits não disponível via Items API
+- Todos os registros atuais:
+  - visits = NULL
+- Painel do ML mostra visitas reais (ex: 721 em 30 dias)
+- Falta implementar ingestão via Visits API oficial
+
+#### IA / Copy
+- Em alguns fluxos:
+  - IA ainda usa linguagem “visitas zeradas”
+  - Mesmo quando visits = NULL
+- Necessário reforçar guardrails no frontend e backend payload
+
+#### Frontend — Modal
+- Bug crítico de UX:
+  - Modal reaproveita análise do anúncio anterior
+  - Estado não é resetado ao trocar de listing
+  - Botão de análise some até F5
+
+---
+
+### 🔧 Commits Relevantes
+- feat: add clips fields to listing model
+- fix: IA copy — never assert absence when hasClips=null
+- feat: make visits nullable + add period_days
+- feat: ingest orders via Orders API
+
+---
+
+## Próximo checkpoint
+Resolver visitas + corrigir modal antes de avançar para:
+- IA Score v2
+- Recomendações acionáveis
+- Automação de melhorias
+
+
 
 ## 26/12/2025 — Fase 1.1 (Score Model + Correções + Diagnóstico Vídeo)
 
