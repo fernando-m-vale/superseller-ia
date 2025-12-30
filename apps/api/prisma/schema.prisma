@@ -249,6 +249,7 @@ model ListingMetricsDaily {
   conversion  Decimal  @db.Decimal(5, 4)
   orders      Int
   gmv         Decimal  @db.Decimal(10, 2)
+  source      String?  // Origem dos dados: 'ml_metrics_api' | 'ml_orders' | 'estimate' | 'ml_items_aggregate'
   created_at  DateTime @default(now())
 
   tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)

@@ -899,6 +899,9 @@ export class MercadoLivreSyncService {
     success: boolean;
     listingsProcessed: number;
     metricsCreated: number;
+    rowsUpserted: number;
+    min_date: string | null;
+    max_date: string | null;
     errors: string[];
     duration: number;
   }> {
@@ -907,6 +910,9 @@ export class MercadoLivreSyncService {
       success: false,
       listingsProcessed: 0,
       metricsCreated: 0,
+      rowsUpserted: 0,
+      min_date: null as string | null,
+      max_date: null as string | null,
       errors: [] as string[],
       duration: 0,
     };
@@ -950,77 +956,98 @@ export class MercadoLivreSyncService {
             return response.data as MercadoLivreItem;
           });
 
-          // Extrair métricas agregadas
-          const totalVisits = itemData.visits || listing.visits_last_7d || 0;
-          const totalSales = itemData.sold_quantity || listing.sales_last_7d || 0;
+          // Extrair métricas agregadas do endpoint /items/{id}
+          // Nota: visits e sold_quantity podem não estar disponíveis ou podem ser agregados
+          const visitsFromAPI = itemData.visits ?? null;
+          const salesFromAPI = itemData.sold_quantity ?? null;
+          
+          // Usar valores do banco como fallback se API não retornar
+          const totalVisits = visitsFromAPI ?? listing.visits_last_7d ?? 0;
+          const totalSales = salesFromAPI ?? listing.sales_last_7d ?? 0;
 
-          // Se não houver métricas, pular este listing
-          if (totalVisits === 0 && totalSales === 0) {
-            console.log(`[ML-METRICS] Listing ${listing.id} não tem métricas, pulando`);
-            result.listingsProcessed++;
-            continue;
+          // Determinar origem dos dados
+          let dataSource: string;
+          if (visitsFromAPI !== null || salesFromAPI !== null) {
+            dataSource = 'ml_items_aggregate'; // Dados do endpoint /items/{id}
+          } else if (listing.visits_last_7d || listing.sales_last_7d) {
+            dataSource = 'listing_aggregates'; // Dados já salvos no listing
+          } else {
+            dataSource = 'estimate'; // Estimativa/zero
           }
 
-          // Calcular métricas diárias aproximadas
-          // Distribuir proporcionalmente pelos últimos periodDays dias
-          // Usar distribuição simples (uniforme) como aproximação inicial
-          const daysWithData = periodDays;
-          const visitsPerDay = Math.floor(totalVisits / daysWithData);
-          const salesPerDay = Math.floor(totalSales / daysWithData);
-          const remainderVisits = totalVisits % daysWithData;
-          const remainderSales = totalSales % daysWithData;
+          // Se não houver métricas, ainda assim salvar registro com zero e origem
+          // Isso permite rastrear que tentamos buscar mas não havia dados
+          
+          // Estratégia: Salvar agregado no dia mais recente do período com flag de origem
+          // Não distribuir uniformemente - isso cria dados falsos
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          // Calcular conversão e CTR aproximados (se houver dados)
+          const conversion = totalVisits > 0 ? totalSales / totalVisits : 0;
+          const impressions = totalVisits > 0 ? totalVisits * 10 : 0; // Aproximação: 10 impressões por visita
+          const clicks = totalVisits;
+          const ctr = impressions > 0 ? clicks / impressions : 0;
+          const gmv = totalSales * Number(listing.price);
 
-          // Criar métricas diárias
-          let metricsCreatedForListing = 0;
-          for (let i = 0; i < daysWithData; i++) {
-            const date = new Date(since);
-            date.setDate(date.getDate() + i);
-            date.setHours(0, 0, 0, 0);
-
-            // Distribuir resto nos primeiros dias
-            const visits = visitsPerDay + (i < remainderVisits ? 1 : 0);
-            const sales = salesPerDay + (i < remainderSales ? 1 : 0);
-
-            // Calcular conversão e CTR aproximados
-            const conversion = visits > 0 ? sales / visits : 0;
-            const impressions = visits * 10; // Aproximação: 10 impressões por visita
-            const clicks = visits;
-            const ctr = impressions > 0 ? clicks / impressions : 0;
-            const gmv = sales * Number(listing.price);
-
-            // Upsert métrica diária
-            await prisma.listingMetricsDaily.upsert({
-              where: {
-                tenant_id_listing_id_date: {
-                  tenant_id: this.tenantId,
-                  listing_id: listing.id,
-                  date: date,
-                },
-              },
-              update: {
-                visits,
-                orders: sales,
-                conversion: conversion,
-                impressions,
-                clicks,
-                ctr: ctr,
-                gmv: gmv,
-              },
-              create: {
+          // Salvar como ponto único no dia atual (representando agregado do período)
+          // Se já existir métrica para hoje, atualizar; senão, criar
+          const existingToday = await prisma.listingMetricsDaily.findUnique({
+            where: {
+              tenant_id_listing_id_date: {
                 tenant_id: this.tenantId,
                 listing_id: listing.id,
-                date: date,
-                visits,
-                orders: sales,
+                date: today,
+              },
+            },
+          });
+
+          if (existingToday) {
+            // Atualizar métrica existente apenas se novos dados forem melhores (maiores valores)
+            if (totalVisits > existingToday.visits || totalSales > existingToday.orders) {
+              await prisma.listingMetricsDaily.update({
+                where: { id: existingToday.id },
+                data: {
+                  visits: totalVisits,
+                  orders: totalSales,
+                  conversion: conversion,
+                  impressions: impressions,
+                  clicks: clicks,
+                  ctr: ctr,
+                  gmv: gmv,
+                  source: dataSource,
+                },
+              });
+              result.rowsUpserted++;
+            }
+          } else {
+            // Criar nova métrica para hoje
+            await prisma.listingMetricsDaily.create({
+              data: {
+                tenant_id: this.tenantId,
+                listing_id: listing.id,
+                date: today,
+                visits: totalVisits,
+                orders: totalSales,
                 conversion: conversion,
-                impressions,
-                clicks,
+                impressions: impressions,
+                clicks: clicks,
                 ctr: ctr,
                 gmv: gmv,
+                source: dataSource,
               },
             });
+            result.metricsCreated++;
+            result.rowsUpserted++;
+          }
 
-            metricsCreatedForListing++;
+          // Atualizar min_date e max_date
+          const dateStr = today.toISOString().split('T')[0];
+          if (!result.min_date || dateStr < result.min_date) {
+            result.min_date = dateStr;
+          }
+          if (!result.max_date || dateStr > result.max_date) {
+            result.max_date = dateStr;
           }
 
           // Atualizar visits_last_7d e sales_last_7d no listing com base nas métricas
@@ -1050,7 +1077,6 @@ export class MercadoLivreSyncService {
             },
           });
 
-          result.metricsCreated += metricsCreatedForListing;
           result.listingsProcessed++;
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';

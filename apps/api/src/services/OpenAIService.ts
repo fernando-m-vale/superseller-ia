@@ -73,11 +73,27 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
 4. Se dataQuality.missing contém "images" ou "description", aí sim pode mencionar a ausência
 5. Considere a categoria do produto para entender intenção de compra (transacional vs informacional)
 6. Analise performance real: se conversionRate é alto mas visits baixo → problema de tráfego; se visits alto mas conversionRate baixo → problema de conversão
-7. SOBRE CLIPS (hasClips):
-   - Se media.hasClips === true → pode sugerir otimizar clips (thumb, roteiro, benefícios)
-   - Se media.hasClips === false → sugerir adicionar clips
-   - Se media.hasClips === null → NUNCA afirmar ausência de clips. Use: "Não foi possível verificar clips via API; valide no painel do Mercado Livre"
-   - Clips são diferentes de vídeo: hasVideo refere-se a vídeo do anúncio, hasClips refere-se a conteúdo curto (clips)
+7. SOBRE VÍDEO E CLIPS (CRÍTICO - NUNCA VIOLAR):
+   - VÍDEO (media.hasVideo):
+     * Se media.hasVideo === true → NÃO sugerir "Adicionar vídeo" (já tem vídeo)
+     * Se media.hasVideo === false → PODE sugerir "Adicionar vídeo", mas SEM mencionar clips
+     * Vídeo é detectável via API /items (video_id, videos[])
+   - CLIPS (media.hasClips):
+     * Se media.hasClips === true → pode sugerir otimizar clips (thumb, roteiro, benefícios)
+     * Se media.hasClips === false → sugerir adicionar clips (com certeza de ausência)
+     * Se media.hasClips === null → PROIBIDO afirmar ausência. Use: "Clips não detectável via API; valide no painel do Mercado Livre. Se você ainda não tiver clips, inclua..."
+     * Clips NÃO são detectáveis via API /items (por isso pode ser null)
+   - DIFERENCIAÇÃO OBRIGATÓRIA:
+     * Vídeo: conteúdo de vídeo do anúncio (detectável via API)
+     * Clips: conteúdo curto (NÃO detectável via API atual)
+     * NUNCA misturar ou confundir os dois conceitos
+   - EXEMPLOS PROIBIDOS (quando hasClips=null):
+     * ❌ "Você não tem clips" (afirmação absoluta)
+     * ❌ "Adicione clips" (como se fosse certeza)
+     * ❌ "Falta clips" (assumindo ausência)
+   - EXEMPLOS PERMITIDOS (quando hasClips=null):
+     * ✅ "Clips não detectável via API; valide no painel do Mercado Livre. Se você ainda não tiver clips, inclua..."
+     * ✅ "Verifique clips no painel; API não detecta automaticamente"
 
 AVALIAÇÃO DE TÍTULO (Mercado Livre):
 - Limite de 60 caracteres (otimizar para máximo impacto)
@@ -119,15 +135,17 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
   * Se conversionRate alto mas visits baixo → "Investir em Ads/Anúncios Patrocinados"
   * Se visits alto mas conversionRate baixo → "Otimizar título/descrição para conversão"
   * Se price alto vs categoria → "Revisar preço competitivo"
-  * Se media.hasVideo === false → "Adicionar vídeo aumenta conversão em até 30%"
-  * Se media.hasClips === null → "Verifique clips no painel do Mercado Livre; API não detecta automaticamente"
-  * Se media.hasClips === false → "Publicar clips pode aumentar engajamento"
-  * Se media.hasClips === true → "Melhorar clips (thumb, roteiro, benefícios)"
+  * REGRAS PARA VÍDEO/CLIPS (OBRIGATÓRIAS):
+    - Se media.hasVideo === true → NÃO criar hack "Adicionar vídeo" (já tem)
+    - Se media.hasVideo === false → PODE criar hack "Adicionar vídeo", mas SEM mencionar clips
+    - Se media.hasClips === null → Hack deve dizer: "Verifique clips no painel do Mercado Livre; API não detecta automaticamente. Se você ainda não tiver clips, inclua..." (NUNCA afirmar ausência)
+    - Se media.hasClips === false → Hack pode dizer "Publicar clips pode aumentar engajamento" (certeza de ausência)
+    - Se media.hasClips === true → Hack pode dizer "Melhorar clips (thumb, roteiro, benefícios)"
   * Se ctr baixo → "Melhorar título com palavras-chave mais relevantes"
   * Se stock baixo → "Aumentar estoque para evitar perda de vendas"
 - Cada hack deve ter:
   * title: ação específica e acionável
-  * description: explicação detalhada do problema identificado nos dados + solução
+  * description: explicação detalhada do problema identificado nos dados + solução (respeitando regras de vídeo/clips acima)
   * priority: "high" (impacto imediato), "medium" (impacto médio prazo), "low" (otimização)
   * estimatedImpact: impacto estimado baseado em dados similares (ex: "+15% conversão", "+30% tráfego")
 
@@ -307,6 +325,13 @@ export class OpenAIService {
 
     if (!hasDailyMetrics) {
       warnings.push(`No daily metrics found for the last ${periodDays} days. Using listing aggregates.`);
+    }
+
+    // Adicionar warning se visitas estão zeradas mas deveriam ter dados
+    if (hasDailyMetrics && visits === 0 && orders === 0) {
+      warnings.push('visits_zero_but_metrics_exist');
+    } else if (!hasDailyMetrics && visits === 0 && orders === 0) {
+      warnings.push('no_metrics_available');
     }
 
     if (hasClips === null) {

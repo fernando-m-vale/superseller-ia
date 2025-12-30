@@ -548,14 +548,120 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
 
   /**
    * POST /api/v1/sync/mercadolivre/metrics
+   * POST /api/v1/sync/mercadolivre/performance (alias)
    * 
-   * Dispara sincronização manual das métricas diárias dos anúncios do Mercado Livre.
+   * Dispara sincronização manual das métricas de performance dos anúncios do Mercado Livre.
    * Query params:
    *   - days: Número de dias para buscar (default: 30, max: 90)
    * 
-   * Esta rota é temporária para permitir ingestão manual de métricas.
-   * As métricas são aproximadas baseadas em dados agregados da API do ML.
+   * Busca métricas agregadas do endpoint /items/{id} e persiste em listing_metrics_daily
+   * com flag de origem (ml_items_aggregate, listing_aggregates, estimate).
    */
+  // Alias para compatibilidade
+  app.post(
+    '/mercadolivre/performance',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      // Redirecionar para a mesma lógica de /metrics
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        const query = MetricsSyncQuerySchema.parse(request.query);
+        const daysBack = query.days;
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          days: daysBack,
+        }, 'Requisição de sync de performance recebida');
+
+        const syncService = new MercadoLivreSyncService(tenantId);
+        const result = await syncService.syncListingMetricsDaily(daysBack);
+
+        const hasAuthRevoked = result.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        if (result.success) {
+          app.log.info({
+            requestId,
+            userId,
+            tenantId,
+            listingsProcessed: result.listingsProcessed,
+            rowsUpserted: result.rowsUpserted,
+            min_date: result.min_date,
+            max_date: result.max_date,
+            duration: result.duration,
+          }, 'Sync de performance concluído com sucesso');
+
+          return reply.status(200).send({
+            message: 'Sincronização de performance concluída com sucesso',
+            data: {
+              listingsProcessed: result.listingsProcessed,
+              rowsUpserted: result.rowsUpserted,
+              min_date: result.min_date,
+              max_date: result.max_date,
+              duration: `${result.duration}ms`,
+            },
+          });
+        } else {
+          app.log.error({
+            requestId,
+            userId,
+            tenantId,
+            errors: result.errors,
+          }, 'Erro no sync de performance');
+
+          return reply.status(500).send({
+            error: 'Internal Server Error',
+            message: 'Erro ao sincronizar métricas',
+            details: result.errors,
+          });
+        }
+      } catch (error) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        app.log.error({
+          requestId,
+          userId,
+          tenantId,
+          err: error,
+        }, 'Erro ao processar sync de performance');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'Parâmetros inválidos',
+            details: error.errors,
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao sincronizar performance';
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: errorMessage,
+        });
+      }
+    }
+  );
+
   app.post(
     '/mercadolivre/metrics',
     { preHandler: authGuard },
@@ -616,6 +722,9 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             data: {
               listingsProcessed: result.listingsProcessed,
               metricsCreated: result.metricsCreated,
+              rowsUpserted: result.rowsUpserted,
+              min_date: result.min_date,
+              max_date: result.max_date,
               duration: `${result.duration}ms`,
             },
           });
