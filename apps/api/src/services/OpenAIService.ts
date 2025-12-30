@@ -62,7 +62,7 @@ Sua missão é:
 
 Você receberá um objeto JSON (AIAnalyzeInputV1) com dados completos do anúncio:
 - Detalhes do listing (title, description, price, stock, status, category)
-- Informações de mídia (imageCount, hasImages, hasVideo)
+- Informações de mídia (imageCount, hasImages, hasVideo, hasClips)
 - Métricas de performance reais (visits, orders, revenue, conversionRate, ctr, impressions, clicks) dos últimos N dias
 - Indicadores de qualidade de dados (missing, warnings, completenessScore, sources)
 
@@ -73,6 +73,11 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
 4. Se dataQuality.missing contém "images" ou "description", aí sim pode mencionar a ausência
 5. Considere a categoria do produto para entender intenção de compra (transacional vs informacional)
 6. Analise performance real: se conversionRate é alto mas visits baixo → problema de tráfego; se visits alto mas conversionRate baixo → problema de conversão
+7. SOBRE CLIPS (hasClips):
+   - Se media.hasClips === true → pode sugerir otimizar clips (thumb, roteiro, benefícios)
+   - Se media.hasClips === false → sugerir adicionar clips
+   - Se media.hasClips === null → NUNCA afirmar ausência de clips. Use: "Não foi possível verificar clips via API; valide no painel do Mercado Livre"
+   - Clips são diferentes de vídeo: hasVideo refere-se a vídeo do anúncio, hasClips refere-se a conteúdo curto (clips)
 
 AVALIAÇÃO DE TÍTULO (Mercado Livre):
 - Limite de 60 caracteres (otimizar para máximo impacto)
@@ -115,6 +120,9 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
   * Se visits alto mas conversionRate baixo → "Otimizar título/descrição para conversão"
   * Se price alto vs categoria → "Revisar preço competitivo"
   * Se media.hasVideo === false → "Adicionar vídeo aumenta conversão em até 30%"
+  * Se media.hasClips === null → "Verifique clips no painel do Mercado Livre; API não detecta automaticamente"
+  * Se media.hasClips === false → "Publicar clips pode aumentar engajamento"
+  * Se media.hasClips === true → "Melhorar clips (thumb, roteiro, benefícios)"
   * Se ctr baixo → "Melhorar título com palavras-chave mais relevantes"
   * Se stock baixo → "Aumentar estoque para evitar perda de vendas"
 - Cada hack deve ter:
@@ -282,6 +290,7 @@ export class OpenAIService {
     const imageCount = listing.pictures_count ?? 0;
     const hasImages = imageCount > 0 || listing.thumbnail_url !== null;
     const hasVideo = listing.has_video ?? false;
+    const hasClips = listing.has_clips ?? null; // null = desconhecido/não detectável via API
     const videoCount = hasVideo ? 1 : 0;
 
     // Build data quality assessment
@@ -298,6 +307,10 @@ export class OpenAIService {
 
     if (!hasDailyMetrics) {
       warnings.push(`No daily metrics found for the last ${periodDays} days. Using listing aggregates.`);
+    }
+
+    if (hasClips === null) {
+      warnings.push('clips_not_detectable_via_items_api');
     }
 
     // Calculate completeness score (0-100)
@@ -335,6 +348,7 @@ export class OpenAIService {
         imageCount,
         hasImages,
         hasVideo,
+        hasClips,
         videoCount,
       },
       performance: {
@@ -410,7 +424,8 @@ ${input.performance.revenue !== null ? `- Receita: R$ ${input.performance.revenu
 
 MÍDIA:
 - Fotos: ${input.media.imageCount} ${input.media.hasImages ? '(presente)' : '(AUSENTE - mencionar na análise)'}
-- Vídeo: ${input.media.hasVideo ? 'Sim' : 'Não (oportunidade de melhoria)'}
+- Vídeo do anúncio: ${input.media.hasVideo ? 'Sim' : 'Não (oportunidade de melhoria)'}
+- Clips: ${input.media.hasClips === true ? 'Sim' : input.media.hasClips === false ? 'Não' : 'Não detectável via API (valide no painel do Mercado Livre)'}
 
 INSTRUÇÕES ESPECÍFICAS:
 1. O SCORE JÁ FOI CALCULADO - você NÃO deve calcular um novo score

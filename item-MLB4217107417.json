@@ -1,0 +1,1229 @@
+{
+  "id": "MLB4217107417",
+  "site_id": "MLB",
+  "title": "Meias 3d Crazy Socks  Diversão E Conforto Em Cada Passo!",
+  "family_name": null,
+  "seller_id": 2019955315,
+  "category_id": "MLB278137",
+  "user_product_id": null,
+  "official_store_id": null,
+  "price": 60,
+  "base_price": 60,
+  "original_price": null,
+  "inventory_id": null,
+  "currency_id": "BRL",
+  "initial_quantity": 141,
+  "available_quantity": 121,
+  "sold_quantity": 20,
+  "sale_terms": [
+    {
+      "id": "WARRANTY_TYPE",
+      "name": "Tipo de garantia",
+      "value_id": "2230280",
+      "value_name": "Garantia do vendedor",
+      "value_struct": null,
+      "values": [
+        {
+          "id": "2230280",
+          "name": "Garantia do vendedor",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    },
+    {
+      "id": "WARRANTY_TIME",
+      "name": "Tempo de garantia",
+      "value_id": null,
+      "value_name": "30 dias",
+      "value_struct": {
+        "number": 30,
+        "unit": "dias"
+      },
+      "values": [
+        {
+          "id": null,
+          "name": "30 dias",
+          "struct": {
+            "number": 30,
+            "unit": "dias"
+          }
+        }
+      ],
+      "value_type": "number_unit"
+    }
+  ],
+  "buying_mode": "buy_it_now",
+  "listing_type_id": "gold_special",
+  "start_time": "2025-09-22T18:43:17.112Z",
+  "stop_time": "2045-09-17T04:00:00Z",
+  "end_time": "2045-09-17T04:00:00Z",
+  "expiration_time": "2026-03-19T17:07:37.917Z",
+  "condition": "new",
+  "permalink": "https://produto.mercadolivre.com.br/MLB-4217107417-meias-3d-crazy-socks-diverso-e-conforto-em-cada-passo-_JM",
+  "thumbnail_id": "844787-MLB92697873624_092025",
+  "thumbnail": "http://http2.mlstatic.com/D_844787-MLB92697873624_092025-I.jpg",
+  "pictures": [
+    {
+      "id": "844787-MLB92697873624_092025",
+      "url": "http://http2.mlstatic.com/D_844787-MLB92697873624_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_844787-MLB92697873624_092025-O.jpg",
+      "size": "500x405",
+      "max_size": "1036x841",
+      "quality": ""
+    },
+    {
+      "id": "754229-MLB92698618344_092025",
+      "url": "http://http2.mlstatic.com/D_754229-MLB92698618344_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_754229-MLB92698618344_092025-O.jpg",
+      "size": "275x500",
+      "max_size": "660x1200",
+      "quality": ""
+    },
+    {
+      "id": "793967-MLB93109634331_092025",
+      "url": "http://http2.mlstatic.com/D_793967-MLB93109634331_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_793967-MLB93109634331_092025-O.jpg",
+      "size": "347x500",
+      "max_size": "834x1200",
+      "quality": ""
+    },
+    {
+      "id": "943472-MLB93110088529_092025",
+      "url": "http://http2.mlstatic.com/D_943472-MLB93110088529_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_943472-MLB93110088529_092025-O.jpg",
+      "size": "500x497",
+      "max_size": "1024x1019",
+      "quality": ""
+    },
+    {
+      "id": "711444-MLB93110000219_092025",
+      "url": "http://http2.mlstatic.com/D_711444-MLB93110000219_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_711444-MLB93110000219_092025-O.jpg",
+      "size": "474x500",
+      "max_size": "1037x1092",
+      "quality": ""
+    },
+    {
+      "id": "883283-MLB93109940775_092025",
+      "url": "http://http2.mlstatic.com/D_883283-MLB93109940775_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_883283-MLB93109940775_092025-O.jpg",
+      "size": "308x500",
+      "max_size": "741x1200",
+      "quality": ""
+    },
+    {
+      "id": "911823-MLB92698101996_092025",
+      "url": "http://http2.mlstatic.com/D_911823-MLB92698101996_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_911823-MLB92698101996_092025-O.jpg",
+      "size": "500x438",
+      "max_size": "1174x1029",
+      "quality": ""
+    },
+    {
+      "id": "676794-MLB92697962890_092025",
+      "url": "http://http2.mlstatic.com/D_676794-MLB92697962890_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_676794-MLB92697962890_092025-O.jpg",
+      "size": "499x500",
+      "max_size": "968x969",
+      "quality": ""
+    },
+    {
+      "id": "873841-MLB92698402172_092025",
+      "url": "http://http2.mlstatic.com/D_873841-MLB92698402172_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_873841-MLB92698402172_092025-O.jpg",
+      "size": "407x500",
+      "max_size": "931x1143",
+      "quality": ""
+    },
+    {
+      "id": "677959-MLB92698501448_092025",
+      "url": "http://http2.mlstatic.com/D_677959-MLB92698501448_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_677959-MLB92698501448_092025-O.jpg",
+      "size": "500x405",
+      "max_size": "1036x841",
+      "quality": ""
+    },
+    {
+      "id": "846410-MLB93110526635_092025",
+      "url": "http://http2.mlstatic.com/D_846410-MLB93110526635_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_846410-MLB93110526635_092025-O.jpg",
+      "size": "347x500",
+      "max_size": "834x1200",
+      "quality": ""
+    },
+    {
+      "id": "855656-MLB92698768046_092025",
+      "url": "http://http2.mlstatic.com/D_855656-MLB92698768046_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_855656-MLB92698768046_092025-O.jpg",
+      "size": "500x497",
+      "max_size": "1024x1019",
+      "quality": ""
+    },
+    {
+      "id": "719412-MLB92698421954_092025",
+      "url": "http://http2.mlstatic.com/D_719412-MLB92698421954_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_719412-MLB92698421954_092025-O.jpg",
+      "size": "499x500",
+      "max_size": "968x969",
+      "quality": ""
+    },
+    {
+      "id": "784507-MLB93110526645_092025",
+      "url": "http://http2.mlstatic.com/D_784507-MLB93110526645_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_784507-MLB93110526645_092025-O.jpg",
+      "size": "474x500",
+      "max_size": "1037x1092",
+      "quality": ""
+    },
+    {
+      "id": "708427-MLB93110447397_092025",
+      "url": "http://http2.mlstatic.com/D_708427-MLB93110447397_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_708427-MLB93110447397_092025-O.jpg",
+      "size": "308x500",
+      "max_size": "741x1200",
+      "quality": ""
+    },
+    {
+      "id": "741860-MLB92698619814_092025",
+      "url": "http://http2.mlstatic.com/D_741860-MLB92698619814_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_741860-MLB92698619814_092025-O.jpg",
+      "size": "484x500",
+      "max_size": "1055x1089",
+      "quality": ""
+    },
+    {
+      "id": "797084-MLB93110566265_092025",
+      "url": "http://http2.mlstatic.com/D_797084-MLB93110566265_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_797084-MLB93110566265_092025-O.jpg",
+      "size": "500x405",
+      "max_size": "1036x841",
+      "quality": ""
+    },
+    {
+      "id": "965770-MLB92698461954_092025",
+      "url": "http://http2.mlstatic.com/D_965770-MLB92698461954_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_965770-MLB92698461954_092025-O.jpg",
+      "size": "347x500",
+      "max_size": "834x1200",
+      "quality": ""
+    },
+    {
+      "id": "972261-MLB93109964681_092025",
+      "url": "http://http2.mlstatic.com/D_972261-MLB93109964681_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_972261-MLB93109964681_092025-O.jpg",
+      "size": "500x497",
+      "max_size": "1024x1019",
+      "quality": ""
+    },
+    {
+      "id": "896703-MLB93110487165_092025",
+      "url": "http://http2.mlstatic.com/D_896703-MLB93110487165_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_896703-MLB93110487165_092025-O.jpg",
+      "size": "499x500",
+      "max_size": "968x969",
+      "quality": ""
+    },
+    {
+      "id": "808197-MLB92698678606_092025",
+      "url": "http://http2.mlstatic.com/D_808197-MLB92698678606_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_808197-MLB92698678606_092025-O.jpg",
+      "size": "474x500",
+      "max_size": "1037x1092",
+      "quality": ""
+    },
+    {
+      "id": "891675-MLB92698471920_092025",
+      "url": "http://http2.mlstatic.com/D_891675-MLB92698471920_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_891675-MLB92698471920_092025-O.jpg",
+      "size": "308x500",
+      "max_size": "741x1200",
+      "quality": ""
+    },
+    {
+      "id": "962799-MLB92698769584_092025",
+      "url": "http://http2.mlstatic.com/D_962799-MLB92698769584_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_962799-MLB92698769584_092025-O.jpg",
+      "size": "378x500",
+      "max_size": "908x1200",
+      "quality": ""
+    },
+    {
+      "id": "940241-MLB92698493014_092025",
+      "url": "http://http2.mlstatic.com/D_940241-MLB92698493014_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_940241-MLB92698493014_092025-O.jpg",
+      "size": "500x405",
+      "max_size": "1036x841",
+      "quality": ""
+    },
+    {
+      "id": "773231-MLB92698749470_092025",
+      "url": "http://http2.mlstatic.com/D_773231-MLB92698749470_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_773231-MLB92698749470_092025-O.jpg",
+      "size": "347x500",
+      "max_size": "834x1200",
+      "quality": ""
+    },
+    {
+      "id": "642716-MLB92698423494_092025",
+      "url": "http://http2.mlstatic.com/D_642716-MLB92698423494_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_642716-MLB92698423494_092025-O.jpg",
+      "size": "500x497",
+      "max_size": "1024x1019",
+      "quality": ""
+    },
+    {
+      "id": "805036-MLB93110488433_092025",
+      "url": "http://http2.mlstatic.com/D_805036-MLB93110488433_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_805036-MLB93110488433_092025-O.jpg",
+      "size": "499x500",
+      "max_size": "968x969",
+      "quality": ""
+    },
+    {
+      "id": "629695-MLB92698759862_092025",
+      "url": "http://http2.mlstatic.com/D_629695-MLB92698759862_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_629695-MLB92698759862_092025-O.jpg",
+      "size": "474x500",
+      "max_size": "1037x1092",
+      "quality": ""
+    },
+    {
+      "id": "994022-MLB92698493018_092025",
+      "url": "http://http2.mlstatic.com/D_994022-MLB92698493018_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_994022-MLB92698493018_092025-O.jpg",
+      "size": "308x500",
+      "max_size": "741x1200",
+      "quality": ""
+    },
+    {
+      "id": "776184-MLB93110469523_092025",
+      "url": "http://http2.mlstatic.com/D_776184-MLB93110469523_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_776184-MLB93110469523_092025-O.jpg",
+      "size": "490x500",
+      "max_size": "1091x1111",
+      "quality": ""
+    },
+    {
+      "id": "647173-MLB93110558397_092025",
+      "url": "http://http2.mlstatic.com/D_647173-MLB93110558397_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_647173-MLB93110558397_092025-O.jpg",
+      "size": "500x405",
+      "max_size": "1036x841",
+      "quality": ""
+    },
+    {
+      "id": "960987-MLB92698463814_092025",
+      "url": "http://http2.mlstatic.com/D_960987-MLB92698463814_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_960987-MLB92698463814_092025-O.jpg",
+      "size": "347x500",
+      "max_size": "834x1200",
+      "quality": ""
+    },
+    {
+      "id": "838328-MLB93110449543_092025",
+      "url": "http://http2.mlstatic.com/D_838328-MLB93110449543_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_838328-MLB93110449543_092025-O.jpg",
+      "size": "500x497",
+      "max_size": "1024x1019",
+      "quality": ""
+    },
+    {
+      "id": "784002-MLB93110449539_092025",
+      "url": "http://http2.mlstatic.com/D_784002-MLB93110449539_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_784002-MLB93110449539_092025-O.jpg",
+      "size": "499x500",
+      "max_size": "968x969",
+      "quality": ""
+    },
+    {
+      "id": "616220-MLB92698976748_092025",
+      "url": "http://http2.mlstatic.com/D_616220-MLB92698976748_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_616220-MLB92698976748_092025-O.jpg",
+      "size": "474x500",
+      "max_size": "1037x1092",
+      "quality": ""
+    },
+    {
+      "id": "698390-MLB92698572382_092025",
+      "url": "http://http2.mlstatic.com/D_698390-MLB92698572382_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_698390-MLB92698572382_092025-O.jpg",
+      "size": "308x500",
+      "max_size": "741x1200",
+      "quality": ""
+    },
+    {
+      "id": "807515-MLB93110449777_092025",
+      "url": "http://http2.mlstatic.com/D_807515-MLB93110449777_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_807515-MLB93110449777_092025-O.jpg",
+      "size": "500x455",
+      "max_size": "1200x1092",
+      "quality": ""
+    },
+    {
+      "id": "796766-MLB93110519139_092025",
+      "url": "http://http2.mlstatic.com/D_796766-MLB93110519139_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_796766-MLB93110519139_092025-O.jpg",
+      "size": "500x405",
+      "max_size": "1036x841",
+      "quality": ""
+    },
+    {
+      "id": "825402-MLB92699036684_092025",
+      "url": "http://http2.mlstatic.com/D_825402-MLB92699036684_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_825402-MLB92699036684_092025-O.jpg",
+      "size": "347x500",
+      "max_size": "834x1200",
+      "quality": ""
+    },
+    {
+      "id": "812872-MLB92699036700_092025",
+      "url": "http://http2.mlstatic.com/D_812872-MLB92699036700_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_812872-MLB92699036700_092025-O.jpg",
+      "size": "500x497",
+      "max_size": "1024x1019",
+      "quality": ""
+    },
+    {
+      "id": "996417-MLB93110568485_092025",
+      "url": "http://http2.mlstatic.com/D_996417-MLB93110568485_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_996417-MLB93110568485_092025-O.jpg",
+      "size": "499x500",
+      "max_size": "968x969",
+      "quality": ""
+    },
+    {
+      "id": "919371-MLB92698523912_092025",
+      "url": "http://http2.mlstatic.com/D_919371-MLB92698523912_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_919371-MLB92698523912_092025-O.jpg",
+      "size": "474x500",
+      "max_size": "1037x1092",
+      "quality": ""
+    },
+    {
+      "id": "826714-MLB93110854713_092025",
+      "url": "http://http2.mlstatic.com/D_826714-MLB93110854713_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_826714-MLB93110854713_092025-O.jpg",
+      "size": "308x500",
+      "max_size": "741x1200",
+      "quality": ""
+    },
+    {
+      "id": "891615-MLB100276876512_122025",
+      "url": "http://http2.mlstatic.com/D_891615-MLB100276876512_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_891615-MLB100276876512_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "790008-MLB100276352758_122025",
+      "url": "http://http2.mlstatic.com/D_790008-MLB100276352758_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_790008-MLB100276352758_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "863172-MLB100276501092_122025",
+      "url": "http://http2.mlstatic.com/D_863172-MLB100276501092_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_863172-MLB100276501092_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "799673-MLB100276312680_122025",
+      "url": "http://http2.mlstatic.com/D_799673-MLB100276312680_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_799673-MLB100276312680_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "791475-MLB100276569786_122025",
+      "url": "http://http2.mlstatic.com/D_791475-MLB100276569786_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_791475-MLB100276569786_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "785499-MLB100276184174_122025",
+      "url": "http://http2.mlstatic.com/D_785499-MLB100276184174_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_785499-MLB100276184174_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "716282-MLB100276243478_122025",
+      "url": "http://http2.mlstatic.com/D_716282-MLB100276243478_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_716282-MLB100276243478_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    },
+    {
+      "id": "910624-MLB100276184164_122025",
+      "url": "http://http2.mlstatic.com/D_910624-MLB100276184164_122025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_910624-MLB100276184164_122025-O.jpg",
+      "size": "500x500",
+      "max_size": "",
+      "quality": ""
+    }
+  ],
+  "video_id": null,
+  "descriptions": [],
+  "accepts_mercadopago": true,
+  "non_mercado_pago_payment_methods": [],
+  "shipping": {
+    "mode": "me2",
+    "methods": [],
+    "tags": [
+      "self_service_out",
+      "self_service_available"
+    ],
+    "dimensions": null,
+    "local_pick_up": false,
+    "free_shipping": false,
+    "logistic_type": "xd_drop_off",
+    "store_pick_up": false
+  },
+  "international_delivery_mode": "none",
+  "seller_address": {
+    "comment": "Emotion 82",
+    "address_line": "Avenida Professor Luiz Ignácio Anhaia Mello 2580",
+    "zip_code": "03154100",
+    "city": {
+      "id": "BR-SP-44",
+      "name": "São Paulo"
+    },
+    "state": {
+      "id": "BR-SP",
+      "name": "São Paulo"
+    },
+    "country": {
+      "id": "BR",
+      "name": "Brasil"
+    },
+    "search_location": {
+      "neighborhood": {
+        "id": "TUxCQkpBUjI0MDY",
+        "name": "Jardim Avelino"
+      },
+      "city": {
+        "id": "TUxCQ1NQLTQzMzc",
+        "name": "São Paulo Zona Leste"
+      },
+      "state": {
+        "id": "TUxCUFNBT085N2E4",
+        "name": "São Paulo"
+      }
+    },
+    "latitude": -23.5827649,
+    "longitude": -46.5637347,
+    "id": 1420543126
+  },
+  "seller_contact": null,
+  "location": {},
+  "geolocation": {
+    "latitude": -23.5827649,
+    "longitude": -46.5637347
+  },
+  "coverage_areas": [],
+  "attributes": [
+    {
+      "id": "BRAND",
+      "name": "Marca",
+      "value_id": "34882529",
+      "value_name": "Crazy Socks",
+      "values": [
+        {
+          "id": "34882529",
+          "name": "Crazy Socks",
+          "struct": null
+        }
+      ],
+      "value_type": "string"
+    },
+    {
+      "id": "MODEL",
+      "name": "Modelo",
+      "value_id": null,
+      "value_name": "meia 3D infantil cano alto colorida divertida criança engraçada com personagem presente infantil unissex estampada",
+      "values": [
+        {
+          "id": null,
+          "name": "meia 3D infantil cano alto colorida divertida criança engraçada com personagem presente infantil unissex estampada",
+          "struct": null
+        }
+      ],
+      "value_type": "string"
+    },
+    {
+      "id": "AGE_GROUP",
+      "name": "Idade",
+      "value_id": "1065183",
+      "value_name": "Crianças",
+      "values": [
+        {
+          "id": "1065183",
+          "name": "Crianças",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    },
+    {
+      "id": "COMPOSITION",
+      "name": "Composição",
+      "value_id": null,
+      "value_name": "10% elastano,90% poliéster",
+      "values": [
+        {
+          "id": "5418705",
+          "name": "10% elastano",
+          "struct": null
+        },
+        {
+          "id": "4705842",
+          "name": "90% poliéster",
+          "struct": null
+        }
+      ],
+      "value_type": "string"
+    },
+    {
+      "id": "FILTRABLE_GENDER",
+      "name": "Gênero filtrável",
+      "value_id": null,
+      "value_name": "Meninas,Meninos",
+      "values": [
+        {
+          "id": "18549362",
+          "name": "Meninas",
+          "struct": null
+        },
+        {
+          "id": "18549363",
+          "name": "Meninos",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    },
+    {
+      "id": "GENDER",
+      "name": "Gênero",
+      "value_id": "19159491",
+      "value_name": "Sem gênero infantil",
+      "values": [
+        {
+          "id": "19159491",
+          "name": "Sem gênero infantil",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    },
+    {
+      "id": "IS_EMERGING_BRAND",
+      "name": "É marca emergente",
+      "value_id": "242084",
+      "value_name": "Não",
+      "values": [
+        {
+          "id": "242084",
+          "name": "Não",
+          "struct": null
+        }
+      ],
+      "value_type": "boolean"
+    },
+    {
+      "id": "IS_HIGHLIGHT_BRAND",
+      "name": "É marca destacada",
+      "value_id": "242084",
+      "value_name": "Não",
+      "values": [
+        {
+          "id": "242084",
+          "name": "Não",
+          "struct": null
+        }
+      ],
+      "value_type": "boolean"
+    },
+    {
+      "id": "IS_TOM_BRAND",
+      "name": "É marca TOM",
+      "value_id": "242084",
+      "value_name": "Não",
+      "values": [
+        {
+          "id": "242084",
+          "name": "Não",
+          "struct": null
+        }
+      ],
+      "value_type": "boolean"
+    },
+    {
+      "id": "ITEM_CONDITION",
+      "name": "Condição do item",
+      "value_id": "2230284",
+      "value_name": "Novo",
+      "values": [
+        {
+          "id": "2230284",
+          "name": "Novo",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    },
+    {
+      "id": "LENGTH_TYPE",
+      "name": "Tipo de comprimento",
+      "value_id": "433368",
+      "value_name": "Longo",
+      "values": [
+        {
+          "id": "433368",
+          "name": "Longo",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    },
+    {
+      "id": "MAIN_MATERIAL",
+      "name": "Material principal",
+      "value_id": "466794",
+      "value_name": "Poliéster",
+      "values": [
+        {
+          "id": "466794",
+          "name": "Poliéster",
+          "struct": null
+        }
+      ],
+      "value_type": "string"
+    },
+    {
+      "id": "PAIRS_NUMBER",
+      "name": "Quantidade de pares",
+      "value_id": null,
+      "value_name": "1",
+      "values": [
+        {
+          "id": null,
+          "name": "1",
+          "struct": null
+        }
+      ],
+      "value_type": "number"
+    },
+    {
+      "id": "SOCKS_TYPE",
+      "name": "Tipo de meias",
+      "value_id": "44992001",
+      "value_name": "Cano médio",
+      "values": [
+        {
+          "id": "44992001",
+          "name": "Cano médio",
+          "struct": null
+        }
+      ],
+      "value_type": "list"
+    }
+  ],
+  "warnings": [],
+  "listing_source": "",
+  "variations": [
+    {
+      "id": 191051235661,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Dinossauro",
+          "values": [
+            {
+              "id": null,
+              "name": "Dinossauro",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": "3818360",
+          "value_name": "Dinossauro",
+          "values": [
+            {
+              "id": "3818360",
+              "name": "Dinossauro",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 8,
+      "sold_quantity": 2,
+      "sale_terms": [],
+      "picture_ids": [
+        "844787-MLB92697873624_092025",
+        "754229-MLB92698618344_092025",
+        "793967-MLB93109634331_092025",
+        "943472-MLB93110088529_092025",
+        "711444-MLB93110000219_092025",
+        "883283-MLB93109940775_092025",
+        "911823-MLB92698101996_092025",
+        "676794-MLB92697962890_092025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3440822526"
+    },
+    {
+      "id": 191051235669,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Elefante",
+          "values": [
+            {
+              "id": null,
+              "name": "Elefante",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": "4420964",
+          "value_name": "Elefante",
+          "values": [
+            {
+              "id": "4420964",
+              "name": "Elefante",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 20,
+      "sold_quantity": 0,
+      "sale_terms": [],
+      "picture_ids": [
+        "873841-MLB92698402172_092025",
+        "677959-MLB92698501448_092025",
+        "846410-MLB93110526635_092025",
+        "855656-MLB92698768046_092025",
+        "719412-MLB92698421954_092025",
+        "784507-MLB93110526645_092025",
+        "708427-MLB93110447397_092025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3440822532"
+    },
+    {
+      "id": 191051235671,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Cachorrinha",
+          "values": [
+            {
+              "id": null,
+              "name": "Cachorrinha",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": "16175375",
+          "value_name": "Cachorrinha",
+          "values": [
+            {
+              "id": "16175375",
+              "name": "Cachorrinha",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 25,
+      "sold_quantity": 2,
+      "sale_terms": [],
+      "picture_ids": [
+        "741860-MLB92698619814_092025",
+        "797084-MLB93110566265_092025",
+        "965770-MLB92698461954_092025",
+        "972261-MLB93109964681_092025",
+        "896703-MLB93110487165_092025",
+        "808197-MLB92698678606_092025",
+        "891675-MLB92698471920_092025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3440824140"
+    },
+    {
+      "id": 191051235673,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Pista Corrida",
+          "values": [
+            {
+              "id": null,
+              "name": "Pista Corrida",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": "28053767",
+          "value_name": "Pista Corrida",
+          "values": [
+            {
+              "id": "28053767",
+              "name": "Pista Corrida",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 8,
+      "sold_quantity": 6,
+      "sale_terms": [],
+      "picture_ids": [
+        "962799-MLB92698769584_092025",
+        "940241-MLB92698493014_092025",
+        "773231-MLB92698749470_092025",
+        "642716-MLB92698423494_092025",
+        "805036-MLB93110488433_092025",
+        "629695-MLB92698759862_092025",
+        "994022-MLB92698493018_092025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3440824144"
+    },
+    {
+      "id": 191051235677,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Coelho Rosa",
+          "values": [
+            {
+              "id": null,
+              "name": "Coelho Rosa",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": "21713255",
+          "value_name": "Coelho Rosa",
+          "values": [
+            {
+              "id": "21713255",
+              "name": "Coelho Rosa",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 25,
+      "sold_quantity": 5,
+      "sale_terms": [],
+      "picture_ids": [
+        "776184-MLB93110469523_092025",
+        "647173-MLB93110558397_092025",
+        "960987-MLB92698463814_092025",
+        "838328-MLB93110449543_092025",
+        "784002-MLB93110449539_092025",
+        "616220-MLB92698976748_092025",
+        "698390-MLB92698572382_092025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3440824152"
+    },
+    {
+      "id": 191051235679,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Robo Futebol",
+          "values": [
+            {
+              "id": null,
+              "name": "Robo Futebol",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": null,
+          "value_name": "Robo Futebol",
+          "values": [
+            {
+              "id": null,
+              "name": "Robo Futebol",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 8,
+      "sold_quantity": 2,
+      "sale_terms": [],
+      "picture_ids": [
+        "807515-MLB93110449777_092025",
+        "796766-MLB93110519139_092025",
+        "825402-MLB92699036684_092025",
+        "812872-MLB92699036700_092025",
+        "996417-MLB93110568485_092025",
+        "919371-MLB92698523912_092025",
+        "826714-MLB93110854713_092025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3434157231"
+    },
+    {
+      "id": 193921549521,
+      "price": 60,
+      "attribute_combinations": [
+        {
+          "id": "COLOR",
+          "name": "Cor",
+          "value_id": null,
+          "value_name": "Cachorrinha Coração",
+          "values": [
+            {
+              "id": null,
+              "name": "Cachorrinha Coração",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "FABRIC_DESIGN",
+          "name": "Desenho do tecido",
+          "value_id": null,
+          "value_name": "Cachorrinha Coração",
+          "values": [
+            {
+              "id": null,
+              "name": "Cachorrinha Coração",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        },
+        {
+          "id": "SIZE",
+          "name": "Tamanho",
+          "value_id": null,
+          "value_name": "Único infantil (24 ao 34)",
+          "values": [
+            {
+              "id": null,
+              "name": "Único infantil (24 ao 34)",
+              "struct": null
+            }
+          ],
+          "value_type": "string"
+        }
+      ],
+      "available_quantity": 27,
+      "sold_quantity": 3,
+      "sale_terms": [],
+      "picture_ids": [
+        "891615-MLB100276876512_122025",
+        "790008-MLB100276352758_122025",
+        "863172-MLB100276501092_122025",
+        "799673-MLB100276312680_122025",
+        "791475-MLB100276569786_122025",
+        "785499-MLB100276184174_122025",
+        "716282-MLB100276243478_122025",
+        "910624-MLB100276184164_122025"
+      ],
+      "seller_custom_field": null,
+      "catalog_product_id": null,
+      "inventory_id": null,
+      "item_relations": [],
+      "user_product_id": "MLBU3668168838"
+    }
+  ],
+  "status": "active",
+  "sub_status": [],
+  "tags": [
+    "standard_price_by_channel",
+    "good_quality_thumbnail",
+    "immediate_payment",
+    "cart_eligible"
+  ],
+  "warranty": "Garantia do vendedor: 30 dias",
+  "catalog_product_id": null,
+  "domain_id": "MLB-SOCKS",
+  "seller_custom_field": null,
+  "parent_item_id": null,
+  "differential_pricing": null,
+  "deal_ids": [],
+  "automatic_relist": false,
+  "date_created": "2025-09-22T18:43:17.341Z",
+  "last_updated": "2025-12-30T15:12:30.172Z",
+  "health": null,
+  "catalog_listing": false,
+  "item_relations": [],
+  "channels": [
+    "marketplace",
+    "mshops"
+  ]
+}

@@ -37,6 +37,8 @@ export interface Listing {
   scoreBreakdown?: ScoreBreakdown // Detalhamento do score
   healthIssues?: HealthIssue[]
   recommendationsCount?: number // Quantidade de recomendações pendentes
+  hasVideo?: boolean // Tem vídeo? (baseado em video_id/videos do payload)
+  hasClips?: boolean | null // Tem clips? (null = desconhecido/não detectável via API)
 }
 
 export interface ListingsResponse {

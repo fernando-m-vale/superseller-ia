@@ -81,19 +81,19 @@ enum ActionType {
 }
 
 enum RecommendationType {
-  seo           // Otimização de título/descrição
-  image         // Melhoria de imagens
-  price         // Ajuste de preço
-  conversion    // Melhoria de conversão
-  stock         // Gestão de estoque
-  content       // Conteúdo geral
+  seo // Otimização de título/descrição
+  image // Melhoria de imagens
+  price // Ajuste de preço
+  conversion // Melhoria de conversão
+  stock // Gestão de estoque
+  content // Conteúdo geral
 }
 
 enum RecommendationStatus {
-  pending       // Aguardando ação do usuário
-  applied       // Usuário aplicou a recomendação
-  dismissed     // Usuário ignorou
-  expired       // Expirou (anúncio mudou)
+  pending // Aguardando ação do usuário
+  applied // Usuário aplicou a recomendação
+  dismissed // Usuário ignorou
+  expired // Expirou (anúncio mudou)
 }
 
 // Models
@@ -151,26 +151,29 @@ model MarketplaceConnection {
 }
 
 model Listing {
-  id                  String        @id @default(uuid())
-  tenant_id           String
-  marketplace         Marketplace
-  listing_id_ext      String
-  title               String
-  description         String?       // Descrição do anúncio para análise
-  price               Decimal       @db.Decimal(10, 2)
-  stock               Int
-  status              ListingStatus
-  category            String?
-  health_score        Float?        @default(0) // Score legado da API do ML (0-100)
-  super_seller_score  Int?          @default(0) // Super Seller Score proprietário (0-100)
-  score_breakdown     Json?         // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
-  thumbnail_url       String?       // URL da imagem principal
-  pictures_count      Int?          @default(0) // Quantidade de fotos
-  has_video           Boolean?      @default(false) // Tem vídeo?
-  visits_last_7d      Int?          @default(0) // Visitas últimos 7 dias
-  sales_last_7d       Int?          @default(0) // Vendas últimos 7 dias
-  created_at          DateTime      @default(now())
-  updated_at          DateTime      @updatedAt
+  id                 String        @id @default(uuid())
+  tenant_id          String
+  marketplace        Marketplace
+  listing_id_ext     String
+  title              String
+  description        String? // Descrição do anúncio para análise
+  price              Decimal       @db.Decimal(10, 2)
+  stock              Int
+  status             ListingStatus
+  category           String?
+  health_score       Float?        @default(0) // Score legado da API do ML (0-100)
+  super_seller_score Int?          @default(0) // Super Seller Score proprietário (0-100)
+  score_breakdown    Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
+  thumbnail_url      String? // URL da imagem principal
+  pictures_count     Int?          @default(0) // Quantidade de fotos
+  has_video          Boolean?      @default(false) // Tem vídeo? (baseado em video_id/videos do payload)
+  has_clips          Boolean? // Tem clips? (null = desconhecido/não detectável via API)
+  clips_source       String? // Fonte: "unknown" | "override" | "api"
+  clips_checked_at   DateTime? // Quando foi verificado/atualizado
+  visits_last_7d     Int?          @default(0) // Visitas últimos 7 dias
+  sales_last_7d      Int?          @default(0) // Vendas últimos 7 dias
+  created_at         DateTime      @default(now())
+  updated_at         DateTime      @updatedAt
 
   tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   listing_metrics_daily   ListingMetricsDaily[]
@@ -187,22 +190,22 @@ model Listing {
 }
 
 model Order {
-  id              String        @id @default(uuid())
-  tenant_id       String
-  marketplace     Marketplace
-  order_id_ext    String        // ID do pedido no marketplace (ex: ML order ID)
-  status          OrderStatus
-  total_amount    Decimal       @db.Decimal(12, 2)
-  currency        String        @default("BRL")
-  buyer_nickname  String?
-  buyer_id_ext    String?       // ID do comprador no marketplace
-  shipping_cost   Decimal?      @db.Decimal(10, 2)
-  order_date      DateTime      // Data do pedido no marketplace
-  paid_date       DateTime?     // Data do pagamento
-  shipped_date    DateTime?     // Data de envio
-  delivered_date  DateTime?     // Data de entrega
-  created_at      DateTime      @default(now())
-  updated_at      DateTime      @updatedAt
+  id             String      @id @default(uuid())
+  tenant_id      String
+  marketplace    Marketplace
+  order_id_ext   String // ID do pedido no marketplace (ex: ML order ID)
+  status         OrderStatus
+  total_amount   Decimal     @db.Decimal(12, 2)
+  currency       String      @default("BRL")
+  buyer_nickname String?
+  buyer_id_ext   String? // ID do comprador no marketplace
+  shipping_cost  Decimal?    @db.Decimal(10, 2)
+  order_date     DateTime // Data do pedido no marketplace
+  paid_date      DateTime? // Data do pagamento
+  shipped_date   DateTime? // Data de envio
+  delivered_date DateTime? // Data de entrega
+  created_at     DateTime    @default(now())
+  updated_at     DateTime    @updatedAt
 
   tenant Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   items  OrderItem[]
@@ -216,15 +219,15 @@ model Order {
 }
 
 model OrderItem {
-  id              String   @id @default(uuid())
-  order_id        String
-  listing_id      String?  // Pode ser null se o listing foi deletado
-  listing_id_ext  String   // ID do item no marketplace
-  title           String
-  quantity        Int
-  unit_price      Decimal  @db.Decimal(10, 2)
-  total_price     Decimal  @db.Decimal(10, 2)
-  created_at      DateTime @default(now())
+  id             String   @id @default(uuid())
+  order_id       String
+  listing_id     String? // Pode ser null se o listing foi deletado
+  listing_id_ext String // ID do item no marketplace
+  title          String
+  quantity       Int
+  unit_price     Decimal  @db.Decimal(10, 2)
+  total_price    Decimal  @db.Decimal(10, 2)
+  created_at     DateTime @default(now())
 
   order   Order    @relation(fields: [order_id], references: [id], onDelete: Cascade)
   listing Listing? @relation(fields: [listing_id], references: [id], onDelete: SetNull)
@@ -259,17 +262,17 @@ model ListingMetricsDaily {
 }
 
 model AiModelMetric {
-  id              String   @id @default(uuid())
-  tenant_id       String
-  model_version   String   @default("v1.1")
-  mae             Decimal  @db.Decimal(10, 4)
-  rmse            Decimal  @db.Decimal(10, 4)
-  r_squared       Decimal  @db.Decimal(5, 4)
-  training_date   DateTime
-  samples_count   Int
-  features_used   String[]
-  metadata        Json?
-  created_at      DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenant_id     String
+  model_version String   @default("v1.1")
+  mae           Decimal  @db.Decimal(10, 4)
+  rmse          Decimal  @db.Decimal(10, 4)
+  r_squared     Decimal  @db.Decimal(5, 4)
+  training_date DateTime
+  samples_count Int
+  features_used String[]
+  metadata      Json?
+  created_at    DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
@@ -280,16 +283,16 @@ model AiModelMetric {
 }
 
 model DataQualityCheck {
-  id                String        @id @default(uuid())
-  tenant_id         String
-  check_date        DateTime      @db.Date
-  status            QualityStatus
-  missing_days      Int           @default(0)
-  outlier_count     Int           @default(0)
-  total_listings    Int
-  listings_checked  Int
-  issues_found      Json?
-  created_at        DateTime      @default(now())
+  id               String        @id @default(uuid())
+  tenant_id        String
+  check_date       DateTime      @db.Date
+  status           QualityStatus
+  missing_days     Int           @default(0)
+  outlier_count    Int           @default(0)
+  total_listings   Int
+  listings_checked Int
+  issues_found     Json?
+  created_at       DateTime      @default(now())
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
@@ -301,17 +304,17 @@ model DataQualityCheck {
 }
 
 model JobLog {
-  id              String    @id @default(uuid())
-  tenant_id       String
-  job_type        JobType
-  status          JobStatus
-  started_at      DateTime
-  completed_at    DateTime?
-  duration_ms     Int?
+  id                String    @id @default(uuid())
+  tenant_id         String
+  job_type          JobType
+  status            JobStatus
+  started_at        DateTime
+  completed_at      DateTime?
+  duration_ms       Int?
   records_processed Int?
-  error_message   String?
-  metadata        Json?
-  created_at      DateTime  @default(now())
+  error_message     String?
+  metadata          Json?
+  created_at        DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
@@ -323,17 +326,17 @@ model JobLog {
 }
 
 model AutoApproveRule {
-  id                   String     @id @default(uuid())
-  tenant_id            String
-  name                 String
-  description          String?
-  status               RuleStatus @default(active)
-  ctr_threshold        Decimal?   @db.Decimal(5, 4)
-  cvr_threshold        Decimal?   @db.Decimal(5, 4)
-  revenue_impact_min   Decimal?   @db.Decimal(10, 2)
-  dry_run              Boolean    @default(true)
-  created_at           DateTime   @default(now())
-  updated_at           DateTime   @updatedAt
+  id                 String     @id @default(uuid())
+  tenant_id          String
+  name               String
+  description        String?
+  status             RuleStatus @default(active)
+  ctr_threshold      Decimal?   @db.Decimal(5, 4)
+  cvr_threshold      Decimal?   @db.Decimal(5, 4)
+  revenue_impact_min Decimal?   @db.Decimal(10, 2)
+  dry_run            Boolean    @default(true)
+  created_at         DateTime   @default(now())
+  updated_at         DateTime   @updatedAt
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
@@ -370,22 +373,22 @@ model ListingActionOutcome {
 }
 
 model Recommendation {
-  id                  String               @id @default(uuid())
-  tenant_id           String
-  listing_id          String
-  type                RecommendationType
-  status              RecommendationStatus @default(pending)
-  priority            Int                  @default(50) // 1-100, maior = mais urgente
-  title               String               // Ex: "Melhore a qualidade das imagens"
-  description         String               // Descrição detalhada da ação
-  impact_estimate     String?              // Ex: "+15% conversão esperada"
-  rule_trigger        String?              // Ex: "pictures_count < 3"
-  score_impact        Int?                 // Quantos pontos o anúncio pode ganhar
-  metadata            Json?                // Dados extras para a UI
-  applied_at          DateTime?            // Quando foi aplicada
-  dismissed_at        DateTime?            // Quando foi ignorada
-  created_at          DateTime             @default(now())
-  updated_at          DateTime             @updatedAt
+  id              String               @id @default(uuid())
+  tenant_id       String
+  listing_id      String
+  type            RecommendationType
+  status          RecommendationStatus @default(pending)
+  priority        Int                  @default(50) // 1-100, maior = mais urgente
+  title           String // Ex: "Melhore a qualidade das imagens"
+  description     String // Descrição detalhada da ação
+  impact_estimate String? // Ex: "+15% conversão esperada"
+  rule_trigger    String? // Ex: "pictures_count < 3"
+  score_impact    Int? // Quantos pontos o anúncio pode ganhar
+  metadata        Json? // Dados extras para a UI
+  applied_at      DateTime? // Quando foi aplicada
+  dismissed_at    DateTime? // Quando foi ignorada
+  created_at      DateTime             @default(now())
+  updated_at      DateTime             @updatedAt
 
   tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
