@@ -242,14 +242,15 @@ model ListingMetricsDaily {
   tenant_id   String
   listing_id  String
   date        DateTime @db.Date
-  impressions Int
-  clicks      Int
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
   ctr         Decimal  @db.Decimal(5, 4)
-  visits      Int
-  conversion  Decimal  @db.Decimal(5, 4)
-  orders      Int
+  visits      Int?     // Nullable: null = unknown, 0 = zero real
+  conversion  Decimal? @db.Decimal(5, 4) // Nullable quando visits é null
+  orders      Int      @default(0)
   gmv         Decimal  @db.Decimal(10, 2)
-  source      String?  // Origem dos dados: 'ml_metrics_api' | 'ml_orders' | 'estimate' | 'ml_items_aggregate'
+  source      String?  // Origem: 'ml_orders_period' | 'ml_visits_period' | 'unknown' | 'ml_items_aggregate'
+  period_days Int?     // Período agregado (ex: 30 para agregado de 30 dias)
   created_at  DateTime @default(now())
 
   tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)

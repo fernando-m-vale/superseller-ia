@@ -114,7 +114,7 @@ export class IAScoreService {
 
     if (hasDailyMetrics) {
       for (const metric of dailyMetrics) {
-        visits += metric.visits;
+        visits += metric.visits ?? 0; // Tratar null como 0 para cálculo de score
         orders += metric.orders;
         impressions += metric.impressions;
         clicks += metric.clicks;

@@ -33,7 +33,7 @@ describe('Metrics Summary Logic', () => {
     expect(metrics.length).toBeGreaterThan(0);
 
     const totalImpressions = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.impressions, 0);
-    const totalVisits = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.visits, 0);
+    const totalVisits = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + (m.visits ?? 0), 0);
     const totalOrders = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.orders, 0);
     const totalRevenue = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + Number(m.gmv), 0);
 
@@ -60,7 +60,7 @@ describe('Metrics Summary Logic', () => {
 
     const totalImpressions = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.impressions, 0);
     const totalClicks = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.clicks, 0);
-    const totalVisits = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.visits, 0);
+    const totalVisits = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + (m.visits ?? 0), 0);
     const totalOrders = metrics.reduce((sum: number, m: typeof metrics[0]) => sum + m.orders, 0);
 
     const avgCTR = totalImpressions > 0 ? totalClicks / totalImpressions : 0;

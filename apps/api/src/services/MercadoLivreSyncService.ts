@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus } from '@prisma/client';
+import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus, OrderStatus } from '@prisma/client';
 import { ScoreCalculator } from './ScoreCalculator';
 import { RecommendationService } from './RecommendationService';
 import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
@@ -941,57 +941,141 @@ export class MercadoLivreSyncService {
         return result;
       }
 
-      // 3. Para cada listing, buscar métricas e persistir
-      const since = new Date();
-      since.setDate(since.getDate() - periodDays);
-      since.setHours(0, 0, 0, 0);
+      // 3. Calcular data de corte para o período
+      const dateFrom = new Date();
+      dateFrom.setDate(dateFrom.getDate() - periodDays);
+      dateFrom.setHours(0, 0, 0, 0);
+      const dateFromISO = dateFrom.toISOString();
+
+      // 4. Buscar pedidos pagos do período via Orders API (fonte confiável)
+      console.log(`[ML-METRICS] Buscando pedidos pagos desde ${dateFromISO}...`);
+      
+      interface MLOrderItem {
+        item: { id: string; title: string };
+        quantity: number;
+        unit_price: number;
+      }
+      
+      interface MLPayment {
+        status: string;
+        date_approved: string | null;
+      }
+      
+      interface MLOrder {
+        id: number;
+        order_items: MLOrderItem[];
+        payments: MLPayment[];
+      }
+      
+      interface MLOrdersSearchResponse {
+        results: MLOrder[];
+        paging: { total: number; offset: number; limit: number };
+      }
+
+      // Buscar pedidos do período via Orders API
+      const allOrders: MLOrder[] = [];
+      let offset = 0;
+      const limit = 50;
+
+      while (true) {
+        const response = await this.executeWithRetryOn401(async () => {
+          return await axios.get<MLOrdersSearchResponse>(`${ML_API_BASE}/orders/search`, {
+            headers: { Authorization: `Bearer ${this.accessToken}` },
+            params: {
+              seller: this.providerAccountId,
+              'order.date_created.from': dateFromISO,
+              sort: 'date_desc',
+              offset,
+              limit,
+            },
+          });
+        });
+
+        allOrders.push(...response.data.results);
+        
+        if (offset + limit >= response.data.paging.total || response.data.paging.total === 0) {
+          break;
+        }
+        
+        offset += limit;
+      }
+
+      // Filtrar apenas pedidos pagos (com payment approved)
+      const paidOrders = allOrders.filter(order => {
+        const paidPayment = order.payments?.find(p => p.status === 'approved');
+        return paidPayment && paidPayment.date_approved;
+      });
+
+      console.log(`[ML-METRICS] Encontrados ${paidOrders.length} pedidos pagos no período (de ${allOrders.length} total)`);
+
+      // 5. Agrupar pedidos por listing_id_ext e calcular métricas
+      const metricsByListing = new Map<string, { orders: number; gmv: number }>();
+      
+      for (const order of paidOrders) {
+        for (const orderItem of order.order_items || []) {
+          const listingIdExt = orderItem.item.id;
+          const existing = metricsByListing.get(listingIdExt) || { orders: 0, gmv: 0 };
+          
+          existing.orders += orderItem.quantity;
+          existing.gmv += orderItem.quantity * orderItem.unit_price;
+          
+          metricsByListing.set(listingIdExt, existing);
+        }
+      }
+
+      // 6. Para cada listing, buscar visitas e persistir métricas agregadas
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
       for (const listing of listings) {
         try {
-          // Buscar dados atualizados do item na API do ML
-          const itemData = await this.executeWithRetryOn401(async () => {
-            const response = await axios.get(`${ML_API_BASE}/items/${listing.listing_id_ext}`, {
-              headers: { Authorization: `Bearer ${this.accessToken}` },
-            });
-            return response.data as MercadoLivreItem;
-          });
+          // Buscar métricas de orders do período (se existirem)
+          const orderMetrics = metricsByListing.get(listing.listing_id_ext);
+          const orders_30d = orderMetrics?.orders || 0;
+          const gmv_30d = orderMetrics?.gmv || 0;
 
-          // Extrair métricas agregadas do endpoint /items/{id}
-          // Nota: visits e sold_quantity podem não estar disponíveis ou podem ser agregados
-          const visitsFromAPI = itemData.visits ?? null;
-          const salesFromAPI = itemData.sold_quantity ?? null;
+          // Tentar buscar visitas via endpoint /items/{id}
+          // Nota: visits pode não estar disponível ou ser lifetime, não período
+          let visits_30d: number | null = null;
+          let visitsSource = 'unknown';
           
-          // Usar valores do banco como fallback se API não retornar
-          const totalVisits = visitsFromAPI ?? listing.visits_last_7d ?? 0;
-          const totalSales = salesFromAPI ?? listing.sales_last_7d ?? 0;
+          try {
+            const itemData = await this.executeWithRetryOn401(async () => {
+              const response = await axios.get(`${ML_API_BASE}/items/${listing.listing_id_ext}`, {
+                headers: { Authorization: `Bearer ${this.accessToken}` },
+              });
+              return response.data as MercadoLivreItem;
+            });
+
+            // Se visits existir no payload, pode ser lifetime ou período - marcar como ml_items_aggregate
+            if (itemData.visits !== undefined && itemData.visits !== null) {
+              visits_30d = itemData.visits;
+              visitsSource = 'ml_items_aggregate'; // Pode ser lifetime, não período
+            }
+          } catch (error) {
+            // Se falhar ao buscar item, visits permanece null (unknown)
+            console.log(`[ML-METRICS] Não foi possível buscar visitas para ${listing.listing_id_ext}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+          }
 
           // Determinar origem dos dados
           let dataSource: string;
-          if (visitsFromAPI !== null || salesFromAPI !== null) {
-            dataSource = 'ml_items_aggregate'; // Dados do endpoint /items/{id}
-          } else if (listing.visits_last_7d || listing.sales_last_7d) {
-            dataSource = 'listing_aggregates'; // Dados já salvos no listing
+          if (orders_30d > 0) {
+            dataSource = 'ml_orders_period'; // Orders do período via Orders API
+          } else if (visits_30d !== null) {
+            dataSource = visitsSource;
           } else {
-            dataSource = 'estimate'; // Estimativa/zero
+            dataSource = 'unknown'; // Sem dados disponíveis
           }
 
-          // Se não houver métricas, ainda assim salvar registro com zero e origem
-          // Isso permite rastrear que tentamos buscar mas não havia dados
+          // Calcular conversão apenas se visits for conhecido
+          const conversion = visits_30d !== null && visits_30d > 0 ? orders_30d / visits_30d : null;
           
-          // Estratégia: Salvar agregado no dia mais recente do período com flag de origem
-          // Não distribuir uniformemente - isso cria dados falsos
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          
-          // Calcular conversão e CTR aproximados (se houver dados)
-          const conversion = totalVisits > 0 ? totalSales / totalVisits : 0;
-          const impressions = totalVisits > 0 ? totalVisits * 10 : 0; // Aproximação: 10 impressões por visita
-          const clicks = totalVisits;
+          // Impressions/clicks/ctr: apenas se visits for conhecido
+          const impressions = visits_30d !== null && visits_30d > 0 ? visits_30d * 10 : 0; // Aproximação
+          const clicks = visits_30d !== null ? visits_30d : 0;
           const ctr = impressions > 0 ? clicks / impressions : 0;
-          const gmv = totalSales * Number(listing.price);
 
           // Salvar como ponto único no dia atual (representando agregado do período)
-          // Se já existir métrica para hoje, atualizar; senão, criar
           const existingToday = await prisma.listingMetricsDaily.findUnique({
             where: {
               tenant_id_listing_id_date: {
@@ -1003,23 +1087,22 @@ export class MercadoLivreSyncService {
           });
 
           if (existingToday) {
-            // Atualizar métrica existente apenas se novos dados forem melhores (maiores valores)
-            if (totalVisits > existingToday.visits || totalSales > existingToday.orders) {
-              await prisma.listingMetricsDaily.update({
-                where: { id: existingToday.id },
-                data: {
-                  visits: totalVisits,
-                  orders: totalSales,
-                  conversion: conversion,
-                  impressions: impressions,
-                  clicks: clicks,
-                  ctr: ctr,
-                  gmv: gmv,
-                  source: dataSource,
-                },
-              });
-              result.rowsUpserted++;
-            }
+            // Atualizar métrica existente
+            await prisma.listingMetricsDaily.update({
+              where: { id: existingToday.id },
+              data: {
+                visits: visits_30d,
+                orders: orders_30d,
+                conversion: conversion,
+                impressions: impressions,
+                clicks: clicks,
+                ctr: ctr,
+                gmv: gmv_30d,
+                source: dataSource,
+                period_days: periodDays,
+              },
+            });
+            result.rowsUpserted++;
           } else {
             // Criar nova métrica para hoje
             await prisma.listingMetricsDaily.create({
@@ -1027,14 +1110,15 @@ export class MercadoLivreSyncService {
                 tenant_id: this.tenantId,
                 listing_id: listing.id,
                 date: today,
-                visits: totalVisits,
-                orders: totalSales,
+                visits: visits_30d,
+                orders: orders_30d,
                 conversion: conversion,
                 impressions: impressions,
                 clicks: clicks,
                 ctr: ctr,
-                gmv: gmv,
+                gmv: gmv_30d,
                 source: dataSource,
+                period_days: periodDays,
               },
             });
             result.metricsCreated++;
@@ -1050,7 +1134,7 @@ export class MercadoLivreSyncService {
             result.max_date = dateStr;
           }
 
-          // Atualizar visits_last_7d e sales_last_7d no listing com base nas métricas
+          // Atualizar visits_last_7d e sales_last_7d no listing
           // Calcular últimos 7 dias das métricas diárias
           const last7Days = new Date();
           last7Days.setDate(last7Days.getDate() - 7);
@@ -1066,7 +1150,8 @@ export class MercadoLivreSyncService {
             },
           });
 
-          const visitsLast7d = last7DaysMetrics.reduce((sum, m) => sum + m.visits, 0);
+          // Somar visits (tratando null como 0 para cálculo de agregado)
+          const visitsLast7d = last7DaysMetrics.reduce((sum, m) => sum + (m.visits ?? 0), 0);
           const salesLast7d = last7DaysMetrics.reduce((sum, m) => sum + m.orders, 0);
 
           await prisma.listing.update({

@@ -115,8 +115,8 @@ export const aiRoutes: FastifyPluginCallback = (app, _, done) => {
         impressions: m.impressions,
         clicks: m.clicks,
         ctr: parseFloat(m.ctr.toString()),
-        visits: m.visits,
-        conversion: parseFloat(m.conversion.toString()),
+        visits: m.visits ?? null,
+        conversion: m.conversion ? parseFloat(m.conversion.toString()) : null,
         orders: m.orders,
         gmv: parseFloat(m.gmv.toString()),
       }));

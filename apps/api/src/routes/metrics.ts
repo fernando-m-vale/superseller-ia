@@ -304,8 +304,8 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       }
 
-      // Calcular totais
-      const totalVisits = metrics.reduce((sum, m) => sum + m.visits, 0);
+      // Calcular totais (tratando visits null como 0)
+      const totalVisits = metrics.reduce((sum, m) => sum + (m.visits ?? 0), 0);
       const totalOrders = metrics.reduce((sum, m) => sum + m.orders, 0);
       const totalRevenue = metrics.reduce((sum, m) => sum + Number(m.gmv), 0);
 
@@ -317,7 +317,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         date: string;
         revenue: number;
         orders: number;
-        visits: number;
+        visits: number; // Tratar null como 0 para série temporal
       }>();
 
       for (const metric of metrics) {
@@ -331,7 +331,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
 
         existing.revenue += Number(metric.gmv);
         existing.orders += metric.orders;
-        existing.visits += metric.visits;
+        existing.visits += metric.visits ?? 0;
 
         seriesMap.set(dateStr, existing);
       }
@@ -521,7 +521,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
 
       const totalImpressions = metrics.reduce((sum, m) => sum + m.impressions, 0);
       const totalClicks = metrics.reduce((sum, m) => sum + m.clicks, 0);
-      const totalVisits = metrics.reduce((sum, m) => sum + m.visits, 0);
+      const totalVisits = metrics.reduce((sum, m) => sum + (m.visits ?? 0), 0);
       const totalOrders = metrics.reduce((sum, m) => sum + m.orders, 0);
       const totalRevenue = metrics.reduce((sum, m) => sum + Number(m.gmv), 0);
 
@@ -552,7 +552,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       listingMetricsMap.get(metric.listing_id)!.push({
         date: metric.date.toISOString().split('T')[0],
         impressions: metric.impressions,
-        visits: metric.visits,
+        visits: metric.visits ?? 0, // Tratar null como 0 para exibição
         orders: metric.orders,
         revenue: Number(metric.gmv),
       });

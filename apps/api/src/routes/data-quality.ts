@@ -66,15 +66,16 @@ async function performDataQualityCheck(tenantId: string): Promise<{
 
     for (const metric of listing.listing_metrics_daily) {
       const ctr = Number(metric.ctr);
-      const conversion = Number(metric.conversion);
+      const conversion = metric.conversion ? Number(metric.conversion) : null;
       const gmv = Number(metric.gmv);
 
-      if (ctr > 0.5 || conversion > 0.5 || gmv > 100000) {
+      if (ctr > 0.5 || (conversion !== null && conversion > 0.5) || gmv > 100000) {
         outlierCount++;
+        const outlierMetric = ctr > 0.5 ? 'ctr' : (conversion !== null && conversion > 0.5) ? 'conversion' : 'gmv';
         (issuesFound.outliers as Array<{ listingId: string; date: Date; metric: string }>).push({
           listingId: listing.id,
           date: metric.date,
-          metric: ctr > 0.5 ? 'ctr' : conversion > 0.5 ? 'conversion' : 'gmv',
+          metric: outlierMetric,
         });
       }
     }

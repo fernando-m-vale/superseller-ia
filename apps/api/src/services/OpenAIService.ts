@@ -87,6 +87,11 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
      * Vídeo: conteúdo de vídeo do anúncio (detectável via API)
      * Clips: conteúdo curto (NÃO detectável via API atual)
      * NUNCA misturar ou confundir os dois conceitos
+8. SOBRE VISITAS (visits_unknown_via_api):
+   - Se dataQuality.warnings contém "visits_unknown_via_api" → NUNCA diga "zero visitas" ou "sem visitas"
+   - Use: "Visitas não disponíveis via API; valide no painel do Mercado Livre"
+   - Não conclua ausência de tráfego se visits estiver unknown
+   - Orders podem estar disponíveis mesmo se visits estiver unknown (fonte: Orders API)
    - EXEMPLOS PROIBIDOS (quando hasClips=null):
      * ❌ "Você não tem clips" (afirmação absoluta)
      * ❌ "Adicione clips" (como se fosse certeza)
@@ -280,8 +285,19 @@ export class OpenAIService {
     let hasDailyMetrics = dailyMetrics.length > 0;
 
     if (hasDailyMetrics) {
+      let totalVisits: number | null = null;
+      let hasKnownVisits = false;
+      
       for (const metric of dailyMetrics) {
-        visits += metric.visits;
+        // Visits pode ser null (unknown) - tratar separadamente
+        if (metric.visits !== null) {
+          if (totalVisits === null) {
+            totalVisits = 0;
+          }
+          totalVisits += metric.visits;
+          hasKnownVisits = true;
+        }
+        
         orders += metric.orders;
         impressions += metric.impressions;
         clicks += metric.clicks;
@@ -294,6 +310,8 @@ export class OpenAIService {
         const ctr = Number(metric.ctr);
         totalCtr += ctr;
       }
+      
+      visits = totalVisits ?? 0; // Se null, usar 0 para cálculo, mas marcar como unknown
     } else {
       // Fallback to listing aggregates
       visits = listing.visits_last_7d ?? 0;
@@ -301,7 +319,10 @@ export class OpenAIService {
       revenue = null;
     }
 
-    const conversionRate = visits > 0 ? orders / visits : null;
+    // Verificar se visits é unknown (null em todas as métricas)
+    const visitsUnknown = hasDailyMetrics && dailyMetrics.every(m => m.visits === null);
+    
+    const conversionRate = visitsUnknown ? null : (visits > 0 ? orders / visits : null);
     const avgCtr = dailyMetrics.length > 0 && totalCtr > 0 ? totalCtr / dailyMetrics.length : null;
 
     // Determine media information
@@ -327,8 +348,10 @@ export class OpenAIService {
       warnings.push(`No daily metrics found for the last ${periodDays} days. Using listing aggregates.`);
     }
 
-    // Adicionar warning se visitas estão zeradas mas deveriam ter dados
-    if (hasDailyMetrics && visits === 0 && orders === 0) {
+    // Adicionar warnings sobre qualidade dos dados
+    if (visitsUnknown) {
+      warnings.push('visits_unknown_via_api');
+    } else if (hasDailyMetrics && visits === 0 && orders === 0) {
       warnings.push('visits_zero_but_metrics_exist');
     } else if (!hasDailyMetrics && visits === 0 && orders === 0) {
       warnings.push('no_metrics_available');
@@ -441,9 +464,9 @@ ${input.dataQuality.missing.length > 0 ? `- Campos ausentes: ${input.dataQuality
 ${input.dataQuality.warnings.length > 0 ? `- Avisos: ${input.dataQuality.warnings.join('; ')}` : ''}
 
 DADOS DE PERFORMANCE:
-- Visitas: ${input.performance.visits} (últimos ${input.performance.periodDays} dias)
-- Pedidos: ${input.performance.orders}
-- Taxa de conversão: ${input.performance.conversionRate ? (input.performance.conversionRate * 100).toFixed(2) + '%' : 'N/A'}
+- Visitas: ${input.dataQuality.warnings.includes('visits_unknown_via_api') ? 'NÃO DISPONÍVEL VIA API (não concluir "zero visitas")' : `${input.performance.visits} (últimos ${input.performance.periodDays} dias)`}
+- Pedidos: ${input.performance.orders} ${input.dataQuality.sources.performance === 'listing_metrics_daily' ? '(fonte: Orders API do período)' : ''}
+- Taxa de conversão: ${input.performance.conversionRate ? (input.performance.conversionRate * 100).toFixed(2) + '%' : 'N/A (visitas não disponíveis)'}
 ${input.performance.ctr !== undefined && input.performance.ctr !== null ? `- CTR: ${(input.performance.ctr * 100).toFixed(2)}%` : ''}
 ${input.performance.revenue !== null ? `- Receita: R$ ${input.performance.revenue.toFixed(2)}` : ''}
 
