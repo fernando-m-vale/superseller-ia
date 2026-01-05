@@ -112,9 +112,9 @@ export const aiRoutes: FastifyPluginCallback = (app, _, done) => {
       const metrics: ListingDailyMetric[] = metricsData.map((m) => ({
         listingId: m.listing_id,
         date: m.date.toISOString().split('T')[0],
-        impressions: m.impressions,
-        clicks: m.clicks,
-        ctr: parseFloat(m.ctr.toString()),
+        impressions: m.impressions ?? 0, // Fallback para 0 para compatibilidade com tipo (será ajustado em PR futuro)
+        clicks: m.clicks ?? 0, // Fallback para 0 para compatibilidade com tipo (será ajustado em PR futuro)
+        ctr: m.ctr ? parseFloat(m.ctr.toString()) : 0, // Fallback para 0 para compatibilidade com tipo (será ajustado em PR futuro)
         visits: m.visits ?? null,
         conversion: m.conversion ? parseFloat(m.conversion.toString()) : null,
         orders: m.orders,

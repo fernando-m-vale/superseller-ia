@@ -651,7 +651,7 @@ export class MercadoLivreSyncService {
         status: status,
         thumbnail_url: thumbnailFromAPI || null,
         pictures_count: picturesCountFromAPI ?? 0,
-        visits_last_7d: item.visits || 0,
+        visits_last_7d: item.visits ?? null,
         sales_last_7d: item.sold_quantity || 0,
       };
       
@@ -730,8 +730,8 @@ export class MercadoLivreSyncService {
         if (visitsFromAPI !== undefined && visitsFromAPI !== null && visitsFromAPI >= 0) {
           listingData.visits_last_7d = visitsFromAPI;
         } else if (!existing) {
-          // Se é criação e não veio visits, setar 0
-          listingData.visits_last_7d = 0;
+          // Se é criação e não veio visits, setar null (não 0)
+          listingData.visits_last_7d = null;
         }
         // Se é update e não veio visits, NÃO atualizar (manter valor existente)
 
@@ -1070,10 +1070,11 @@ export class MercadoLivreSyncService {
           // Calcular conversão apenas se visits for conhecido
           const conversion = visits_30d !== null && visits_30d > 0 ? orders_30d / visits_30d : null;
           
-          // Impressions/clicks/ctr: apenas se visits for conhecido
-          const impressions = visits_30d !== null && visits_30d > 0 ? visits_30d * 10 : 0; // Aproximação
-          const clicks = visits_30d !== null ? visits_30d : 0;
-          const ctr = impressions > 0 ? clicks / impressions : 0;
+          // Impressions/clicks/ctr: null quando não houver fonte real (sem estimativas)
+          // NOTA: Não estimamos impressions/clicks/ctr - aguardar integração com Visits API ou Ads API
+          const impressions = null;
+          const clicks = null;
+          const ctr = null;
 
           // Salvar como ponto único no dia atual (representando agregado do período)
           const existingToday = await prisma.listingMetricsDaily.findUnique({
@@ -1150,8 +1151,9 @@ export class MercadoLivreSyncService {
             },
           });
 
-          // Somar visits (tratando null como 0 para cálculo de agregado)
-          const visitsLast7d = last7DaysMetrics.reduce((sum, m) => sum + (m.visits ?? 0), 0);
+          // Somar visits: null se todos forem null, senão soma apenas valores não-null
+          const visitsValues = last7DaysMetrics.map(m => m.visits).filter((v): v is number => v !== null);
+          const visitsLast7d = visitsValues.length > 0 ? visitsValues.reduce((sum, v) => sum + v, 0) : null;
           const salesLast7d = last7DaysMetrics.reduce((sum, m) => sum + m.orders, 0);
 
           await prisma.listing.update({

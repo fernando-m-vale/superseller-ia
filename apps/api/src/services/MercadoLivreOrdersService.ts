@@ -311,14 +311,16 @@ export class MercadoLivreOrdersService {
    */
   private async refreshAccessToken(refreshToken: string): Promise<void> {
     try {
+      const credentials = await import('../lib/secrets').then(m => m.getMercadoLivreCredentials());
+      
       const response = await axios.post<TokenRefreshResponse>(
         `${ML_API_BASE}/oauth/token`,
         null,
         {
           params: {
             grant_type: 'refresh_token',
-            client_id: process.env.ML_CLIENT_ID,
-            client_secret: process.env.ML_CLIENT_SECRET,
+            client_id: credentials.clientId,
+            client_secret: credentials.clientSecret,
             refresh_token: refreshToken,
           },
         }

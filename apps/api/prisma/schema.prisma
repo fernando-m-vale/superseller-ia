@@ -242,9 +242,9 @@ model ListingMetricsDaily {
   tenant_id   String
   listing_id  String
   date        DateTime @db.Date
-  impressions Int      @default(0)
-  clicks      Int      @default(0)
-  ctr         Decimal  @db.Decimal(5, 4)
+  impressions Int?     // Nullable: null = não disponível (sem estimativas)
+  clicks      Int?     // Nullable: null = não disponível (sem estimativas)
+  ctr         Decimal? @db.Decimal(5, 4) // Nullable: null = não disponível (sem estimativas)
   visits      Int?     // Nullable: null = unknown, 0 = zero real
   conversion  Decimal? @db.Decimal(5, 4) // Nullable quando visits é null
   orders      Int      @default(0)
