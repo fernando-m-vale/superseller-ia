@@ -1,3 +1,6 @@
+A partir de 2026-01-05, o planejamento diário passou para DAILY_EXECUTION_LOG.md
+
+
 # SuperSeller IA — Plano da Próxima Sessão
 
 ## Objetivo da sessão
