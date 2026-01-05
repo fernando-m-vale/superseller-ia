@@ -6,6 +6,7 @@ import { getMercadoLivreCredentials } from '../lib/secrets';
 import { authGuard } from '../plugins/auth';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
+import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
 
 const prisma = new PrismaClient();
 
@@ -256,6 +257,72 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       }
     });
+
+  // POST /api/v1/sync/mercadolivre/visits
+  // Sincroniza visitas incrementais (últimos 2-3 dias)
+  app.post('/sync/mercadolivre/visits', { preHandler: authGuard }, async (req, reply) => {
+    try {
+      const tenantId = (req as RequestWithAuth).tenantId;
+      if (!tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const { lastDays = 2 } = req.body as { lastDays?: number };
+
+      const visitsService = new MercadoLivreVisitsService(tenantId);
+      const result = await visitsService.syncVisitsIncremental(lastDays);
+
+      return reply.send({
+        success: result.success,
+        listingsProcessed: result.listingsProcessed,
+        metricsCreated: result.metricsCreated,
+        metricsUpdated: result.metricsUpdated,
+        errors: result.errors,
+        duration: result.duration,
+      });
+    } catch (error) {
+      app.log.error({ err: error }, 'Failed to sync visits');
+      return reply.status(500).send({
+        error: 'Failed to sync visits',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // POST /api/v1/sync/mercadolivre/visits/backfill
+  // Sincroniza visitas em backfill (últimos 30 dias)
+  app.post('/sync/mercadolivre/visits/backfill', { preHandler: authGuard }, async (req, reply) => {
+    try {
+      const tenantId = (req as RequestWithAuth).tenantId;
+      if (!tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const { lastDays = 30, batchSize = 10, delayMs = 1000 } = req.body as {
+        lastDays?: number;
+        batchSize?: number;
+        delayMs?: number;
+      };
+
+      const visitsService = new MercadoLivreVisitsService(tenantId);
+      const result = await visitsService.syncVisitsBackfill(lastDays, batchSize, delayMs);
+
+      return reply.send({
+        success: result.success,
+        listingsProcessed: result.listingsProcessed,
+        metricsCreated: result.metricsCreated,
+        metricsUpdated: result.metricsUpdated,
+        errors: result.errors,
+        duration: result.duration,
+      });
+    } catch (error) {
+      app.log.error({ err: error }, 'Failed to backfill visits');
+      return reply.status(500).send({
+        error: 'Failed to backfill visits',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
 
     done();
 };
