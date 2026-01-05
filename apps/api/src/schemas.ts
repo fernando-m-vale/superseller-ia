@@ -33,7 +33,7 @@ export const MetricsSummaryResponseSchema = z.object({
   totalVisits: z.number(),
   totalOrders: z.number(),
   totalRevenue: z.number(),
-  avgCTR: z.number(),
+  avgCTR: z.number().nullable(), // Null quando impressions/clicks não disponíveis
   avgCVR: z.number(),
   bestListing: z.object({
     id: z.string(),

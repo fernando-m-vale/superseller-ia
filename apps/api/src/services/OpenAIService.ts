@@ -299,16 +299,18 @@ export class OpenAIService {
         }
         
         orders += metric.orders;
-        impressions += metric.impressions;
-        clicks += metric.clicks;
+        impressions += metric.impressions ?? 0; // Tratar null como 0 para agregação
+        clicks += metric.clicks ?? 0; // Tratar null como 0 para agregação
         const gmv = Number(metric.gmv);
         if (revenue === null) {
           revenue = gmv;
         } else {
           revenue += gmv;
         }
-        const ctr = Number(metric.ctr);
-        totalCtr += ctr;
+        // CTR: só somar se não for null
+        if (metric.ctr !== null) {
+          totalCtr += Number(metric.ctr);
+        }
       }
       
       visits = totalVisits ?? 0; // Se null, usar 0 para cálculo, mas marcar como unknown
@@ -323,7 +325,14 @@ export class OpenAIService {
     const visitsUnknown = hasDailyMetrics && dailyMetrics.every(m => m.visits === null);
     
     const conversionRate = visitsUnknown ? null : (visits > 0 ? orders / visits : null);
-    const avgCtr = dailyMetrics.length > 0 && totalCtr > 0 ? totalCtr / dailyMetrics.length : null;
+    
+    // CTR: null se impressions ou clicks forem null, ou se impressions = 0
+    const hasImpressions = hasDailyMetrics && dailyMetrics.some(m => m.impressions !== null && m.impressions > 0);
+    const hasClicks = hasDailyMetrics && dailyMetrics.some(m => m.clicks !== null);
+    const ctrCount = dailyMetrics.filter(m => m.ctr !== null).length;
+    const avgCtr = (hasImpressions && hasClicks && ctrCount > 0) 
+      ? totalCtr / ctrCount 
+      : null;
 
     // Determine media information
     const imageCount = listing.pictures_count ?? 0;
@@ -342,6 +351,23 @@ export class OpenAIService {
 
     if (!hasImages) {
       missing.push('images');
+    }
+
+    // Adicionar métricas indisponíveis (null) em missing
+    if (hasDailyMetrics) {
+      const hasAnyImpressions = dailyMetrics.some(m => m.impressions !== null);
+      const hasAnyClicks = dailyMetrics.some(m => m.clicks !== null);
+      const hasAnyCtr = dailyMetrics.some(m => m.ctr !== null);
+      
+      if (!hasAnyImpressions) {
+        missing.push('impressions');
+      }
+      if (!hasAnyClicks) {
+        missing.push('clicks');
+      }
+      if (!hasAnyCtr || avgCtr === null) {
+        missing.push('ctr');
+      }
     }
 
     if (!hasDailyMetrics) {

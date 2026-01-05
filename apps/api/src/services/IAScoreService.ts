@@ -110,22 +110,26 @@ export class IAScoreService {
     let impressions = 0;
     let clicks = 0;
     let totalCtr = 0;
+    let ctrCount = 0; // Contar apenas CTRs não-null
     const hasDailyMetrics = dailyMetrics.length > 0;
 
     if (hasDailyMetrics) {
       for (const metric of dailyMetrics) {
         visits += metric.visits ?? 0; // Tratar null como 0 para cálculo de score
         orders += metric.orders;
-        impressions += metric.impressions;
-        clicks += metric.clicks;
+        impressions += metric.impressions ?? 0; // Tratar null como 0 para agregação
+        clicks += metric.clicks ?? 0; // Tratar null como 0 para agregação
         const gmv = Number(metric.gmv);
         if (revenue === null) {
           revenue = gmv;
         } else {
           revenue += gmv;
         }
-        const ctr = Number(metric.ctr);
-        totalCtr += ctr;
+        // CTR: só somar se não for null
+        if (metric.ctr !== null) {
+          totalCtr += Number(metric.ctr);
+          ctrCount++;
+        }
       }
     } else {
       // Fallback para agregados do listing
@@ -135,7 +139,7 @@ export class IAScoreService {
     }
 
     const conversionRate = visits > 0 ? orders / visits : null;
-    const avgCtr = dailyMetrics.length > 0 && totalCtr > 0 ? totalCtr / dailyMetrics.length : null;
+    const avgCtr = ctrCount > 0 ? totalCtr / ctrCount : null;
 
     // Calcular dimensões
     const breakdown: IAScoreBreakdown = {

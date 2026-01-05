@@ -519,19 +519,19 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         },
       });
 
-      const totalImpressions = metrics.reduce((sum, m) => sum + m.impressions, 0);
-      const totalClicks = metrics.reduce((sum, m) => sum + m.clicks, 0);
+      const totalImpressions = metrics.reduce((sum, m) => sum + (m.impressions ?? 0), 0);
+      const totalClicks = metrics.reduce((sum, m) => sum + (m.clicks ?? 0), 0);
       const totalVisits = metrics.reduce((sum, m) => sum + (m.visits ?? 0), 0);
       const totalOrders = metrics.reduce((sum, m) => sum + m.orders, 0);
       const totalRevenue = metrics.reduce((sum, m) => sum + Number(m.gmv), 0);
 
-    const avgCTR = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+    const avgCTR = totalImpressions > 0 && totalClicks !== null ? totalClicks / totalImpressions : null;
     const avgCVR = totalVisits > 0 ? totalOrders / totalVisits : 0;
 
       // Calcular health score por listing
       type ListingMetric = {
         date: string;
-        impressions: number;
+        impressions: number; // healthScore espera number, usar 0 quando null
         visits: number;
         orders: number;
         revenue: number;
@@ -551,7 +551,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
 
       listingMetricsMap.get(metric.listing_id)!.push({
         date: metric.date.toISOString().split('T')[0],
-        impressions: metric.impressions,
+        impressions: metric.impressions ?? 0, // healthScore espera number, usar 0 quando null
         visits: metric.visits ?? 0, // Tratar null como 0 para exibição
         orders: metric.orders,
         revenue: Number(metric.gmv),
@@ -582,7 +582,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       totalVisits,
       totalOrders,
       totalRevenue,
-      avgCTR: Math.round(avgCTR * 10000) / 10000,
+      avgCTR: avgCTR !== null ? Math.round(avgCTR * 10000) / 10000 : null,
       avgCVR: Math.round(avgCVR * 10000) / 10000,
       bestListing,
       updatedAt: new Date().toISOString(),
