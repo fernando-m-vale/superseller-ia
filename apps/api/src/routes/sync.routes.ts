@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
+import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
 import { ScoreCalculator } from '../services/ScoreCalculator';
 import { authGuard } from '../plugins/auth';
 
@@ -768,6 +769,136 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/mercadolivre/visits/backfill
+   * 
+   * Backfill granular de visitas por dia (30 dias) para todos os listings do tenant.
+   * Processa em batches por itemId com controle de concorrência.
+   * 
+   * Query params:
+   *   - days: Número de dias para buscar (default: 30, max: 90)
+   */
+  app.post(
+    '/mercadolivre/visits/backfill',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const query = MetricsSyncQuerySchema.parse(request.query);
+        const days = Math.min(query.days, 90); // Max 90 dias
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          days,
+        }, 'Requisição de backfill de visitas recebida');
+
+        // Instanciar service e executar backfill
+        const visitsService = new MercadoLivreVisitsService(tenantId);
+        const result = await visitsService.backfillVisitsGranular(days, 50, 5); // batchSize=50, concurrency=5
+
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = result.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') ||
+          err.includes('autenticação')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        if (result.success) {
+          app.log.info({
+            requestId,
+            userId,
+            tenantId,
+            days: result.days,
+            listingsConsidered: result.listingsConsidered,
+            batchesPerDay: result.batchesPerDay,
+            rowsUpserted: result.rowsUpserted,
+            rowsWithNull: result.rowsWithNull,
+            duration: result.duration,
+          }, 'Backfill de visitas concluído com sucesso');
+
+          return reply.status(200).send({
+            message: 'Backfill de visitas concluído com sucesso',
+            data: {
+              days: result.days,
+              listingsConsidered: result.listingsConsidered,
+              batchesPerDay: result.batchesPerDay,
+              rowsUpserted: result.rowsUpserted,
+              rowsWithNull: result.rowsWithNull,
+              duration: `${result.duration}ms`,
+              errors: result.errors,
+            },
+          });
+        } else {
+          app.log.warn({
+            requestId,
+            userId,
+            tenantId,
+            errors: result.errors,
+          }, 'Backfill de visitas concluído com erros');
+
+          return reply.status(207).send({
+            message: 'Backfill de visitas concluído com alguns erros',
+            data: {
+              days: result.days,
+              listingsConsidered: result.listingsConsidered,
+              batchesPerDay: result.batchesPerDay,
+              rowsUpserted: result.rowsUpserted,
+              rowsWithNull: result.rowsWithNull,
+              duration: `${result.duration}ms`,
+              errors: result.errors,
+            },
+          });
+        }
+      } catch (error: any) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro no backfill de visitas');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'Parâmetros inválidos',
+            details: error.errors,
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao fazer backfill de visitas';
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: errorMessage,
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/sync/status
    * 
    * Endpoint auxiliar para verificar se o serviço de sync está disponível
@@ -781,6 +912,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         'POST /mercadolivre - Sync de anúncios',
         'POST /mercadolivre/orders - Sync de pedidos',
         'POST /mercadolivre/metrics - Sync de métricas diárias',
+        'POST /mercadolivre/visits/backfill - Backfill granular de visitas por dia',
         'POST /mercadolivre/full - Sync completo',
         'POST /recalculate-scores - Recalcular Super Seller Score',
       ],
