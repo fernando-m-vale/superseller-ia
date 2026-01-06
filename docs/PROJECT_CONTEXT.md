@@ -1,106 +1,96 @@
 # SuperSeller IA — Project Context (Atualizado)
 
 ## Visão Geral
-O SuperSeller IA é uma plataforma de inteligência artificial voltada para sellers de marketplaces (inicialmente Mercado Livre), com o objetivo de diagnosticar anúncios, gerar um IA Score e recomendar ações práticas para aumentar visibilidade, conversão e vendas.
+O SuperSeller IA é uma plataforma de inteligência artificial para sellers de marketplaces (inicialmente Mercado Livre), focada em diagnóstico de anúncios, score de qualidade e recomendações acionáveis para aumento de vendas.
 
-O projeto combina:
-- Coleta de dados via APIs oficiais (Mercado Livre)
-- Persistência estruturada (PostgreSQL)
-- Análise por IA (score, diagnóstico e recomendações)
-- Interface visual orientada à tomada de decisão do seller
+O projeto foi desenhado para operar **com dados reais**, respeitando **as limitações efetivas das APIs oficiais**.
 
 ---
 
-## Estado Atual do Projeto (Dez/2025)
+## Estado Atual do Projeto (Jan/2026)
 
-### 1. Listings (Cadastro)
-- ✅ Títulos e descrições estão sendo corretamente ingeridos
-- ✅ Campo `description` validado no banco:
-  - 100% dos anúncios com descrição válida (>= 120 caracteres)
-- ✅ `pictures_count` confiável
-- ✅ Cadastro considerado estável para IA Score
-
----
-
-### 2. Mídia (Vídeo x Clips)
-
-#### Vídeo
-- Campo `has_video` baseado **exclusivamente** em evidência real da API (`video_id`, `videos[]`)
-- Para o listing MLB4217107417:
-  - `video_id = null`
-  - `has_video = false`
-- A API **não detecta clips como vídeo**
-
-#### Clips
-- Mercado Livre possui “Clips”, **mas eles não são detectáveis via Items API**
-- Implementação atual:
-  - `has_clips = NULL` → status “não detectável via API”
-  - `clips_source` e `clips_checked_at` preparados para futuro
-- UI e IA foram ajustadas para:
-  - ❌ Nunca afirmar ausência de clips quando `has_clips = NULL`
-  - ✔️ Orientar seller a validar no painel do ML
+### 1. Conexão com Mercado Livre
+- OAuth funcional
+- Tokens válidos e renovados automaticamente
+- Seller real validado via `/users/me`
+- Ambiente único (PROD) usado como DEV/HOMOL/PROD
 
 ---
 
-### 3. Performance (Ponto mais crítico)
+### 2. Ingestão de Listings (Decisão Estrutural)
 
-#### Orders e GMV
-- ❌ NÃO usar mais `sold_quantity` (lifetime)
-- ✅ Orders e GMV 30d agora vêm da **Orders API**
-- Persistência:
-  - 1 linha agregada por período (`period_days = 30`)
-  - `source = ml_orders_period`
-- Orders e GMV batem com o painel do Mercado Livre
+#### Situação real
+- APIs de discovery (`search`, `user items`) retornam 403 (PolicyAgent)
+- Bloqueio ocorre mesmo em produção, com seller real
 
-#### Visitas
-- API de visitas não retorna dados via Items API
-- Situação atual:
-  - `visits = NULL` (unknown) para todos os anúncios
-- Importante:
-  - `NULL` ≠ `0`
-  - Zero só deve ser usado quando for **zero real**
+#### Decisão oficial
+- **Orders API é a fonte de descoberta de listings**
+- Listings são inferidos a partir de vendas reais
+- Details sempre via `/items/{id}`
+
+Essa decisão é **canônica** e documentada no `ML_DATA_AUDIT.md`.
 
 ---
 
-### 4. IA Score e Diagnóstico
+### 3. Mídia (Fotos, Vídeo, Clips)
 
-- IA Score funcional e estável
-- Breakdown atual:
-  - Cadastro: OK
-  - Mídia: penaliza ausência de vídeo real
-  - Performance: gargalo principal
-- Ajustes feitos:
-  - IA **não afirma mais “zero visitas” quando visits = NULL**
-  - IA distingue claramente:
-    - Vídeo
-    - Clips
-    - Não detectável via API
+- Fotos: confiáveis via Items API
+- Vídeo: detectável apenas quando `video_id` existe
+- Clips:
+  - Não detectáveis via API
+  - Representados como `NULL`
+  - UI e IA nunca afirmam ausência sem evidência
 
 ---
 
-### 5. Frontend (Estado atual)
+### 4. Performance
 
-#### Funcional
-- Modal de IA renderiza score, diagnóstico, SEO e descrição
-- Copy de mídia corrigida (vídeo x clips)
+#### Orders / GMV
+- Derivados exclusivamente da Orders API
+- Janela móvel (30d / 60d)
+- Dados confiáveis e auditáveis
 
-#### Bugs conhecidos
-1. **IA ainda menciona “visitas zeradas” em alguns fluxos**
-   - Indício de `null → 0` em frontend ou payload
-2. **Modal reaproveita análise anterior**
-   - Ao abrir outro anúncio, mostra análise do anterior
-   - Necessário F5 para resetar
+#### Visits
+- Única fonte válida: Visits API
+- Persistidas em `listing_metrics_daily`
+- `NULL` preservado quando indisponível
 
 ---
 
-## Referências Oficiais
-- Mercado Livre — Visits API  
-  https://developers.mercadolivre.com.br/pt_br/recurso-visits
+### 5. IA Score
+
+- Baseado apenas em dados reais
+- Penalizações ocorrem somente quando há evidência
+- IA distingue claramente:
+  - Dado ausente
+  - Dado zero
+  - Dado bloqueado por API
+
+---
+
+### 6. Frontend
+
+- Dashboard orientado a decisão
+- Estados explícitos:
+  - Carregando dados
+  - Dados parciais
+  - Dados completos
+- Bugs conhecidos:
+  - Reset de state no modal (em correção)
+
+---
+
+## Prioridade Atual
+**PRIORIDADE ZERO — ML Data Audit**
+
+Nada avança para monetização, benchmark ou UX avançado até:
+- Pipeline de dados estar sólido
+- Ingestão real funcionando em PROD
+- Sistema resiliente às limitações do ML
 
 ---
 
 ## Status Geral
-- ✅ Backend: ingestão de cadastro, mídia e orders estável
-- ⚠️ Performance: visitas ainda não ingeridas
-- ⚠️ Frontend: bugs de state/cache no modal
-- 🚧 Próximo foco: visitas + UX do modal
+- Backend: sólido e alinhado à realidade
+- Integrações ML: funcionais com fallback
+- Produto: pronto para fechar a base de dados

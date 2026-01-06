@@ -1,58 +1,70 @@
-# SuperSeller IA — Plano da Próxima Sessão
+# SuperSeller IA — NEXT SESSION PLAN
 
-## Objetivo da sessão
-Fechar completamente:
-1. Ingestão correta de visitas
-2. Coerência total entre BD, IA e UI
-3. UX do modal (state reset)
+## Objetivo da próxima sessão
+Fechar completamente a **PRIORIDADE ZERO (ML Data Audit)** e deixar o sistema pronto para uso real por usuários.
 
 ---
 
-## Checklist — 30 minutos (Quick Wins)
-
-- [ ] Inspecionar payload da API `/ai/analyze`
-  - Confirmar se `visits` chega como `null` ou `0`
-- [ ] Ajustar frontend:
-  - Nunca converter `null` → `0`
-  - Se `visits === null`, mostrar:
-    > “Visitas não disponíveis via API; valide no painel do Mercado Livre”
-- [ ] Remover copy “visitas zeradas” quando visits = null
+## 🎯 Foco central
+- Listings reais ingeridos (mesmo com PolicyAgent ativo)
+- Visits reais persistidas
+- Dashboard refletindo estados corretos
+- Pipeline automático pós-OAuth validado
 
 ---
 
-## Checklist — 60 minutos (Correções estruturais)
+## Checklist — Bloco 1 (Fundação de dados)
 
-- [ ] Implementar ingestão via **Visits API**
-  - Endpoint: `/visits/items/{item_id}`
-  - Persistir:
-    - visits_30d real
-    - source = ml_visits
-- [ ] Atualizar `listing_metrics_daily`:
-  - visits deixa de ser sempre NULL
-- [ ] Atualizar `buildAIAnalyzeInput`:
-  - Calcular conversion apenas se visits conhecido
+- [ ] Executar FULL sync em PROD
+  - Confirmar fallback via Orders acionado
+  - Validar `COUNT(*) FROM listings > 0`
+- [ ] Validar logs:
+  - discoveryBlocked=true
+  - ordersFound > 0
+  - uniqueItemIds > 0
 
 ---
 
-## Checklist — 120 minutos (UX e robustez)
+## Checklist — Bloco 2 (Visits)
 
-- [ ] Corrigir bug do modal:
-  - Resetar state ao trocar `listingId`
-  - Invalidar cache/query por listing
+- [ ] Executar sync incremental de visits
+- [ ] Confirmar criação de registros em `listing_metrics_daily`
 - [ ] Garantir:
-  - Cada clique → nova análise
-  - Nenhuma análise “herdada”
-- [ ] Validar end-to-end:
-  - BD → API → IA → UI
-- [ ] Atualizar documentação:
-  - ML_METRICS_SYNC.md
-  - PROJECT_CONTEXT.md
+  - visits ≠ NULL quando API retornar
+  - NULL preservado quando indisponível
 
 ---
 
-## Critérios de aceite da próxima sessão
+## Checklist — Bloco 3 (Dashboard & UX)
 
-- Visits no BD batem com painel do ML
-- IA nunca afirma dados inexistentes
-- Modal sempre mostra análise correta do anúncio clicado
-- Nenhum F5 necessário para nova análise
+- [ ] Ajustar UI para estados:
+  - “Carregando dados”
+  - “Dados parciais”
+  - “Dados completos”
+- [ ] Garantir:
+  - UI nunca mostra “0 visitas” quando visits = NULL
+  - IA nunca conclui ausência sem evidência
+- [ ] Validar modal de análise:
+  - Reset de state ao trocar listing
+  - Nenhuma análise herdada
+
+---
+
+## Checklist — Bloco 4 (Automação)
+
+- [ ] Conectar OAuth → FULL sync automático
+- [ ] Backfill automático de visits (30 dias)
+- [ ] Planejar cron / jobs:
+  - Orders
+  - Visits
+  - Recalc score
+
+---
+
+## Critérios de aceite da sessão
+
+- Listings reais aparecem no dashboard
+- Visits aparecem após sync
+- Nenhuma métrica estimada
+- Sistema funciona com limitações reais do ML
+- PRIORIDADE ZERO pode ser encerrada oficialmente
