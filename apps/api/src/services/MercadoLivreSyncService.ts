@@ -214,7 +214,8 @@ export class MercadoLivreSyncService {
 
         try {
           const items = await this.fetchItemsDetails(chunk);
-          const { created, updated } = await this.upsertListings(items);
+          // Fluxo normal: source = "discovery", discoveryBlocked = false
+          const { created, updated } = await this.upsertListings(items, 'discovery', false);
           
           result.itemsProcessed += items.length;
           result.itemsCreated += created;
@@ -592,7 +593,8 @@ export class MercadoLivreSyncService {
       for (const chunk of chunks) {
         try {
           const items = await this.fetchItemsDetails(chunk);
-          const { updated } = await this.upsertListings(items);
+          // Resync: não alterar source e discovery_blocked (manter valores existentes)
+          const { updated } = await this.upsertListings(items, undefined, false);
           
           result.itemsProcessed += items.length;
           result.itemsUpdated += updated;
@@ -668,8 +670,16 @@ export class MercadoLivreSyncService {
    * 
    * Garante que campos de mídia/descrição sejam preenchidos corretamente do ML API
    * e NUNCA sobrescreve com valores vazios/0 quando API não retornar dados.
+   * 
+   * @param items Lista de itens do ML para upsert
+   * @param source Origem da ingestão: "discovery" | "orders_fallback" | null
+   * @param discoveryBlocked Se discovery foi bloqueado (403/PolicyAgent)
    */
-  private async upsertListings(items: MercadoLivreItem[]): Promise<{ created: number; updated: number }> {
+  private async upsertListings(
+    items: MercadoLivreItem[],
+    source?: string | null,
+    discoveryBlocked: boolean = false
+  ): Promise<{ created: number; updated: number }> {
     let created = 0;
     let updated = 0;
 
@@ -822,9 +832,15 @@ export class MercadoLivreSyncService {
         }
         // Se é update e não veio sales, NÃO atualizar (manter valor existente)
 
+        // Atualizar source e discovery_blocked (sempre atualizar quando fornecidos)
+        if (source !== undefined) {
+          listingData.source = source;
+        }
+        listingData.discovery_blocked = discoveryBlocked;
+
         // Log seguro dos campos atualizados
         const updatedFields = Object.keys(listingData).filter(k => k !== 'score_breakdown');
-        console.log(`[ML-SYNC] Listing ${item.id} (${existing ? 'updated' : 'created'}): fields=${updatedFields.join(',')}`);
+        console.log(`[ML-SYNC] Listing ${item.id} (${existing ? 'updated' : 'created'}): fields=${updatedFields.join(',')} source=${source || 'null'} discoveryBlocked=${discoveryBlocked}`);
 
         if (existing) {
           await prisma.listing.update({
@@ -1079,7 +1095,8 @@ export class MercadoLivreSyncService {
 
         try {
           const items = await this.fetchItemsDetails(chunk);
-          const { created, updated } = await this.upsertListings(items);
+          // Fallback via Orders: source = "orders_fallback", discoveryBlocked = true
+          const { created, updated } = await this.upsertListings(items, 'orders_fallback', true);
 
           result.itemsProcessed += items.length;
           result.itemsCreated += created;

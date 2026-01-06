@@ -172,6 +172,8 @@ model Listing {
   clips_checked_at   DateTime? // Quando foi verificado/atualizado
   visits_last_7d     Int?          @default(0) // Visitas últimos 7 dias
   sales_last_7d      Int?          @default(0) // Vendas últimos 7 dias
+  source              String?       // Origem da ingestão: "discovery" | "orders_fallback" | null
+  discovery_blocked   Boolean       @default(false) // Se discovery foi bloqueado (403/PolicyAgent)
   created_at         DateTime      @default(now())
   updated_at         DateTime      @updatedAt
 
