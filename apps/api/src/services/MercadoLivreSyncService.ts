@@ -122,27 +122,89 @@ export class MercadoLivreSyncService {
       // Log estruturado: sellerId após carregar conexão
       console.log(`[ML-SYNC] Conexão carregada tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
 
-      // 3. Buscar IDs dos anúncios
-      const itemIds = await this.fetchUserItemIds();
+      // 3. Buscar IDs dos anúncios via discovery/search
+      let itemIds: string[] = [];
+      let discoveryBlocked = false;
       
-      // Log estruturado: total, sample ids (primeiros 3), endpoint
-      const sampleItemIds = itemIds.slice(0, 3);
-      console.log(`[ML-SYNC] Busca concluída tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpointUsed=/sites/MLB/search totalFound=${itemIds.length} sampleItemIds=[${sampleItemIds.join(',')}]`);
+      try {
+        itemIds = await this.fetchUserItemIds();
+        
+        // Log estruturado: total, sample ids (primeiros 3), endpoint
+        const sampleItemIds = itemIds.slice(0, 3);
+        console.log(`[ML-SYNC] Busca concluída tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpointUsed=/sites/MLB/search totalFound=${itemIds.length} sampleItemIds=[${sampleItemIds.join(',')}]`);
+      } catch (error) {
+        // Verificar se é 403 (PolicyAgent bloqueando)
+        if (axios.isAxiosError(error) && error.response?.status === 403) {
+          discoveryBlocked = true;
+          console.log(`[ML-SYNC] Discovery bloqueado (403) tenantId=${this.tenantId} sellerId=${this.providerAccountId} motivo=PolicyAgent_blocking endpoint=/sites/MLB/search`);
+        } else {
+          // Re-throw se não for 403
+          throw error;
+        }
+      }
 
-      if (itemIds.length === 0) {
-        // Log estruturado: motivo quando total=0 + status da conexão
+      // 4. Se discovery bloqueado (403) ou total=0, usar fallback via Orders
+      if (discoveryBlocked || itemIds.length === 0) {
         const connectionStatus = await prisma.marketplaceConnection.findUnique({
           where: { id: this.connectionId },
           select: { status: true },
         });
         const statusStr = connectionStatus?.status || 'unknown';
-        console.log(`[ML-SYNC] Nenhum anúncio encontrado tenantId=${this.tenantId} sellerId=${this.providerAccountId} motivo=nenhum_item_encontrado_via_search endpoint=/sites/MLB/search connectionStatus=${statusStr}`);
-        result.success = true;
-        result.duration = Date.now() - startTime;
-        return result;
+        
+        if (itemIds.length === 0 && !discoveryBlocked) {
+          console.log(`[ML-SYNC] Nenhum anúncio encontrado tenantId=${this.tenantId} sellerId=${this.providerAccountId} motivo=nenhum_item_encontrado_via_search endpoint=/sites/MLB/search connectionStatus=${statusStr}`);
+        }
+        
+        console.log(`[ML-SYNC] Acionando fallback via Orders tenantId=${this.tenantId} sellerId=${this.providerAccountId} discoveryBlocked=${discoveryBlocked} totalViaDiscovery=${itemIds.length}`);
+        
+        try {
+          const fallbackResult = await this.fallbackViaOrders();
+          
+          // Atualizar contadores do resultado principal
+          result.itemsProcessed += fallbackResult.itemsProcessed;
+          result.itemsCreated += fallbackResult.itemsCreated;
+          result.itemsUpdated += fallbackResult.itemsUpdated;
+          
+          // Se fallback encontrou items, continuar normalmente
+          if (fallbackResult.itemsProcessed > 0) {
+            // Buscar IDs dos items criados/atualizados para continuar processamento
+            const fallbackItemIds = await prisma.listing.findMany({
+              where: {
+                tenant_id: this.tenantId,
+                marketplace: Marketplace.mercadolivre,
+              },
+              select: { listing_id_ext: true },
+              take: 1000, // Limite razoável
+            });
+            
+            itemIds = fallbackItemIds.map(l => l.listing_id_ext);
+            console.log(`[ML-SYNC] Fallback concluído tenantId=${this.tenantId} sellerId=${this.providerAccountId} itemsProcessed=${fallbackResult.itemsProcessed} itemsCreated=${fallbackResult.itemsCreated} itemsUpdated=${fallbackResult.itemsUpdated} uniqueItemIds=${itemIds.length}`);
+          } else {
+            // Fallback não encontrou items, retornar sucesso vazio
+            result.success = true;
+            result.duration = Date.now() - startTime;
+            return result;
+          }
+        } catch (fallbackError) {
+          const errorMsg = fallbackError instanceof Error ? fallbackError.message : 'Erro desconhecido no fallback';
+          result.errors.push(`Fallback via Orders falhou: ${errorMsg}`);
+          console.error(`[ML-SYNC] Erro no fallback via Orders:`, errorMsg);
+          
+          // Se discovery também falhou, retornar erro
+          if (discoveryBlocked) {
+            result.success = false;
+            result.duration = Date.now() - startTime;
+            return result;
+          }
+          
+          // Se discovery retornou 0 mas fallback falhou, retornar sucesso vazio
+          result.success = true;
+          result.duration = Date.now() - startTime;
+          return result;
+        }
       }
 
-      // 4. Processar em lotes de 20
+      // 5. Processar em lotes de 20
       const chunks = this.chunkArray(itemIds, 20);
       console.log(`[ML-SYNC] Processando ${chunks.length} lotes de até 20 itens`);
 
@@ -901,6 +963,141 @@ export class MercadoLivreSyncService {
       chunks.push(array.slice(i, i + size));
     }
     return chunks;
+  }
+
+  /**
+   * Fallback: Busca listings via Orders API quando discovery/search está bloqueado
+   * Busca orders dos últimos 30-60 dias, extrai item IDs e faz upsert
+   */
+  private async fallbackViaOrders(): Promise<{
+    itemsProcessed: number;
+    itemsCreated: number;
+    itemsUpdated: number;
+    ordersFound: number;
+    uniqueItemIds: number;
+  }> {
+    const result = {
+      itemsProcessed: 0,
+      itemsCreated: 0,
+      itemsUpdated: 0,
+      ordersFound: 0,
+      uniqueItemIds: 0,
+    };
+
+    try {
+      console.log(`[ML-SYNC-FALLBACK] Iniciando fallback via Orders tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+      // 1. Buscar orders dos últimos 60 dias (período maior para garantir cobertura)
+      const dateFrom = new Date();
+      dateFrom.setDate(dateFrom.getDate() - 60);
+      dateFrom.setHours(0, 0, 0, 0);
+      const dateFromISO = dateFrom.toISOString();
+
+      console.log(`[ML-SYNC-FALLBACK] Buscando orders desde ${dateFromISO} tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+      // 2. Buscar orders via Orders API
+      interface MLOrderItem {
+        item: { id: string; title: string };
+        quantity: number;
+        unit_price: number;
+      }
+
+      interface MLOrder {
+        id: number;
+        order_items: MLOrderItem[];
+      }
+
+      interface MLOrdersSearchResponse {
+        results: MLOrder[];
+        paging: { total: number; offset: number; limit: number };
+      }
+
+      const allOrders: MLOrder[] = [];
+      let offset = 0;
+      const limit = 50;
+
+      while (true) {
+        const response = await this.executeWithRetryOn401(async () => {
+          return await axios.get<MLOrdersSearchResponse>(`${ML_API_BASE}/orders/search`, {
+            headers: { Authorization: `Bearer ${this.accessToken}` },
+            params: {
+              seller: this.providerAccountId,
+              'order.date_created.from': dateFromISO,
+              sort: 'date_desc',
+              offset,
+              limit,
+            },
+          });
+        });
+
+        allOrders.push(...response.data.results);
+        result.ordersFound = allOrders.length;
+
+        console.log(`[ML-SYNC-FALLBACK] Progresso tenantId=${this.tenantId} sellerId=${this.providerAccountId} ordersFound=${allOrders.length} total=${response.data.paging.total}`);
+
+        if (offset + limit >= response.data.paging.total || response.data.paging.total === 0) {
+          break;
+        }
+
+        offset += limit;
+      }
+
+      console.log(`[ML-SYNC-FALLBACK] Total de orders encontrados: ${allOrders.length} tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+      if (allOrders.length === 0) {
+        console.log(`[ML-SYNC-FALLBACK] Nenhum order encontrado, não é possível fazer fallback tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+        return result;
+      }
+
+      // 3. Extrair item IDs únicos dos orders
+      const itemIdSet = new Set<string>();
+      for (const order of allOrders) {
+        for (const orderItem of order.order_items || []) {
+          if (orderItem.item?.id) {
+            itemIdSet.add(orderItem.item.id);
+          }
+        }
+      }
+
+      const uniqueItemIds = Array.from(itemIdSet);
+      result.uniqueItemIds = uniqueItemIds.length;
+
+      console.log(`[ML-SYNC-FALLBACK] Item IDs únicos extraídos: ${uniqueItemIds.length} tenantId=${this.tenantId} sellerId=${this.providerAccountId} ordersFound=${allOrders.length}`);
+
+      if (uniqueItemIds.length === 0) {
+        console.log(`[ML-SYNC-FALLBACK] Nenhum item ID encontrado nos orders tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+        return result;
+      }
+
+      // 4. Buscar detalhes de cada item e fazer upsert
+      const chunks = this.chunkArray(uniqueItemIds, 20); // Processar em lotes de 20
+      console.log(`[ML-SYNC-FALLBACK] Processando ${chunks.length} lotes de até 20 itens tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`[ML-SYNC-FALLBACK] Processando lote ${i + 1}/${chunks.length} (${chunk.length} itens) tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+        try {
+          const items = await this.fetchItemsDetails(chunk);
+          const { created, updated } = await this.upsertListings(items);
+
+          result.itemsProcessed += items.length;
+          result.itemsCreated += created;
+          result.itemsUpdated += updated;
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+          console.error(`[ML-SYNC-FALLBACK] Erro no lote ${i + 1}:`, errorMsg);
+        }
+      }
+
+      console.log(`[ML-SYNC-FALLBACK] Fallback concluído tenantId=${this.tenantId} sellerId=${this.providerAccountId} ordersFound=${result.ordersFound} uniqueItemIds=${result.uniqueItemIds} itemsProcessed=${result.itemsProcessed} itemsCreated=${result.itemsCreated} itemsUpdated=${result.itemsUpdated}`);
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido no fallback';
+      console.error(`[ML-SYNC-FALLBACK] Erro fatal no fallback via Orders:`, errorMsg);
+      throw error;
+    }
   }
 
   /**
