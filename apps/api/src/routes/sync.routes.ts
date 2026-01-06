@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
+import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
 import { ScoreCalculator } from '../services/ScoreCalculator';
 import { authGuard } from '../plugins/auth';
 
@@ -867,19 +868,16 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
-   * POST /api/v1/sync/mercadolivre/listings/from-orders
+   * POST /api/v1/sync/mercadolivre/visits/backfill
    * 
-   * Fallback para popular listings via Orders quando discovery está bloqueado (403).
-   * Extrai itemIds únicos dos pedidos e busca detalhes de cada item via GET /items/{id}.
+   * Backfill granular de visitas por dia (30 dias) para todos os listings do tenant.
+   * Processa em batches por itemId com controle de concorrência.
    * 
    * Query params:
-   *   - days: Número de dias para buscar pedidos (default: 30, max: 90)
-   * 
-   * Retorna contadores: ordersProcessed, uniqueItemIds, itemsProcessed, itemsCreated, 
-   * itemsUpdated, itemsSkipped, duration, errors[]
+   *   - days: Número de dias para buscar (default: 30, max: 90)
    */
   app.post(
-    '/mercadolivre/listings/from-orders',
+    '/mercadolivre/visits/backfill',
     { preHandler: authGuard },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
@@ -893,25 +891,25 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Validar query params
-        const query = OrdersSyncQuerySchema.parse(request.query);
-        const daysBack = query.days;
+        const query = MetricsSyncQuerySchema.parse(request.query);
+        const days = Math.min(query.days, 90); // Max 90 dias
 
         app.log.info({ 
           requestId,
           userId,
           tenantId,
-          days: daysBack,
-        }, 'Requisição de sync de listings via orders (fallback) recebida');
+          days,
+        }, 'Requisição de backfill de visitas recebida');
 
-        // Instanciar service e executar sync via orders
-        const syncService = new MercadoLivreSyncService(tenantId);
-        const result = await syncService.syncListingsFromOrders(daysBack);
+        // Instanciar service e executar backfill
+        const visitsService = new MercadoLivreVisitsService(tenantId);
+        const result = await visitsService.backfillVisitsGranular(days, 50, 5); // batchSize=50, concurrency=5
 
         // Verificar se há erro de autenticação revogada
         const hasAuthRevoked = result.errors.some(err => 
           err.includes('AUTH_REVOKED') || 
-          err.includes('Conexão expirada') || 
-          err.includes('Reconecte sua conta')
+          err.includes('Conexão expirada') ||
+          err.includes('autenticação')
         );
 
         if (hasAuthRevoked) {
@@ -922,57 +920,57 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Log estruturado do resultado
-        app.log.info({
-          requestId,
-          userId,
-          tenantId,
-          ordersProcessed: result.ordersProcessed,
-          uniqueItemIds: result.uniqueItemIds,
-          itemsProcessed: result.itemsProcessed,
-          itemsCreated: result.itemsCreated,
-          itemsUpdated: result.itemsUpdated,
-          itemsSkipped: result.itemsSkipped,
-          duration: result.duration,
-          errorsCount: result.errors.length,
-          source: result.source,
-        }, 'Sync de listings via orders concluído');
-
-        // Retornar resultado
         if (result.success) {
+          app.log.info({
+            requestId,
+            userId,
+            tenantId,
+            days: result.days,
+            listingsConsidered: result.listingsConsidered,
+            batchesPerDay: result.batchesPerDay,
+            rowsUpserted: result.rowsUpserted,
+            rowsWithNull: result.rowsWithNull,
+            duration: result.duration,
+          }, 'Backfill de visitas concluído com sucesso');
+
           return reply.status(200).send({
-            message: 'Sincronização de listings via orders concluída com sucesso',
+            message: 'Backfill de visitas concluído com sucesso',
             data: {
-              ordersProcessed: result.ordersProcessed,
-              uniqueItemIds: result.uniqueItemIds,
-              itemsProcessed: result.itemsProcessed,
-              itemsCreated: result.itemsCreated,
-              itemsUpdated: result.itemsUpdated,
-              itemsSkipped: result.itemsSkipped,
+              days: result.days,
+              listingsConsidered: result.listingsConsidered,
+              batchesPerDay: result.batchesPerDay,
+              rowsUpserted: result.rowsUpserted,
+              rowsWithNull: result.rowsWithNull,
               duration: `${result.duration}ms`,
-              source: result.source,
+              errors: result.errors,
             },
           });
         } else {
+          app.log.warn({
+            requestId,
+            userId,
+            tenantId,
+            errors: result.errors,
+          }, 'Backfill de visitas concluído com erros');
+
           return reply.status(207).send({
-            message: 'Sincronização de listings via orders concluída com erros',
+            message: 'Backfill de visitas concluído com alguns erros',
             data: {
-              ordersProcessed: result.ordersProcessed,
-              uniqueItemIds: result.uniqueItemIds,
-              itemsProcessed: result.itemsProcessed,
-              itemsCreated: result.itemsCreated,
-              itemsUpdated: result.itemsUpdated,
-              itemsSkipped: result.itemsSkipped,
+              days: result.days,
+              listingsConsidered: result.listingsConsidered,
+              batchesPerDay: result.batchesPerDay,
+              rowsUpserted: result.rowsUpserted,
+              rowsWithNull: result.rowsWithNull,
               duration: `${result.duration}ms`,
-              source: result.source,
               errors: result.errors,
             },
           });
         }
-      } catch (error: unknown) {
+      } catch (error: any) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        
         // Capturar erros AUTH_REVOKED lançados diretamente
-        const err = error as { code?: string; message?: string };
-        if (err.code === 'AUTH_REVOKED' || err.message?.includes('Conexão expirada')) {
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
           return reply.status(401).send({
             error: 'AUTH_REVOKED',
             message: 'Conexão expirada. Reconecte sua conta.',
@@ -980,10 +978,20 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro na sincronização de listings via orders');
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro no backfill de visitas');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'Parâmetros inválidos',
+            details: error.errors,
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao fazer backfill de visitas';
         return reply.status(500).send({
-          error: 'Falha na sincronização de listings via orders',
-          message: error instanceof Error ? error.message : 'Erro interno',
+          error: 'Internal Server Error',
+          message: errorMessage,
         });
       }
     }
@@ -1003,6 +1011,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         'POST /mercadolivre - Sync de anúncios',
         'POST /mercadolivre/orders - Sync de pedidos',
         'POST /mercadolivre/metrics - Sync de métricas diárias',
+        'POST /mercadolivre/visits/backfill - Backfill granular de visitas por dia',
         'POST /mercadolivre/full - Sync completo',
         'POST /mercadolivre/listings/from-orders - Sync de listings via orders (fallback)',
         'POST /recalculate-scores - Recalcular Super Seller Score',

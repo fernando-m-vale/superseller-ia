@@ -255,8 +255,6 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
   // GET /api/v1/debug/mercadolivre/my-items?limit=50
   // Lista itemIds usando o mesmo método do sync de listings
   app.get('/mercadolivre/my-items', { preHandler: authGuard }, async (request: RequestWithAuth, reply: FastifyReply) => {
-    const { tenantId, requestId } = request;
-    
     // Log de acesso (apenas em desenvolvimento)
     if (process.env.NODE_ENV !== 'production') {
       request.log.debug('Debug endpoint accessed: /api/v1/debug/mercadolivre/my-items');

@@ -608,5 +608,301 @@ export class MercadoLivreVisitsService {
       return result;
     }
   }
+
+  /**
+   * Backfill granular de visitas por dia (30 dias)
+   * Processa em batches por itemId e por dia com controle de concorrência
+   * 
+   * @param days Número de dias para buscar (padrão: 30)
+   * @param batchSize Tamanho do batch de itemIds (padrão: 50)
+   * @param concurrency Número de requests paralelas (padrão: 5)
+   */
+  async backfillVisitsGranular(
+    days: number = 30,
+    batchSize: number = 50,
+    concurrency: number = 5
+  ): Promise<{
+    success: boolean;
+    days: number;
+    listingsConsidered: number;
+    batchesPerDay: number;
+    rowsUpserted: number;
+    rowsWithNull: number;
+    errors: string[];
+    duration: number;
+  }> {
+    const startTime = Date.now();
+    const requestId = `backfill-granular-${Date.now()}`;
+    const result = {
+      success: false,
+      days,
+      listingsConsidered: 0,
+      batchesPerDay: 0,
+      rowsUpserted: 0,
+      rowsWithNull: 0,
+      errors: [] as string[],
+      duration: 0,
+    };
+
+    try {
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Iniciando backfill granular tenantId=${this.tenantId} days=${days} batchSize=${batchSize} concurrency=${concurrency}`);
+
+      // 1. Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Conexão carregada tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+      // 2. Buscar todos os listings do tenant (marketplace=mercadolivre)
+      const listings = await prisma.listing.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+        },
+        select: {
+          id: true,
+          listing_id_ext: true,
+        },
+      });
+
+      result.listingsConsidered = listings.length;
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Listings encontrados: ${listings.length} tenantId=${this.tenantId}`);
+
+      if (listings.length === 0) {
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        console.log(`[ML-VISITS-BACKFILL] [${requestId}] Nenhum listing encontrado, finalizando`);
+        return result;
+      }
+
+      // 3. Dividir listings em batches de itemIds
+      const itemIdBatches: string[][] = [];
+      for (let i = 0; i < listings.length; i += batchSize) {
+        const batch = listings.slice(i, i + batchSize).map(l => l.listing_id_ext);
+        itemIdBatches.push(batch);
+      }
+
+      result.batchesPerDay = itemIdBatches.length;
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Criados ${itemIdBatches.length} batches de até ${batchSize} itemIds`);
+
+      // 4. Processar cada batch com controle de concorrência
+      for (let batchIndex = 0; batchIndex < itemIdBatches.length; batchIndex++) {
+        const itemIdBatch = itemIdBatches[batchIndex];
+        console.log(`[ML-VISITS-BACKFILL] [${requestId}] Processando batch ${batchIndex + 1}/${itemIdBatches.length} (${itemIdBatch.length} itemIds)`);
+
+        // Processar items do batch em paralelo (com limite de concorrência)
+        const batchPromises: Promise<void>[] = [];
+        
+        for (let i = 0; i < itemIdBatch.length; i += concurrency) {
+          const chunk = itemIdBatch.slice(i, i + concurrency);
+          const chunkPromises = chunk.map(itemId =>
+            this.processItemVisitsGranular(itemId, days, requestId, result)
+          );
+          
+          // Aguardar chunk atual antes de processar próximo
+          await Promise.allSettled(chunkPromises);
+        }
+      }
+
+      result.success = result.errors.length === 0 || result.rowsUpserted > 0;
+      result.duration = Date.now() - startTime;
+
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Backfill concluído tenantId=${this.tenantId} sellerId=${this.providerAccountId} durationMs=${result.duration} rowsUpserted=${result.rowsUpserted} rowsWithNull=${result.rowsWithNull} errors=${result.errors.length}`);
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      result.errors.push(errorMsg);
+      result.duration = Date.now() - startTime;
+      console.error(`[ML-VISITS-BACKFILL] [${requestId}] Erro fatal:`, errorMsg);
+      return result;
+    }
+  }
+
+  /**
+   * Processa visitas de um item específico (granular por dia)
+   * 
+   * @param itemId ID do item no Mercado Livre
+   * @param days Número de dias para buscar
+   * @param requestId ID da requisição para logs
+   * @param result Objeto de resultado para atualizar contadores
+   */
+  private async processItemVisitsGranular(
+    itemId: string,
+    days: number,
+    requestId: string,
+    result: {
+      rowsUpserted: number;
+      rowsWithNull: number;
+      errors: string[];
+    }
+  ): Promise<void> {
+    try {
+      // Buscar listing pelo itemId
+      const listing = await prisma.listing.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+          listing_id_ext: itemId,
+        },
+        select: { id: true },
+      });
+
+      if (!listing) {
+        console.log(`[ML-VISITS-BACKFILL] [${requestId}] Listing não encontrado para itemId=${itemId}`);
+        return;
+      }
+
+      // Buscar visitas com retry e backoff
+      let visits: VisitsTimeWindowResponse['visits'] = [];
+      let retries = 0;
+      const maxRetries = 3;
+
+      while (retries < maxRetries) {
+        try {
+          visits = await this.fetchVisitsTimeWindow(itemId, days);
+          break; // Sucesso
+        } catch (error) {
+          if (axios.isAxiosError(error)) {
+            const status = error.response?.status;
+
+            // 401/403: abortar (problema de autenticação)
+            if (status === 401 || status === 403) {
+              const errorMsg = `Erro de autenticação (${status}) para itemId ${itemId}`;
+              result.errors.push(errorMsg);
+              console.error(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg}`);
+              return;
+            }
+
+            // 429/5xx: backoff e retry
+            if (status === 429 || (status && status >= 500)) {
+              retries++;
+              if (retries < maxRetries) {
+                const backoffMs = Math.min(1000 * Math.pow(2, retries), 10000); // Exponential backoff, max 10s
+                console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro ${status} para itemId ${itemId}, retry ${retries}/${maxRetries} após ${backoffMs}ms`);
+                await new Promise(resolve => setTimeout(resolve, backoffMs));
+                continue;
+              }
+            }
+
+            // Outros erros: log e continuar (visits = null)
+            console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro ${status} para itemId ${itemId}, visits será null`);
+            visits = []; // Array vazio = visits será null
+            break;
+          }
+
+          // Erro não-Axios: log e continuar
+          console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro não-Axios para itemId ${itemId}:`, error instanceof Error ? error.message : 'Erro desconhecido');
+          visits = []; // Array vazio = visits será null
+          break;
+        }
+      }
+
+      // Se não conseguiu buscar visitas após retries, visits = null
+      if (visits.length === 0 && retries >= maxRetries) {
+        // Criar/atualizar métricas com visits = null para cada dia do range
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (let dayOffset = 0; dayOffset < days; dayOffset++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - dayOffset);
+
+          const existing = await prisma.listingMetricsDaily.findUnique({
+            where: {
+              tenant_id_listing_id_date: {
+                tenant_id: this.tenantId,
+                listing_id: listing.id,
+                date,
+              },
+            },
+          });
+
+          if (existing) {
+            // Update: apenas visits = null (não sobrescrever outros campos)
+            await prisma.listingMetricsDaily.update({
+              where: { id: existing.id },
+              data: {
+                visits: null,
+                source: 'ml_visits_api_daily',
+              },
+            });
+            result.rowsUpserted++;
+            result.rowsWithNull++;
+          } else {
+            // Create: visits = null
+            await prisma.listingMetricsDaily.create({
+              data: {
+                tenant_id: this.tenantId,
+                listing_id: listing.id,
+                date,
+                visits: null,
+                source: 'ml_visits_api_daily',
+                orders: 0,
+                gmv: 0,
+                impressions: null,
+                clicks: null,
+                ctr: null,
+                conversion: null,
+              },
+            });
+            result.rowsUpserted++;
+            result.rowsWithNull++;
+          }
+        }
+        return;
+      }
+
+      // Processar visitas retornadas (granular por dia)
+      for (const visitData of visits) {
+        const visitDate = new Date(visitData.date);
+        visitDate.setHours(0, 0, 0, 0);
+
+        const existing = await prisma.listingMetricsDaily.findUnique({
+          where: {
+            tenant_id_listing_id_date: {
+              tenant_id: this.tenantId,
+              listing_id: listing.id,
+              date: visitDate,
+            },
+          },
+        });
+
+        if (existing) {
+          // Update: apenas visits e source
+          await prisma.listingMetricsDaily.update({
+            where: { id: existing.id },
+            data: {
+              visits: visitData.visits,
+              source: 'ml_visits_api_daily',
+            },
+          });
+          result.rowsUpserted++;
+        } else {
+          // Create: visits, date, source
+          await prisma.listingMetricsDaily.create({
+            data: {
+              tenant_id: this.tenantId,
+              listing_id: listing.id,
+              date: visitDate,
+              visits: visitData.visits,
+              source: 'ml_visits_api_daily',
+              orders: 0,
+              gmv: 0,
+              impressions: null,
+              clicks: null,
+              ctr: null,
+              conversion: null,
+            },
+          });
+          result.rowsUpserted++;
+        }
+      }
+    } catch (error) {
+      const errorMsg = `Erro ao processar itemId ${itemId}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+      result.errors.push(errorMsg);
+      console.error(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg}`);
+    }
+  }
 }
 
