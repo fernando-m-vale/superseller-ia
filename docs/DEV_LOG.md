@@ -2,6 +2,14 @@ Developer Log - SuperSeller IA
 
 # SuperSeller IA — Dev Log
 
+2026-01-06
+- PRIORIDADE ZERO consolidada
+- PolicyAgent confirmado em PROD
+- Fallback via Orders definido como canônico
+- Debug endpoints validados em PROD
+- Fluxo pós-OAuth definido
+
+
 ## 2025-12-30
 
 ### ✅ Concluído
