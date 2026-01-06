@@ -1204,5 +1204,205 @@ export class MercadoLivreSyncService {
       return result;
     }
   }
+
+  /**
+   * Sincroniza listings extraindo itemIds dos pedidos (fallback quando discovery está bloqueado)
+   * 
+   * Este método é usado quando o endpoint de discovery (/sites/MLB/search) retorna 403.
+   * Extrai itemIds únicos dos pedidos e busca detalhes de cada item via GET /items/{id}.
+   * 
+   * @param daysBack Número de dias para buscar pedidos (default: 30)
+   * @param concurrencyLimit Limite de requisições paralelas (default: 5)
+   */
+  async syncListingsFromOrders(daysBack: number = 30, concurrencyLimit: number = 5): Promise<{
+    success: boolean;
+    ordersProcessed: number;
+    uniqueItemIds: number;
+    itemsProcessed: number;
+    itemsCreated: number;
+    itemsUpdated: number;
+    itemsSkipped: number;
+    duration: number;
+    errors: string[];
+    source: string;
+  }> {
+    const startTime = Date.now();
+    const result = {
+      success: false,
+      ordersProcessed: 0,
+      uniqueItemIds: 0,
+      itemsProcessed: 0,
+      itemsCreated: 0,
+      itemsUpdated: 0,
+      itemsSkipped: 0,
+      duration: 0,
+      errors: [] as string[],
+      source: 'orders_fallback',
+    };
+
+    try {
+      console.log(`[ML-SYNC-FALLBACK] Iniciando sync de listings via orders tenantId=${this.tenantId} daysBack=${daysBack}`);
+
+      // 1. Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      console.log(`[ML-SYNC-FALLBACK] Conexão carregada tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
+      // 2. Buscar pedidos dos últimos N dias do banco de dados
+      const dateFrom = new Date();
+      dateFrom.setDate(dateFrom.getDate() - daysBack);
+
+      const orders = await prisma.order.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+          order_date: {
+            gte: dateFrom,
+          },
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      result.ordersProcessed = orders.length;
+      console.log(`[ML-SYNC-FALLBACK] Pedidos encontrados tenantId=${this.tenantId} ordersProcessed=${orders.length}`);
+
+      if (orders.length === 0) {
+        console.log(`[ML-SYNC-FALLBACK] Nenhum pedido encontrado. Tentando buscar da API...`);
+        
+        // Se não há pedidos no banco, buscar da API primeiro
+        const { MercadoLivreOrdersService } = await import('./MercadoLivreOrdersService');
+        const ordersService = new MercadoLivreOrdersService(this.tenantId);
+        const ordersResult = await ordersService.syncOrders(daysBack);
+        
+        if (ordersResult.ordersProcessed > 0) {
+          // Recarregar pedidos do banco após sync
+          const refreshedOrders = await prisma.order.findMany({
+            where: {
+              tenant_id: this.tenantId,
+              marketplace: Marketplace.mercadolivre,
+              order_date: {
+                gte: dateFrom,
+              },
+            },
+            include: {
+              items: true,
+            },
+          });
+          
+          result.ordersProcessed = refreshedOrders.length;
+          orders.push(...refreshedOrders);
+          console.log(`[ML-SYNC-FALLBACK] Pedidos sincronizados da API tenantId=${this.tenantId} ordersProcessed=${refreshedOrders.length}`);
+        }
+      }
+
+      // 3. Extrair itemIds únicos dos pedidos
+      const itemIdsSet = new Set<string>();
+      for (const order of orders) {
+        for (const item of order.items) {
+          if (item.listing_id_ext) {
+            itemIdsSet.add(item.listing_id_ext);
+          }
+        }
+      }
+
+      const uniqueItemIds = Array.from(itemIdsSet);
+      result.uniqueItemIds = uniqueItemIds.length;
+
+      console.log(`[ML-SYNC-FALLBACK] ItemIds extraídos tenantId=${this.tenantId} uniqueItemIds=${uniqueItemIds.length} sampleIds=[${uniqueItemIds.slice(0, 3).join(',')}]`);
+
+      if (uniqueItemIds.length === 0) {
+        console.log(`[ML-SYNC-FALLBACK] Nenhum itemId encontrado nos pedidos`);
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        return result;
+      }
+
+      // 4. Processar em lotes de 20 (limite da API multiget)
+      const chunks = this.chunkArray(uniqueItemIds, 20);
+      console.log(`[ML-SYNC-FALLBACK] Processando ${chunks.length} lotes de até 20 itens`);
+
+      // Processar lotes com controle de concorrência simples
+      for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+        const batchChunks = chunks.slice(i, i + concurrencyLimit);
+        
+        const batchResults = await Promise.allSettled(
+          batchChunks.map(async (chunk, batchIndex) => {
+            const chunkIndex = i + batchIndex;
+            console.log(`[ML-SYNC-FALLBACK] Processando lote ${chunkIndex + 1}/${chunks.length} (${chunk.length} itens)`);
+            
+            try {
+              const items = await this.fetchItemsDetails(chunk);
+              const { created, updated } = await this.upsertListings(items);
+              
+              return {
+                processed: items.length,
+                created,
+                updated,
+                skipped: chunk.length - items.length,
+              };
+            } catch (error) {
+              const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+              throw new Error(`Lote ${chunkIndex + 1}: ${errorMsg}`);
+            }
+          })
+        );
+
+        // Agregar resultados
+        for (const batchResult of batchResults) {
+          if (batchResult.status === 'fulfilled') {
+            result.itemsProcessed += batchResult.value.processed;
+            result.itemsCreated += batchResult.value.created;
+            result.itemsUpdated += batchResult.value.updated;
+            result.itemsSkipped += batchResult.value.skipped;
+          } else {
+            result.errors.push(batchResult.reason?.message || 'Erro desconhecido no lote');
+            console.error(`[ML-SYNC-FALLBACK] Erro no lote:`, batchResult.reason);
+          }
+        }
+      }
+
+      result.success = result.errors.length === 0;
+      result.duration = Date.now() - startTime;
+
+      // Log estruturado final
+      console.log(`[ML-SYNC-FALLBACK] Sync concluído tenantId=${this.tenantId} sellerId=${this.providerAccountId} durationMs=${result.duration} ordersProcessed=${result.ordersProcessed} uniqueItemIds=${result.uniqueItemIds} itemsProcessed=${result.itemsProcessed} itemsCreated=${result.itemsCreated} itemsUpdated=${result.itemsUpdated} itemsSkipped=${result.itemsSkipped} errorsCount=${result.errors.length} source=${result.source}`);
+
+      // 5. Gerar recomendações para os anúncios sincronizados
+      if (result.itemsCreated > 0 || result.itemsUpdated > 0) {
+        try {
+          console.log('[ML-SYNC-FALLBACK] Gerando recomendações...');
+          const recommendationService = new RecommendationService(this.tenantId);
+          const recResult = await recommendationService.generateForAllListings();
+          console.log(`[ML-SYNC-FALLBACK] Recomendações geradas: ${recResult.totalRecommendations} para ${recResult.totalListings} anúncios`);
+        } catch (recError) {
+          console.error('[ML-SYNC-FALLBACK] Erro ao gerar recomendações (não crítico):', recError);
+        }
+      }
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      result.errors.push(errorMsg);
+      result.duration = Date.now() - startTime;
+      console.error('[ML-SYNC-FALLBACK] Erro fatal no sync via orders:', errorMsg);
+      return result;
+    }
+  }
+
+  /**
+   * Verifica se um erro é um erro 403 de discovery bloqueado
+   */
+  static isDiscoveryBlockedError(error: unknown): boolean {
+    if (axios.isAxiosError(error)) {
+      return error.response?.status === 403;
+    }
+    if (error instanceof Error) {
+      return error.message.includes('403') || error.message.includes('PolicyAgent');
+    }
+    return false;
+  }
 }
 

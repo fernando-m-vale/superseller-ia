@@ -217,14 +217,17 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
    * 
    * Dispara sincronização completa (listings + orders).
    * Útil para onboarding inicial de usuário.
+   * 
+   * Se o discovery de listings falhar com 403 (PolicyAgent), usa fallback via orders
+   * para popular listings sem falhar o sync completo.
    */
   app.post(
     '/mercadolivre/full',
     { preHandler: authGuard },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const { tenantId } = request as RequestWithAuth;
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
 
+      try {
         if (!tenantId) {
           return reply.status(401).send({ 
             error: 'Unauthorized',
@@ -232,11 +235,90 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        console.log(`[SYNC-ROUTE] Requisição de sync COMPLETO recebida para tenant: ${tenantId}`);
+        app.log.info({ requestId, userId, tenantId }, 'Requisição de sync COMPLETO recebida');
 
-        // 1. Sync de listings
         const syncService = new MercadoLivreSyncService(tenantId);
-        const listingsResult = await syncService.syncListings();
+        let listingsResult: {
+          success: boolean;
+          itemsProcessed: number;
+          itemsCreated: number;
+          itemsUpdated: number;
+          duration: number;
+          errors: string[];
+          source?: string;
+          discoveryBlocked?: boolean;
+        };
+        let discoveryBlocked = false;
+
+        // 1. Tentar sync de listings via discovery
+        try {
+          listingsResult = await syncService.syncListings();
+          
+          // Verificar se houve erro 403 no discovery
+          const has403Error = listingsResult.errors.some(err => 
+            err.includes('403') || err.includes('PolicyAgent')
+          );
+          
+          if (has403Error || (listingsResult.itemsProcessed === 0 && listingsResult.errors.length > 0)) {
+            discoveryBlocked = true;
+            app.log.warn({ 
+              requestId, 
+              tenantId, 
+              discoveryBlocked: true,
+              originalErrors: listingsResult.errors,
+            }, 'Discovery bloqueado (403). Usando fallback via orders...');
+            
+            // Usar fallback via orders
+            const fallbackResult = await syncService.syncListingsFromOrders(30);
+            listingsResult = {
+              success: fallbackResult.success,
+              itemsProcessed: fallbackResult.itemsProcessed,
+              itemsCreated: fallbackResult.itemsCreated,
+              itemsUpdated: fallbackResult.itemsUpdated,
+              duration: fallbackResult.duration,
+              errors: fallbackResult.errors.length > 0 
+                ? ['Discovery blocked; used orders fallback', ...fallbackResult.errors]
+                : ['Discovery blocked; used orders fallback'],
+              source: 'orders_fallback',
+              discoveryBlocked: true,
+            };
+            
+            app.log.info({
+              requestId,
+              tenantId,
+              discoveryBlocked: true,
+              fallbackItemsCreated: fallbackResult.itemsCreated,
+              fallbackItemsUpdated: fallbackResult.itemsUpdated,
+              uniqueItemIds: fallbackResult.uniqueItemIds,
+            }, 'Fallback via orders concluído');
+          }
+        } catch (discoveryError) {
+          // Se o erro for 403, usar fallback
+          if (MercadoLivreSyncService.isDiscoveryBlockedError(discoveryError)) {
+            discoveryBlocked = true;
+            app.log.warn({ 
+              requestId, 
+              tenantId, 
+              discoveryBlocked: true,
+              err: discoveryError,
+            }, 'Discovery bloqueado (403 exception). Usando fallback via orders...');
+            
+            const fallbackResult = await syncService.syncListingsFromOrders(30);
+            listingsResult = {
+              success: fallbackResult.success,
+              itemsProcessed: fallbackResult.itemsProcessed,
+              itemsCreated: fallbackResult.itemsCreated,
+              itemsUpdated: fallbackResult.itemsUpdated,
+              duration: fallbackResult.duration,
+              errors: ['Discovery blocked; used orders fallback', ...fallbackResult.errors],
+              source: 'orders_fallback',
+              discoveryBlocked: true,
+            };
+          } else {
+            // Re-throw outros erros
+            throw discoveryError;
+          }
+        }
 
         // 2. Sync de pedidos (últimos 30 dias)
         const ordersService = new MercadoLivreOrdersService(tenantId);
@@ -255,7 +337,21 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        const allSuccess = listingsResult.success && ordersResult.success;
+        // Considerar sucesso mesmo com fallback (desde que não haja outros erros)
+        const listingsSuccess = listingsResult.success || (discoveryBlocked && listingsResult.itemsCreated > 0);
+        const allSuccess = listingsSuccess && ordersResult.success;
+
+        app.log.info({
+          requestId,
+          tenantId,
+          discoveryBlocked,
+          listingsSuccess,
+          ordersSuccess: ordersResult.success,
+          allSuccess,
+          listingsItemsCreated: listingsResult.itemsCreated,
+          listingsItemsUpdated: listingsResult.itemsUpdated,
+          ordersProcessed: ordersResult.ordersProcessed,
+        }, 'Sync COMPLETO finalizado');
 
         return reply.status(allSuccess ? 200 : 207).send({
           message: allSuccess 
@@ -268,6 +364,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
               itemsUpdated: listingsResult.itemsUpdated,
               duration: `${listingsResult.duration}ms`,
               errors: listingsResult.errors,
+              source: listingsResult.source || 'discovery',
+              discoveryBlocked,
             },
             orders: {
               ordersProcessed: ordersResult.ordersProcessed,
@@ -279,9 +377,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           },
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Capturar erros AUTH_REVOKED lançados diretamente
-        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+        const err = error as { code?: string; message?: string };
+        if (err.code === 'AUTH_REVOKED' || err.message?.includes('Conexão expirada')) {
           return reply.status(401).send({
             error: 'AUTH_REVOKED',
             message: 'Conexão expirada. Reconecte sua conta.',
@@ -289,7 +388,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        console.error('[SYNC-ROUTE] Erro na sincronização completa:', error);
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro na sincronização completa');
         return reply.status(500).send({
           error: 'Falha na sincronização completa',
           message: error instanceof Error ? error.message : 'Erro interno',
@@ -768,6 +867,129 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/mercadolivre/listings/from-orders
+   * 
+   * Fallback para popular listings via Orders quando discovery está bloqueado (403).
+   * Extrai itemIds únicos dos pedidos e busca detalhes de cada item via GET /items/{id}.
+   * 
+   * Query params:
+   *   - days: Número de dias para buscar pedidos (default: 30, max: 90)
+   * 
+   * Retorna contadores: ordersProcessed, uniqueItemIds, itemsProcessed, itemsCreated, 
+   * itemsUpdated, itemsSkipped, duration, errors[]
+   */
+  app.post(
+    '/mercadolivre/listings/from-orders',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const query = OrdersSyncQuerySchema.parse(request.query);
+        const daysBack = query.days;
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          days: daysBack,
+        }, 'Requisição de sync de listings via orders (fallback) recebida');
+
+        // Instanciar service e executar sync via orders
+        const syncService = new MercadoLivreSyncService(tenantId);
+        const result = await syncService.syncListingsFromOrders(daysBack);
+
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = result.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        // Log estruturado do resultado
+        app.log.info({
+          requestId,
+          userId,
+          tenantId,
+          ordersProcessed: result.ordersProcessed,
+          uniqueItemIds: result.uniqueItemIds,
+          itemsProcessed: result.itemsProcessed,
+          itemsCreated: result.itemsCreated,
+          itemsUpdated: result.itemsUpdated,
+          itemsSkipped: result.itemsSkipped,
+          duration: result.duration,
+          errorsCount: result.errors.length,
+          source: result.source,
+        }, 'Sync de listings via orders concluído');
+
+        // Retornar resultado
+        if (result.success) {
+          return reply.status(200).send({
+            message: 'Sincronização de listings via orders concluída com sucesso',
+            data: {
+              ordersProcessed: result.ordersProcessed,
+              uniqueItemIds: result.uniqueItemIds,
+              itemsProcessed: result.itemsProcessed,
+              itemsCreated: result.itemsCreated,
+              itemsUpdated: result.itemsUpdated,
+              itemsSkipped: result.itemsSkipped,
+              duration: `${result.duration}ms`,
+              source: result.source,
+            },
+          });
+        } else {
+          return reply.status(207).send({
+            message: 'Sincronização de listings via orders concluída com erros',
+            data: {
+              ordersProcessed: result.ordersProcessed,
+              uniqueItemIds: result.uniqueItemIds,
+              itemsProcessed: result.itemsProcessed,
+              itemsCreated: result.itemsCreated,
+              itemsUpdated: result.itemsUpdated,
+              itemsSkipped: result.itemsSkipped,
+              duration: `${result.duration}ms`,
+              source: result.source,
+              errors: result.errors,
+            },
+          });
+        }
+      } catch (error: unknown) {
+        // Capturar erros AUTH_REVOKED lançados diretamente
+        const err = error as { code?: string; message?: string };
+        if (err.code === 'AUTH_REVOKED' || err.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro na sincronização de listings via orders');
+        return reply.status(500).send({
+          error: 'Falha na sincronização de listings via orders',
+          message: error instanceof Error ? error.message : 'Erro interno',
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/sync/status
    * 
    * Endpoint auxiliar para verificar se o serviço de sync está disponível
@@ -782,6 +1004,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         'POST /mercadolivre/orders - Sync de pedidos',
         'POST /mercadolivre/metrics - Sync de métricas diárias',
         'POST /mercadolivre/full - Sync completo',
+        'POST /mercadolivre/listings/from-orders - Sync de listings via orders (fallback)',
         'POST /recalculate-scores - Recalcular Super Seller Score',
       ],
       timestamp: new Date().toISOString(),
