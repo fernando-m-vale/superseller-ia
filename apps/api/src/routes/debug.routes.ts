@@ -40,6 +40,11 @@ const ItemIdParamsSchema = z.object({
 const enableMLDebug = process.env.ENABLE_ML_DEBUG === 'true' && process.env.NODE_ENV !== 'production';
 
 export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
+  // Log de registro (apenas em desenvolvimento)
+  if (process.env.NODE_ENV !== 'production') {
+    app.log.debug('Registering debug routes: /api/v1/debug/mercadolivre/*');
+  }
+
   if (enableMLDebug) {
     app.get<{ Params: { itemIdExt: string } }>(
       '/mercadolivre/item/:itemIdExt',
@@ -250,6 +255,10 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
   // GET /api/v1/debug/mercadolivre/my-items?limit=50
   // Lista itemIds usando o mesmo método do sync de listings
   app.get('/mercadolivre/my-items', { preHandler: authGuard }, async (request: RequestWithAuth, reply: FastifyReply) => {
+    // Log de acesso (apenas em desenvolvimento)
+    if (process.env.NODE_ENV !== 'production') {
+      request.log.debug('Debug endpoint accessed: /api/v1/debug/mercadolivre/my-items');
+    }
     try {
       const tenantId = request.tenantId;
       if (!tenantId) {
