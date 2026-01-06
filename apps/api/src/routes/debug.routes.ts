@@ -184,6 +184,171 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
     });
   }
 
+  // Endpoints de debug sempre disponíveis (somente leitura, sem persistência)
+  // GET /api/v1/debug/mercadolivre/me
+  // Retorna informações do usuário via /users/me
+  app.get('/mercadolivre/me', { preHandler: authGuard }, async (request: RequestWithAuth, reply: FastifyReply) => {
+    try {
+      const tenantId = request.tenantId;
+      if (!tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      // Buscar conexão ativa do Mercado Livre
+      const connection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: tenantId,
+          type: Marketplace.mercadolivre,
+          status: 'active',
+        },
+        orderBy: { updated_at: 'desc' },
+      });
+
+      if (!connection || !connection.access_token) {
+        return reply.status(404).send({
+          error: 'Not Found',
+          message: 'Conexão ativa do Mercado Livre não encontrada',
+        });
+      }
+
+      // Chamar /users/me da API do ML
+      const userResponse = await axios.get(`${ML_API_BASE}/users/me`, {
+        headers: {
+          Authorization: `Bearer ${connection.access_token}`,
+        },
+      });
+
+      const userData = userResponse.data;
+
+      return reply.send({
+        id: userData.id || null,
+        nickname: userData.nickname || null,
+        site_id: userData.site_id || null,
+        country_id: userData.country_id || null,
+        sellerId: connection.provider_account_id,
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      request.log.error({ err: error, tenantId: request.tenantId }, 'ML debug: error fetching /users/me');
+      
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const message = error.response?.data?.message || error.message;
+        return reply.status(status || 500).send({
+          error: 'Failed to fetch user info',
+          message,
+        });
+      }
+
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
+  // GET /api/v1/debug/mercadolivre/my-items?limit=50
+  // Lista itemIds usando o mesmo método do sync de listings
+  app.get('/mercadolivre/my-items', { preHandler: authGuard }, async (request: RequestWithAuth, reply: FastifyReply) => {
+    try {
+      const tenantId = request.tenantId;
+      if (!tenantId) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const limit = Math.min(parseInt((request.query as { limit?: string })?.limit || '50', 10), 200);
+
+      // Buscar conexão ativa do Mercado Livre
+      const connection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: tenantId,
+          type: Marketplace.mercadolivre,
+          status: 'active',
+        },
+        orderBy: { updated_at: 'desc' },
+      });
+
+      if (!connection || !connection.provider_account_id) {
+        return reply.status(404).send({
+          error: 'Not Found',
+          message: 'Conexão ativa do Mercado Livre não encontrada',
+        });
+      }
+
+      const sellerId = connection.provider_account_id;
+      const allIds: string[] = [];
+      let offset = 0;
+      const pageLimit = 50;
+
+      // Usar o mesmo método do sync: /sites/MLB/search com seller_id
+      while (allIds.length < limit) {
+        try {
+          const url = `${ML_API_BASE}/sites/MLB/search`;
+          const response = await axios.get(url, {
+            params: {
+              seller_id: sellerId,
+              offset,
+              limit: pageLimit,
+            },
+          });
+
+          const { results, paging } = response.data;
+          const itemIds = results.map((item: { id: string }) => item.id);
+          allIds.push(...itemIds);
+
+          // Se atingiu o limite solicitado ou não há mais resultados
+          if (allIds.length >= limit || offset + pageLimit >= paging.total || offset >= 1000) {
+            break;
+          }
+
+          offset += pageLimit;
+        } catch (error) {
+          if (axios.isAxiosError(error)) {
+            const status = error.response?.status;
+            const data = JSON.stringify(error.response?.data);
+            request.log.error({ 
+              err: error, 
+              tenantId, 
+              sellerId, 
+              status, 
+              data 
+            }, 'ML debug: error fetching items');
+            throw new Error(`Erro ML ${status}: ${data}`);
+          }
+          throw error;
+        }
+      }
+
+      // Limitar ao solicitado
+      const limitedIds = allIds.slice(0, limit);
+
+      return reply.send({
+        sellerId,
+        endpointUsed: '/sites/MLB/search',
+        total: allIds.length, // Total encontrado (pode ser maior que limit)
+        resultsCount: limitedIds.length, // Quantidade retornada (limitado)
+        itemIds: limitedIds,
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      request.log.error({ err: error, tenantId: request.tenantId }, 'ML debug: error fetching my-items');
+      
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const message = error.response?.data?.message || error.message;
+        return reply.status(status || 500).send({
+          error: 'Failed to fetch items',
+          message,
+        });
+      }
+
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
+
   done();
 };
 

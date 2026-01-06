@@ -110,7 +110,8 @@ export class MercadoLivreSyncService {
     };
 
     try {
-      console.log(`[ML-SYNC] Iniciando sincronização para tenant: ${this.tenantId}`);
+      // Logs estruturados: tenantId, sellerId, endpoint
+      console.log(`[ML-SYNC] Iniciando sincronização tenantId=${this.tenantId}`);
 
       // 1. Buscar conexão do Mercado Livre
       await this.loadConnection();
@@ -118,12 +119,24 @@ export class MercadoLivreSyncService {
       // 2. Verificar/renovar token se necessário
       await this.ensureValidToken();
 
+      // Log estruturado: sellerId após carregar conexão
+      console.log(`[ML-SYNC] Conexão carregada tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
+
       // 3. Buscar IDs dos anúncios
       const itemIds = await this.fetchUserItemIds();
-      console.log(`[ML-SYNC] Encontrados ${itemIds.length} anúncios`);
+      
+      // Log estruturado: total, sample ids (primeiros 3), endpoint
+      const sampleItemIds = itemIds.slice(0, 3);
+      console.log(`[ML-SYNC] Busca concluída tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpointUsed=/sites/MLB/search totalFound=${itemIds.length} sampleItemIds=[${sampleItemIds.join(',')}]`);
 
       if (itemIds.length === 0) {
-        console.log('[ML-SYNC] Nenhum anúncio encontrado para sincronizar');
+        // Log estruturado: motivo quando total=0 + status da conexão
+        const connectionStatus = await prisma.marketplaceConnection.findUnique({
+          where: { id: this.connectionId },
+          select: { status: true },
+        });
+        const statusStr = connectionStatus?.status || 'unknown';
+        console.log(`[ML-SYNC] Nenhum anúncio encontrado tenantId=${this.tenantId} sellerId=${this.providerAccountId} motivo=nenhum_item_encontrado_via_search endpoint=/sites/MLB/search connectionStatus=${statusStr}`);
         result.success = true;
         result.duration = Date.now() - startTime;
         return result;
@@ -154,8 +167,8 @@ export class MercadoLivreSyncService {
       result.success = result.errors.length === 0;
       result.duration = Date.now() - startTime;
 
-      console.log(`[ML-SYNC] Sincronização concluída em ${result.duration}ms`);
-      console.log(`[ML-SYNC] Processados: ${result.itemsProcessed}, Criados: ${result.itemsCreated}, Atualizados: ${result.itemsUpdated}`);
+      // Log estruturado: resumo final
+      console.log(`[ML-SYNC] Sincronização concluída tenantId=${this.tenantId} sellerId=${this.providerAccountId} durationMs=${result.duration} processed=${result.itemsProcessed} created=${result.itemsCreated} updated=${result.itemsUpdated} errors=${result.errors.length}`);
 
       // 5. Gerar recomendações para os anúncios sincronizados
       try {
@@ -409,7 +422,8 @@ export class MercadoLivreSyncService {
       try {
         // Usando /sites/MLB/search com seller_id (endpoint PÚBLICO - não precisa de Auth)
         const url = `${ML_API_BASE}/sites/MLB/search`;
-        console.log(`[ML-SYNC] Chamando API: ${url} (seller_id: ${this.providerAccountId}, Offset: ${offset})`);
+        // Log estruturado: endpoint, sellerId, offset
+        console.log(`[ML-SYNC] Buscando items tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpoint=/sites/MLB/search offset=${offset}`);
 
         const response = await axios.get(url, {
           // NOTA: Endpoint público - Authorization removido para evitar conflitos de escopo
@@ -426,7 +440,8 @@ export class MercadoLivreSyncService {
         const itemIds = results.map((item: { id: string }) => item.id);
         allIds.push(...itemIds);
 
-        console.log(`[ML-SYNC] Buscados ${allIds.length}/${paging.total} IDs`);
+        // Log estruturado: progresso
+        console.log(`[ML-SYNC] Progresso tenantId=${this.tenantId} sellerId=${this.providerAccountId} encontrados=${allIds.length} total=${paging.total}`);
 
         // Proteção contra loop infinito (máximo 1000 itens via offset)
         // A API de search tem limite de offset 1000. Para MVP, isso atende a maioria dos sellers.
@@ -436,12 +451,14 @@ export class MercadoLivreSyncService {
 
         offset += limit;
       } catch (error) {
-        // Melhorar debug: mostrar status e resposta completa do ML
+        // Log estruturado: erro HTTP com status code e payload resumido
         if (axios.isAxiosError(error)) {
           const status = error.response?.status;
-          const data = JSON.stringify(error.response?.data);
-          console.error(`[ML-SYNC] Erro API ML (${status}):`, data);
-          throw new Error(`Erro ML ${status}: ${data}`);
+          const data = error.response?.data;
+          // Resumir payload (limitar tamanho para não poluir logs)
+          const dataStr = data ? JSON.stringify(data).substring(0, 500) : 'no data';
+          console.error(`[ML-SYNC] Erro HTTP ML tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpoint=/sites/MLB/search statusCode=${status} payload=${dataStr}`);
+          throw new Error(`Erro ML ${status}: ${dataStr}`);
         }
         throw error;
       }

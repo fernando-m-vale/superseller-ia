@@ -172,10 +172,56 @@ Exibir:
 
 ---
 
-## 7) Checklist de Auditoria (execução)
+## 7) Diagnóstico quando listings=0
 
-### 7.1 Checklist BD
+### 7.1 Endpoints de Debug
+
+Se após sync você tiver `listings = 0`:
+
+**1. Verificar conexão:**
+```bash
+GET /api/v1/debug/mercadolivre/me
+```
+- Retorna: `id`, `nickname`, `site_id`, `country_id`, `sellerId`
+- Se 404: conexão não encontrada ou inativa
+- Se 401: token expirado (reconectar)
+- Se OK: conexão válida
+
+**2. Verificar itens na API do ML:**
+```bash
+GET /api/v1/debug/mercadolivre/my-items?limit=50
+```
+- Retorna: `sellerId`, `endpointUsed`, `total`, `resultsCount`, `itemIds[]`
+- Usa o **mesmo método do sync** (`/sites/MLB/search`)
+- Se `total = 0`: seller não tem itens no ML (ou sellerId incorreto)
+- Se `total > 0` mas sync retorna 0: problema no sync (ver logs)
+
+**3. Verificar logs do sync:**
+- Buscar por `[ML-SYNC]` nos logs
+- Verificar: `tenantId`, `sellerId`, `endpointUsed`, `totalFound`, `sampleItemIds`
+- Se `total=0`: verificar `motivo` e `connectionStatus`
+- Se erro HTTP: verificar `statusCode` e `payload`
+
+### 7.2 Logs Estruturados
+
+O sync emite logs estruturados:
+```
+[ML-SYNC] Iniciando sincronização tenantId={tenantId}
+[ML-SYNC] Conexão carregada tenantId={tenantId} sellerId={sellerId}
+[ML-SYNC] Buscando items tenantId={tenantId} sellerId={sellerId} endpoint=/sites/MLB/search offset={offset}
+[ML-SYNC] Progresso tenantId={tenantId} sellerId={sellerId} encontrados={count} total={total}
+[ML-SYNC] Busca concluída tenantId={tenantId} sellerId={sellerId} endpointUsed=/sites/MLB/search totalFound={total} sampleItemIds=[id1,id2,id3]
+[ML-SYNC] Nenhum anúncio encontrado tenantId={tenantId} sellerId={sellerId} motivo=nenhum_item_encontrado_via_search endpoint=/sites/MLB/search connectionStatus={status}
+[ML-SYNC] Erro HTTP ML tenantId={tenantId} sellerId={sellerId} endpoint=/sites/MLB/search statusCode={code} payload={resumo}
+[ML-SYNC] Sincronização concluída tenantId={tenantId} sellerId={sellerId} durationMs={duration} processed={count} created={count} updated={count} errors={count}
+```
+
+---
+
+## 8) Checklist de Auditoria (execução)
+
+### 8.1 Checklist BD
 - [ ] `listings.description` populado via `/items/{id}/description`
 - [ ] `pictures_count` consistente com `pictures.length`
-- [ ] `has_video` não “mente” quando `null`
+- [ ] `has_video` não "mente" quando `null`
 - [ ] `lis

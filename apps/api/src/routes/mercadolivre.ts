@@ -20,22 +20,27 @@ const ML_API_BASE = 'https://api.mercadolibre.com';
  */
 async function triggerFullSync(tenantId: string): Promise<void> {
   try {
-    console.log(`[ML-CALLBACK] Iniciando sync completo para tenant: ${tenantId}`);
+    // Log estruturado: início do sync full
+    console.log(`[ML-SYNC-FULL] Iniciando sync completo tenantId=${tenantId}`);
     
     // Sync de listings
     const syncService = new MercadoLivreSyncService(tenantId);
     const listingsResult = await syncService.syncListings();
-    console.log(`[ML-CALLBACK] Sync de listings concluído: ${listingsResult.itemsProcessed} processados`);
+    // Log estruturado: resultado do sync de listings
+    console.log(`[ML-SYNC-FULL] Sync listings concluído tenantId=${tenantId} processed=${listingsResult.itemsProcessed} created=${listingsResult.itemsCreated} updated=${listingsResult.itemsUpdated} durationMs=${listingsResult.duration}`);
 
     // Sync de pedidos (últimos 30 dias)
     const ordersService = new MercadoLivreOrdersService(tenantId);
     const ordersResult = await ordersService.syncOrders(30);
-    console.log(`[ML-CALLBACK] Sync de pedidos concluído: ${ordersResult.ordersProcessed} processados`);
+    // Log estruturado: resultado do sync de orders
+    console.log(`[ML-SYNC-FULL] Sync orders concluído tenantId=${tenantId} processed=${ordersResult.ordersProcessed} created=${ordersResult.ordersCreated} updated=${ordersResult.ordersUpdated} durationMs=${ordersResult.duration}`);
 
-    console.log(`[ML-CALLBACK] Sync completo finalizado para tenant: ${tenantId}`);
+    // Log estruturado: resumo final
+    console.log(`[ML-SYNC-FULL] Sync completo finalizado tenantId=${tenantId}`);
   } catch (error) {
     // Log do erro mas não propaga para não afetar o callback
-    console.error(`[ML-CALLBACK] Erro ao executar sync completo para tenant ${tenantId}:`, error);
+    const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error(`[ML-SYNC-FULL] Erro ao executar sync completo tenantId=${tenantId} error=${errorMsg}`, error);
   }
 }
 
