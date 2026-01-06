@@ -255,12 +255,13 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
   // GET /api/v1/debug/mercadolivre/my-items?limit=50
   // Lista itemIds usando o mesmo método do sync de listings
   app.get('/mercadolivre/my-items', { preHandler: authGuard }, async (request: RequestWithAuth, reply: FastifyReply) => {
+    const { tenantId, requestId } = request;
+    
     // Log de acesso (apenas em desenvolvimento)
     if (process.env.NODE_ENV !== 'production') {
       request.log.debug('Debug endpoint accessed: /api/v1/debug/mercadolivre/my-items');
     }
     try {
-      const tenantId = request.tenantId;
       if (!tenantId) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
@@ -314,15 +315,30 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
         } catch (error) {
           if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            const data = JSON.stringify(error.response?.data);
+            const data = error.response?.data;
+            
             request.log.error({ 
               err: error, 
+              requestId,
               tenantId, 
               sellerId, 
               status, 
-              data 
+              data: JSON.stringify(data),
             }, 'ML debug: error fetching items');
-            throw new Error(`Erro ML ${status}: ${data}`);
+            
+            // Se for 403, retornar erro específico de discovery bloqueado
+            if (status === 403) {
+              return reply.status(403).send({
+                error: 'DiscoveryBlocked',
+                message: 'Discovery endpoint bloqueado (403). Use fallback via Orders.',
+                details: data,
+                sellerId,
+                requestId,
+                tenantId,
+              });
+            }
+            
+            throw new Error(`Erro ML ${status}: ${JSON.stringify(data)}`);
           }
           throw error;
         }
@@ -340,7 +356,24 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
-      request.log.error({ err: error, tenantId: request.tenantId }, 'ML debug: error fetching my-items');
+      request.log.error({ err: error, requestId, tenantId }, 'ML debug: error fetching my-items');
+      
+      // Verificar se é um erro 403 que não foi capturado no loop
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        const sellerId = (await prisma.marketplaceConnection.findFirst({
+          where: { tenant_id: tenantId, type: Marketplace.mercadolivre, status: 'active' },
+          select: { provider_account_id: true },
+        }))?.provider_account_id;
+        
+        return reply.status(403).send({
+          error: 'DiscoveryBlocked',
+          message: 'Discovery endpoint bloqueado (403). Use fallback via Orders.',
+          details: error.response?.data,
+          sellerId,
+          requestId,
+          tenantId,
+        });
+      }
       
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
