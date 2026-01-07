@@ -255,12 +255,14 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
   // GET /api/v1/debug/mercadolivre/my-items?limit=50
   // Lista itemIds usando o mesmo método do sync de listings
   app.get('/mercadolivre/my-items', { preHandler: authGuard }, async (request: RequestWithAuth, reply: FastifyReply) => {
+    const tenantId = request.tenantId;
+    const requestId = request.requestId;
+    
     // Log de acesso (apenas em desenvolvimento)
     if (process.env.NODE_ENV !== 'production') {
       request.log.debug('Debug endpoint accessed: /api/v1/debug/mercadolivre/my-items');
     }
     try {
-      const tenantId = request.tenantId;
       if (!tenantId) {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
@@ -316,7 +318,8 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
             const status = error.response?.status;
             const data = JSON.stringify(error.response?.data);
             request.log.error({ 
-              err: error, 
+              err: error,
+              requestId,
               tenantId, 
               sellerId, 
               status, 
@@ -331,6 +334,14 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
       // Limitar ao solicitado
       const limitedIds = allIds.slice(0, limit);
 
+      request.log.info({
+        requestId,
+        tenantId,
+        sellerId,
+        totalFound: allIds.length,
+        resultsCount: limitedIds.length,
+      }, 'ML debug: my-items fetched');
+
       return reply.send({
         sellerId,
         endpointUsed: '/sites/MLB/search',
@@ -340,7 +351,11 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
-      request.log.error({ err: error, tenantId: request.tenantId }, 'ML debug: error fetching my-items');
+      request.log.error({ 
+        err: error, 
+        requestId,
+        tenantId 
+      }, 'ML debug: error fetching my-items');
       
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
