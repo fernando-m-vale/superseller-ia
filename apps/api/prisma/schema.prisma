@@ -113,6 +113,7 @@ model Tenant {
   auto_approve_rules      AutoApproveRule[]
   listing_action_outcomes ListingActionOutcome[]
   recommendations         Recommendation[]
+  listing_ai_analysis     ListingAIAnalysis[]
 
   @@map("tenants")
 }
@@ -182,6 +183,7 @@ model Listing {
   listing_action_outcomes ListingActionOutcome[]
   order_items             OrderItem[]
   recommendations         Recommendation[]
+  listing_ai_analysis     ListingAIAnalysis[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -404,4 +406,28 @@ model Recommendation {
   @@index([type])
   @@index([priority])
   @@map("recommendations")
+}
+
+// Cache de análise IA por listing + fingerprint
+// Evita chamadas repetidas à OpenAI quando dados não mudaram
+model ListingAIAnalysis {
+  id             String   @id @default(uuid())
+  tenant_id      String
+  listing_id     String
+  period_days    Int      @default(30) // Período de métricas usado na análise
+  fingerprint    String   // SHA256 hash dos dados relevantes (listing + metrics + prompt_version)
+  model          String   @default("gpt-4o") // Modelo usado na análise
+  prompt_version String   @default("ai-v1.2") // Versão do prompt para invalidar cache quando mudar
+  result_json    Json     // Resultado completo da análise (AIAnalysisResult + score)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, listing_id, period_days, fingerprint]) // Cache key única
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([fingerprint])
+  @@map("listing_ai_analysis")
 }

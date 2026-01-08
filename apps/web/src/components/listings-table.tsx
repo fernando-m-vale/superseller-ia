@@ -37,6 +37,7 @@ function AIAnalysisTab({
   isLoading,
   error,
   onAnalyze,
+  onForceRefresh,
   currentTitle,
   copiedText,
   onCopy,
@@ -47,6 +48,7 @@ function AIAnalysisTab({
   isLoading: boolean
   error: string | null
   onAnalyze: () => Promise<void>
+  onForceRefresh: () => Promise<void>
   currentTitle: string
   copiedText: string | null
   onCopy: (text: string) => void
@@ -193,6 +195,37 @@ function AIAnalysisTab({
 
   return (
     <div className="space-y-6">
+      {/* Cache Status Banner */}
+      {analysis.cacheHit && (
+        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
+          <div className="flex items-center gap-2 text-blue-700 text-sm">
+            <CheckCircle2 className="h-4 w-4" />
+            <span>Análise atual (cache)</span>
+            {analysis.analyzedAt && (
+              <span className="text-blue-500 text-xs">
+                - Gerada em {new Date(analysis.analyzedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                await onForceRefresh()
+              } catch {
+                console.error('[AI-ANALYZE] Erro ao atualizar análise')
+              }
+            }}
+            disabled={isLoading}
+            className="text-blue-700 border-blue-300 hover:bg-blue-100"
+          >
+            <Sparkles className="h-3 w-3 mr-1" />
+            Atualizar
+          </Button>
+        </div>
+      )}
+
       {/* Score IA */}
       <Card>
         <CardHeader>
@@ -789,6 +822,17 @@ export function ListingsTable() {
                     // Log erro sem detalhes sensíveis
                     console.error('[AI-ANALYZE] Erro ao disparar análise')
                     // Não mostrar toast de erro aqui, o componente AIAnalysisTab já exibe o erro
+                  }
+                }}
+                onForceRefresh={async () => {
+                  try {
+                    await triggerAIAnalysis(true) // forceRefresh=true
+                    toast({
+                      title: 'Análise atualizada!',
+                      description: 'Nova análise gerada com sucesso',
+                    })
+                  } catch {
+                    console.error('[AI-ANALYZE] Erro ao forçar atualização')
                   }
                 }}
                 currentTitle={data?.items.find(l => l.id === selectedListingId)?.title || ''}
