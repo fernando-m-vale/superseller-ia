@@ -316,16 +316,30 @@ export const debugRoutes: FastifyPluginCallback = (app, _, done) => {
         } catch (error) {
           if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            const data = JSON.stringify(error.response?.data);
+            const data = error.response?.data;
+            
             request.log.error({ 
               err: error,
               requestId,
               tenantId, 
               sellerId, 
               status, 
-              data 
+              data: JSON.stringify(data),
             }, 'ML debug: error fetching items');
-            throw new Error(`Erro ML ${status}: ${data}`);
+            
+            // Se for 403, retornar erro específico de discovery bloqueado
+            if (status === 403) {
+              return reply.status(403).send({
+                error: 'DiscoveryBlocked',
+                message: 'Discovery endpoint bloqueado (403). Use fallback via Orders.',
+                details: data,
+                sellerId,
+                requestId,
+                tenantId,
+              });
+            }
+            
+            throw new Error(`Erro ML ${status}: ${JSON.stringify(data)}`);
           }
           throw error;
         }
