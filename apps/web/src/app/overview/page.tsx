@@ -346,7 +346,7 @@ function OverviewContent() {
             Evolução de receita, pedidos e visitas (últimos {periodDays} dias)
             {!hasVisits && (
               <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
-                • Visitas indisponíveis via API no período
+                • Visitas indisponíveis via API no período ({visitsCoverage.filledDays}/{visitsCoverage.totalDays} dias com dados)
               </span>
             )}
           </CardDescription>
@@ -356,7 +356,7 @@ function OverviewContent() {
             <Alert className="mb-4 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
               <AlertDescription className="text-yellow-800 dark:text-yellow-200">
-                Visitas indisponíveis via API no período selecionado. Os dados de pedidos e receita continuam funcionando normalmente.
+                Visitas indisponíveis via API no período selecionado ({visitsCoverage.filledDays}/{visitsCoverage.totalDays} dias com dados). Os dados de pedidos e receita continuam funcionando normalmente.
               </AlertDescription>
             </Alert>
           )}
@@ -367,10 +367,16 @@ function OverviewContent() {
               <YAxis yAxisId="left" orientation="left" stroke="#82ca9d" />
               <YAxis yAxisId="right" orientation="right" stroke="#ffc658" />
               <Tooltip 
-                formatter={(value: number | null, name: string) => {
-                  if (name === 'Receita') return [`R$ ${Number(value || 0).toFixed(2)}`, name];
-                  if (name === 'Visitas' && value === null) return ['N/A', name];
-                  return [value, name];
+                formatter={(value: unknown, name: string) => {
+                  if (name === 'Receita') {
+                    const numValue = typeof value === 'number' ? value : Number(value) || 0;
+                    return [`R$ ${numValue.toFixed(2)}`, name] as [string, string];
+                  }
+                  if (name === 'Visitas') {
+                    if (value === null || value === undefined) return ['N/A', name] as [string, string];
+                    return [String(value), name] as [string, string];
+                  }
+                  return [String(value), name] as [string, string];
                 }}
               />
               <Legend />
