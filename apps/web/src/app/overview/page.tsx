@@ -169,6 +169,7 @@ function OverviewContent() {
         date: new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
         revenue: item.revenue,
         orders: item.orders,
+        visits: item.visits ?? null, // null quando não disponível
       }))
     : Array.from({ length: Math.min(periodDays, 7) }, (_, i) => {
         const date = new Date();
@@ -177,8 +178,13 @@ function OverviewContent() {
           date: date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
           revenue: 0,
           orders: 0,
+          visits: null,
         };
       });
+
+  // Verificar se há visitas disponíveis
+  const hasVisits = data.visitsCoverage && data.visitsCoverage.filledDays > 0;
+  const visitsCoverage = data.visitsCoverage || { filledDays: 0, totalDays: periodDays };
 
   const formatNumber = (num: number | null | undefined) => {
     const safeNum = Number(num) || 0;
@@ -337,10 +343,23 @@ function OverviewContent() {
         <CardHeader>
           <CardTitle>Tendência de Vendas</CardTitle>
           <CardDescription>
-            Evolução de receita e pedidos (últimos {periodDays} dias)
+            Evolução de receita, pedidos e visitas (últimos {periodDays} dias)
+            {!hasVisits && (
+              <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
+                • Visitas indisponíveis via API no período
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {!hasVisits && (
+            <Alert className="mb-4 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                Visitas indisponíveis via API no período selecionado. Os dados de pedidos e receita continuam funcionando normalmente.
+              </AlertDescription>
+            </Alert>
+          )}
           <ResponsiveContainer width="100%" height={350}>
             <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" />
@@ -348,8 +367,9 @@ function OverviewContent() {
               <YAxis yAxisId="left" orientation="left" stroke="#82ca9d" />
               <YAxis yAxisId="right" orientation="right" stroke="#ffc658" />
               <Tooltip 
-                formatter={(value: number, name: string) => {
-                  if (name === 'Receita') return [`R$ ${value.toFixed(2)}`, name];
+                formatter={(value: number | null, name: string) => {
+                  if (name === 'Receita') return [`R$ ${Number(value || 0).toFixed(2)}`, name];
+                  if (name === 'Visitas' && value === null) return ['N/A', name];
                   return [value, name];
                 }}
               />
@@ -370,6 +390,17 @@ function OverviewContent() {
                 strokeWidth={2}
                 yAxisId="right"
               />
+              {hasVisits && (
+                <Line
+                  type="monotone"
+                  dataKey="visits"
+                  stroke="#8884d8"
+                  name="Visitas"
+                  strokeWidth={2}
+                  yAxisId="right"
+                  connectNulls={false}
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         </CardContent>

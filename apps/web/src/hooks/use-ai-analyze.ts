@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 
@@ -153,6 +153,16 @@ export function useAIAnalyze(listingId: string | null) {
     isLoading: false,
     error: null,
   })
+
+  // Resetar COMPLETAMENTE o state quando listingId mudar
+  // Isso evita misturar dados entre anúncios diferentes
+  useEffect(() => {
+    setState({
+      data: null,
+      isLoading: false,
+      error: null,
+    })
+  }, [listingId])
 
   const analyze = async (): Promise<void> => {
     if (!listingId) {

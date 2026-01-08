@@ -21,7 +21,7 @@ export interface ListingAnalysisInput {
   status: string;
   category: string | null;
   picturesCount: number;
-  hasVideo: boolean;
+  hasVideo: boolean | null; // null = indisponível via API
   visitsLast7d: number;
   salesLast7d: number;
   superSellerScore: number | null;
@@ -77,6 +77,7 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
    - VÍDEO (media.hasVideo):
      * Se media.hasVideo === true → NÃO sugerir "Adicionar vídeo" (já tem vídeo)
      * Se media.hasVideo === false → PODE sugerir "Adicionar vídeo", mas SEM mencionar clips
+     * Se media.hasVideo === null → NÃO afirmar ausência, usar texto condicional: "Caso o anúncio não possua vídeo, adicionar pode melhorar conversão"
      * Vídeo é detectável via API /items (video_id, videos[])
    - CLIPS (media.hasClips):
      * Se media.hasClips === true → pode sugerir otimizar clips (thumb, roteiro, benefícios)
@@ -143,6 +144,7 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
   * REGRAS PARA VÍDEO/CLIPS (OBRIGATÓRIAS):
     - Se media.hasVideo === true → NÃO criar hack "Adicionar vídeo" (já tem)
     - Se media.hasVideo === false → PODE criar hack "Adicionar vídeo", mas SEM mencionar clips
+    - Se media.hasVideo === null → NÃO criar hack categórico, usar texto condicional: "Caso o anúncio não possua vídeo, adicionar pode melhorar conversão"
     - Se media.hasClips === null → Hack deve dizer: "Verifique clips no painel do Mercado Livre; API não detecta automaticamente. Se você ainda não tiver clips, inclua..." (NUNCA afirmar ausência)
     - Se media.hasClips === false → Hack pode dizer "Publicar clips pode aumentar engajamento" (certeza de ausência)
     - Se media.hasClips === true → Hack pode dizer "Melhorar clips (thumb, roteiro, benefícios)"
@@ -337,9 +339,9 @@ export class OpenAIService {
     // Determine media information
     const imageCount = listing.pictures_count ?? 0;
     const hasImages = imageCount > 0 || listing.thumbnail_url !== null;
-    const hasVideo = listing.has_video ?? false;
+    const hasVideo = listing.has_video; // null quando não sabemos (tri-state)
     const hasClips = listing.has_clips ?? null; // null = desconhecido/não detectável via API
-    const videoCount = hasVideo ? 1 : 0;
+    const videoCount = hasVideo === true ? 1 : 0;
 
     // Build data quality assessment
     const missing: string[] = [];
@@ -498,7 +500,7 @@ ${input.performance.revenue !== null ? `- Receita: R$ ${input.performance.revenu
 
 MÍDIA:
 - Fotos: ${input.media.imageCount} ${input.media.hasImages ? '(presente)' : '(AUSENTE - mencionar na análise)'}
-- Vídeo do anúncio: ${input.media.hasVideo ? 'Sim' : 'Não (oportunidade de melhoria)'}
+- Vídeo do anúncio: ${input.media.hasVideo === true ? 'Sim' : input.media.hasVideo === false ? 'Não (oportunidade de melhoria)' : 'Não detectável via API'}
 - Clips: ${input.media.hasClips === true ? 'Sim' : input.media.hasClips === false ? 'Não' : 'Não detectável via API (valide no painel do Mercado Livre)'}
 
 INSTRUÇÕES ESPECÍFICAS:

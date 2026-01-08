@@ -72,7 +72,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         healthScore: listing.health_score ?? undefined, // Score legado da API do ML
         superSellerScore: listing.super_seller_score ?? undefined, // Super Seller Score proprietário
         scoreBreakdown: listing.score_breakdown ?? undefined, // Detalhamento do score
-        hasVideo: listing.has_video ?? false,
+        hasVideo: listing.has_video, // null quando não sabemos (tri-state: true/false/null)
         hasClips: listing.has_clips ?? null, // null = desconhecido/não detectável via API
         createdAt: listing.created_at,
         updatedAt: listing.updated_at,

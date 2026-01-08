@@ -42,7 +42,7 @@ export interface AIAnalyzeInputListing {
 export interface AIAnalyzeInputMedia {
   imageCount: number;
   hasImages: boolean;
-  hasVideo: boolean;
+  hasVideo: boolean | null; // null = indisponível via API (tri-state: true/false/null)
   hasClips: boolean | null; // null = desconhecido/não detectável via API
   videoCount: number;
 }
