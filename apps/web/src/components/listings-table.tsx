@@ -41,7 +41,6 @@ function AIAnalysisTab({
   copiedText,
   onCopy,
   hasVideo,
-  hasClips,
 }: {
   analysis: AIAnalysisResponse | null
   isLoading: boolean
@@ -50,8 +49,7 @@ function AIAnalysisTab({
   currentTitle: string
   copiedText: string | null
   onCopy: (text: string) => void
-  hasVideo?: boolean
-  hasClips?: boolean | null
+  hasVideo?: boolean | null
 }) {
   const loadingMessages = [
     'Analisando concorrentes...',
@@ -307,11 +305,11 @@ function AIAnalysisTab({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Informações de Mídia</CardTitle>
-          <CardDescription>Status de vídeo e clips do anúncio</CardDescription>
+          <CardDescription>Status de clips (vídeo) do anúncio</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Vídeo do anúncio:</span>
+            <span className="text-sm font-medium">Clips (vídeo):</span>
             {hasVideo === null ? (
               <Badge variant="outline" className="border-yellow-500 text-yellow-700">
                 Não detectável via API
@@ -322,19 +320,7 @@ function AIAnalysisTab({
               </Badge>
             )}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Clips:</span>
-            {hasClips === null ? (
-              <Badge variant="outline" className="border-yellow-500 text-yellow-700">
-                Não detectável via API
-              </Badge>
-            ) : (
-              <Badge variant={hasClips ? 'default' : 'secondary'} className={hasClips ? 'bg-green-600' : ''}>
-                {hasClips ? 'Sim' : 'Não'}
-              </Badge>
-            )}
-          </div>
-          {hasClips === null && (
+          {hasVideo === null && (
             <p className="text-xs text-muted-foreground mt-2">
               💡 Valide no painel do Mercado Livre; a API não detecta clips automaticamente.
             </p>
@@ -803,7 +789,6 @@ export function ListingsTable() {
                   })
                 }}
                 hasVideo={data?.items.find(l => l.id === selectedListingId)?.hasVideo}
-                hasClips={data?.items.find(l => l.id === selectedListingId)?.hasClips}
               />
             </TabsContent>
           </Tabs>
