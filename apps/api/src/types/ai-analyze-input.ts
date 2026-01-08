@@ -62,12 +62,22 @@ export interface AIAnalyzeInputPerformance {
 }
 
 /**
+ * Cobertura de dados de visitas
+ */
+export interface VisitsCoverage {
+  filledDays: number;  // Dias com visits não-null
+  totalDays: number;   // Total de dias no período
+}
+
+/**
  * Qualidade dos dados enviados
  */
 export interface AIAnalyzeInputDataQuality {
   missing: string[];
   warnings: string[];
   completenessScore: number;
+  visitsCoverage: VisitsCoverage;
+  performanceAvailable: boolean;  // false quando filledDays === 0
   sources: {
     performance: 'listing_metrics_daily' | 'listing_aggregates';
   };

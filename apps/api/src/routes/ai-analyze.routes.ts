@@ -2,6 +2,7 @@
  * AI Analyze Routes
  * 
  * Endpoints for AI-powered listing analysis using OpenAI GPT-4o.
+ * Includes fingerprint-based caching to reduce OpenAI API costs.
  */
 
 import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
@@ -9,7 +10,9 @@ import { z } from 'zod';
 import { OpenAIService } from '../services/OpenAIService';
 import { IAScoreService } from '../services/IAScoreService';
 import { authGuard } from '../plugins/auth';
-import { sanitizeOpenAIError, createSafeErrorMessage } from '../utils/sanitize-error';
+import { sanitizeOpenAIError } from '../utils/sanitize-error';
+import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
+import { prisma } from '../config/prisma';
 
 interface RequestWithAuth extends FastifyRequest {
   userId?: string;
@@ -18,6 +21,10 @@ interface RequestWithAuth extends FastifyRequest {
 
 const AnalyzeParamsSchema = z.object({
   listingId: z.string().uuid(),
+});
+
+const AnalyzeQuerySchema = z.object({
+  forceRefresh: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
 
 export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
@@ -114,10 +121,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
-  app.post<{ Params: { listingId: string } }>(
+  app.post<{ Params: { listingId: string }; Querystring: { forceRefresh?: string } }>(
     '/analyze/:listingId',
     { preHandler: authGuard },
-    async (request: FastifyRequest<{ Params: { listingId: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { listingId: string }; Querystring: { forceRefresh?: string } }>, reply: FastifyReply) => {
       // Declarar variáveis de contexto uma vez no topo do handler
       const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
 
@@ -130,7 +137,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         const params = AnalyzeParamsSchema.parse(request.params);
+        const query = AnalyzeQuerySchema.parse(request.query);
         const { listingId } = params;
+        const forceRefresh = query.forceRefresh ?? false;
 
         request.log.info({ 
           requestId,
@@ -138,6 +147,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           tenantId,
           listingId,
           periodDays: PERIOD_DAYS,
+          forceRefresh,
         }, 'Starting AI analysis');
 
         const service = new OpenAIService(tenantId);
@@ -149,43 +159,201 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        const result = await service.analyzeAndSaveRecommendations(
-          listingId,
-          userId,
-          requestId,
+        // Step 1: Get listing data for fingerprint calculation
+        const listing = await prisma.listing.findFirst({
+          where: {
+            id: listingId,
+            tenant_id: tenantId,
+          },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: 'Anúncio não encontrado',
+          });
+        }
+
+        // Step 2: Calculate score to get metrics for fingerprint
+        const scoreService = new IAScoreService(tenantId);
+        const scoreResult = await scoreService.calculateScore(listingId, PERIOD_DAYS);
+
+        // Step 3: Build fingerprint from listing + metrics
+        const fingerprintInput = buildFingerprintInput(
+          {
+            title: listing.title,
+            price: listing.price,
+            category: listing.category,
+            pictures_count: listing.pictures_count,
+            has_video: listing.has_video,
+            status: listing.status,
+            stock: listing.stock,
+            updated_at: listing.updated_at,
+          },
+          {
+            orders: scoreResult.metrics_30d.orders,
+            revenue: scoreResult.metrics_30d.revenue,
+            visitsCoverage: scoreResult.dataQuality.visitsCoverage,
+          },
           PERIOD_DAYS
         );
+        const fingerprint = generateFingerprint(fingerprintInput);
 
-        request.log.info(
-          {
-            requestId,
-            userId,
-            tenantId,
+        // Step 4: Check cache (unless forceRefresh)
+        let cachedResult: {
+          analysis: {
+            score: number;
+            critique: string;
+            growthHacks: Array<{ title: string; description: string; priority: string; estimatedImpact: string }>;
+            seoSuggestions: { suggestedTitle: string; titleRationale: string; suggestedDescriptionPoints: string[]; keywords: string[] };
+            analyzedAt: string;
+            model: string;
+          };
+          savedRecommendations: number;
+        } | null = null;
+
+        if (!forceRefresh) {
+          const cached = await prisma.listingAIAnalysis.findFirst({
+            where: {
+              tenant_id: tenantId,
+              listing_id: listingId,
+              period_days: PERIOD_DAYS,
+              fingerprint,
+            },
+          });
+
+          if (cached) {
+            cachedResult = cached.result_json as typeof cachedResult;
+            
+            request.log.info(
+              {
+                requestId,
+                userId,
+                tenantId,
+                listingId,
+                fingerprint: fingerprint.substring(0, 16) + '...',
+                cacheHit: true,
+              },
+              'AI analysis cache hit'
+            );
+          }
+        }
+
+        // Step 5: If cache miss or forceRefresh, call OpenAI
+        if (!cachedResult) {
+          const result = await service.analyzeAndSaveRecommendations(
             listingId,
-            score: result.analysis.score,
-            growthHacksCount: result.analysis.growthHacks.length,
-            savedRecommendations: result.savedRecommendations,
-            performanceSource: result.dataQuality.sources.performance,
-            completenessScore: result.dataQuality.completenessScore,
-          },
-          'AI analysis complete'
-        );
+            userId,
+            requestId,
+            PERIOD_DAYS
+          );
 
+          // Step 6: Save to cache
+          try {
+            await prisma.listingAIAnalysis.upsert({
+              where: {
+                tenant_id_listing_id_period_days_fingerprint: {
+                  tenant_id: tenantId,
+                  listing_id: listingId,
+                  period_days: PERIOD_DAYS,
+                  fingerprint,
+                },
+              },
+              update: {
+                model: result.analysis.model || 'gpt-4o',
+                prompt_version: PROMPT_VERSION,
+                result_json: {
+                  analysis: {
+                    score: result.analysis.score,
+                    critique: result.analysis.critique,
+                    growthHacks: result.analysis.growthHacks,
+                    seoSuggestions: result.analysis.seoSuggestions,
+                    analyzedAt: result.analysis.analyzedAt,
+                    model: result.analysis.model,
+                  },
+                  savedRecommendations: result.savedRecommendations,
+                },
+                updated_at: new Date(),
+              },
+              create: {
+                tenant_id: tenantId,
+                listing_id: listingId,
+                period_days: PERIOD_DAYS,
+                fingerprint,
+                model: result.analysis.model || 'gpt-4o',
+                prompt_version: PROMPT_VERSION,
+                result_json: {
+                  analysis: {
+                    score: result.analysis.score,
+                    critique: result.analysis.critique,
+                    growthHacks: result.analysis.growthHacks,
+                    seoSuggestions: result.analysis.seoSuggestions,
+                    analyzedAt: result.analysis.analyzedAt,
+                    model: result.analysis.model,
+                  },
+                  savedRecommendations: result.savedRecommendations,
+                },
+              },
+            });
+          } catch (cacheError) {
+            // Log but don't fail if cache save fails
+            request.log.warn({ err: cacheError, listingId, fingerprint: fingerprint.substring(0, 16) + '...' }, 'Failed to save AI analysis to cache');
+          }
+
+          request.log.info(
+            {
+              requestId,
+              userId,
+              tenantId,
+              listingId,
+              score: result.analysis.score,
+              growthHacksCount: result.analysis.growthHacks.length,
+              savedRecommendations: result.savedRecommendations,
+              performanceSource: result.dataQuality.sources.performance,
+              completenessScore: result.dataQuality.completenessScore,
+              cacheHit: false,
+              fingerprint: fingerprint.substring(0, 16) + '...',
+            },
+            'AI analysis complete (cache miss)'
+          );
+
+          return reply.status(200).send({
+            message: 'Análise concluída com sucesso',
+            data: {
+              listingId,
+              score: result.score.score.final,
+              scoreBreakdown: result.score.score.breakdown,
+              potentialGain: result.score.score.potential_gain,
+              critique: result.analysis.critique,
+              growthHacks: result.analysis.growthHacks,
+              seoSuggestions: result.analysis.seoSuggestions,
+              savedRecommendations: result.savedRecommendations,
+              analyzedAt: result.analysis.analyzedAt,
+              model: result.analysis.model,
+              metrics30d: result.score.metrics_30d,
+              dataQuality: result.dataQuality,
+              cacheHit: false,
+            },
+          });
+        }
+
+        // Step 7: Return cached result
         return reply.status(200).send({
-          message: 'Análise concluída com sucesso',
+          message: 'Análise concluída com sucesso (cache)',
           data: {
             listingId,
-            score: result.score.score.final,
-            scoreBreakdown: result.score.score.breakdown,
-            potentialGain: result.score.score.potential_gain,
-            critique: result.analysis.critique,
-            growthHacks: result.analysis.growthHacks,
-            seoSuggestions: result.analysis.seoSuggestions,
-            savedRecommendations: result.savedRecommendations,
-            analyzedAt: result.analysis.analyzedAt,
-            model: result.analysis.model,
-            metrics30d: result.score.metrics_30d,
-            dataQuality: result.dataQuality,
+            score: scoreResult.score.final,
+            scoreBreakdown: scoreResult.score.breakdown,
+            potentialGain: scoreResult.score.potential_gain,
+            critique: cachedResult.analysis.critique,
+            growthHacks: cachedResult.analysis.growthHacks,
+            seoSuggestions: cachedResult.analysis.seoSuggestions,
+            savedRecommendations: cachedResult.savedRecommendations,
+            analyzedAt: cachedResult.analysis.analyzedAt,
+            model: cachedResult.analysis.model,
+            metrics30d: scoreResult.metrics_30d,
+            dataQuality: scoreResult.dataQuality,
+            cacheHit: true,
           },
         });
       } catch (error) {
