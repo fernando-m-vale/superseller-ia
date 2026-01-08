@@ -160,6 +160,57 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         a.date.localeCompare(b.date)
       );
 
+      // Buscar visitas agregadas por dia (ignorar NULL na soma)
+      const visitsByDay = await prisma.listingMetricsDaily.groupBy({
+        by: ['date'],
+        where: {
+          tenant_id: tenantId,
+          date: { gte: cutoffDate },
+          visits: { not: null }, // Ignorar NULL na agregação
+          ...(query.marketplace ? {
+            listing: { marketplace: query.marketplace },
+          } : {}),
+        },
+        _sum: {
+          visits: true,
+        },
+        orderBy: {
+          date: 'asc',
+        },
+      });
+
+      // Criar mapa de visitas por dia (YYYY-MM-DD) -> soma(visits)
+      const visitsMap = new Map<string, number>();
+      for (const dayData of visitsByDay) {
+        const dateStr = dayData.date.toISOString().split('T')[0];
+        visitsMap.set(dateStr, Number(dayData._sum.visits) || 0);
+      }
+
+      // Contar dias com visitas vs total de dias no período
+      const totalDaysInPeriod = periodDays;
+      const filledDays = visitsByDay.length;
+
+      // Combinar salesSeries com visits (adicionar visits a cada dia)
+      const combinedSeries = salesSeries.map((day) => ({
+        ...day,
+        visits: visitsMap.get(day.date) ?? null, // null quando não há visitas disponíveis
+      }));
+
+      // Adicionar dias que têm visitas mas não têm vendas
+      for (const [dateStr, visits] of visitsMap.entries()) {
+        if (!salesSeries.find(s => s.date === dateStr)) {
+          combinedSeries.push({
+            date: dateStr,
+            revenue: 0,
+            orders: 0,
+            visits: visits,
+          });
+        }
+      }
+
+      // Ordenar por data
+      combinedSeries.sort((a, b) => a.date.localeCompare(b.date));
+
       // Top 3 produtos por receita (últimos 30 dias)
       const topListings = await prisma.orderItem.groupBy({
         by: ['listing_id_ext'],
@@ -224,7 +275,15 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         totalOrders,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         averageTicket: Math.round(averageTicket * 100) / 100,
-        salesSeries,
+        salesSeries: combinedSeries,
+        visitsByDay: combinedSeries.map(day => ({
+          date: day.date,
+          visits: day.visits,
+        })),
+        visitsCoverage: {
+          filledDays,
+          totalDays: totalDaysInPeriod,
+        },
         // Top products
         topListings: topListingsWithDetails,
       });

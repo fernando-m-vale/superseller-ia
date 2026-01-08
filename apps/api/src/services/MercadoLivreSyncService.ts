@@ -807,9 +807,17 @@ export class MercadoLivreSyncService {
         }
         // Se é update e não veio thumbnail, NÃO atualizar (manter valor existente)
 
-        // Atualizar has_video sempre (true/false) desde que o item tenha sido buscado com sucesso
-        // O helper extractHasVideoFromMlItem sempre retorna boolean
-        listingData.has_video = hasVideoFromAPI;
+        // Atualizar has_video (tri-state: true/false/null)
+        // - true: tem vídeo confirmado via API
+        // - false: confirmado que não tem vídeo (ex: video_id is null explicitamente)
+        // - null: indisponível via API (fallback orders_fallback ou quando não conseguimos determinar)
+        // No fallback via Orders, não temos certeza, então setar null
+        if (source === 'orders_fallback') {
+          listingData.has_video = null; // Não sabemos se tem vídeo via fallback
+        } else {
+          // Fluxo normal: usar valor da API (true/false)
+          listingData.has_video = hasVideoFromAPI;
+        }
 
         // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos
         // Isso evita sobrescrever com 0 quando não há dados

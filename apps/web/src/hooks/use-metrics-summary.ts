@@ -26,7 +26,16 @@ export interface MetricsSummary {
     date: string;
     revenue: number;
     orders: number;
+    visits?: number | null; // null quando não disponível
   }>;
+  visitsByDay?: Array<{
+    date: string;
+    visits: number | null;
+  }>;
+  visitsCoverage?: {
+    filledDays: number;
+    totalDays: number;
+  };
   topListings: Array<{
     title: string;
     revenue: number;

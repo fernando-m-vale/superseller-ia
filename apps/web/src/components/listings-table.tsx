@@ -312,9 +312,15 @@ function AIAnalysisTab({
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Vídeo do anúncio:</span>
-            <Badge variant={hasVideo ? 'default' : 'secondary'} className={hasVideo ? 'bg-green-600' : ''}>
-              {hasVideo ? 'Sim' : 'Não'}
-            </Badge>
+            {hasVideo === null ? (
+              <Badge variant="outline" className="border-yellow-500 text-yellow-700">
+                Não detectável via API
+              </Badge>
+            ) : (
+              <Badge variant={hasVideo ? 'default' : 'secondary'} className={hasVideo ? 'bg-green-600' : ''}>
+                {hasVideo ? 'Sim' : 'Não'}
+              </Badge>
+            )}
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Clips:</span>
