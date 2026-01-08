@@ -1,70 +1,89 @@
 # SuperSeller IA — NEXT SESSION PLAN
 
 ## Objetivo da próxima sessão
-Fechar completamente a **PRIORIDADE ZERO (ML Data Audit)** e deixar o sistema pronto para uso real por usuários.
+**Encerrar a PRIORIDADE ZERO (ML Data Audit)** com pipeline de dados totalmente confiável, auditável e pronto para uso real.
 
 ---
 
 ## 🎯 Foco central
-- Listings reais ingeridos (mesmo com PolicyAgent ativo)
-- Visits reais persistidas
-- Dashboard refletindo estados corretos
-- Pipeline automático pós-OAuth validado
+- Backfill de Visits funcionando corretamente
+- `listing_metrics_daily` populada com granularidade diária
+- NULL tratado corretamente (sem métricas inventadas)
+- Pipeline pós-OAuth validado de ponta a ponta
 
 ---
 
-## Checklist — Bloco 1 (Fundação de dados)
+## Checklist — Bloco 1 (Hotfix Visits Backfill)
 
-- [ ] Executar FULL sync em PROD
-  - Confirmar fallback via Orders acionado
-  - Validar `COUNT(*) FROM listings > 0`
-- [ ] Validar logs:
-  - discoveryBlocked=true
-  - ordersFound > 0
-  - uniqueItemIds > 0
-
----
-
-## Checklist — Bloco 2 (Visits)
-
-- [ ] Executar sync incremental de visits
-- [ ] Confirmar criação de registros em `listing_metrics_daily`
+- [ ] Ajustar service de backfill para:
+  - Criar linhas em `listing_metrics_daily` **sempre**
+  - visits = valor real quando API retornar
+  - visits = NULL quando API não retornar
+  - period_days = 1
+  - source = `visits_api`
 - [ ] Garantir:
-  - visits ≠ NULL quando API retornar
-  - NULL preservado quando indisponível
+  - `rowsUpserted >= listings × days`
+  - `rowsWithNull` > 0 quando API não retornar
+- [ ] Adicionar logs explícitos:
+  - endpoint chamado (`/items/visits`)
+  - status code
+  - quantidade de dados retornados
 
 ---
 
-## Checklist — Bloco 3 (Dashboard & UX)
+## Checklist — Bloco 2 (Validação em PROD)
 
-- [ ] Ajustar UI para estados:
-  - “Carregando dados”
-  - “Dados parciais”
-  - “Dados completos”
-- [ ] Garantir:
-  - UI nunca mostra “0 visitas” quando visits = NULL
-  - IA nunca conclui ausência sem evidência
-- [ ] Validar modal de análise:
-  - Reset de state ao trocar listing
-  - Nenhuma análise herdada
+- [ ] Executar:
+  - `POST /sync/mercadolivre/full`
+  - `POST /sync/mercadolivre/visits/backfill?days=1`
+- [ ] Validar SQL:
+```sql
+SELECT COUNT(*)
+FROM listing_metrics_daily
+WHERE date >= (CURRENT_DATE - INTERVAL '1 day');
 
----
+ Esperado: COUNT >= número de listings
 
-## Checklist — Bloco 4 (Automação)
+Checklist — Bloco 3 (Dashboard & IA)
+ UI exibir corretamente estados:
 
-- [ ] Conectar OAuth → FULL sync automático
-- [ ] Backfill automático de visits (30 dias)
-- [ ] Planejar cron / jobs:
-  - Orders
-  - Visits
-  - Recalc score
+“Dados indisponíveis via API”
 
----
+“Dados parciais”
 
-## Critérios de aceite da sessão
+ Garantir:
 
-- Listings reais aparecem no dashboard
-- Visits aparecem após sync
-- Nenhuma métrica estimada
-- Sistema funciona com limitações reais do ML
-- PRIORIDADE ZERO pode ser encerrada oficialmente
+UI nunca mostra “0 visitas” quando visits = NULL
+
+IA nunca conclui ausência de visitas sem evidência
+
+ Modal de análise:
+
+Reset de state ao trocar listing
+
+Nenhuma análise herdada
+
+Checklist — Bloco 4 (Automação)
+ Validar fluxo pós-OAuth:
+
+OAuth → FULL sync → Visits backfill
+
+ Planejar jobs:
+
+Orders incremental
+
+Visits incremental
+
+Recalcular métricas / score
+
+Critérios de aceite da sessão
+listing_metrics_daily populada corretamente
+
+NULL tratado de forma semântica
+
+Nenhuma métrica estimada
+
+Pipeline confiável mesmo com limitações do ML
+
+PRIORIDADE ZERO encerrada oficialmente
+

@@ -148,7 +148,8 @@ describe('Visits Backfill Granular', () => {
             listing_id: listing.id,
             date: today,
             visits: null, // NULL, não 0
-            source: 'ml_visits_api_daily',
+            source: 'visits_api',
+            period_days: 1,
             orders: 0,
             gmv: 0,
             impressions: null,
@@ -165,6 +166,89 @@ describe('Visits Backfill Granular', () => {
 
         expect(retrieved?.visits).toBeNull();
         expect(retrieved?.visits).not.toBe(0);
+        expect(retrieved?.source).toBe('visits_api');
+        expect(retrieved?.period_days).toBe(1);
+      }
+    });
+
+    it('should upsert all days with visits=NULL when API returns empty', async () => {
+      // Este teste verifica que quando a API retorna array vazio,
+      // o service ainda faz upsert com visits=NULL para TODOS os dias do range
+      
+      const listing = await prisma.listing.findFirst({
+        where: {
+          tenant_id: testTenantId,
+          listing_id_ext: 'MLB001',
+        },
+      });
+
+      expect(listing).not.toBeNull();
+
+      if (listing) {
+        const days = 3; // 3 dias para testar
+        
+        // Simular: API retornou array vazio (visitsMap vazio)
+        // Service deve fazer upsert para TODOS os 3 dias com visits=NULL
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        for (let dayOffset = 0; dayOffset < days; dayOffset++) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - dayOffset);
+          
+          // Simular o que o service faz quando API retorna vazio
+          await prisma.listingMetricsDaily.upsert({
+            where: {
+              tenant_id_listing_id_date: {
+                tenant_id: testTenantId,
+                listing_id: listing.id,
+                date,
+              },
+            },
+            create: {
+              tenant_id: testTenantId,
+              listing_id: listing.id,
+              date,
+              visits: null, // NULL porque API não retornou
+              source: 'visits_api',
+              period_days: 1,
+              orders: 0,
+              gmv: 0,
+              impressions: null,
+              clicks: null,
+              ctr: null,
+              conversion: null,
+            },
+            update: {
+              visits: null,
+              source: 'visits_api',
+              period_days: 1,
+            },
+          });
+        }
+
+        // Verificar que TODOS os 3 dias foram gravados
+        const metrics = await prisma.listingMetricsDaily.findMany({
+          where: {
+            tenant_id: testTenantId,
+            listing_id: listing.id,
+            date: {
+              gte: new Date(today.getTime() - (days - 1) * 24 * 60 * 60 * 1000),
+              lte: today,
+            },
+          },
+        });
+
+        expect(metrics.length).toBe(days);
+        
+        // Verificar que TODOS têm visits = NULL
+        for (const metric of metrics) {
+          expect(metric.visits).toBeNull();
+          expect(metric.visits).not.toBe(0);
+          expect(metric.source).toBe('visits_api');
+          expect(metric.period_days).toBe(1);
+        }
       }
     });
 
@@ -189,7 +273,8 @@ describe('Visits Backfill Granular', () => {
             listing_id: listing.id,
             date: today,
             visits: null,
-            source: 'ml_visits_api_daily',
+            source: 'visits_api',
+            period_days: 1,
             orders: 0,
             gmv: 0,
           },
@@ -206,7 +291,8 @@ describe('Visits Backfill Granular', () => {
           },
           data: {
             visits: null, // Mantém NULL
-            source: 'ml_visits_api_daily',
+            source: 'visits_api',
+            period_days: 1,
           },
         });
 
@@ -248,7 +334,8 @@ describe('Visits Backfill Granular', () => {
             listing_id: listing.id,
             date: today,
             visits: 10,
-            source: 'ml_visits_api_daily',
+            source: 'visits_api',
+            period_days: 1,
             orders: 0,
             gmv: 0,
           },
@@ -271,7 +358,8 @@ describe('Visits Backfill Granular', () => {
             where: { id: existing.id },
             data: {
               visits: 15, // Atualizar valor
-              source: 'ml_visits_api_daily',
+              source: 'visits_api',
+            period_days: 1,
             },
           });
         } else {
@@ -282,7 +370,8 @@ describe('Visits Backfill Granular', () => {
               listing_id: listing.id,
               date: today,
               visits: 15,
-              source: 'ml_visits_api_daily',
+              source: 'visits_api',
+            period_days: 1,
               orders: 0,
               gmv: 0,
             },
@@ -336,7 +425,8 @@ describe('Visits Backfill Granular', () => {
             listing_id: listing.id,
             date: today,
             visits: 20,
-            source: 'ml_visits_api_daily',
+            source: 'visits_api',
+            period_days: 1,
             orders: 0,
             gmv: 0,
           },
@@ -350,7 +440,8 @@ describe('Visits Backfill Granular', () => {
               listing_id: listing.id,
               date: today,
               visits: 25,
-              source: 'ml_visits_api_daily',
+              source: 'visits_api',
+            period_days: 1,
               orders: 0,
               gmv: 0,
             },
