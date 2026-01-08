@@ -1,89 +1,61 @@
 # SuperSeller IA — NEXT SESSION PLAN
 
 ## Objetivo da próxima sessão
-**Encerrar a PRIORIDADE ZERO (ML Data Audit)** com pipeline de dados totalmente confiável, auditável e pronto para uso real.
+Encerrar pendências técnicas finais e **entrar na FASE DE VALOR**:
+IA explicável, insights acionáveis e base para monetização.
 
 ---
 
-## 🎯 Foco central
-- Backfill de Visits funcionando corretamente
-- `listing_metrics_daily` populada com granularidade diária
-- NULL tratado corretamente (sem métricas inventadas)
-- Pipeline pós-OAuth validado de ponta a ponta
+## 🎯 Foco imediato (Dia 1)
+### Correções técnicas finais
+- [ ] Corrigir build da PR #78 (IA + cache)
+- [ ] Ajustar imports e tipagem em `ai-analyze.routes.ts`
+- [ ] Validar migration `listing_ai_analysis`
+- [ ] Garantir cacheHit=true/false funcional em PROD
 
 ---
 
-## Checklist — Bloco 1 (Hotfix Visits Backfill)
+## 🚀 Fase 2 — Inteligência de Verdade
 
-- [ ] Ajustar service de backfill para:
-  - Criar linhas em `listing_metrics_daily` **sempre**
-  - visits = valor real quando API retornar
-  - visits = NULL quando API não retornar
-  - period_days = 1
-  - source = `visits_api`
-- [ ] Garantir:
-  - `rowsUpserted >= listings × days`
-  - `rowsWithNull` > 0 quando API não retornar
-- [ ] Adicionar logs explícitos:
-  - endpoint chamado (`/items/visits`)
-  - status code
-  - quantidade de dados retornados
+### IA Score Model (explicável)
+- Dimensões:
+  - Cadastro
+  - Mídia
+  - Performance (condicional)
+  - SEO Mercado Livre
+  - Competitividade
+- Definir:
+  - pesos
+  - limites
+  - score máximo por dimensão
 
 ---
 
-## Checklist — Bloco 2 (Validação em PROD)
+## 🧠 Valor para o Seller
+- SEO específico Mercado Livre (não genérico)
+- Diagnóstico competitivo (preço, título, imagens)
+- Insights baseados em vendas reais
+- Advertir quando dados são indisponíveis (sem penalizar)
 
-- [ ] Executar:
-  - `POST /sync/mercadolivre/full`
-  - `POST /sync/mercadolivre/visits/backfill?days=1`
-- [ ] Validar SQL:
-```sql
-SELECT COUNT(*)
-FROM listing_metrics_daily
-WHERE date >= (CURRENT_DATE - INTERVAL '1 day');
+---
 
- Esperado: COUNT >= número de listings
+## 🌐 Produto
+- Landing Page pública (Home)
+- Onboarding educacional
+- Explicação clara: “como funcionam os dados”
 
-Checklist — Bloco 3 (Dashboard & IA)
- UI exibir corretamente estados:
+---
 
-“Dados indisponíveis via API”
+## 💰 Base para monetização
+- Free tier limitado
+- Análise IA premium
+- Benchmark concorrentes
+- Ads intelligence
 
-“Dados parciais”
+---
 
- Garantir:
-
-UI nunca mostra “0 visitas” quando visits = NULL
-
-IA nunca conclui ausência de visitas sem evidência
-
- Modal de análise:
-
-Reset de state ao trocar listing
-
-Nenhuma análise herdada
-
-Checklist — Bloco 4 (Automação)
- Validar fluxo pós-OAuth:
-
-OAuth → FULL sync → Visits backfill
-
- Planejar jobs:
-
-Orders incremental
-
-Visits incremental
-
-Recalcular métricas / score
-
-Critérios de aceite da sessão
-listing_metrics_daily populada corretamente
-
-NULL tratado de forma semântica
-
-Nenhuma métrica estimada
-
-Pipeline confiável mesmo com limitações do ML
-
-PRIORIDADE ZERO encerrada oficialmente
-
+## Critério de aceite da próxima fase
+- IA gera valor percebido
+- Usuário confia nos dados
+- UX clara e honesta
+- Produto pronto para piloto real
