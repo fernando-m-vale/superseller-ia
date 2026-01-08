@@ -32,6 +32,14 @@ export interface IAScorePotentialGain {
 }
 
 /**
+ * Cobertura de dados de visitas
+ */
+export interface VisitsCoverage {
+  filledDays: number;  // Dias com visits não-null
+  totalDays: number;   // Total de dias no período
+}
+
+/**
  * Resultado completo do score
  */
 export interface IAScoreResult {
@@ -49,6 +57,8 @@ export interface IAScoreResult {
   };
   dataQuality: {
     completenessScore: number;
+    visitsCoverage: VisitsCoverage;
+    performanceAvailable: boolean;  // false quando filledDays === 0
     sources: {
       performance: 'listing_metrics_daily' | 'listing_aggregates';
     };
@@ -113,6 +123,13 @@ export class IAScoreService {
     let ctrCount = 0; // Contar apenas CTRs não-null
     const hasDailyMetrics = dailyMetrics.length > 0;
 
+    // Calcular visitsCoverage: quantos dias têm visits não-null
+    const visitsFilledDays = hasDailyMetrics 
+      ? dailyMetrics.filter(m => m.visits !== null).length 
+      : 0;
+    const visitsTotalDays = hasDailyMetrics ? dailyMetrics.length : periodDays;
+    const performanceAvailable = visitsFilledDays > 0;
+
     if (hasDailyMetrics) {
       for (const metric of dailyMetrics) {
         visits += metric.visits ?? 0; // Tratar null como 0 para cálculo de score
@@ -142,10 +159,15 @@ export class IAScoreService {
     const avgCtr = ctrCount > 0 ? totalCtr / ctrCount : null;
 
     // Calcular dimensões
+    // Quando performanceAvailable=false, usar score neutro (15/30 = 50%) para não penalizar
+    const performanceScore = performanceAvailable 
+      ? this.calculatePerformanceScore(visits, orders, conversionRate)
+      : 15; // Score neutro quando dados indisponíveis (50% do máximo)
+    
     const breakdown: IAScoreBreakdown = {
       cadastro: this.clampScore(this.calculateCadastroScore(listing), 0, 20),
       midia: this.clampScore(this.calculateMidiaScore(listing), 0, 20),
-      performance: this.clampScore(this.calculatePerformanceScore(visits, orders, conversionRate), 0, 30),
+      performance: this.clampScore(performanceScore, 0, 30),
       seo: this.clampScore(this.calculateSEOScore(avgCtr), 0, 20),
       competitividade: this.clampScore(this.calculateCompetitividadeScore(), 0, 10), // Placeholder V1: 5 (50% do máximo)
     };
@@ -185,6 +207,11 @@ export class IAScoreService {
       },
       dataQuality: {
         completenessScore,
+        visitsCoverage: {
+          filledDays: visitsFilledDays,
+          totalDays: visitsTotalDays,
+        },
+        performanceAvailable,
         sources: {
           performance: hasDailyMetrics ? 'listing_metrics_daily' : 'listing_aggregates',
         },

@@ -47,10 +47,16 @@ interface AIAnalysisApiResponse {
   }
   dataQuality?: {
     completenessScore: number
+    visitsCoverage?: {
+      filledDays: number
+      totalDays: number
+    }
+    performanceAvailable?: boolean
     sources: {
       performance: 'listing_metrics_daily' | 'listing_aggregates'
     }
   }
+  cacheHit?: boolean
 }
 
 // Interface adaptada para o frontend
@@ -94,10 +100,16 @@ export interface AIAnalysisResponse {
   }
   dataQuality?: {
     completenessScore: number
+    visitsCoverage?: {
+      filledDays: number
+      totalDays: number
+    }
+    performanceAvailable?: boolean
     sources: {
       performance: 'listing_metrics_daily' | 'listing_aggregates'
     }
   }
+  cacheHit?: boolean
 }
 
 /**
@@ -126,6 +138,7 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     model: apiResponse.model,
     metrics30d: apiResponse.metrics30d,
     dataQuality: apiResponse.dataQuality,
+    cacheHit: apiResponse.cacheHit,
   }
 }
 
@@ -164,7 +177,7 @@ export function useAIAnalyze(listingId: string | null) {
     })
   }, [listingId])
 
-  const analyze = async (): Promise<void> => {
+  const analyze = async (forceRefresh: boolean = false): Promise<void> => {
     if (!listingId) {
       setState({ data: null, isLoading: false, error: 'ID do anúncio não fornecido' })
       return
@@ -180,7 +193,12 @@ export function useAIAnalyze(listingId: string | null) {
         throw new Error('Usuário não autenticado')
       }
 
-      const response = await fetch(`${apiUrl}/ai/analyze/${listingId}`, {
+      // Build URL with forceRefresh query param if needed
+      const url = forceRefresh 
+        ? `${apiUrl}/ai/analyze/${listingId}?forceRefresh=true`
+        : `${apiUrl}/ai/analyze/${listingId}`
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

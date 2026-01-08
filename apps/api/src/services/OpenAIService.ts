@@ -100,6 +100,21 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
    - EXEMPLOS PERMITIDOS (quando hasClips=null):
      * ✅ "Clips não detectável via API; valide no painel do Mercado Livre. Se você ainda não tiver clips, inclua..."
      * ✅ "Verifique clips no painel; API não detecta automaticamente"
+9. SOBRE PERFORMANCE INDISPONÍVEL (CRÍTICO - NUNCA VIOLAR):
+   - Se dataQuality.performanceAvailable === false:
+     * NUNCA chamar Performance de "gargalo" ou "maior problema"
+     * NUNCA afirmar "tráfego baixo", "sem visitas", "conversão baixa"
+     * NUNCA penalizar o anúncio por falta de dados de performance
+     * Mostrar Performance como "Indisponível via API" ou "Sem dados suficientes"
+     * Usar linguagem CONDICIONAL para hacks de performance:
+       - ✅ "Se você quiser aumentar tráfego, considere..."
+       - ✅ "Para melhorar conversão (quando dados estiverem disponíveis)..."
+       - ❌ "Seu tráfego está baixo" (afirmação sem dados)
+       - ❌ "Conversão precisa melhorar" (conclusão sem dados)
+   - Se dataQuality.visitsCoverage.filledDays === 0:
+     * Significa que NENHUM dia do período tem dados de visitas
+     * Tratar como "dados indisponíveis", não como "zero visitas"
+     * O score de Performance já foi ajustado para não penalizar (15/30 = neutro)
 
 AVALIAÇÃO DE TÍTULO (Mercado Livre):
 - Limite de 60 caracteres (otimizar para máximo impacto)
@@ -326,6 +341,13 @@ export class OpenAIService {
     // Verificar se visits é unknown (null em todas as métricas)
     const visitsUnknown = hasDailyMetrics && dailyMetrics.every(m => m.visits === null);
     
+    // Calcular visitsCoverage: quantos dias têm visits não-null
+    const visitsFilledDays = hasDailyMetrics 
+      ? dailyMetrics.filter(m => m.visits !== null).length 
+      : 0;
+    const visitsTotalDays = hasDailyMetrics ? dailyMetrics.length : periodDays;
+    const performanceAvailable = visitsFilledDays > 0;
+    
     const conversionRate = visitsUnknown ? null : (visits > 0 ? orders / visits : null);
     
     // CTR: null se impressions ou clicks forem null, ou se impressions = 0
@@ -443,6 +465,11 @@ export class OpenAIService {
         missing,
         warnings,
         completenessScore,
+        visitsCoverage: {
+          filledDays: visitsFilledDays,
+          totalDays: visitsTotalDays,
+        },
+        performanceAvailable,
         sources: {
           performance: hasDailyMetrics ? 'listing_metrics_daily' : 'listing_aggregates',
         },
@@ -488,11 +515,14 @@ CONTEXTO PARA ANÁLISE:
 - Período analisado: ${input.meta.periodDays} dias
 - Fonte de performance: ${input.dataQuality.sources.performance} ${input.dataQuality.sources.performance === 'listing_aggregates' ? '(dados agregados, podem ser incompletos)' : '(métricas diárias confiáveis)'}
 - Qualidade dos dados: ${input.dataQuality.completenessScore}/100
+- Cobertura de visitas: ${input.dataQuality.visitsCoverage.filledDays}/${input.dataQuality.visitsCoverage.totalDays} dias com dados
+- Performance disponível: ${input.dataQuality.performanceAvailable ? 'SIM' : 'NÃO (dados indisponíveis via API - NÃO chamar de gargalo)'}
 ${input.dataQuality.missing.length > 0 ? `- Campos ausentes: ${input.dataQuality.missing.join(', ')}` : ''}
 ${input.dataQuality.warnings.length > 0 ? `- Avisos: ${input.dataQuality.warnings.join('; ')}` : ''}
 
 DADOS DE PERFORMANCE:
-- Visitas: ${input.dataQuality.warnings.includes('visits_unknown_via_api') ? 'NÃO DISPONÍVEL VIA API (não concluir "zero visitas")' : `${input.performance.visits} (últimos ${input.performance.periodDays} dias)`}
+${!input.dataQuality.performanceAvailable ? `⚠️ ATENÇÃO: Performance INDISPONÍVEL (visitsCoverage.filledDays=0). NÃO chamar de gargalo, NÃO afirmar tráfego baixo/conversão baixa. Usar linguagem condicional.` : ''}
+- Visitas: ${!input.dataQuality.performanceAvailable ? 'INDISPONÍVEL VIA API (não concluir "zero visitas")' : `${input.performance.visits} (últimos ${input.performance.periodDays} dias)`}
 - Pedidos: ${input.performance.orders} ${input.dataQuality.sources.performance === 'listing_metrics_daily' ? '(fonte: Orders API do período)' : ''}
 - Taxa de conversão: ${input.performance.conversionRate ? (input.performance.conversionRate * 100).toFixed(2) + '%' : 'N/A (visitas não disponíveis)'}
 ${input.performance.ctr !== undefined && input.performance.ctr !== null ? `- CTR: ${(input.performance.ctr * 100).toFixed(2)}%` : ''}
@@ -513,6 +543,7 @@ INSTRUÇÕES ESPECÍFICAS:
 7. Analise a performance real: se conversão alta mas tráfego baixo → foco em tráfego; se tráfego alto mas conversão baixa → foco em otimização
 8. Considere o preço (R$ ${input.listing.price.toFixed(2)}) em relação à categoria e performance
 9. Use o potencial de ganho fornecido para priorizar hacks
+10. Se performanceAvailable=false: NÃO chamar Performance de gargalo, NÃO afirmar tráfego/conversão baixa. Usar linguagem condicional ("Se você quiser aumentar tráfego...")
 
 IMPORTANTE:
 - O score retornado deve ser o MESMO do score calculado (${scoreResult.score.final})
