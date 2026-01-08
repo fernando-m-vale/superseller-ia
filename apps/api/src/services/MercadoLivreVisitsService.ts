@@ -722,6 +722,11 @@ export class MercadoLivreVisitsService {
   /**
    * Processa visitas de um item específico (granular por dia)
    * 
+   * Sempre faz UPSERT para TODOS os dias do range.
+   * - Se API retornar visita para o dia: grava o valor
+   * - Se API não retornar visita para o dia: grava visits=NULL
+   * - NUNCA grava visits=0
+   * 
    * @param itemId ID do item no Mercado Livre
    * @param days Número de dias para buscar
    * @param requestId ID da requisição para logs
@@ -753,25 +758,64 @@ export class MercadoLivreVisitsService {
         return;
       }
 
-      // Buscar visitas com retry e backoff
-      let visits: VisitsTimeWindowResponse['visits'] = [];
+      // Preparar range de datas (hoje até days-1 dias atrás)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dateRange: Date[] = [];
+      for (let dayOffset = 0; dayOffset < days; dayOffset++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - dayOffset);
+        dateRange.push(date);
+      }
+
+      // Buscar visitas da API com retry e backoff
+      let visitsMap = new Map<string, number>(); // date (YYYY-MM-DD) -> visits count
+      let apiCallSuccess = false;
       let retries = 0;
       const maxRetries = 3;
 
       while (retries < maxRetries) {
         try {
-          visits = await this.fetchVisitsTimeWindow(itemId, days);
+          const endpoint = `/items/${itemId}/visits/time_window`;
+          const url = `${ML_API_BASE}${endpoint}`;
+          
+          console.log(`[ML-VISITS-BACKFILL] [${requestId}] Chamando API: ${endpoint} itemId=${itemId} last=${days} unit=day`);
+
+          const response = await axios.get<VisitsTimeWindowResponse>(url, {
+            headers: { Authorization: `Bearer ${this.accessToken}` },
+            params: {
+              last: days,
+              unit: 'day',
+            },
+          });
+
+          const visitsData = response.data.visits || [];
+          apiCallSuccess = true;
+
+          // Criar mapa de visitas por data (YYYY-MM-DD)
+          for (const visitData of visitsData) {
+            const visitDate = new Date(visitData.date);
+            visitDate.setHours(0, 0, 0, 0);
+            const dateKey = visitDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            visitsMap.set(dateKey, visitData.visits);
+          }
+
+          console.log(`[ML-VISITS-BACKFILL] [${requestId}] API resposta: statusCode=${response.status} itemId=${itemId} count=${visitsData.length} idsRetornados`);
+
           break; // Sucesso
         } catch (error) {
           if (axios.isAxiosError(error)) {
             const status = error.response?.status;
+            const endpoint = `/items/${itemId}/visits/time_window`;
 
             // 401/403: abortar (problema de autenticação)
             if (status === 401 || status === 403) {
-              const errorMsg = `Erro de autenticação (${status}) para itemId ${itemId}`;
+              const errorMsg = `Erro de autenticação (${status}) para itemId ${itemId} endpoint=${endpoint}`;
               result.errors.push(errorMsg);
               console.error(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg}`);
-              return;
+              // Mesmo com erro de auth, vamos gravar NULL para todos os dias
+              apiCallSuccess = false;
+              break;
             }
 
             // 429/5xx: backoff e retry
@@ -779,129 +823,88 @@ export class MercadoLivreVisitsService {
               retries++;
               if (retries < maxRetries) {
                 const backoffMs = Math.min(1000 * Math.pow(2, retries), 10000); // Exponential backoff, max 10s
-                console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro ${status} para itemId ${itemId}, retry ${retries}/${maxRetries} após ${backoffMs}ms`);
+                console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro ${status} para itemId ${itemId} endpoint=${endpoint}, retry ${retries}/${maxRetries} após ${backoffMs}ms`);
                 await new Promise(resolve => setTimeout(resolve, backoffMs));
                 continue;
               }
             }
 
-            // Outros erros: log e continuar (visits = null)
-            console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro ${status} para itemId ${itemId}, visits será null`);
-            visits = []; // Array vazio = visits será null
+            // Outros erros: log, adicionar em errors e continuar (visits = null para todos os dias)
+            const errorMsg = `Erro ${status || 'unknown'} para itemId ${itemId} endpoint=${endpoint}`;
+            result.errors.push(errorMsg);
+            console.log(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg} - visits será NULL para todos os dias`);
+            apiCallSuccess = false;
             break;
           }
 
-          // Erro não-Axios: log e continuar
-          console.log(`[ML-VISITS-BACKFILL] [${requestId}] Erro não-Axios para itemId ${itemId}:`, error instanceof Error ? error.message : 'Erro desconhecido');
-          visits = []; // Array vazio = visits será null
+          // Erro não-Axios: log, adicionar em errors e continuar
+          const errorMsg = `Erro não-Axios para itemId ${itemId}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+          result.errors.push(errorMsg);
+          console.log(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg} - visits será NULL para todos os dias`);
+          apiCallSuccess = false;
           break;
         }
       }
 
-      // Se não conseguiu buscar visitas após retries, visits = null
-      if (visits.length === 0 && retries >= maxRetries) {
-        // Criar/atualizar métricas com visits = null para cada dia do range
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        for (let dayOffset = 0; dayOffset < days; dayOffset++) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - dayOffset);
-
-          const existing = await prisma.listingMetricsDaily.findUnique({
-            where: {
-              tenant_id_listing_id_date: {
-                tenant_id: this.tenantId,
-                listing_id: listing.id,
-                date,
-              },
-            },
-          });
-
-          if (existing) {
-            // Update: apenas visits = null (não sobrescrever outros campos)
-            await prisma.listingMetricsDaily.update({
-              where: { id: existing.id },
-              data: {
-                visits: null,
-                source: 'ml_visits_api_daily',
-              },
-            });
-            result.rowsUpserted++;
-            result.rowsWithNull++;
-          } else {
-            // Create: visits = null
-            await prisma.listingMetricsDaily.create({
-              data: {
-                tenant_id: this.tenantId,
-                listing_id: listing.id,
-                date,
-                visits: null,
-                source: 'ml_visits_api_daily',
-                orders: 0,
-                gmv: 0,
-                impressions: null,
-                clicks: null,
-                ctr: null,
-                conversion: null,
-              },
-            });
-            result.rowsUpserted++;
-            result.rowsWithNull++;
-          }
-        }
-        return;
+      // Se não conseguiu buscar visitas após retries, visitsMap já está vazio (NULL para todos)
+      if (!apiCallSuccess && retries >= maxRetries) {
+        console.log(`[ML-VISITS-BACKFILL] [${requestId}] Falha ao buscar visitas após ${maxRetries} retries para itemId ${itemId} - gravando NULL para todos os dias`);
       }
 
-      // Processar visitas retornadas (granular por dia)
-      for (const visitData of visits) {
-        const visitDate = new Date(visitData.date);
-        visitDate.setHours(0, 0, 0, 0);
+      // Processar TODOS os dias do range (sempre fazer UPSERT)
+      let itemRowsWithNull = 0;
+      for (const date of dateRange) {
+        const dateKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+        const visitsCount = visitsMap.get(dateKey); // undefined se não retornou da API
+        
+        // Se não tem visita na resposta da API, gravar NULL (nunca 0)
+        const visitsValue = visitsCount !== undefined ? visitsCount : null;
 
-        const existing = await prisma.listingMetricsDaily.findUnique({
+        // UPSERT usando upsert do Prisma
+        await prisma.listingMetricsDaily.upsert({
           where: {
             tenant_id_listing_id_date: {
               tenant_id: this.tenantId,
               listing_id: listing.id,
-              date: visitDate,
+              date,
             },
+          },
+          create: {
+            tenant_id: this.tenantId,
+            listing_id: listing.id,
+            date,
+            visits: visitsValue, // Pode ser número ou NULL
+            source: 'visits_api',
+            period_days: 1,
+            orders: 0,
+            gmv: 0,
+            impressions: null,
+            clicks: null,
+            ctr: null,
+            conversion: null,
+          },
+          update: {
+            visits: visitsValue, // Atualiza visits (pode ser número ou NULL)
+            source: 'visits_api',
+            period_days: 1,
           },
         });
 
-        if (existing) {
-          // Update: apenas visits e source
-          await prisma.listingMetricsDaily.update({
-            where: { id: existing.id },
-            data: {
-              visits: visitData.visits,
-              source: 'ml_visits_api_daily',
-            },
-          });
-          result.rowsUpserted++;
-        } else {
-          // Create: visits, date, source
-          await prisma.listingMetricsDaily.create({
-            data: {
-              tenant_id: this.tenantId,
-              listing_id: listing.id,
-              date: visitDate,
-              visits: visitData.visits,
-              source: 'ml_visits_api_daily',
-              orders: 0,
-              gmv: 0,
-              impressions: null,
-              clicks: null,
-              ctr: null,
-              conversion: null,
-            },
-          });
-          result.rowsUpserted++;
+        // Contar linhas gravadas
+        result.rowsUpserted++;
+
+        // Se visits é NULL, contar em rowsWithNull
+        if (visitsValue === null) {
+          result.rowsWithNull++;
+          itemRowsWithNull++;
         }
       }
+
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Processado itemId=${itemId} dias=${days} rowsUpserted=${days} rowsWithNull=${itemRowsWithNull}`);
     } catch (error) {
       const errorMsg = `Erro ao processar itemId ${itemId}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
       result.errors.push(errorMsg);
-      console.error(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg}`);
+      console.error(`[ML-VISITS-BACKFILL] [${requestId}] ${errorMsg}`, error);
     }
   }
 }
