@@ -310,6 +310,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           const dataQualityForActions: DataQuality = {
             performanceAvailable: result.dataQuality.performanceAvailable,
             visitsCoverage: result.dataQuality.visitsCoverage,
+            videoStatusKnown: listing.has_video !== null, // false quando has_video = null (não detectável via API)
           };
           const actionPlan = generateActionPlan(
             result.score.score.breakdown,
@@ -376,6 +377,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const dataQualityForActions: DataQuality = {
           performanceAvailable: scoreResult.dataQuality.performanceAvailable,
           visitsCoverage: scoreResult.dataQuality.visitsCoverage,
+          videoStatusKnown: listing.has_video !== null, // false quando has_video = null (não detectável via API)
         };
         const actionPlan = generateActionPlan(
           scoreResult.score.breakdown,
