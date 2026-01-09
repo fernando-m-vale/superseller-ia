@@ -7,6 +7,7 @@
 
 import { IAScoreBreakdown } from './IAScoreService';
 import { DataQuality } from './ScoreActionEngine';
+import { getMediaVerdict } from '../utils/media-verdict';
 
 export interface MediaInfo {
   hasVideo: boolean | null; // null = indisponível via API
@@ -36,49 +37,43 @@ export function explainScore(
     explanations.push('Cadastro está completo (20/20 pontos).');
   }
 
-  // Mídia (0-20) - Regras atualizadas para respeitar has_video null e pictures_count alto
+  // Mídia (0-20) - Usar MediaVerdict como fonte única de verdade
   const midiaLost = 20 - scoreBreakdown.midia;
   if (midiaLost > 0) {
     const picturesCount = mediaInfo?.picturesCount ?? 0;
     const hasVideo = mediaInfo?.hasVideo;
+    const verdict = getMediaVerdict(hasVideo ?? null, picturesCount);
     
-    // Construir explicação baseada em dados reais
+    // Construir explicação baseada no MediaVerdict
     const reasons: string[] = [];
     
-    // Verificar vídeo/clips
-    if (hasVideo === true) {
-      // Tem vídeo, não mencionar falta de vídeo
-      // Se tem vídeo mas poucas imagens, mencionar apenas imagens
+    // Se tem vídeo detectado, não mencionar falta de vídeo
+    if (verdict.hasVideoDetected === true) {
+      // Tem vídeo, só mencionar imagens se necessário
       if (picturesCount < 6) {
         reasons.push(`poucas imagens (${picturesCount})`);
-      } else if (picturesCount >= 6) {
-        // Tem vídeo e imagens suficientes - não deveria ter perda de pontos, mas se tiver, não mencionar
-        // (caso raro, mas proteção)
       }
-    } else if (hasVideo === false) {
-      // Não tem vídeo (certeza)
+    } else if (verdict.hasVideoDetected === false) {
+      // Não tem vídeo (certeza) - pode mencionar
       reasons.push('não ter clips/vídeo');
       if (picturesCount < 6) {
         reasons.push(`poucas imagens (${picturesCount})`);
       }
     } else {
-      // hasVideo === null: não detectável via API
+      // hasVideo === null: usar mensagem do verdict (sempre condicional)
       if (picturesCount >= 8) {
-        // Muitas imagens, só mencionar vídeo/clips como não detectável
         explanations.push(
           `Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. ` +
-          `Fotos estão boas (${picturesCount}), mas não foi possível confirmar via API se há clips/vídeo; valide no painel do Mercado Livre.`
+          `Fotos estão boas (${picturesCount}), mas ${verdict.message.toLowerCase()}`
         );
       } else if (picturesCount >= 6) {
-        // Imagens suficientes
         explanations.push(
           `Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. ` +
-          `Imagens estão suficientes (${picturesCount}), mas não foi possível confirmar via API se há clips/vídeo; valide no painel do Mercado Livre.`
+          `Imagens estão suficientes (${picturesCount}), mas ${verdict.message.toLowerCase()}`
         );
       } else {
-        // Poucas imagens + vídeo não detectável
         reasons.push(`poucas imagens (${picturesCount})`);
-        reasons.push('não foi possível confirmar via API se há clips/vídeo (valide no painel do Mercado Livre)');
+        reasons.push(verdict.message.toLowerCase());
       }
     }
     
@@ -90,11 +85,12 @@ export function explainScore(
       explanations.push(`Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia por ${reasonText}.`);
     }
   } else if (scoreBreakdown.midia === 20) {
-    // Score máximo - verificar se tem vídeo para mensagem mais específica
+    // Score máximo - usar MediaVerdict para mensagem
     const picturesCount = mediaInfo?.picturesCount ?? 0;
     const hasVideo = mediaInfo?.hasVideo;
+    const verdict = getMediaVerdict(hasVideo ?? null, picturesCount);
     
-    if (hasVideo === true && picturesCount >= 6) {
+    if (verdict.hasVideoDetected === true && picturesCount >= 6) {
       explanations.push('Mídia está forte: fotos e clips/vídeo presentes.');
     } else if (picturesCount >= 8) {
       explanations.push(`Mídia está boa em fotos (${picturesCount}).`);

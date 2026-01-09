@@ -66,6 +66,13 @@ interface AIAnalysisApiResponse {
     priority: 'high' | 'medium' | 'low'
   }>
   scoreExplanation?: string[]
+  // MediaVerdict - Fonte única de verdade para mídia
+  mediaVerdict?: {
+    hasVideoDetected: boolean | null
+    canSuggestVideo: boolean
+    message: string
+    shortMessage: string
+  }
 }
 
 // Interface adaptada para o frontend
@@ -128,6 +135,13 @@ export interface AIAnalysisResponse {
     priority: 'high' | 'medium' | 'low'
   }>
   scoreExplanation?: string[]
+  // MediaVerdict - Fonte única de verdade para mídia
+  mediaVerdict?: {
+    hasVideoDetected: boolean | null
+    canSuggestVideo: boolean
+    message: string
+    shortMessage: string
+  }
 }
 
 /**
@@ -160,6 +174,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     // IA Score V2 - Onda 1
     actionPlan: apiResponse.actionPlan,
     scoreExplanation: apiResponse.scoreExplanation,
+    // MediaVerdict - Fonte única de verdade para mídia
+    mediaVerdict: apiResponse.mediaVerdict,
   }
 }
 

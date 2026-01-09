@@ -9,6 +9,7 @@ import OpenAI from 'openai';
 import { PrismaClient, Listing, RecommendationType, RecommendationStatus } from '@prisma/client';
 import { AIAnalyzeInputV1 } from '../types/ai-analyze-input';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
+import { getMediaVerdict } from '../utils/media-verdict';
 
 const prisma = new PrismaClient();
 
@@ -79,18 +80,28 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
    - Só sugerir "adicionar mais imagens" se media.imageCount <= 5 (realmente baixo)
    - NUNCA invente "limite máximo do ML" no texto
    - Se media.imageCount é alto mas score de mídia baixo, focar em vídeo/clips, não em imagens
-8. SOBRE VÍDEO E CLIPS (CRÍTICO - NUNCA VIOLAR):
-   - VÍDEO (media.hasVideo):
-     * Se media.hasVideo === true → NÃO sugerir "Adicionar vídeo" (já tem vídeo)
-     * Se media.hasVideo === false → PODE sugerir "Adicionar vídeo", mas SEM mencionar clips
-     * Se media.hasVideo === null → NÃO afirmar ausência, usar texto condicional: "Caso o anúncio não possua vídeo, adicionar pode melhorar conversão"
-     * Vídeo é detectável via API /items (video_id, videos[])
+8. SOBRE VÍDEO E CLIPS (CRÍTICO - NUNCA VIOLAR - USAR media.mediaVerdict):
+   - O payload inclui media.mediaVerdict que é a FONTE ÚNICA DE VERDADE sobre vídeo/clips
+   - media.mediaVerdict.canSuggestVideo:
+     * Se false → PROIBIDO sugerir "Adicionar vídeo" (já tem vídeo OU não detectável)
+     * Se true → PODE sugerir "Adicionar vídeo" (certeza de ausência)
+   - media.mediaVerdict.hasVideoDetected:
+     * true → Anúncio TEM vídeo detectado via API (NUNCA sugerir adicionar)
+     * false → Anúncio NÃO tem vídeo (certeza, pode sugerir)
+     * null → Não detectável via API (NUNCA afirmar ausência, usar linguagem condicional)
+   - media.mediaVerdict.message:
+     * Use esta mensagem como referência para explicar o status do vídeo
+     * NUNCA contradiga esta mensagem
+   - REGRAS OBRIGATÓRIAS:
+     * Se media.mediaVerdict.canSuggestVideo === false → NUNCA criar hack "Adicionar vídeo"
+     * Se media.mediaVerdict.hasVideoDetected === null → SEMPRE usar linguagem condicional
+     * Se media.mediaVerdict.hasVideoDetected === true → SEMPRE afirmar presença, nunca sugerir adicionar
    - CLIPS (media.hasClips):
      * Se media.hasClips === true → pode sugerir otimizar clips (thumb, roteiro, benefícios)
      * Se media.hasClips === false → sugerir adicionar clips (com certeza de ausência)
      * Se media.hasClips === null → PROIBIDO afirmar ausência. Use: "Clips não detectável via API; valide no painel do Mercado Livre. Se você ainda não tiver clips, inclua..."
      * Clips NÃO são detectáveis via API /items (por isso pode ser null)
-   - DIFERENCIAÇÃO OBRIGATÓRIA:
+   - DIFERENCIAÇÃO OBRIGATÓRIO:
      * Vídeo: conteúdo de vídeo do anúncio (detectável via API)
      * Clips: conteúdo curto (NÃO detectável via API atual)
      * NUNCA misturar ou confundir os dois conceitos
@@ -166,10 +177,11 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
     - Se media.imageCount >= 8 → NÃO criar hack "Adicionar mais imagens" (já tem muitas)
     - Se media.imageCount >= 12 → NÃO mencionar quantidade de imagens, focar em qualidade/variação se necessário
     - Só sugerir "adicionar mais imagens" se media.imageCount <= 5
-  * REGRAS PARA VÍDEO/CLIPS (OBRIGATÓRIAS):
-    - Se media.hasVideo === true → NÃO criar hack "Adicionar vídeo" (já tem)
-    - Se media.hasVideo === false → PODE criar hack "Adicionar vídeo", mas SEM mencionar clips
-    - Se media.hasVideo === null → NÃO criar hack categórico, usar texto condicional: "Caso o anúncio não possua vídeo, adicionar pode melhorar conversão"
+  * REGRAS PARA VÍDEO/CLIPS (OBRIGATÓRIAS - USAR media.mediaVerdict):
+    - Se media.mediaVerdict.canSuggestVideo === false → NÃO criar hack "Adicionar vídeo" (já tem OU não detectável)
+    - Se media.mediaVerdict.canSuggestVideo === true → PODE criar hack "Adicionar vídeo" (certeza de ausência)
+    - Se media.mediaVerdict.hasVideoDetected === null → Hack deve usar linguagem condicional baseada em media.mediaVerdict.message
+    - Se media.mediaVerdict.hasVideoDetected === true → NUNCA criar hack sobre vídeo (já tem)
     - Se media.hasClips === null → Hack deve dizer: "Verifique clips no painel do Mercado Livre; API não detecta automaticamente. Se você ainda não tiver clips, inclua..." (NUNCA afirmar ausência)
     - Se media.hasClips === false → Hack pode dizer "Publicar clips pode aumentar engajamento" (certeza de ausência)
     - Se media.hasClips === true → Hack pode dizer "Melhorar clips (thumb, roteiro, benefícios)"
@@ -374,6 +386,9 @@ export class OpenAIService {
     const hasVideo = listing.has_video; // null quando não sabemos (tri-state)
     const hasClips = listing.has_clips ?? null; // null = desconhecido/não detectável via API
     const videoCount = hasVideo === true ? 1 : 0;
+    
+    // Gerar MediaVerdict - Fonte única de verdade
+    const mediaVerdict = getMediaVerdict(hasVideo, imageCount);
 
     // Build data quality assessment
     const missing: string[] = [];
@@ -458,6 +473,7 @@ export class OpenAIService {
         hasVideo,
         hasClips,
         videoCount,
+        mediaVerdict, // Fonte única de verdade para decisões sobre vídeo/clips
       },
       performance: {
         periodDays,

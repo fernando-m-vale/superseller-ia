@@ -237,6 +237,7 @@ function AIAnalysisTab({
         seoSuggestions={analysis.seoSuggestions}
         marketplace={marketplace}
         listingIdExt={listingIdExt}
+        mediaVerdict={analysis.mediaVerdict}
       />
 
       {/* Informação da Análise (Modelo e Data) */}
@@ -248,7 +249,7 @@ function AIAnalysisTab({
         </CardContent>
       </Card>
 
-      {/* Informações de Mídia */}
+      {/* Informações de Mídia - Usar MediaVerdict como fonte única de verdade */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Informações de Mídia</CardTitle>
@@ -257,17 +258,32 @@ function AIAnalysisTab({
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Clips (vídeo):</span>
-            {hasVideo === null ? (
-              <Badge variant="outline" className="border-yellow-500 text-yellow-700">
-                Não detectável via API
+            {analysis.mediaVerdict ? (
+              <Badge 
+                variant={analysis.mediaVerdict.hasVideoDetected === true ? 'default' : 'outline'} 
+                className={analysis.mediaVerdict.hasVideoDetected === true ? 'bg-green-600' : analysis.mediaVerdict.hasVideoDetected === null ? 'border-yellow-500 text-yellow-700' : ''}
+              >
+                {analysis.mediaVerdict.shortMessage}
               </Badge>
             ) : (
-              <Badge variant={hasVideo ? 'default' : 'secondary'} className={hasVideo ? 'bg-green-600' : ''}>
-                {hasVideo ? 'Sim' : 'Não'}
-              </Badge>
+              // Fallback para compatibilidade (não deveria acontecer)
+              hasVideo === null ? (
+                <Badge variant="outline" className="border-yellow-500 text-yellow-700">
+                  Não detectável via API
+                </Badge>
+              ) : (
+                <Badge variant={hasVideo ? 'default' : 'secondary'} className={hasVideo ? 'bg-green-600' : ''}>
+                  {hasVideo ? 'Sim' : 'Não'}
+                </Badge>
+              )
             )}
           </div>
-          {hasVideo === null && (
+          {analysis.mediaVerdict && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {analysis.mediaVerdict.message}
+            </p>
+          )}
+          {!analysis.mediaVerdict && hasVideo === null && (
             <p className="text-xs text-muted-foreground mt-2">
               💡 Valide no painel do Mercado Livre; a API não detecta clips automaticamente.
             </p>

@@ -45,6 +45,13 @@ export interface AIAnalyzeInputMedia {
   hasVideo: boolean | null; // null = indisponível via API (tri-state: true/false/null)
   hasClips: boolean | null; // null = desconhecido/não detectável via API
   videoCount: number;
+  // MediaVerdict - Fonte única de verdade para decisões sobre vídeo/clips
+  mediaVerdict?: {
+    hasVideoDetected: boolean | null;
+    canSuggestVideo: boolean;
+    message: string;
+    shortMessage: string;
+  };
 }
 
 /**

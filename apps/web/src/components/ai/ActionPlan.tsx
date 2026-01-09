@@ -22,6 +22,13 @@ interface SEOSuggestions {
   description?: string
 }
 
+interface MediaVerdict {
+  hasVideoDetected: boolean | null
+  canSuggestVideo: boolean
+  message: string
+  shortMessage: string
+}
+
 interface ActionPlanProps {
   actionPlan?: ActionPlanItem[]
   onActionClick?: (action: ActionPlanItem) => void
@@ -31,6 +38,7 @@ interface ActionPlanProps {
   permalinkUrl?: string
   marketplace?: 'shopee' | 'mercadolivre'
   listingIdExt?: string
+  mediaVerdict?: MediaVerdict
 }
 
 const DIMENSION_NAMES: Record<string, string> = {
@@ -56,6 +64,7 @@ export function ActionPlan({
   permalinkUrl,
   marketplace,
   listingIdExt,
+  mediaVerdict,
 }: ActionPlanProps) {
   const [selectedAction, setSelectedAction] = useState<ActionPlanItem | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -205,6 +214,7 @@ export function ActionPlan({
         listingTitle={listingTitle}
         seoSuggestions={seoSuggestions}
         permalinkUrl={mercadoLivreUrl || permalinkUrl}
+        mediaVerdict={mediaVerdict}
       />
     </>
   )

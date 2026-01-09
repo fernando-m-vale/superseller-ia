@@ -15,6 +15,7 @@ import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../u
 import { PrismaClient, Prisma } from '@prisma/client';
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
+import { getMediaVerdict } from '../utils/media-verdict';
 
 const prisma = new PrismaClient();
 
@@ -329,6 +330,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               picturesCount: listing.pictures_count,
             }
           );
+          
+          // Gerar MediaVerdict para incluir na resposta
+          const mediaVerdict = getMediaVerdict(listing.has_video, listing.pictures_count);
 
           request.log.info(
             {
@@ -367,6 +371,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               // IA Score V2: Action Plan and Score Explanation
               actionPlan,
               scoreExplanation,
+              // MediaVerdict - Fonte única de verdade para mídia
+              mediaVerdict,
             },
           });
         }
@@ -404,6 +410,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             picturesCount: listing.pictures_count,
           }
         );
+        
+        // Gerar MediaVerdict para incluir na resposta
+        const mediaVerdict = getMediaVerdict(listing.has_video, listing.pictures_count);
 
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',
@@ -424,6 +433,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // IA Score V2: Action Plan and Score Explanation
             actionPlan,
             scoreExplanation,
+            // MediaVerdict - Fonte única de verdade para mídia
+            mediaVerdict,
           },
         });
       } catch (error) {

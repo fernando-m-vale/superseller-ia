@@ -36,6 +36,13 @@ interface SEOSuggestions {
   description?: string
 }
 
+interface MediaVerdict {
+  hasVideoDetected: boolean | null
+  canSuggestVideo: boolean
+  message: string
+  shortMessage: string
+}
+
 interface ActionModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -44,6 +51,7 @@ interface ActionModalProps {
   listingTitle?: string
   seoSuggestions?: SEOSuggestions
   permalinkUrl?: string
+  mediaVerdict?: MediaVerdict
 }
 
 const DIMENSION_NAMES: Record<ActionDimension, string> = {
@@ -62,6 +70,7 @@ export function ActionModal({
   listingTitle,
   seoSuggestions,
   permalinkUrl,
+  mediaVerdict,
 }: ActionModalProps) {
   const [copiedField, setCopiedField] = useState<'title' | 'description' | null>(null)
 
@@ -100,15 +109,34 @@ export function ActionModal({
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
-            <Video className="h-5 w-5 text-primary mt-0.5" />
-            <div>
-              <p className="font-medium text-sm">Clips e Videos</p>
-              <p className="text-xs text-muted-foreground">
-                Verifique no painel do Mercado Livre se seu anuncio possui clips ou video. Videos aumentam a conversao em ate 40%.
-              </p>
+          {/* Clips e Videos - Usar MediaVerdict como fonte única de verdade */}
+          {mediaVerdict && (
+            <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+              <Video className="h-5 w-5 text-primary mt-0.5" />
+              <div>
+                <p className="font-medium text-sm">Clips e Videos</p>
+                <p className="text-xs text-muted-foreground">
+                  {mediaVerdict.message}
+                </p>
+                {mediaVerdict.hasVideoDetected === null && (
+                  <p className="text-xs text-muted-foreground mt-1 italic">
+                    Valide no painel do Mercado Livre; a API não detecta clips automaticamente.
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
+          )}
+          {!mediaVerdict && (
+            <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
+              <Video className="h-5 w-5 text-primary mt-0.5" />
+              <div>
+                <p className="font-medium text-sm">Clips e Videos</p>
+                <p className="text-xs text-muted-foreground">
+                  Verifique no painel do Mercado Livre se seu anúncio possui clips ou vídeo. Vídeos aumentam a conversão em até 40%.
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
             <CheckCircle2 className="h-5 w-5 text-primary mt-0.5" />
             <div>
