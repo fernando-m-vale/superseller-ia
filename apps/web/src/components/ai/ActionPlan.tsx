@@ -90,9 +90,9 @@ export function ActionPlan({
     }
   }
 
-  // Construir URL do Mercado Livre se aplicável
+  // Construir URL do Mercado Livre se aplicável (modo edit para painel do vendedor)
   const mercadoLivreUrl = marketplace === 'mercadolivre' 
-    ? buildMercadoLivreListingUrl(listingIdExt || null, permalinkUrl || null)
+    ? buildMercadoLivreListingUrl(listingIdExt || null, permalinkUrl || null, 'edit')
     : null
 
   return (
@@ -215,6 +215,8 @@ export function ActionPlan({
         seoSuggestions={seoSuggestions}
         permalinkUrl={mercadoLivreUrl || permalinkUrl}
         mediaVerdict={mediaVerdict}
+        listingIdExt={listingIdExt}
+        marketplace={marketplace}
       />
     </>
   )

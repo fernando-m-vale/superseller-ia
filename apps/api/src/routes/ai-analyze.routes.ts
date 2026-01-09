@@ -331,8 +331,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }
           );
           
+          // DEBUG: Log mediaInfo antes de gerar MediaVerdict
+          const mediaInfo = {
+            hasVideo: listing.has_video,
+            hasClips: listing.has_clips,
+            picturesCount: listing.pictures_count,
+          };
+          request.log.info(
+            {
+              listingId,
+              listingIdExt: listing.listing_id_ext,
+              marketplace: listing.marketplace,
+              mediaInfo,
+            },
+            '[MEDIA-VERDICT-DEBUG] MediaInfo antes de gerar MediaVerdict'
+          );
+          
           // Gerar MediaVerdict para incluir na resposta
           const mediaVerdict = getMediaVerdict(listing.has_video, listing.pictures_count);
+          
+          // DEBUG: Log MediaVerdict result
+          request.log.info(
+            {
+              listingId,
+              listingIdExt: listing.listing_id_ext,
+              mediaVerdict,
+            },
+            '[MEDIA-VERDICT-DEBUG] MediaVerdict gerado'
+          );
 
           request.log.info(
             {
@@ -411,8 +437,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           }
         );
         
+        // DEBUG: Log mediaInfo antes de gerar MediaVerdict
+        const mediaInfo = {
+          hasVideo: listing.has_video,
+          hasClips: listing.has_clips,
+          picturesCount: listing.pictures_count,
+        };
+        request.log.info(
+          {
+            listingId,
+            listingIdExt: listing.listing_id_ext,
+            marketplace: listing.marketplace,
+            mediaInfo,
+          },
+          '[MEDIA-VERDICT-DEBUG] MediaInfo antes de gerar MediaVerdict (cache)'
+        );
+        
         // Gerar MediaVerdict para incluir na resposta
         const mediaVerdict = getMediaVerdict(listing.has_video, listing.pictures_count);
+        
+        // DEBUG: Log MediaVerdict result
+        request.log.info(
+          {
+            listingId,
+            listingIdExt: listing.listing_id_ext,
+            mediaVerdict,
+          },
+          '[MEDIA-VERDICT-DEBUG] MediaVerdict gerado (cache)'
+        );
 
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',

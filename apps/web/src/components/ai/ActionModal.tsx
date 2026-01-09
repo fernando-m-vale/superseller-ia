@@ -71,6 +71,8 @@ export function ActionModal({
   seoSuggestions,
   permalinkUrl,
   mediaVerdict,
+  listingIdExt,
+  marketplace,
 }: ActionModalProps) {
   const [copiedField, setCopiedField] = useState<'title' | 'description' | null>(null)
 
@@ -87,11 +89,26 @@ export function ActionModal({
   }
 
   const handleOpenListing = () => {
+    // Prioridade: usar permalinkUrl se disponível (já vem com mode='edit' do ActionPlan)
     if (permalinkUrl) {
       window.open(permalinkUrl, '_blank', 'noopener,noreferrer')
+    } else if (marketplace === 'mercadolivre' && listingIdExt) {
+      // Construir URL de edição usando listingIdExt
+      const numericId = listingIdExt.startsWith('MLB') 
+        ? listingIdExt.replace(/^MLB/, '')
+        : listingIdExt.match(/^\d+$/) 
+        ? listingIdExt 
+        : null;
+      
+      if (numericId) {
+        window.open(`https://www.mercadolivre.com.br/anuncios/MLB${numericId}/modificar/bomni`, '_blank', 'noopener,noreferrer')
+      } else {
+        console.warn('[ACTION-MODAL] listingIdExt inválido:', listingIdExt)
+      }
     } else if (listingId) {
-      // Fallback: construct ML URL from listing ID
-      window.open(`https://www.mercadolivre.com.br/p/${listingId}`, '_blank', 'noopener,noreferrer')
+      // Fallback: tentar com listingId interno (pode não funcionar)
+      console.warn('[ACTION-MODAL] Usando listingId interno como fallback (pode não funcionar):', listingId)
+      window.open(`https://www.mercadolivre.com.br/anuncios/${listingId}/modificar/bomni`, '_blank', 'noopener,noreferrer')
     }
   }
 
