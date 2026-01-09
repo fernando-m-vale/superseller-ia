@@ -1,0 +1,63 @@
+[33mcommit 1222b0073d24fdc073672fc496b9ce0073dcb0f5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: fernando-m-vale <femvale@gmail.com>
+Date:   Fri Jan 9 15:50:06 2026 -0300
+
+    fix(confidence): enforce media single source of truth
+    
+    Implementa ONDA 3.2.1 - Hotfix Confiança: MediaVerdict como fonte única de verdade
+    
+    BACKEND:
+    - Criado apps/api/src/utils/media-verdict.ts (MediaVerdict utilitário)
+    - ScoreExplanationService usa MediaVerdict
+    - ScoreActionEngine usa MediaVerdict
+    - OpenAIService inclui MediaVerdict no payload e prompt
+    - API retorna mediaVerdict na resposta de /ai/analyze/:listingId
+    - Prompt LLM atualizado para usar media.mediaVerdict (proibido afirmar ausência quando null)
+    
+    FRONTEND:
+    - Tipo AIAnalysisResponse atualizado com mediaVerdict
+    - ActionModal usa mediaVerdict.message (não faz lógica própria)
+    - ActionPlan recebe e passa mediaVerdict para ActionModal
+    - Informações de Mídia usa mediaVerdict.shortMessage e message
+    - Removida lógica de decisão sobre vídeo no frontend (apenas renderiza verdict)
+    
+    TESTES:
+    - Criado apps/api/src/__tests__/media-verdict.test.ts
+    - Testa hasVideo=true, false, null
+    - Valida canSuggestVideo e mensagens
+    
+    REGRAS GARANTIDAS:
+    - hasVideo=true → canSuggestVideo=false, nunca sugerir vídeo
+    - hasVideo=false → canSuggestVideo=true, pode sugerir
+    - hasVideo=null → canSuggestVideo=false, sempre linguagem condicional
+    - Nenhum texto contraditório em UI, IA ou Action Plan
+    - Zero afirmações falsas detectáveis
+    
+    Arquivos alterados:
+    - apps/api/src/utils/media-verdict.ts (novo)
+    - apps/api/src/services/ScoreExplanationService.ts
+    - apps/api/src/services/ScoreActionEngine.ts
+    - apps/api/src/services/OpenAIService.ts
+    - apps/api/src/types/ai-analyze-input.ts
+    - apps/api/src/routes/ai-analyze.routes.ts
+    - apps/api/src/__tests__/media-verdict.test.ts (novo)
+    - apps/web/src/hooks/use-ai-analyze.ts
+    - apps/web/src/components/ai/ActionModal.tsx
+    - apps/web/src/components/ai/ActionPlan.tsx
+    - apps/web/src/components/listings-table.tsx
+    
+    Build: pnpm --filter @superseller/api build ✅
+    Build: pnpm --filter web build ✅
+
+ apps/api/src/__tests__/media-verdict.test.ts     |  83 [32m+++++++++++++++++[m
+ apps/api/src/routes/ai-analyze.routes.ts         |  11 [32m+++[m
+ apps/api/src/services/OpenAIService.ts           |  38 [32m+++++[m[31m---[m
+ apps/api/src/services/ScoreActionEngine.ts       |  42 [32m++++[m[31m-----[m
+ apps/api/src/services/ScoreExplanationService.ts |  36 [32m++++[m[31m----[m
+ apps/api/src/types/ai-analyze-input.ts           |   7 [32m++[m
+ apps/api/src/utils/media-verdict.ts              | 110 [32m+++++++++++++++++++++++[m
+ apps/web/src/components/ai/ActionModal.tsx       |  44 [32m+++++++[m[31m--[m
+ apps/web/src/components/ai/ActionPlan.tsx        |  10 [32m+++[m
+ apps/web/src/components/listings-table.tsx       |  32 [32m+++++[m[31m--[m
+ apps/web/src/hooks/use-ai-analyze.ts             |  16 [32m++++[m
+ 11 files changed, 359 insertions(+), 70 deletions(-)
