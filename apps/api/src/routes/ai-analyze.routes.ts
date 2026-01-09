@@ -13,6 +13,8 @@ import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError } from '../utils/sanitize-error';
 import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { generateActionPlan, DataQuality } from '../services/ScoreActionEngine';
+import { explainScore } from '../services/ScoreExplanationService';
 
 const prisma = new PrismaClient();
 
@@ -304,6 +306,21 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             request.log.warn({ err: cacheError, listingId, fingerprint: fingerprint.substring(0, 16) + '...' }, 'Failed to save AI analysis to cache');
           }
 
+          // Generate action plan and score explanation (IA Score V2)
+          const dataQualityForActions: DataQuality = {
+            performanceAvailable: result.dataQuality.performanceAvailable,
+            visitsCoverage: result.dataQuality.visitsCoverage,
+          };
+          const actionPlan = generateActionPlan(
+            result.score.score.breakdown,
+            dataQualityForActions,
+            result.score.score.potential_gain
+          );
+          const scoreExplanation = explainScore(
+            result.score.score.breakdown,
+            dataQualityForActions
+          );
+
           request.log.info(
             {
               requestId,
@@ -317,6 +334,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               completenessScore: result.dataQuality.completenessScore,
               cacheHit: false,
               fingerprint: fingerprint.substring(0, 16) + '...',
+              actionPlanCount: actionPlan.length,
             },
             'AI analysis complete (cache miss)'
           );
@@ -337,6 +355,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               metrics30d: result.score.metrics_30d,
               dataQuality: result.dataQuality,
               cacheHit: false,
+              // IA Score V2: Action Plan and Score Explanation
+              actionPlan,
+              scoreExplanation,
             },
           });
         }
@@ -349,6 +370,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             message: 'Erro ao recuperar análise em cache',
           });
         }
+
+        // Generate action plan and score explanation (IA Score V2)
+        // Use fresh scoreResult for actionPlan since it's based on current score
+        const dataQualityForActions: DataQuality = {
+          performanceAvailable: scoreResult.dataQuality.performanceAvailable,
+          visitsCoverage: scoreResult.dataQuality.visitsCoverage,
+        };
+        const actionPlan = generateActionPlan(
+          scoreResult.score.breakdown,
+          dataQualityForActions,
+          scoreResult.score.potential_gain
+        );
+        const scoreExplanation = explainScore(
+          scoreResult.score.breakdown,
+          dataQualityForActions
+        );
 
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',
@@ -366,6 +403,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             metrics30d: scoreResult.metrics_30d,
             dataQuality: scoreResult.dataQuality,
             cacheHit: true,
+            // IA Score V2: Action Plan and Score Explanation
+            actionPlan,
+            scoreExplanation,
           },
         });
       } catch (error) {
