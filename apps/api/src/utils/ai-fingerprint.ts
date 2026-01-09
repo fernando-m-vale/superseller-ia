@@ -4,6 +4,9 @@
  * Generates SHA256 fingerprints for AI analysis caching.
  * The fingerprint is based on listing data, metrics, and prompt version
  * to determine if a cached analysis can be reused.
+ * 
+ * IMPORTANT: The fingerprint must be deterministic and stable.
+ * Do NOT include volatile fields like timestamps, requestId, or runtime info.
  */
 
 import { createHash } from 'crypto';
@@ -13,9 +16,12 @@ export const PROMPT_VERSION = 'ai-v1.2';
 
 /**
  * Data structure for fingerprint generation
+ * 
+ * NOTE: updated_at is intentionally excluded as it's volatile and doesn't affect analysis content.
+ * The analysis should be the same regardless of when the listing was last updated.
  */
 export interface FingerprintInput {
-  // Listing fields that affect analysis
+  // Listing fields that affect analysis (NO volatile timestamps)
   listing: {
     title: string;
     price: number;
@@ -24,7 +30,7 @@ export interface FingerprintInput {
     has_video: boolean | null;
     status: string;
     stock: number;
-    updated_at: string; // ISO date string
+    // updated_at is intentionally excluded - it's volatile and doesn't affect analysis
   };
   // Metrics that affect analysis
   metrics: {
@@ -41,15 +47,52 @@ export interface FingerprintInput {
 }
 
 /**
+ * Stable stringify that sorts keys recursively to ensure deterministic output.
+ * Arrays are kept in their original order (they should already be stable).
+ * 
+ * @param obj - Object to stringify
+ * @returns Deterministic JSON string
+ */
+function stableStringify(obj: unknown): string {
+  if (obj === null || obj === undefined) {
+    return JSON.stringify(obj);
+  }
+
+  if (typeof obj === 'string' || typeof obj === 'number' || typeof obj === 'boolean') {
+    return JSON.stringify(obj);
+  }
+
+  if (Array.isArray(obj)) {
+    // Arrays are kept in order - they should already be stable
+    const items = obj.map(item => stableStringify(item));
+    return `[${items.join(',')}]`;
+  }
+
+  if (typeof obj === 'object') {
+    // Sort keys recursively for objects
+    const sortedKeys = Object.keys(obj).sort();
+    const pairs = sortedKeys.map(key => {
+      const value = (obj as Record<string, unknown>)[key];
+      return `${JSON.stringify(key)}:${stableStringify(value)}`;
+    });
+    return `{${pairs.join(',')}}`;
+  }
+
+  return JSON.stringify(obj);
+}
+
+/**
  * Generates a SHA256 fingerprint from the input data.
  * The fingerprint is deterministic - same input always produces same output.
+ * 
+ * Uses stable stringify to ensure keys are sorted consistently.
  * 
  * @param input - The data to generate fingerprint from
  * @returns SHA256 hash string (64 characters)
  */
 export function generateFingerprint(input: FingerprintInput): string {
-  // Create a deterministic JSON string (sorted keys)
-  const data = JSON.stringify({
+  // Create a deterministic JSON string with sorted keys
+  const data = stableStringify({
     listing: {
       title: input.listing.title,
       price: input.listing.price,
@@ -58,7 +101,7 @@ export function generateFingerprint(input: FingerprintInput): string {
       has_video: input.listing.has_video,
       status: input.listing.status,
       stock: input.listing.stock,
-      updated_at: input.listing.updated_at,
+      // updated_at is intentionally excluded - it's volatile
     },
     metrics: {
       orders: input.metrics.orders,
@@ -92,7 +135,7 @@ export function buildFingerprintInput(
     has_video: boolean | null;
     status: string;
     stock: number;
-    updated_at: Date;
+    updated_at: Date; // Received but not included in fingerprint
   },
   metrics: {
     orders: number;
@@ -118,7 +161,7 @@ export function buildFingerprintInput(
       has_video: listing.has_video,
       status: listing.status,
       stock: listing.stock,
-      updated_at: listing.updated_at.toISOString(),
+      // updated_at is intentionally excluded - it's volatile and doesn't affect analysis
     },
     metrics: {
       orders: metrics.orders,
