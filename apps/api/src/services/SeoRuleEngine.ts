@@ -805,9 +805,33 @@ export class SeoRuleEngine {
   // UTILITY METHODS
   // ============================================================
 
+  /**
+   * Extrai texto puro de uma string que pode conter HTML.
+   * 
+   * NOTA: Este método é usado apenas para análise de texto (contagem de caracteres,
+   * detecção de padrões). NÃO é usado para sanitização de HTML para renderização.
+   * O output da SEO Rule Engine é dados estruturados (SeoAnalysis), não HTML.
+   * 
+   * Usa abordagem iterativa para garantir remoção completa de tags HTML,
+   * evitando problemas com tags aninhadas ou malformadas.
+   */
   private stripHtml(html: string): string {
     if (!html) return '';
-    return html.replace(/<[^>]*>/g, '').trim();
+    
+    let result = html;
+    let previousResult = '';
+    
+    // Iteratively remove HTML tags until no more changes occur
+    // This handles nested tags and malformed HTML safely
+    while (result !== previousResult) {
+      previousResult = result;
+      result = result.replace(/<[^>]*>/g, '');
+    }
+    
+    // Also remove any remaining angle brackets that might be part of incomplete tags
+    result = result.replace(/[<>]/g, '');
+    
+    return result.trim();
   }
 }
 
