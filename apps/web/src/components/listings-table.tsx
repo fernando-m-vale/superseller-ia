@@ -30,6 +30,9 @@ import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AIAnalysisResponse } from '@/hooks/use-ai-analyze'
+import { ScoreBreakdown } from '@/components/ai/ScoreBreakdown'
+import { ScoreExplanation } from '@/components/ai/ScoreExplanation'
+import { ActionPlan } from '@/components/ai/ActionPlan'
 
 // Componente da aba de Análise IA
 function AIAnalysisTab({
@@ -145,62 +148,17 @@ function AIAnalysisTab({
   // Estado com análise
   if (!analysis) return null
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600'
-    if (score >= 60) return 'text-blue-600'
-    if (score >= 40) return 'text-yellow-600'
-    return 'text-red-600'
-  }
-
-  const getScoreBgColor = (score: number) => {
-    if (score >= 80) return 'bg-green-100'
-    if (score >= 60) return 'bg-blue-100'
-    if (score >= 40) return 'bg-yellow-100'
-    return 'bg-red-100'
-  }
-
-  // Máximos por dimensão
-  const maxScores: Record<string, number> = {
-    cadastro: 20,
-    midia: 20,
-    performance: 30,
-    seo: 20,
-    competitividade: 10,
-  };
-
-  // Encontrar maior gargalo (menor % relativo no breakdown)
-  const breakdown = analysis.scoreBreakdown;
-  const potentialGain = analysis.potentialGain;
-
-  // Calcular menor % relativo (gargalo)
-  const lowestDimension = breakdown ? (() => {
-    let minKey = 'cadastro';
-    let minValue = breakdown.cadastro;
-    let minPercent = (breakdown.cadastro / maxScores.cadastro) * 100;
-    
-    Object.entries(breakdown).forEach(([key, value]) => {
-      const maxScore = maxScores[key] || 100;
-      const percent = maxScore > 0 ? (value / maxScore) * 100 : 0;
-      if (percent < minPercent) {
-        minKey = key;
-        minValue = value;
-        minPercent = percent;
-      }
-    });
-    
-    return [minKey, minValue, minPercent] as [string, number, number];
-  })() : null;
 
   return (
     <div className="space-y-6">
       {/* Cache Status Banner */}
       {analysis.cacheHit && (
-        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-2">
-          <div className="flex items-center gap-2 text-blue-700 text-sm">
+        <div className="flex items-center justify-between bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg px-4 py-2">
+          <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300 text-sm">
             <CheckCircle2 className="h-4 w-4" />
             <span>Análise atual (cache)</span>
             {analysis.analyzedAt && (
-              <span className="text-blue-500 text-xs">
+              <span className="text-blue-500 dark:text-blue-400 text-xs">
                 - Gerada em {new Date(analysis.analyzedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
@@ -216,119 +174,64 @@ function AIAnalysisTab({
               }
             }}
             disabled={isLoading}
-            className="text-blue-700 border-blue-300 hover:bg-blue-100"
+            className="text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 hover:bg-blue-100 dark:hover:bg-blue-900/20"
           >
             <Sparkles className="h-3 w-3 mr-1" />
-            Atualizar
+            Atualizar análise
           </Button>
         </div>
       )}
 
-      {/* Score IA */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">IA Score</CardTitle>
-            <Badge className={`${getScoreBgColor(analysis.score)} ${getScoreColor(analysis.score)} text-lg font-bold px-4 py-1`}>
-              {analysis.score}/100
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Barra principal */}
-          <div className="w-full bg-muted rounded-full h-3 mb-4">
-            <div
-              className={`h-3 rounded-full transition-all ${
-                analysis.score >= 80
-                  ? 'bg-green-600'
-                  : analysis.score >= 60
-                  ? 'bg-blue-600'
-                  : analysis.score >= 40
-                  ? 'bg-yellow-600'
-                  : 'bg-red-600'
-              }`}
-              style={{ width: `${analysis.score}%` }}
-            />
-          </div>
+      {/* IA Score V2 - Onda 2: Score Breakdown */}
+      <ScoreBreakdown
+        score={analysis.score}
+        scoreBreakdown={analysis.scoreBreakdown}
+        dataQuality={analysis.dataQuality}
+      />
 
-          {/* Breakdown por dimensão */}
-          {breakdown && (
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold">Breakdown por Dimensão</h4>
-              {Object.entries(breakdown).map(([dimension, score]) => {
-                const maxScore = maxScores[dimension] || 100;
-                // Garantir clamp: score nunca pode passar do max
-                const clampedScore = Math.min(score, maxScore);
-                const percentage = maxScore > 0 ? (clampedScore / maxScore) * 100 : 0;
-                const gain = potentialGain?.[dimension as keyof typeof potentialGain];
-                const isLowest = lowestDimension && lowestDimension[0] === dimension;
-
-                return (
-                  <div key={dimension} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-medium capitalize">
-                        {dimension === 'cadastro' ? '📝 Cadastro' :
-                         dimension === 'midia' ? '🖼️ Mídia' :
-                         dimension === 'performance' ? '📈 Performance' :
-                         dimension === 'seo' ? '🔍 SEO' :
-                         '🏆 Competitividade'}
-                        {isLowest && <span className="ml-2 text-orange-600 font-bold">(Maior Gargalo)</span>}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className={percentage < 50 ? 'text-red-600' : percentage < 70 ? 'text-yellow-600' : 'text-green-600'}>
-                          {clampedScore}/{maxScore}
-                        </span>
-                        {gain && (
-                          <Badge variant="outline" className="text-xs text-green-600 border-green-600">
-                            +{gain}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          percentage >= 70
-                            ? 'bg-green-600'
-                            : percentage >= 50
-                            ? 'bg-yellow-600'
-                            : 'bg-red-600'
-                        }`}
-                        style={{ width: `${Math.min(100, percentage)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Performance Indisponível - Aviso Neutro */}
+      {analysis.dataQuality?.performanceAvailable === false && (
+        <Card className="border-gray-200 dark:border-gray-800">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3 text-sm">
+              <AlertCircle className="h-5 w-5 text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <p className="text-foreground font-medium">
+                  Dados de performance indisponíveis via API do Mercado Livre.
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  A dimensão de Performance não pôde ser avaliada por indisponibilidade de dados via API.
+                </p>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    // Placeholder: link para entender por quê
+                    console.log('[PERFORMANCE-UNAVAILABLE] Link clicado: Entenda por quê')
+                  }}
+                  className="text-xs text-primary hover:underline mt-2 inline-block"
+                >
+                  Entenda por quê
+                </a>
+              </div>
             </div>
-          )}
+          </CardContent>
+        </Card>
+      )}
 
-          {/* Insight automático */}
-          {lowestDimension && breakdown && (
-            <div className="mt-4 p-3 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-md">
-              <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
-                💡 Maior Gargalo: {lowestDimension[0] === 'cadastro' ? 'Cadastro' :
-                                   lowestDimension[0] === 'midia' ? 'Mídia' :
-                                   lowestDimension[0] === 'performance' ? 'Performance' :
-                                   lowestDimension[0] === 'seo' ? 'SEO' :
-                                   'Competitividade'} ({lowestDimension[1]}/{maxScores[lowestDimension[0]] || 0}) - {lowestDimension[2]?.toFixed(0) || 0}%
-              </p>
-              <p className="text-xs text-orange-700 dark:text-orange-300 mt-1">
-                Foque em melhorar esta dimensão para aumentar o score geral mais rapidamente.
-              </p>
-            </div>
-          )}
+      {/* IA Score V2 - Onda 2: Score Explanation */}
+      <ScoreExplanation
+        scoreExplanation={analysis.scoreExplanation}
+        scoreBreakdown={analysis.scoreBreakdown}
+      />
 
-          {/* Fallback se breakdown estiver incompleto */}
-          {!breakdown && (
-            <div className="mt-4 p-3 bg-muted rounded-md">
-              <p className="text-sm text-muted-foreground">
-                Breakdown de score não disponível. Score geral: {analysis.score}/100
-              </p>
-            </div>
-          )}
+      {/* IA Score V2 - Onda 2: Action Plan */}
+      <ActionPlan actionPlan={analysis.actionPlan} />
 
-          <p className="text-xs text-muted-foreground pt-2 border-t">
+      {/* Informação da Análise (Modelo e Data) */}
+      <Card className="bg-muted/50">
+        <CardContent className="pt-6">
+          <p className="text-xs text-muted-foreground text-center">
             Análise gerada em {new Date(analysis.analyzedAt).toLocaleString('pt-BR')} usando {analysis.model}
           </p>
         </CardContent>

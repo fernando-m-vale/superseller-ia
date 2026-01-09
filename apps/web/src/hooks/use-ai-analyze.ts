@@ -57,6 +57,15 @@ interface AIAnalysisApiResponse {
     }
   }
   cacheHit?: boolean
+  // IA Score V2 - Onda 1
+  actionPlan?: Array<{
+    dimension: 'cadastro' | 'midia' | 'performance' | 'seo' | 'competitividade'
+    lostPoints: number
+    whyThisMatters: string
+    expectedScoreAfterFix: number
+    priority: 'high' | 'medium' | 'low'
+  }>
+  scoreExplanation?: string[]
 }
 
 // Interface adaptada para o frontend
@@ -110,6 +119,15 @@ export interface AIAnalysisResponse {
     }
   }
   cacheHit?: boolean
+  // IA Score V2 - Onda 1
+  actionPlan?: Array<{
+    dimension: 'cadastro' | 'midia' | 'performance' | 'seo' | 'competitividade'
+    lostPoints: number
+    whyThisMatters: string
+    expectedScoreAfterFix: number
+    priority: 'high' | 'medium' | 'low'
+  }>
+  scoreExplanation?: string[]
 }
 
 /**
@@ -139,6 +157,9 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     metrics30d: apiResponse.metrics30d,
     dataQuality: apiResponse.dataQuality,
     cacheHit: apiResponse.cacheHit,
+    // IA Score V2 - Onda 1
+    actionPlan: apiResponse.actionPlan,
+    scoreExplanation: apiResponse.scoreExplanation,
   }
 }
 
