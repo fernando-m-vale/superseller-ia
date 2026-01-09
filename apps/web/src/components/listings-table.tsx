@@ -33,6 +33,7 @@ import type { AIAnalysisResponse } from '@/hooks/use-ai-analyze'
 import { ScoreBreakdown } from '@/components/ai/ScoreBreakdown'
 import { ScoreExplanation } from '@/components/ai/ScoreExplanation'
 import { ActionPlan } from '@/components/ai/ActionPlan'
+import { PerformanceUnavailableModal } from '@/components/ai/PerformanceUnavailableModal'
 
 // Componente da aba de Análise IA
 function AIAnalysisTab({
@@ -45,6 +46,7 @@ function AIAnalysisTab({
   copiedText,
   onCopy,
   hasVideo,
+  listingId,
 }: {
   analysis: AIAnalysisResponse | null
   isLoading: boolean
@@ -55,6 +57,7 @@ function AIAnalysisTab({
   copiedText: string | null
   onCopy: (text: string) => void
   hasVideo?: boolean | null
+  listingId?: string
 }) {
   const loadingMessages = [
     'Analisando concorrentes...',
@@ -63,6 +66,7 @@ function AIAnalysisTab({
     'Gerando insights personalizados...',
   ]
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
+  const [performanceModalOpen, setPerformanceModalOpen] = useState(false)
 
   useEffect(() => {
     if (isLoading) {
@@ -202,17 +206,13 @@ function AIAnalysisTab({
                 <p className="text-muted-foreground text-xs">
                   A dimensão de Performance não pôde ser avaliada por indisponibilidade de dados via API.
                 </p>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    // Placeholder: link para entender por quê
-                    console.log('[PERFORMANCE-UNAVAILABLE] Link clicado: Entenda por quê')
-                  }}
-                  className="text-xs text-primary hover:underline mt-2 inline-block"
+                <button
+                  type="button"
+                  onClick={() => setPerformanceModalOpen(true)}
+                  className="text-xs text-primary hover:underline mt-2 inline-block cursor-pointer"
                 >
                   Entenda por quê
-                </a>
+                </button>
               </div>
             </div>
           </CardContent>
@@ -226,7 +226,13 @@ function AIAnalysisTab({
       />
 
       {/* IA Score V2 - Onda 2: Action Plan */}
-      <ActionPlan actionPlan={analysis.actionPlan} />
+      {/* Onda 3: Botão "Melhorar agora" com modal contextual */}
+      <ActionPlan 
+        actionPlan={analysis.actionPlan}
+        listingId={listingId}
+        listingTitle={currentTitle}
+        seoSuggestions={analysis.seoSuggestions}
+      />
 
       {/* Informação da Análise (Modelo e Data) */}
       <Card className="bg-muted/50">
@@ -383,6 +389,12 @@ function AIAnalysisTab({
           </CardContent>
         </Card>
       )}
+
+      {/* Modal: Entenda por quê (Performance Indisponível) */}
+      <PerformanceUnavailableModal
+        open={performanceModalOpen}
+        onOpenChange={setPerformanceModalOpen}
+      />
     </div>
   )
 }
@@ -736,6 +748,7 @@ export function ListingsTable() {
                   })
                 }}
                 hasVideo={data?.items.find(l => l.id === selectedListingId)?.hasVideo}
+                listingId={selectedListingId || undefined}
               />
             </TabsContent>
           </Tabs>

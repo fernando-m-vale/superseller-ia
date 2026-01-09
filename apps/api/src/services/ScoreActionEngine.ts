@@ -22,6 +22,7 @@ export interface ActionPlanItem {
 
 export interface DataQuality {
   performanceAvailable: boolean;
+  videoStatusKnown?: boolean; // false quando has_video = null (não detectável via API)
   visitsCoverage?: {
     filledDays: number;
     totalDays: number;

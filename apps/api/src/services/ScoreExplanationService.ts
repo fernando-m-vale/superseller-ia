@@ -30,12 +30,24 @@ export function explainScore(
   }
 
   // Mídia (0-20)
+  // IMPORTANTE: videoStatusKnown = false significa que has_video = null (não detectável via API)
+  // Nesse caso, não afirmar ausência de vídeo/clips
   const midiaLost = 20 - scoreBreakdown.midia;
   if (midiaLost > 0) {
-    if (midiaLost >= 10) {
-      explanations.push(`Você perdeu ${midiaLost} pontos em Mídia por não utilizar vídeo ou clips e ter poucas imagens.`);
+    if (dataQuality.videoStatusKnown === false) {
+      // Não sabemos se tem vídeo - usar linguagem condicional
+      if (midiaLost >= 10) {
+        explanations.push(`Você perdeu ${midiaLost} pontos em Mídia. Verifique no painel do Mercado Livre se seu anúncio possui vídeo ou clips, e considere adicionar mais imagens.`);
+      } else {
+        explanations.push(`Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. Revise suas imagens e verifique vídeos/clips no painel do Mercado Livre.`);
+      }
     } else {
-      explanations.push(`Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. Adicionar mais imagens ou vídeo pode melhorar o engajamento.`);
+      // Sabemos o status do vídeo - usar linguagem assertiva
+      if (midiaLost >= 10) {
+        explanations.push(`Você perdeu ${midiaLost} pontos em Mídia por não utilizar vídeo ou clips e ter poucas imagens.`);
+      } else {
+        explanations.push(`Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. Adicionar mais imagens ou vídeo pode melhorar o engajamento.`);
+      }
     }
   } else if (scoreBreakdown.midia === 20) {
     explanations.push('Mídia está completa (20/20 pontos).');
