@@ -59,3 +59,10 @@ IA explicável, insights acionáveis e base para monetização.
 - Usuário confia nos dados
 - UX clara e honesta
 - Produto pronto para piloto real
+
+
+## Próxima Épica
+- IA Score V2 (valor real + monetização)
+- Competitive Intelligence
+- Ads Intelligence
+- AI Automations

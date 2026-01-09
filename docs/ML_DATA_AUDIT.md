@@ -4,6 +4,12 @@
 **Status:** OFICIAL — PRIORIDADE ZERO  
 **Última atualização:** 2026-01-08  
 
+Este documento garante a confiabilidade dos dados que alimentam:
+- IA Score V2
+- Benchmark competitivo
+- Ads Intelligence
+
+
 ---
 
 ## 0) Regras-mãe (não negociáveis)
