@@ -21,13 +21,18 @@ import {
   Store,
   TrendingDown,
   AlertCircle,
-  Database
+  Database,
+  Globe,
+  Building2,
+  Search,
+  Megaphone,
+  BarChart
 } from 'lucide-react'
 
 export default function HomePage() {
   const router = useRouter()
 
-  return (
+    return (
     <div className="min-h-screen bg-background -mx-4 md:-mx-8">
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-purple-50 dark:to-purple-950/20 pt-24 pb-16 md:pt-32 md:pb-24">
@@ -42,7 +47,7 @@ export default function HomePage() {
               <span className="text-primary">IA</span>
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
-              Aumente suas vendas e melhor seu ROI com análises inteligentes e recomendações automáticas
+              Aumente suas vendas e melhore seu ROI com análises inteligentes e recomendações automáticas
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
               <Button 
@@ -249,6 +254,73 @@ export default function HomePage() {
                   </p>
                 </CardContent>
               </Card>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Visão / Roadmap */}
+      <section className="py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                Uma plataforma, todos os marketplaces
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                O SuperSeller IA está sendo construído para ser sua central de crescimento em marketplaces — hoje no Mercado Livre, e em breve em outros canais.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card">
+                <ShoppingBag className="h-5 w-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Mercado Livre</div>
+                  <Badge variant="default" className="mt-1">ativo</Badge>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card opacity-75">
+                <Store className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Shopee</div>
+                  <Badge variant="secondary" className="mt-1">em breve</Badge>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card opacity-75">
+                <Building2 className="h-5 w-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Amazon</div>
+                  <Badge variant="secondary" className="mt-1">em breve</Badge>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card opacity-75">
+                <Globe className="h-5 w-5 text-purple-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Magalu</div>
+                  <Badge variant="secondary" className="mt-1">em breve</Badge>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card opacity-60">
+                <Search className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Análise de concorrência</div>
+                  <Badge variant="outline" className="mt-1">roadmap</Badge>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card opacity-60">
+                <Megaphone className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Inteligência de publicidade e Ads</div>
+                  <Badge variant="outline" className="mt-1">roadmap</Badge>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-lg border bg-card opacity-60 md:col-span-2 lg:col-span-1">
+                <BarChart className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <div className="font-semibold">Comparação de performance entre canais</div>
+                  <Badge variant="outline" className="mt-1">roadmap</Badge>
+                </div>
+              </div>
             </div>
           </div>
         </div>
