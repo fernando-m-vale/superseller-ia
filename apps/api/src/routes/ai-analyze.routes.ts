@@ -12,7 +12,9 @@ import { IAScoreService } from '../services/IAScoreService';
 import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError } from '../utils/sanitize-error';
 import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
-import { prisma } from '../config/prisma';
+import { PrismaClient, Prisma } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 interface RequestWithAuth extends FastifyRequest {
   userId?: string;
@@ -200,7 +202,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const fingerprint = generateFingerprint(fingerprintInput);
 
         // Step 4: Check cache (unless forceRefresh)
-        let cachedResult: {
+        type CachedAnalysisResult = {
           analysis: {
             score: number;
             critique: string;
@@ -210,7 +212,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             model: string;
           };
           savedRecommendations: number;
-        } | null = null;
+        };
+
+        let cachedResult: CachedAnalysisResult | null = null;
 
         if (!forceRefresh) {
           const cached = await prisma.listingAIAnalysis.findFirst({
@@ -222,8 +226,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           });
 
-          if (cached) {
-            cachedResult = cached.result_json as typeof cachedResult;
+          if (cached && cached.result_json) {
+            cachedResult = cached.result_json as CachedAnalysisResult;
             
             request.log.info(
               {
@@ -272,7 +276,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                     model: result.analysis.model,
                   },
                   savedRecommendations: result.savedRecommendations,
-                },
+                } as unknown as Prisma.InputJsonValue,
                 updated_at: new Date(),
               },
               create: {
@@ -292,7 +296,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                     model: result.analysis.model,
                   },
                   savedRecommendations: result.savedRecommendations,
-                },
+                } as unknown as Prisma.InputJsonValue,
               },
             });
           } catch (cacheError) {
@@ -338,6 +342,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Step 7: Return cached result
+        if (!cachedResult) {
+          // This should never happen due to the check above, but TypeScript needs it
+          return reply.status(500).send({
+            error: 'Internal Server Error',
+            message: 'Erro ao recuperar análise em cache',
+          });
+        }
+
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',
           data: {
