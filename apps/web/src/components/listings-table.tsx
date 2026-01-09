@@ -46,7 +46,12 @@ function AIAnalysisTab({
   copiedText,
   onCopy,
   hasVideo,
+<<<<<<< HEAD
   listingId,
+=======
+  marketplace,
+  listingIdExt,
+>>>>>>> b1d208b (ONDA 3.1: Hotfix UX + Regras de Mídia + Link correto ML)
 }: {
   analysis: AIAnalysisResponse | null
   isLoading: boolean
@@ -57,7 +62,12 @@ function AIAnalysisTab({
   copiedText: string | null
   onCopy: (text: string) => void
   hasVideo?: boolean | null
+<<<<<<< HEAD
   listingId?: string
+=======
+  marketplace?: 'shopee' | 'mercadolivre'
+  listingIdExt?: string
+>>>>>>> b1d208b (ONDA 3.1: Hotfix UX + Regras de Mídia + Link correto ML)
 }) {
   const loadingMessages = [
     'Analisando concorrentes...',
@@ -226,12 +236,19 @@ function AIAnalysisTab({
       />
 
       {/* IA Score V2 - Onda 2: Action Plan */}
+<<<<<<< HEAD
       {/* Onda 3: Botão "Melhorar agora" com modal contextual */}
       <ActionPlan 
         actionPlan={analysis.actionPlan}
         listingId={listingId}
         listingTitle={currentTitle}
         seoSuggestions={analysis.seoSuggestions}
+=======
+      <ActionPlan 
+        actionPlan={analysis.actionPlan}
+        marketplace={marketplace}
+        listingIdExt={listingIdExt}
+>>>>>>> b1d208b (ONDA 3.1: Hotfix UX + Regras de Mídia + Link correto ML)
       />
 
       {/* Informação da Análise (Modelo e Data) */}
@@ -748,7 +765,12 @@ export function ListingsTable() {
                   })
                 }}
                 hasVideo={data?.items.find(l => l.id === selectedListingId)?.hasVideo}
+<<<<<<< HEAD
                 listingId={selectedListingId || undefined}
+=======
+                marketplace={data?.items.find(l => l.id === selectedListingId)?.marketplace}
+                listingIdExt={data?.items.find(l => l.id === selectedListingId)?.listingIdExt}
+>>>>>>> b1d208b (ONDA 3.1: Hotfix UX + Regras de Mídia + Link correto ML)
               />
             </TabsContent>
           </Tabs>

@@ -74,6 +74,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         scoreBreakdown: listing.score_breakdown ?? undefined, // Detalhamento do score
         hasVideo: listing.has_video, // null quando não sabemos (tri-state: true/false/null)
         hasClips: listing.has_clips ?? null, // null = desconhecido/não detectável via API
+        listingIdExt: listing.listing_id_ext, // ID externo do marketplace (ex: MLB3923303743)
         createdAt: listing.created_at,
         updatedAt: listing.updated_at,
       }));

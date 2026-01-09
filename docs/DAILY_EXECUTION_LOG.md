@@ -1,49 +1,40 @@
-# DAILY EXECUTION LOG — 2026-01-08
+# DAILY EXECUTION LOG — 2026-01-09
 
 ## 🎯 Foco do dia
-Encerrar PRIORIDADE ZERO e alinhar IA, UX e pipeline com a realidade da API do Mercado Livre.
-
----
+IA Score V2 — Onda 3 (fechar ciclo Insight → Confiança → Ação)
 
 ## ✅ Planejado
-- [x] Corrigir backfill de Visits (linhas sempre criadas)
-- [x] Garantir NULL semântico
-- [x] Ajustar dashboard para dados parciais
-- [x] Corrigir mistura de dados no modal de IA
-- [x] Unificar mídia em “Clips (vídeo)”
-- [x] Implementar cache de análise IA
-- [x] Alinhar IA com dados indisponíveis
-- [x] Iniciar Landing Page pública
-
----
+- [x] Implementar Onda 3 (UX + Semântica + Ação contextual)
+- [x] Validar cache de IA (fingerprint determinístico)
+- [x] Hardening de UX (troca de anúncio, cache, force refresh)
+- [x] Review funcional completo da IA Score V2
 
 ## 🧠 Descobertas
-- Visits API retorna **zero dados** mesmo com permissão ativa
-- Isso é limitação do ML, não bug
-- IA estava penalizando injustamente performance
-- Cache de IA é essencial para custo e UX
-- Clips e vídeo devem ser tratados como uma coisa só
-- UX honesta aumenta confiança mesmo sem dados completos
+- A arquitetura do IA Score V2 está sólida e escalável.
+- Cache por fingerprint funciona corretamente após remoção de campos voláteis.
+- Performance indisponível via API pode ser comunicada sem penalizar score (boa UX).
+- Detecção de vídeo/clips via API do Mercado Livre é **incompleta**:
+  - has_video = null não significa ausência.
+  - UI e IA **não podem afirmar ausência** quando API não confirma.
+- “Poder agir” (Action Plan) é o maior salto de valor percebido até agora.
 
----
+## ⚠️ Problemas encontrados
+- IA/ScoreExplanation ainda afirmavam:
+  - “falta vídeo/clips” mesmo quando anúncio possui clips no ML.
+  - “poucas imagens” mesmo quando anúncio está no limite máximo.
+- Botão “Abrir anúncio no Mercado Livre” abria a home, não o anúncio correto.
+- Necessidade de alinhar **toda linguagem** à confiabilidade real dos dados.
 
 ## 📌 Decisões tomadas
-- Performance só existe se visitsCoverage > 0
-- IA nunca conclui ausência sem evidência
-- Cache por fingerprint é padrão
-- Landing Page vira peça estratégica de confiança
-- PRIORIDADE ZERO considerada encerrada
-
----
-
-## ⚠️ Pendências
-- Build quebrado da PR #78 (IA + cache)
-- Ajustar tipagem TS no backend
-- Validar migration manual
-
----
+- Onda 3 foi corretamente implementada pelo Devin (merge OK).
+- Correções finas (semântica + UX + links) foram isoladas como **ONDA 3.1**.
+- ONDA 3.1 será executada pelo **Cursor** (escopo cirúrgico).
+- Devin volta apenas na próxima grande épica (Automações / Onda 4).
 
 ## ➡️ Próximo passo claro
-- Corrigir build da PR #78
-- Finalizar Landing Page
-- Entrar na fase de IA com valor real
+- Revisar PR da ONDA 3.1 do Cursor.
+- Validar:
+  - regras de mídia (vídeo/imagens),
+  - link correto do anúncio no Mercado Livre,
+  - coerência total entre dados, score e ação.
+- Avançar para planejamento da Onda 4 (Automações Assistidas).

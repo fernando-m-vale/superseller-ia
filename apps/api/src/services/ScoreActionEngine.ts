@@ -31,6 +31,11 @@ export interface DataQuality {
   warnings?: string[];
 }
 
+export interface MediaInfo {
+  hasVideo: boolean | null; // null = indisponível via API
+  picturesCount: number | null;
+}
+
 /**
  * Máximos por dimensão (baseado na documentação IA_SCORE_V2.md)
  */
@@ -59,12 +64,14 @@ const WHY_THIS_MATTERS_BASE: Record<ActionDimension, string> = {
  * @param scoreBreakdown - Breakdown do score por dimensão
  * @param dataQuality - Qualidade e disponibilidade dos dados
  * @param potentialGain - Potencial de ganho por dimensão (opcional, para contexto)
+ * @param mediaInfo - Informações de mídia para evitar ações incorretas (opcional)
  * @returns Array de ações priorizadas e ordenadas
  */
 export function generateActionPlan(
   scoreBreakdown: IAScoreBreakdown,
   dataQuality: DataQuality,
-  potentialGain?: IAScorePotentialGain
+  potentialGain?: IAScorePotentialGain,
+  mediaInfo?: MediaInfo
 ): ActionPlanItem[] {
   const actions: ActionPlanItem[] = [];
 
@@ -86,6 +93,29 @@ export function generateActionPlan(
       continue;
     }
 
+    // MÍDIA: Regras especiais para não gerar ações incorretas
+    if (dimension === 'midia') {
+      const hasVideo = mediaInfo?.hasVideo;
+      const picturesCount = mediaInfo?.picturesCount ?? 0;
+      
+      // Se has_video === true, não sugerir adicionar vídeo
+      if (hasVideo === true) {
+        // Se tem vídeo e muitas imagens, pode não ter ação de mídia
+        if (picturesCount >= 8) {
+          // Mídia está completa, não gerar ação
+          continue;
+        }
+        // Se tem vídeo mas poucas imagens, ainda pode ter ação (mas não mencionar vídeo)
+      }
+      
+      // Se pictures_count é alto (>= 8), não sugerir "adicionar mais imagens"
+      // Mas ainda pode ter ação se falta vídeo (hasVideo === false)
+      if (picturesCount >= 8 && hasVideo === true) {
+        // Mídia completa, não gerar ação
+        continue;
+      }
+    }
+
     // Calcular score esperado após correção (assumindo recuperar todos os pontos perdidos)
     const expectedScoreAfterFix = Math.min(maxScore, currentScore + lostPoints);
 
@@ -100,7 +130,12 @@ export function generateActionPlan(
     }
 
     // Gerar whyThisMatters baseado na dimensão e contexto
-    const whyThisMatters = generateWhyThisMatters(dimension, dataQuality, potentialGain?.[dimension]);
+    const whyThisMatters = generateWhyThisMatters(
+      dimension, 
+      dataQuality, 
+      potentialGain?.[dimension],
+      mediaInfo
+    );
 
     actions.push({
       dimension,
@@ -133,12 +168,14 @@ export function generateActionPlan(
  * @param dimension - Dimensão da ação
  * @param dataQuality - Qualidade dos dados (para casos especiais)
  * @param potentialGain - Potencial de ganho da dimensão (opcional)
+ * @param mediaInfo - Informações de mídia para explicações precisas (opcional)
  * @returns Texto explicativo
  */
 function generateWhyThisMatters(
   dimension: ActionDimension,
   dataQuality: DataQuality,
-  potentialGain?: string
+  potentialGain?: string,
+  mediaInfo?: MediaInfo
 ): string {
   // Caso especial: performance indisponível (não deve chegar aqui, mas proteção)
   if (dimension === 'performance' && !dataQuality.performanceAvailable) {
@@ -147,6 +184,37 @@ function generateWhyThisMatters(
 
   // Texto base
   let text = WHY_THIS_MATTERS_BASE[dimension];
+
+  // MÍDIA: Ajustar texto baseado em dados reais
+  if (dimension === 'midia') {
+    const hasVideo = mediaInfo?.hasVideo;
+    const picturesCount = mediaInfo?.picturesCount ?? 0;
+    
+    // Se has_video === true, não mencionar falta de vídeo
+    if (hasVideo === true) {
+      if (picturesCount >= 8) {
+        // Mídia completa, não deveria chegar aqui, mas proteção
+        text = 'Mídia está completa com fotos e vídeo.';
+      } else {
+        // Tem vídeo mas poucas imagens
+        text = 'Anúncios com mais imagens tendem a gerar maior engajamento e conversão.';
+      }
+    } else if (hasVideo === false) {
+      // Não tem vídeo (certeza)
+      if (picturesCount >= 8) {
+        text = 'Anúncios com clips/vídeo tendem a gerar maior engajamento e conversão.';
+      } else {
+        text = 'Anúncios com mídia mais completa (fotos e clips/vídeo) tendem a gerar maior engajamento e conversão.';
+      }
+    } else {
+      // hasVideo === null: não detectável via API
+      if (picturesCount >= 8) {
+        text = 'Anúncios com clips/vídeo tendem a gerar maior engajamento. Não foi possível confirmar via API se há clips/vídeo; valide no painel do Mercado Livre.';
+      } else {
+        text = 'Anúncios com mídia mais completa tendem a gerar maior engajamento e conversão. Não foi possível confirmar via API se há clips/vídeo; valide no painel do Mercado Livre.';
+      }
+    }
+  }
 
   // Adicionar contexto de potencial de ganho se disponível
   if (potentialGain) {

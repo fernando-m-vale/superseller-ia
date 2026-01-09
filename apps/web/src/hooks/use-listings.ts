@@ -39,6 +39,7 @@ export interface Listing {
   recommendationsCount?: number // Quantidade de recomendações pendentes
   hasVideo?: boolean // Tem vídeo? (baseado em video_id/videos do payload)
   hasClips?: boolean | null // Tem clips? (null = desconhecido/não detectável via API)
+  listingIdExt?: string // ID externo do marketplace (ex: MLB3923303743)
 }
 
 export interface ListingsResponse {

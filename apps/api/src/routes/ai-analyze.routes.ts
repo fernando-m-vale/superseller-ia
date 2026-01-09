@@ -13,7 +13,7 @@ import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError } from '../utils/sanitize-error';
 import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
 import { PrismaClient, Prisma } from '@prisma/client';
-import { generateActionPlan, DataQuality } from '../services/ScoreActionEngine';
+import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
 
 const prisma = new PrismaClient();
@@ -315,11 +315,19 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           const actionPlan = generateActionPlan(
             result.score.score.breakdown,
             dataQualityForActions,
-            result.score.score.potential_gain
+            result.score.score.potential_gain,
+            {
+              hasVideo: listing.has_video,
+              picturesCount: listing.pictures_count,
+            }
           );
           const scoreExplanation = explainScore(
             result.score.score.breakdown,
-            dataQualityForActions
+            dataQualityForActions,
+            {
+              hasVideo: listing.has_video,
+              picturesCount: listing.pictures_count,
+            }
           );
 
           request.log.info(
@@ -382,11 +390,19 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const actionPlan = generateActionPlan(
           scoreResult.score.breakdown,
           dataQualityForActions,
-          scoreResult.score.potential_gain
+          scoreResult.score.potential_gain,
+          {
+            hasVideo: listing.has_video,
+            picturesCount: listing.pictures_count,
+          }
         );
         const scoreExplanation = explainScore(
           scoreResult.score.breakdown,
-          dataQualityForActions
+          dataQualityForActions,
+          {
+            hasVideo: listing.has_video,
+            picturesCount: listing.pictures_count,
+          }
         );
 
         return reply.status(200).send({

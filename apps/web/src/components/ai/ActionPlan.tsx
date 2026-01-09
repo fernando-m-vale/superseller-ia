@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Target, ArrowRight } from 'lucide-react'
+import { Target, ArrowRight, ExternalLink } from 'lucide-react'
+import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ActionModal } from './ActionModal'
 
 interface ActionPlanItem {
@@ -27,6 +29,8 @@ interface ActionPlanProps {
   listingTitle?: string
   seoSuggestions?: SEOSuggestions
   permalinkUrl?: string
+  marketplace?: 'shopee' | 'mercadolivre'
+  listingIdExt?: string
 }
 
 const DIMENSION_NAMES: Record<string, string> = {
@@ -50,6 +54,8 @@ export function ActionPlan({
   listingTitle,
   seoSuggestions,
   permalinkUrl,
+  marketplace,
+  listingIdExt,
 }: ActionPlanProps) {
   const [selectedAction, setSelectedAction] = useState<ActionPlanItem | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -74,6 +80,11 @@ export function ActionPlan({
       onActionClick(action)
     }
   }
+
+  // Construir URL do Mercado Livre se aplicável
+  const mercadoLivreUrl = marketplace === 'mercadolivre' 
+    ? buildMercadoLivreListingUrl(listingIdExt || null, permalinkUrl || null)
+    : null
 
   return (
     <>
@@ -123,15 +134,62 @@ export function ActionPlan({
                     </div>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleActionClick(action)}
-                  className="w-full sm:w-auto"
-                >
-                  Melhorar agora
-                  <ArrowRight className="h-3 w-3 ml-2" />
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleActionClick(action)}
+                    className="flex-1 sm:flex-none"
+                  >
+                    Melhorar agora
+                    <ArrowRight className="h-3 w-3 ml-2" />
+                  </Button>
+                  {marketplace === 'mercadolivre' && action.dimension === 'midia' && mercadoLivreUrl && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              window.open(mercadoLivreUrl, '_blank', 'noopener,noreferrer')
+                            }}
+                            className="flex-1 sm:flex-none"
+                          >
+                            <ExternalLink className="h-3 w-3 mr-2" />
+                            Abrir no ML
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Abrir anúncio no Mercado Livre</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                  {marketplace === 'mercadolivre' && action.dimension === 'midia' && !mercadoLivreUrl && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="flex-1 sm:flex-none opacity-50 cursor-not-allowed"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-2" />
+                              Abrir no ML
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Link indisponível</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -146,9 +204,8 @@ export function ActionPlan({
         listingId={listingId}
         listingTitle={listingTitle}
         seoSuggestions={seoSuggestions}
-        permalinkUrl={permalinkUrl}
+        permalinkUrl={mercadoLivreUrl || permalinkUrl}
       />
     </>
   )
 }
-

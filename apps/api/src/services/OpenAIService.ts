@@ -73,7 +73,13 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
 4. Se dataQuality.missing contém "images" ou "description", aí sim pode mencionar a ausência
 5. Considere a categoria do produto para entender intenção de compra (transacional vs informacional)
 6. Analise performance real: se conversionRate é alto mas visits baixo → problema de tráfego; se visits alto mas conversionRate baixo → problema de conversão
-7. SOBRE VÍDEO E CLIPS (CRÍTICO - NUNCA VIOLAR):
+7. SOBRE QUANTIDADE DE IMAGENS (CRÍTICO - NUNCA VIOLAR):
+   - Se media.imageCount >= 8 → NUNCA diga "poucas imagens" ou "adicionar mais imagens"
+   - Se media.imageCount >= 12 → use texto tipo "imagens suficientes" ou "forte em imagens"
+   - Só sugerir "adicionar mais imagens" se media.imageCount <= 5 (realmente baixo)
+   - NUNCA invente "limite máximo do ML" no texto
+   - Se media.imageCount é alto mas score de mídia baixo, focar em vídeo/clips, não em imagens
+8. SOBRE VÍDEO E CLIPS (CRÍTICO - NUNCA VIOLAR):
    - VÍDEO (media.hasVideo):
      * Se media.hasVideo === true → NÃO sugerir "Adicionar vídeo" (já tem vídeo)
      * Se media.hasVideo === false → PODE sugerir "Adicionar vídeo", mas SEM mencionar clips
@@ -88,7 +94,7 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
      * Vídeo: conteúdo de vídeo do anúncio (detectável via API)
      * Clips: conteúdo curto (NÃO detectável via API atual)
      * NUNCA misturar ou confundir os dois conceitos
-8. SOBRE VISITAS (visits_unknown_via_api):
+9. SOBRE VISITAS (visits_unknown_via_api):
    - Se dataQuality.warnings contém "visits_unknown_via_api" → NUNCA diga "zero visitas" ou "sem visitas"
    - Use: "Visitas não disponíveis via API; valide no painel do Mercado Livre"
    - Não conclua ausência de tráfego se visits estiver unknown
@@ -100,7 +106,7 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
    - EXEMPLOS PERMITIDOS (quando hasClips=null):
      * ✅ "Clips não detectável via API; valide no painel do Mercado Livre. Se você ainda não tiver clips, inclua..."
      * ✅ "Verifique clips no painel; API não detecta automaticamente"
-9. SOBRE PERFORMANCE INDISPONÍVEL (CRÍTICO - NUNCA VIOLAR):
+10. SOBRE PERFORMANCE INDISPONÍVEL (CRÍTICO - NUNCA VIOLAR):
    - Se dataQuality.performanceAvailable === false:
      * NUNCA chamar Performance de "gargalo" ou "maior problema"
      * NUNCA afirmar "tráfego baixo", "sem visitas", "conversão baixa"
@@ -156,6 +162,10 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
   * Se conversionRate alto mas visits baixo → "Investir em Ads/Anúncios Patrocinados"
   * Se visits alto mas conversionRate baixo → "Otimizar título/descrição para conversão"
   * Se price alto vs categoria → "Revisar preço competitivo"
+  * REGRAS PARA IMAGENS (OBRIGATÓRIAS):
+    - Se media.imageCount >= 8 → NÃO criar hack "Adicionar mais imagens" (já tem muitas)
+    - Se media.imageCount >= 12 → NÃO mencionar quantidade de imagens, focar em qualidade/variação se necessário
+    - Só sugerir "adicionar mais imagens" se media.imageCount <= 5
   * REGRAS PARA VÍDEO/CLIPS (OBRIGATÓRIAS):
     - Se media.hasVideo === true → NÃO criar hack "Adicionar vídeo" (já tem)
     - Se media.hasVideo === false → PODE criar hack "Adicionar vídeo", mas SEM mencionar clips
