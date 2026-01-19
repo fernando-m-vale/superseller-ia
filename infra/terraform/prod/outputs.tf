@@ -185,3 +185,26 @@ output "rds_database_name" {
   description = "RDS Database Name (if enabled)"
   value       = var.enable_rds ? var.rds_database_name : null
 }
+
+# -----------------------------------------------------------------------------
+# EventBridge Scheduler (se habilitado)
+# -----------------------------------------------------------------------------
+output "scheduler_daily_metrics_arn" {
+  description = "EventBridge Scheduler ARN for daily metrics rebuild (if enabled)"
+  value       = var.enable_scheduler ? aws_scheduler_schedule.daily_metrics_rebuild[0].arn : null
+}
+
+output "scheduler_api_destination_arn" {
+  description = "EventBridge API Destination ARN (if enabled)"
+  value       = var.enable_scheduler ? aws_cloudwatch_event_api_destination.superseller_jobs[0].arn : null
+}
+
+output "scheduler_connection_arn" {
+  description = "EventBridge Connection ARN (if enabled)"
+  value       = var.enable_scheduler ? aws_cloudwatch_event_connection.superseller_internal[0].arn : null
+}
+
+output "scheduler_execution_role_arn" {
+  description = "Scheduler Execution Role ARN (if enabled)"
+  value       = var.enable_scheduler ? aws_iam_role.scheduler_execution[0].arn : null
+}
