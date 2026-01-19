@@ -10,6 +10,7 @@ import { syncRoutes } from './routes/sync.routes';
 import { recommendationsRoutes } from './routes/recommendations.routes';
 import { aiAnalyzeRoutes } from './routes/ai-analyze.routes';
 import { debugRoutes } from './routes/debug.routes';
+import { internalJobsRoutes } from './routes/internal-jobs.routes';
 import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
@@ -65,6 +66,7 @@ async function main() {
     await app.register(recommendationsRoutes, { prefix: '/api/v1/recommendations' });
     await app.register(aiAnalyzeRoutes, { prefix: '/api/v1/ai' });
     await app.register(debugRoutes, { prefix: '/api/v1/debug' });
+    await app.register(internalJobsRoutes, { prefix: '/api/v1/jobs' });
 
     await app.ready();
     

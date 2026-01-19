@@ -20,6 +20,7 @@ function OverviewContent() {
   const router = useRouter();
   const [periodDays, setPeriodDays] = useState<number>(7);
   const [mounted, setMounted] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { data: connectionStatus } = useMercadoLivreStatus();
 
   useEffect(() => {
@@ -65,6 +66,40 @@ function OverviewContent() {
     } catch {
       // Log erro sem detalhes sensíveis
       console.error('Erro ao reconectar');
+    }
+  };
+
+  const handleRefreshData = async () => {
+    try {
+      setIsRefreshing(true);
+      const apiUrl = getApiBaseUrl();
+      const token = getAccessToken();
+      
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      // Chamar endpoint de sync de métricas com o período selecionado
+      const response = await fetch(`${apiUrl}/sync/mercadolivre/metrics?days=${periodDays}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Falha ao atualizar dados');
+      }
+
+      // Recarregar dados após atualização
+      window.location.reload();
+    } catch (error) {
+      console.error('Erro ao atualizar dados:', error);
+      alert(error instanceof Error ? error.message : 'Erro ao atualizar dados');
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
@@ -232,7 +267,7 @@ function OverviewContent() {
             Métricas de performance dos últimos {periodDays} dias
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={() => setPeriodDays(7)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -253,6 +288,25 @@ function OverviewContent() {
           >
             30 dias
           </button>
+          <Button
+            onClick={handleRefreshData}
+            disabled={isRefreshing}
+            variant="outline"
+            size="sm"
+            className="ml-2"
+          >
+            {isRefreshing ? (
+              <>
+                <Zap className="h-4 w-4 mr-2 animate-spin" />
+                Atualizando...
+              </>
+            ) : (
+              <>
+                <Zap className="h-4 w-4 mr-2" />
+                Atualizar dados
+              </>
+            )}
+          </Button>
         </div>
       </div>
 

@@ -175,10 +175,10 @@ HACKS DE CRESCIMENTO (exatamente 3, priorizados por impacto):
     - Se media.imageCount >= 12 → NÃO mencionar quantidade de imagens, focar em qualidade/variação se necessário
     - Só sugerir "adicionar mais imagens" se media.imageCount <= 5
   * REGRAS PARA VÍDEO/CLIPS (OBRIGATÓRIAS - USAR media.mediaVerdict):
-    - Se media.mediaVerdict.canSuggestVideo === false → NÃO criar hack "Adicionar vídeo" (já tem OU não detectável)
-    - Se media.mediaVerdict.canSuggestVideo === true → PODE criar hack "Adicionar vídeo" (certeza de ausência)
-    - Se media.mediaVerdict.hasVideoDetected === null → Hack deve usar linguagem condicional baseada em media.mediaVerdict.message
-    - Se media.mediaVerdict.hasVideoDetected === true → NUNCA criar hack sobre vídeo (já tem)
+    - Se media.mediaVerdict.canSuggestClip === false → NÃO criar hack "Adicionar clip" (já tem OU não detectável)
+    - Se media.mediaVerdict.canSuggestClip === true → PODE criar hack "Adicionar clip (vídeo)" (certeza de ausência)
+    - Se media.mediaVerdict.hasClipDetected === null → Hack deve usar linguagem condicional baseada em media.mediaVerdict.message
+    - Se media.mediaVerdict.hasClipDetected === true → NUNCA criar hack sobre clip (já tem)
     - Se media.hasClips === null → Hack deve dizer: "Verifique clips no painel do Mercado Livre; API não detecta automaticamente. Se você ainda não tiver clips, inclua..." (NUNCA afirmar ausência)
     - Se media.hasClips === false → Hack pode dizer "Publicar clips pode aumentar engajamento" (certeza de ausência)
     - Se media.hasClips === true → Hack pode dizer "Melhorar clips (thumb, roteiro, benefícios)"
