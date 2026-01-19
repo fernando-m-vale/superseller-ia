@@ -10,7 +10,7 @@ import { DataQuality } from './ScoreActionEngine';
 import { getMediaVerdict } from '../utils/media-verdict';
 
 export interface MediaInfo {
-  hasVideo: boolean | null; // null = indisponível via API
+  hasClips: boolean | null; // null = indisponível via API (no ML, clip = vídeo)
   picturesCount: number | null;
 }
 
@@ -37,30 +37,30 @@ export function explainScore(
     explanations.push('Cadastro está completo (20/20 pontos).');
   }
 
-  // Mídia (0-20) - Usar MediaVerdict como fonte única de verdade
+  // Mídia (0-20) - Usar MediaVerdict como fonte única de verdade (apenas hasClips)
   const midiaLost = 20 - scoreBreakdown.midia;
   if (midiaLost > 0) {
     const picturesCount = mediaInfo?.picturesCount ?? 0;
-    const hasVideo = mediaInfo?.hasVideo;
-    const verdict = getMediaVerdict(hasVideo ?? null, picturesCount);
+    const hasClips = mediaInfo?.hasClips;
+    const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
     
     // Construir explicação baseada no MediaVerdict
     const reasons: string[] = [];
     
-    // Se tem vídeo detectado, não mencionar falta de vídeo
-    if (verdict.hasVideoDetected === true) {
-      // Tem vídeo, só mencionar imagens se necessário
+    // Se tem clip detectado, não mencionar falta de clip
+    if (verdict.hasClipDetected === true) {
+      // Tem clip, só mencionar imagens se necessário
       if (picturesCount < 6) {
         reasons.push(`poucas imagens (${picturesCount})`);
       }
-    } else if (verdict.hasVideoDetected === false) {
-      // Não tem vídeo (certeza) - pode mencionar
-      reasons.push('não ter clips/vídeo');
+    } else if (verdict.hasClipDetected === false) {
+      // Não tem clip (certeza) - pode mencionar
+      reasons.push('não ter clip (vídeo)');
       if (picturesCount < 6) {
         reasons.push(`poucas imagens (${picturesCount})`);
       }
     } else {
-      // hasVideo === null: usar mensagem do verdict (sempre condicional)
+      // hasClips === null: usar mensagem do verdict (sempre condicional)
       if (picturesCount >= 8) {
         explanations.push(
           `Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. ` +
@@ -87,11 +87,11 @@ export function explainScore(
   } else if (scoreBreakdown.midia === 20) {
     // Score máximo - usar MediaVerdict para mensagem
     const picturesCount = mediaInfo?.picturesCount ?? 0;
-    const hasVideo = mediaInfo?.hasVideo;
-    const verdict = getMediaVerdict(hasVideo ?? null, picturesCount);
+    const hasClips = mediaInfo?.hasClips;
+    const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
     
-    if (verdict.hasVideoDetected === true && picturesCount >= 6) {
-      explanations.push('Mídia está forte: fotos e clips/vídeo presentes.');
+    if (verdict.hasClipDetected === true && picturesCount >= 6) {
+      explanations.push('Mídia está forte: fotos e clip (vídeo) presentes.');
     } else if (picturesCount >= 8) {
       explanations.push(`Mídia está boa em fotos (${picturesCount}).`);
     } else {

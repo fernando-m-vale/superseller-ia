@@ -42,13 +42,13 @@ export interface AIAnalyzeInputListing {
 export interface AIAnalyzeInputMedia {
   imageCount: number;
   hasImages: boolean;
-  hasVideo: boolean | null; // null = indisponível via API (tri-state: true/false/null)
-  hasClips: boolean | null; // null = desconhecido/não detectável via API
+  hasVideo: boolean | null; // LEGADO: não usar na decisão (mantido para compatibilidade)
+  hasClips: boolean | null; // FONTE DE VERDADE: no ML, clip = vídeo. null = não detectável via API
   videoCount: number;
-  // MediaVerdict - Fonte única de verdade para decisões sobre vídeo/clips
+  // MediaVerdict - Fonte única de verdade para decisões sobre clip (vídeo)
   mediaVerdict?: {
-    hasVideoDetected: boolean | null;
-    canSuggestVideo: boolean;
+    hasClipDetected: boolean | null;
+    canSuggestClip: boolean;
     message: string;
     shortMessage: string;
   };

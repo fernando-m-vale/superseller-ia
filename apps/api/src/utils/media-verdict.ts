@@ -2,20 +2,22 @@
  * Media Verdict - Fonte Única de Verdade para Mídia
  * 
  * Este utilitário determina de forma determinística o que pode ser afirmado
- * sobre vídeo/clips de anúncios, garantindo que nunca afirmemos ausência
+ * sobre clips (vídeo) de anúncios, garantindo que nunca afirmemos ausência
  * quando os dados são null ou true.
  * 
+ * IMPORTANTE: No Mercado Livre, sellers só têm "CLIP" (vídeo). Não há distinção.
+ * 
  * REGRAS OBRIGATÓRIAS:
- * - hasVideo === true  → canSuggestVideo = false, message afirma presença
- * - hasVideo === false → canSuggestVideo = true, message sugere adicionar
- * - hasVideo === null  → canSuggestVideo = false, message SEMPRE condicional
+ * - hasClips === true  → canSuggestClip = false, message afirma presença
+ * - hasClips === false → canSuggestClip = true, message sugere adicionar
+ * - hasClips === null  → canSuggestClip = false, message SEMPRE condicional
  */
 
 export interface MediaVerdict {
-  /** Se vídeo foi detectado via API (true) ou não (false) ou não detectável (null) */
-  hasVideoDetected: boolean | null;
-  /** Se é seguro sugerir adicionar vídeo (false quando já tem ou quando null) */
-  canSuggestVideo: boolean;
+  /** Se clip (vídeo) foi detectado via API (true) ou não (false) ou não detectável (null) */
+  hasClipDetected: boolean | null;
+  /** Se é seguro sugerir adicionar clip (false quando já tem ou quando null) */
+  canSuggestClip: boolean;
   /** Mensagem determinística que pode ser usada em UI/IA */
   message: string;
   /** Mensagem curta para tooltips/badges */
@@ -23,45 +25,45 @@ export interface MediaVerdict {
 }
 
 /**
- * Gera verdict determinístico sobre mídia (vídeo/clips)
+ * Gera verdict determinístico sobre mídia (clips/vídeo)
  * 
- * @param hasVideo - Status do vídeo: true (tem), false (não tem), null (não detectável)
+ * @param hasClips - Status do clip: true (tem), false (não tem), null (não detectável)
  * @param picturesCount - Quantidade de imagens (opcional, para contexto)
  * @returns MediaVerdict com decisão determinística
  */
 export function getMediaVerdict(
-  hasVideo: boolean | null,
+  hasClips: boolean | null,
   picturesCount?: number | null
 ): MediaVerdict {
-  // REGRA 1: hasVideo === true → NUNCA sugerir vídeo, SEMPRE afirmar presença
-  if (hasVideo === true) {
+  // REGRA 1: hasClips === true → NUNCA sugerir clip, SEMPRE afirmar presença
+  if (hasClips === true) {
     return {
-      hasVideoDetected: true,
-      canSuggestVideo: false,
-      message: 'O anúncio possui vídeo/clips. Mídia está completa.',
-      shortMessage: 'Vídeo presente',
+      hasClipDetected: true,
+      canSuggestClip: false,
+      message: 'O anúncio possui clip (vídeo). Mídia está completa.',
+      shortMessage: 'Clip presente',
     };
   }
 
-  // REGRA 2: hasVideo === false → PODE sugerir vídeo, afirmar ausência
-  if (hasVideo === false) {
+  // REGRA 2: hasClips === false → PODE sugerir clip, afirmar ausência
+  if (hasClips === false) {
     const picturesContext = picturesCount !== null && picturesCount !== undefined
       ? picturesCount >= 8
         ? ' Imagens estão suficientes.'
         : picturesCount >= 6
         ? ' Considere adicionar mais imagens também.'
-        : ' Considere adicionar mais imagens e vídeo/clips.'
+        : ' Considere adicionar mais imagens e clip (vídeo).'
       : '';
     
     return {
-      hasVideoDetected: false,
-      canSuggestVideo: true,
-      message: `O anúncio não possui vídeo/clips. Adicionar vídeo pode melhorar engajamento e conversão.${picturesContext}`,
-      shortMessage: 'Sem vídeo',
+      hasClipDetected: false,
+      canSuggestClip: true,
+      message: `O anúncio não possui clip (vídeo). Adicionar clip pode melhorar engajamento e conversão.${picturesContext}`,
+      shortMessage: 'Sem clip',
     };
   }
 
-  // REGRA 3: hasVideo === null → NUNCA sugerir vídeo, SEMPRE linguagem condicional
+  // REGRA 3: hasClips === null → NUNCA sugerir clip, SEMPRE linguagem condicional
   const picturesContext = picturesCount !== null && picturesCount !== undefined
     ? picturesCount >= 8
       ? ' Imagens estão boas.'
@@ -71,40 +73,40 @@ export function getMediaVerdict(
     : '';
   
   return {
-    hasVideoDetected: null,
-    canSuggestVideo: false,
-    message: `Não foi possível confirmar via API se o anúncio possui vídeo/clips. Valide no painel do Mercado Livre.${picturesContext}`,
+    hasClipDetected: null,
+    canSuggestClip: false,
+    message: `Não foi possível confirmar via API se o anúncio possui clip (vídeo). Valide no painel do Mercado Livre.${picturesContext}`,
     shortMessage: 'Não detectável via API',
   };
 }
 
 /**
- * Verifica se é seguro afirmar que o anúncio NÃO tem vídeo
+ * Verifica se é seguro afirmar que o anúncio NÃO tem clip
  * 
- * @param hasVideo - Status do vídeo
- * @returns true apenas se hasVideo === false (certeza de ausência)
+ * @param hasClips - Status do clip
+ * @returns true apenas se hasClips === false (certeza de ausência)
  */
-export function canAffirmNoVideo(hasVideo: boolean | null): boolean {
-  return hasVideo === false;
+export function canAffirmNoClip(hasClips: boolean | null): boolean {
+  return hasClips === false;
 }
 
 /**
- * Verifica se é seguro afirmar que o anúncio TEM vídeo
+ * Verifica se é seguro afirmar que o anúncio TEM clip
  * 
- * @param hasVideo - Status do vídeo
- * @returns true apenas se hasVideo === true (certeza de presença)
+ * @param hasClips - Status do clip
+ * @returns true apenas se hasClips === true (certeza de presença)
  */
-export function canAffirmHasVideo(hasVideo: boolean | null): boolean {
-  return hasVideo === true;
+export function canAffirmHasClip(hasClips: boolean | null): boolean {
+  return hasClips === true;
 }
 
 /**
- * Verifica se vídeo é detectável via API
+ * Verifica se clip é detectável via API
  * 
- * @param hasVideo - Status do vídeo
- * @returns true se hasVideo não é null (foi detectado via API)
+ * @param hasClips - Status do clip
+ * @returns true se hasClips não é null (foi detectado via API)
  */
-export function isVideoStatusKnown(hasVideo: boolean | null): boolean {
-  return hasVideo !== null;
+export function isClipStatusKnown(hasClips: boolean | null): boolean {
+  return hasClips !== null;
 }
 

@@ -1,82 +1,83 @@
 /**
  * Media Verdict Tests
  * 
- * Testa a fonte única de verdade para mídia (vídeo/clips)
+ * Testa a fonte única de verdade para mídia (clip/vídeo)
+ * IMPORTANTE: No Mercado Livre, clip = vídeo. Não há distinção.
  */
 
 import { describe, it, expect } from 'vitest';
-import { getMediaVerdict, canAffirmNoVideo, canAffirmHasVideo, isVideoStatusKnown } from '../utils/media-verdict';
+import { getMediaVerdict, canAffirmNoClip, canAffirmHasClip, isClipStatusKnown } from '../utils/media-verdict';
 
 describe('MediaVerdict', () => {
   describe('getMediaVerdict', () => {
-    it('deve retornar canSuggestVideo=false quando hasVideo=true', () => {
+    it('deve retornar canSuggestClip=false quando hasClips=true', () => {
       const verdict = getMediaVerdict(true, 10);
       
-      expect(verdict.hasVideoDetected).toBe(true);
-      expect(verdict.canSuggestVideo).toBe(false);
-      expect(verdict.message).toContain('possui vídeo');
-      expect(verdict.shortMessage).toBe('Vídeo presente');
+      expect(verdict.hasClipDetected).toBe(true);
+      expect(verdict.canSuggestClip).toBe(false);
+      expect(verdict.message).toContain('possui clip');
+      expect(verdict.shortMessage).toBe('Clip presente');
     });
 
-    it('deve retornar canSuggestVideo=true quando hasVideo=false', () => {
+    it('deve retornar canSuggestClip=true quando hasClips=false', () => {
       const verdict = getMediaVerdict(false, 5);
       
-      expect(verdict.hasVideoDetected).toBe(false);
-      expect(verdict.canSuggestVideo).toBe(true);
-      expect(verdict.message).toContain('não possui vídeo');
-      expect(verdict.shortMessage).toBe('Sem vídeo');
+      expect(verdict.hasClipDetected).toBe(false);
+      expect(verdict.canSuggestClip).toBe(true);
+      expect(verdict.message).toContain('não possui clip');
+      expect(verdict.shortMessage).toBe('Sem clip');
     });
 
-    it('deve retornar canSuggestVideo=false quando hasVideo=null', () => {
+    it('deve retornar canSuggestClip=false quando hasClips=null', () => {
       const verdict = getMediaVerdict(null, 10);
       
-      expect(verdict.hasVideoDetected).toBe(null);
-      expect(verdict.canSuggestVideo).toBe(false);
+      expect(verdict.hasClipDetected).toBe(null);
+      expect(verdict.canSuggestClip).toBe(false);
       expect(verdict.message).toContain('Não foi possível confirmar');
       expect(verdict.message).toContain('valide no painel');
       expect(verdict.shortMessage).toBe('Não detectável via API');
     });
 
-    it('deve incluir contexto de imagens quando picturesCount >= 8 e hasVideo=null', () => {
+    it('deve incluir contexto de imagens quando picturesCount >= 8 e hasClips=null', () => {
       const verdict = getMediaVerdict(null, 8);
       
       expect(verdict.message).toContain('Imagens estão boas');
     });
 
-    it('deve incluir contexto de imagens quando picturesCount >= 6 e hasVideo=null', () => {
+    it('deve incluir contexto de imagens quando picturesCount >= 6 e hasClips=null', () => {
       const verdict = getMediaVerdict(null, 6);
       
       expect(verdict.message).toContain('Imagens estão suficientes');
     });
 
-    it('deve sugerir adicionar imagens quando picturesCount < 6 e hasVideo=false', () => {
+    it('deve sugerir adicionar imagens quando picturesCount < 6 e hasClips=false', () => {
       const verdict = getMediaVerdict(false, 3);
       
       expect(verdict.message).toContain('adicionar mais imagens');
     });
   });
 
-  describe('canAffirmNoVideo', () => {
-    it('deve retornar true apenas quando hasVideo=false', () => {
-      expect(canAffirmNoVideo(false)).toBe(true);
-      expect(canAffirmNoVideo(true)).toBe(false);
-      expect(canAffirmNoVideo(null)).toBe(false);
+  describe('canAffirmNoClip', () => {
+    it('deve retornar true apenas quando hasClips=false', () => {
+      expect(canAffirmNoClip(false)).toBe(true);
+      expect(canAffirmNoClip(true)).toBe(false);
+      expect(canAffirmNoClip(null)).toBe(false);
     });
   });
 
-  describe('canAffirmHasVideo', () => {
-    it('deve retornar true apenas quando hasVideo=true', () => {
-      expect(canAffirmHasVideo(true)).toBe(true);
-      expect(canAffirmHasVideo(false)).toBe(false);
-      expect(canAffirmHasVideo(null)).toBe(false);
+  describe('canAffirmHasClip', () => {
+    it('deve retornar true apenas quando hasClips=true', () => {
+      expect(canAffirmHasClip(true)).toBe(true);
+      expect(canAffirmHasClip(false)).toBe(false);
+      expect(canAffirmHasClip(null)).toBe(false);
     });
   });
 
-  describe('isVideoStatusKnown', () => {
-    it('deve retornar true quando hasVideo não é null', () => {
-      expect(isVideoStatusKnown(true)).toBe(true);
-      expect(isVideoStatusKnown(false)).toBe(true);
-      expect(isVideoStatusKnown(null)).toBe(false);
+  describe('isClipStatusKnown', () => {
+    it('deve retornar true quando hasClips não é null', () => {
+      expect(isClipStatusKnown(true)).toBe(true);
+      expect(isClipStatusKnown(false)).toBe(true);
+      expect(isClipStatusKnown(null)).toBe(false);
     });
   });
 });

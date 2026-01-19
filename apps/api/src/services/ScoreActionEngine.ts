@@ -33,7 +33,7 @@ export interface DataQuality {
 }
 
 export interface MediaInfo {
-  hasVideo: boolean | null; // null = indisponível via API
+  hasClips: boolean | null; // null = indisponível via API (no ML, clip = vídeo)
   picturesCount: number | null;
 }
 
@@ -94,20 +94,20 @@ export function generateActionPlan(
       continue;
     }
 
-    // MÍDIA: Usar MediaVerdict como fonte única de verdade
+    // MÍDIA: Usar MediaVerdict como fonte única de verdade (apenas hasClips)
     if (dimension === 'midia') {
-      const hasVideo = mediaInfo?.hasVideo;
+      const hasClips = mediaInfo?.hasClips;
       const picturesCount = mediaInfo?.picturesCount ?? 0;
-      const verdict = getMediaVerdict(hasVideo ?? null, picturesCount);
+      const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
       
-      // Se não pode sugerir vídeo (já tem ou null) e tem muitas imagens, não gerar ação
-      if (!verdict.canSuggestVideo && picturesCount >= 8) {
+      // Se não pode sugerir clip (já tem ou null) e tem muitas imagens, não gerar ação
+      if (!verdict.canSuggestClip && picturesCount >= 8) {
         // Mídia está completa, não gerar ação
         continue;
       }
       
-      // Se tem vídeo detectado e imagens suficientes, não gerar ação
-      if (verdict.hasVideoDetected === true && picturesCount >= 6) {
+      // Se tem clip detectado e imagens suficientes, não gerar ação
+      if (verdict.hasClipDetected === true && picturesCount >= 6) {
         continue;
       }
     }
@@ -181,31 +181,31 @@ function generateWhyThisMatters(
   // Texto base
   let text = WHY_THIS_MATTERS_BASE[dimension];
 
-  // MÍDIA: Usar MediaVerdict como fonte única de verdade
+  // MÍDIA: Usar MediaVerdict como fonte única de verdade (apenas hasClips)
   if (dimension === 'midia') {
-    const hasVideo = mediaInfo?.hasVideo;
+    const hasClips = mediaInfo?.hasClips;
     const picturesCount = mediaInfo?.picturesCount ?? 0;
-    const verdict = getMediaVerdict(hasVideo ?? null, picturesCount);
+    const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
     
     // Usar mensagem do MediaVerdict como base
-    if (verdict.hasVideoDetected === true) {
-      // Tem vídeo detectado
+    if (verdict.hasClipDetected === true) {
+      // Tem clip detectado
       if (picturesCount >= 8) {
-        text = 'Mídia está completa com fotos e vídeo.';
+        text = 'Mídia está completa com fotos e clip (vídeo).';
       } else {
         text = 'Anúncios com mais imagens tendem a gerar maior engajamento e conversão.';
       }
-    } else if (verdict.hasVideoDetected === false) {
-      // Não tem vídeo (certeza) - pode sugerir
+    } else if (verdict.hasClipDetected === false) {
+      // Não tem clip (certeza) - pode sugerir
       if (picturesCount >= 8) {
-        text = 'Anúncios com clips/vídeo tendem a gerar maior engajamento e conversão.';
+        text = 'Anúncios com clip (vídeo) tendem a gerar maior engajamento e conversão.';
       } else {
-        text = 'Anúncios com mídia mais completa (fotos e clips/vídeo) tendem a gerar maior engajamento e conversão.';
+        text = 'Anúncios com mídia mais completa (fotos e clip/vídeo) tendem a gerar maior engajamento e conversão.';
       }
     } else {
-      // hasVideo === null: usar mensagem do verdict (sempre condicional)
+      // hasClips === null: usar mensagem do verdict (sempre condicional)
       if (picturesCount >= 8) {
-        text = `Anúncios com clips/vídeo tendem a gerar maior engajamento. ${verdict.message}`;
+        text = `Anúncios com clip (vídeo) tendem a gerar maior engajamento. ${verdict.message}`;
       } else {
         text = `Anúncios com mídia mais completa tendem a gerar maior engajamento e conversão. ${verdict.message}`;
       }

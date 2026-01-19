@@ -23,8 +23,8 @@ interface SEOSuggestions {
 }
 
 interface MediaVerdict {
-  hasVideoDetected: boolean | null
-  canSuggestVideo: boolean
+  hasClipDetected: boolean | null
+  canSuggestClip: boolean
   message: string
   shortMessage: string
 }

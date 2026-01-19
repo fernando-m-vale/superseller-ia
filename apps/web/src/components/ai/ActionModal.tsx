@@ -38,8 +38,8 @@ interface SEOSuggestions {
 }
 
 interface MediaVerdict {
-  hasVideoDetected: boolean | null
-  canSuggestVideo: boolean
+  hasClipDetected: boolean | null
+  canSuggestClip: boolean
   message: string
   shortMessage: string
 }
@@ -125,18 +125,18 @@ export function ActionModal({
               </p>
             </div>
           </div>
-          {/* Clips e Videos - Usar MediaVerdict como fonte única de verdade */}
+          {/* Clip (vídeo) - Usar MediaVerdict como fonte única de verdade */}
           {mediaVerdict && (
             <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
               <Video className="h-5 w-5 text-primary mt-0.5" />
               <div>
-                <p className="font-medium text-sm">Clips e Videos</p>
+                <p className="font-medium text-sm">Clip (vídeo)</p>
                 <p className="text-xs text-muted-foreground">
                   {mediaVerdict.message}
                 </p>
-                {mediaVerdict.hasVideoDetected === null && (
+                {mediaVerdict.hasClipDetected === null && (
                   <p className="text-xs text-muted-foreground mt-1 italic">
-                    Valide no painel do Mercado Livre; a API não detecta clips automaticamente.
+                    Valide no painel do Mercado Livre; a API não detecta clip automaticamente.
                   </p>
                 )}
               </div>
@@ -146,9 +146,9 @@ export function ActionModal({
             <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg">
               <Video className="h-5 w-5 text-primary mt-0.5" />
               <div>
-                <p className="font-medium text-sm">Clips e Videos</p>
+                <p className="font-medium text-sm">Clip (vídeo)</p>
                 <p className="text-xs text-muted-foreground">
-                  Verifique no painel do Mercado Livre se seu anúncio possui clips ou vídeo. Vídeos aumentam a conversão em até 40%.
+                  Verifique no painel do Mercado Livre se seu anúncio possui clip (vídeo). Clips aumentam a conversão em até 40%.
                 </p>
               </div>
             </div>

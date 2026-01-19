@@ -66,10 +66,10 @@ interface AIAnalysisApiResponse {
     priority: 'high' | 'medium' | 'low'
   }>
   scoreExplanation?: string[]
-  // MediaVerdict - Fonte única de verdade para mídia
+  // MediaVerdict - Fonte única de verdade para mídia (clip/vídeo)
   mediaVerdict?: {
-    hasVideoDetected: boolean | null
-    canSuggestVideo: boolean
+    hasClipDetected: boolean | null
+    canSuggestClip: boolean
     message: string
     shortMessage: string
   }
@@ -135,10 +135,10 @@ export interface AIAnalysisResponse {
     priority: 'high' | 'medium' | 'low'
   }>
   scoreExplanation?: string[]
-  // MediaVerdict - Fonte única de verdade para mídia
+  // MediaVerdict - Fonte única de verdade para mídia (clip/vídeo)
   mediaVerdict?: {
-    hasVideoDetected: boolean | null
-    canSuggestVideo: boolean
+    hasClipDetected: boolean | null
+    canSuggestClip: boolean
     message: string
     shortMessage: string
   }

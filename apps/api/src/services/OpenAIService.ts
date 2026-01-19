@@ -80,31 +80,28 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
    - Só sugerir "adicionar mais imagens" se media.imageCount <= 5 (realmente baixo)
    - NUNCA invente "limite máximo do ML" no texto
    - Se media.imageCount é alto mas score de mídia baixo, focar em vídeo/clips, não em imagens
-8. SOBRE VÍDEO E CLIPS (CRÍTICO - NUNCA VIOLAR - USAR media.mediaVerdict):
-   - O payload inclui media.mediaVerdict que é a FONTE ÚNICA DE VERDADE sobre vídeo/clips
-   - media.mediaVerdict.canSuggestVideo:
-     * Se false → PROIBIDO sugerir "Adicionar vídeo" (já tem vídeo OU não detectável)
-     * Se true → PODE sugerir "Adicionar vídeo" (certeza de ausência)
-   - media.mediaVerdict.hasVideoDetected:
-     * true → Anúncio TEM vídeo detectado via API (NUNCA sugerir adicionar)
-     * false → Anúncio NÃO tem vídeo (certeza, pode sugerir)
+8. SOBRE CLIP (VÍDEO) - CRÍTICO - NUNCA VIOLAR - USAR media.mediaVerdict:
+   - IMPORTANTE: No Mercado Livre, sellers só têm "CLIP" (vídeo). Não há distinção entre vídeo e clip.
+   - O payload inclui media.mediaVerdict que é a FONTE ÚNICA DE VERDADE sobre clip (vídeo)
+   - media.mediaVerdict.canSuggestClip:
+     * Se false → PROIBIDO sugerir "Adicionar clip" (já tem clip OU não detectável)
+     * Se true → PODE sugerir "Adicionar clip (vídeo)" (certeza de ausência)
+   - media.mediaVerdict.hasClipDetected:
+     * true → Anúncio TEM clip detectado via API (NUNCA sugerir adicionar)
+     * false → Anúncio NÃO tem clip (certeza, pode sugerir)
      * null → Não detectável via API (NUNCA afirmar ausência, usar linguagem condicional)
    - media.mediaVerdict.message:
-     * Use esta mensagem como referência para explicar o status do vídeo
+     * Use esta mensagem como referência para explicar o status do clip
      * NUNCA contradiga esta mensagem
    - REGRAS OBRIGATÓRIAS:
-     * Se media.mediaVerdict.canSuggestVideo === false → NUNCA criar hack "Adicionar vídeo"
-     * Se media.mediaVerdict.hasVideoDetected === null → SEMPRE usar linguagem condicional
-     * Se media.mediaVerdict.hasVideoDetected === true → SEMPRE afirmar presença, nunca sugerir adicionar
-   - CLIPS (media.hasClips):
-     * Se media.hasClips === true → pode sugerir otimizar clips (thumb, roteiro, benefícios)
-     * Se media.hasClips === false → sugerir adicionar clips (com certeza de ausência)
-     * Se media.hasClips === null → PROIBIDO afirmar ausência. Use: "Clips não detectável via API; valide no painel do Mercado Livre. Se você ainda não tiver clips, inclua..."
-     * Clips NÃO são detectáveis via API /items (por isso pode ser null)
-   - DIFERENCIAÇÃO OBRIGATÓRIO:
-     * Vídeo: conteúdo de vídeo do anúncio (detectável via API)
-     * Clips: conteúdo curto (NÃO detectável via API atual)
-     * NUNCA misturar ou confundir os dois conceitos
+     * Se media.mediaVerdict.canSuggestClip === false → NUNCA criar hack "Adicionar clip"
+     * Se media.mediaVerdict.hasClipDetected === null → SEMPRE usar linguagem condicional
+     * Se media.mediaVerdict.hasClipDetected === true → SEMPRE afirmar presença, nunca sugerir adicionar
+   - TERMINOLOGIA:
+     * Use sempre "clip (vídeo)" ou "clip/vídeo" para deixar claro que são a mesma coisa
+     * NUNCA mencione "vídeo" separadamente de "clip"
+     * media.hasVideo é LEGADO e não deve ser usado na decisão
+     * media.hasClips é a FONTE DE VERDADE
 9. SOBRE VISITAS (visits_unknown_via_api):
    - Se dataQuality.warnings contém "visits_unknown_via_api" → NUNCA diga "zero visitas" ou "sem visitas"
    - Use: "Visitas não disponíveis via API; valide no painel do Mercado Livre"
@@ -383,12 +380,12 @@ export class OpenAIService {
     // Determine media information
     const imageCount = listing.pictures_count ?? 0;
     const hasImages = imageCount > 0 || listing.thumbnail_url !== null;
-    const hasVideo = listing.has_video; // null quando não sabemos (tri-state)
-    const hasClips = listing.has_clips ?? null; // null = desconhecido/não detectável via API
-    const videoCount = hasVideo === true ? 1 : 0;
+    const hasVideo = listing.has_video; // LEGADO: não usar na decisão (mantido para compatibilidade)
+    const hasClips = listing.has_clips ?? null; // FONTE DE VERDADE: no ML, clip = vídeo. null = não detectável via API
+    const videoCount = hasClips === true ? 1 : 0; // Usar hasClips para contar
     
-    // Gerar MediaVerdict - Fonte única de verdade
-    const mediaVerdict = getMediaVerdict(hasVideo, imageCount);
+    // Gerar MediaVerdict - Fonte única de verdade (usar apenas hasClips)
+    const mediaVerdict = getMediaVerdict(hasClips, imageCount);
 
     // Build data quality assessment
     const missing: string[] = [];

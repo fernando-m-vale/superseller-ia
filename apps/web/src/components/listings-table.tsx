@@ -260,8 +260,8 @@ function AIAnalysisTab({
             <span className="text-sm font-medium">Clips (vídeo):</span>
             {analysis.mediaVerdict ? (
               <Badge 
-                variant={analysis.mediaVerdict.hasVideoDetected === true ? 'default' : 'outline'} 
-                className={analysis.mediaVerdict.hasVideoDetected === true ? 'bg-green-600' : analysis.mediaVerdict.hasVideoDetected === null ? 'border-yellow-500 text-yellow-700' : ''}
+                variant={analysis.mediaVerdict.hasClipDetected === true ? 'default' : 'outline'} 
+                className={analysis.mediaVerdict.hasClipDetected === true ? 'bg-green-600' : analysis.mediaVerdict.hasClipDetected === null ? 'border-yellow-500 text-yellow-700' : ''}
               >
                 {analysis.mediaVerdict.shortMessage}
               </Badge>

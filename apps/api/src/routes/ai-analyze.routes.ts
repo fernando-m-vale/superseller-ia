@@ -318,7 +318,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             dataQualityForActions,
             result.score.score.potential_gain,
             {
-              hasVideo: listing.has_video,
+              hasClips: listing.has_clips ?? null, // Usar apenas has_clips (no ML, clip = vídeo)
               picturesCount: listing.pictures_count,
             }
           );
@@ -326,15 +326,15 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             result.score.score.breakdown,
             dataQualityForActions,
             {
-              hasVideo: listing.has_video,
+              hasClips: listing.has_clips ?? null, // Usar apenas has_clips (no ML, clip = vídeo)
               picturesCount: listing.pictures_count,
             }
           );
           
           // DEBUG: Log mediaInfo antes de gerar MediaVerdict
           const mediaInfo = {
-            hasVideo: listing.has_video,
-            hasClips: listing.has_clips,
+            hasVideo: listing.has_video, // Legado (não usado na decisão)
+            hasClips: listing.has_clips, // Fonte de verdade
             picturesCount: listing.pictures_count,
           };
           request.log.info(
@@ -347,8 +347,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             '[MEDIA-VERDICT-DEBUG] MediaInfo antes de gerar MediaVerdict'
           );
           
-          // Gerar MediaVerdict para incluir na resposta
-          const mediaVerdict = getMediaVerdict(listing.has_video, listing.pictures_count);
+          // Gerar MediaVerdict para incluir na resposta (usar apenas has_clips)
+          const mediaVerdict = getMediaVerdict(listing.has_clips ?? null, listing.pictures_count);
           
           // DEBUG: Log MediaVerdict result
           request.log.info(
@@ -424,7 +424,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           dataQualityForActions,
           scoreResult.score.potential_gain,
           {
-            hasVideo: listing.has_video,
+            hasClips: listing.has_clips ?? null, // Usar apenas has_clips (no ML, clip = vídeo)
             picturesCount: listing.pictures_count,
           }
         );
@@ -432,15 +432,15 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           scoreResult.score.breakdown,
           dataQualityForActions,
           {
-            hasVideo: listing.has_video,
+            hasClips: listing.has_clips ?? null, // Usar apenas has_clips (no ML, clip = vídeo)
             picturesCount: listing.pictures_count,
           }
         );
         
         // DEBUG: Log mediaInfo antes de gerar MediaVerdict
         const mediaInfo = {
-          hasVideo: listing.has_video,
-          hasClips: listing.has_clips,
+          hasVideo: listing.has_video, // Legado (não usado na decisão)
+          hasClips: listing.has_clips, // Fonte de verdade
           picturesCount: listing.pictures_count,
         };
         request.log.info(
@@ -453,8 +453,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           '[MEDIA-VERDICT-DEBUG] MediaInfo antes de gerar MediaVerdict (cache)'
         );
         
-        // Gerar MediaVerdict para incluir na resposta
-        const mediaVerdict = getMediaVerdict(listing.has_video, listing.pictures_count);
+        // Gerar MediaVerdict para incluir na resposta (usar apenas has_clips)
+        const mediaVerdict = getMediaVerdict(listing.has_clips ?? null, listing.pictures_count);
         
         // DEBUG: Log MediaVerdict result
         request.log.info(
