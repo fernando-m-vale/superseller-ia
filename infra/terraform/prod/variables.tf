@@ -149,3 +149,60 @@ variable "rds_multi_az" {
   type        = bool
   default     = false
 }
+
+# -----------------------------------------------------------------------------
+# EventBridge Scheduler Configuration
+# -----------------------------------------------------------------------------
+variable "enable_scheduler" {
+  description = "Enable EventBridge Scheduler for internal jobs (requires prod/INTERNAL_JOBS_KEY secret)"
+  type        = bool
+  default     = false
+}
+
+variable "scheduler_enabled" {
+  description = "Whether the scheduler should be ENABLED or DISABLED after creation"
+  type        = bool
+  default     = true
+}
+
+variable "scheduler_tenant_id" {
+  description = "Tenant ID to use for scheduled jobs (required when enable_scheduler=true)"
+  type        = string
+  default     = ""
+}
+
+variable "scheduler_cron_expression" {
+  description = "Cron expression for daily metrics rebuild (default: 06:00 UTC = 03:00 BRT)"
+  type        = string
+  default     = "cron(0 6 * * ? *)"
+}
+
+variable "scheduler_timezone" {
+  description = "Timezone for scheduler (IANA format)"
+  type        = string
+  default     = "America/Sao_Paulo"
+}
+
+variable "scheduler_retry_attempts" {
+  description = "Maximum retry attempts for failed invocations"
+  type        = number
+  default     = 3
+}
+
+variable "scheduler_max_event_age" {
+  description = "Maximum age of event in seconds before it's dropped"
+  type        = number
+  default     = 3600
+}
+
+variable "enable_ml_sync_schedule" {
+  description = "Enable additional schedule for Mercado Livre sync (runs before metrics rebuild)"
+  type        = bool
+  default     = false
+}
+
+variable "enable_scheduler_alarm" {
+  description = "Enable CloudWatch alarm for scheduler failures"
+  type        = bool
+  default     = false
+}
