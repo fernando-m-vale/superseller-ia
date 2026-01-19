@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ArrowRight,
 } from 'lucide-react'
+import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 
 type ActionDimension = 'cadastro' | 'midia' | 'performance' | 'seo' | 'competitividade'
 
@@ -52,6 +53,8 @@ interface ActionModalProps {
   seoSuggestions?: SEOSuggestions
   permalinkUrl?: string
   mediaVerdict?: MediaVerdict
+  listingIdExt?: string
+  marketplace?: 'shopee' | 'mercadolivre'
 }
 
 const DIMENSION_NAMES: Record<ActionDimension, string> = {
@@ -93,17 +96,13 @@ export function ActionModal({
     if (permalinkUrl) {
       window.open(permalinkUrl, '_blank', 'noopener,noreferrer')
     } else if (marketplace === 'mercadolivre' && listingIdExt) {
-      // Construir URL de edição usando listingIdExt
-      const numericId = listingIdExt.startsWith('MLB') 
-        ? listingIdExt.replace(/^MLB/, '')
-        : listingIdExt.match(/^\d+$/) 
-        ? listingIdExt 
-        : null;
+      // Usar função normalizada para construir URL de edição
+      const editUrl = buildMercadoLivreListingUrl(listingIdExt, null, 'edit');
       
-      if (numericId) {
-        window.open(`https://www.mercadolivre.com.br/anuncios/MLB${numericId}/modificar/bomni`, '_blank', 'noopener,noreferrer')
+      if (editUrl) {
+        window.open(editUrl, '_blank', 'noopener,noreferrer')
       } else {
-        console.warn('[ACTION-MODAL] listingIdExt inválido:', listingIdExt)
+        console.warn('[ACTION-MODAL] Não foi possível construir URL de edição para listingIdExt:', listingIdExt)
       }
     } else if (listingId) {
       // Fallback: tentar com listingId interno (pode não funcionar)

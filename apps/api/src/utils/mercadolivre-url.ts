@@ -7,6 +7,40 @@
 export type MercadoLivreUrlMode = 'edit' | 'view';
 
 /**
+ * Normaliza listingIdExt para extrair apenas os dígitos numéricos do MLB ID
+ * 
+ * Aceita formatos:
+ * - "MLB3923303743"
+ * - "3923303743"
+ * - "MLB-3923303743"
+ * 
+ * @param listingIdExt - ID externo do listing (pode ter prefixo MLB ou não)
+ * @returns ID numérico normalizado ou null se não encontrar dígitos válidos
+ */
+export function normalizeMlbId(listingIdExt: string | null | undefined): string | null {
+  if (!listingIdExt || !listingIdExt.trim()) return null;
+  
+  // Remover espaços e hífens
+  const cleaned = listingIdExt.trim().replace(/-/g, '');
+  
+  // Extrair apenas dígitos (usar regex para encontrar sequência de 6+ dígitos)
+  const digitMatches = cleaned.match(/\d{6,}/g);
+  
+  if (!digitMatches || digitMatches.length === 0) {
+    // Fallback: tentar qualquer sequência de dígitos
+    const anyDigits = cleaned.match(/\d+/g);
+    if (anyDigits && anyDigits.length > 0) {
+      // Escolher o maior número encontrado
+      return anyDigits.reduce((max, current) => current.length > max.length ? current : max);
+    }
+    return null;
+  }
+  
+  // Escolher o maior número encontrado (normalmente será o MLB ID completo)
+  return digitMatches.reduce((max, current) => current.length > max.length ? current : max);
+}
+
+/**
  * Constrói URL do anúncio no Mercado Livre
  * 
  * @param listingIdExt - ID externo do listing (ex: MLB3923303743)
@@ -19,33 +53,17 @@ export function buildMercadoLivreListingUrl(
   permalink?: string | null,
   mode: MercadoLivreUrlMode = 'edit'
 ): string | null {
-  // Extrair ID numérico do listingIdExt (remover prefixo MLB se presente)
-  const extractNumericId = (id: string): string | null => {
-    if (!id || !id.trim()) return null;
-    
-    // Se começa com MLB, remover prefixo
-    if (id.startsWith('MLB')) {
-      return id.replace(/^MLB/, '');
-    }
-    
-    // Se é só números, usar diretamente
-    if (id.match(/^\d+$/)) {
-      return id;
-    }
-    
-    return null;
-  };
+  // Normalizar ID usando helper
+  const normalizedId = normalizeMlbId(listingIdExt);
 
   // MODE: 'edit' - Painel do vendedor (edição)
   if (mode === 'edit') {
-    const numericId = listingIdExt ? extractNumericId(listingIdExt) : null;
-    
-    if (numericId) {
+    if (normalizedId) {
       // URL de edição: https://www.mercadolivre.com.br/anuncios/MLB{ID}/modificar/bomni
-      return `https://www.mercadolivre.com.br/anuncios/MLB${numericId}/modificar/bomni`;
+      return `https://www.mercadolivre.com.br/anuncios/MLB${normalizedId}/modificar/bomni`;
     }
     
-    // Se não tiver numericId, tentar fallback para view
+    // Se não tiver normalizedId, tentar fallback para view
     return buildMercadoLivreListingUrl(listingIdExt, permalink, 'view');
   }
 
@@ -65,13 +83,9 @@ export function buildMercadoLivreListingUrl(
   }
 
   // Prioridade 2: Se existir listing_id_ext (MLB ID), construir URL pública
-  if (listingIdExt && listingIdExt.trim().length > 0) {
-    const numericId = extractNumericId(listingIdExt);
-    
-    if (numericId) {
-      // URL pública do anúncio: https://produto.mercadolivre.com.br/MLB-{ID}
-      return `https://produto.mercadolivre.com.br/MLB-${numericId}`;
-    }
+  if (normalizedId) {
+    // URL pública do anúncio: https://produto.mercadolivre.com.br/MLB-{ID}
+    return `https://produto.mercadolivre.com.br/MLB-${normalizedId}`;
   }
 
   // Não foi possível construir URL
