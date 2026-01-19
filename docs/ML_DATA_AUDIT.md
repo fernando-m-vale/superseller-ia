@@ -1,96 +1,82 @@
 # ML DATA AUDIT — Mercado Livre (PRIORIDADE ZERO)
 
 ## 🎯 Objetivo
-Garantir que métricas e sinais do Mercado Livre (ex.: performance, mídia, visitas, clips/vídeo) sejam coletados, armazenados e exibidos com confiabilidade, sem contradições.
+Garantir que os sinais e métricas do Mercado Livre sejam coletados, armazenados e exibidos com confiabilidade, sem contradições e com operação contínua (sempre atualizado).
 
 ---
 
-## ✅ Status atual — Observações de campo (2026-01-09)
+## ✅ Status atual — 2026-01-19
 
-### 1) Sinais de Mídia no DB
-Tabela: `listings`
+### 1) Operação / Atualização de dados
+Infra:
+- Backend roda em AWS App Runner (processo não confiável para cron interno).
+- Estratégia correta: endpoints internos idempotentes + scheduler externo (EventBridge).
 
-Colunas identificadas:
-- `has_video` (boolean)
-- `has_clips` (boolean)
-- `pictures_count` (integer)
-- `clips_source` (text)
-- `clips_checked_at` (timestamp)
+Implementado:
+- POST /api/v1/jobs/sync-mercadolivre (listings + orders)
+- POST /api/v1/jobs/rebuild-daily-metrics (UPSERT idempotente em listing_metrics_daily)
+- Segurança: X-Internal-Key com INTERNAL_JOBS_KEY
 
-Caso testado:
-- marketplace: mercadolivre
-- listing_id_ext: "MLB3923303743"
-- pictures_count: 20
-- has_clips: NULL
-- has_video: exibido como “vazio” no client SQL (provável NULL)
+Risco atual:
+- INTERNAL_JOBS_KEY ainda precisa estar configurado no Secrets Manager e App Runner.
+- Scheduler (EventBridge) precisa ser ativado (PR #82).
 
-**Risco atual:**
-- Se `has_video` estiver NULL e algum mapper converter para false, o produto passa a afirmar “não tem vídeo” incorretamente.
+### 2) Performance (visits, etc.)
+Status:
+- Visitas seguem como indisponíveis via API no período (dependente de endpoint/escopo e estratégia de ingestão).
+- Orders e receita estão funcionando e alimentam gráficos.
 
-### 2) Sinais de Performance
-- Dimension “Performance” aparece como indisponível via API (dataQuality).
-- Ainda precisamos consolidar exatamente quais endpoints estão sendo usados e quais campos retornam, para não inferir dados ausentes.
+Auditoria:
+- listing_metrics_daily é a base do dashboard. Se MAX(date) não chega até hoje, dashboard fica “parado”.
 
-### 3) Snapshot / Payload bruto
-- Não existe tabela `listing_snapshots` no schema atual.
-- Tabelas relevantes existentes: `listing_action_outcomes`, `listing_ai_analysis`, `listing_metrics_daily`, `ai_model_metrics`, `job_logs`, etc.
+### 3) Mídia (CLIP)
+Decisão tomada e implementada:
+- Mercado Livre (seller) usa CLIP. Produto passa a tratar como “Clip (vídeo)” — conceito único.
+- Fonte de verdade: listings.has_clips (boolean | null).
+- listings.has_video é LEGACY e não participa da decisão.
 
-**Risco atual:**
-- Sem snapshot/payload bruto, não dá para auditar se a API do ML retornou “vídeo/clips” e o pipeline perdeu no caminho.
+Regras de confiabilidade:
+- has_clips = true → afirmar presença e nunca sugerir adicionar
+- has_clips = false → sugerir adicionar clip
+- has_clips = null → linguagem condicional (“não foi possível detectar via API; valide no painel”)
 
 ---
 
-## ✅ Matriz de Confiabilidade (atual)
+## ✅ Matriz de confiabilidade (atual)
 
 | Sinal | Origem | Armazenamento | Status | Observação |
 |------|--------|---------------|--------|-----------|
-| pictures_count | sync ML | listings.pictures_count | ✅ Confiável | Valor alto e consistente (ex.: 20) |
-| has_video | sync ML | listings.has_video | ⚠️ Inconclusivo | Pode estar NULL e virar false por bug de mapper |
-| has_clips | sync ML | listings.has_clips | ⚠️ Inconclusivo | NULL no caso testado |
-| performance (visits etc.) | API ML | (não consolidado) | ❌ Indisponível/Parcial | UI mostra “dados indisponíveis via API” |
+| pictures_count | ML sync | listings.pictures_count | ✅ Confiável | usado para regras de imagens |
+| has_clips | ML sync | listings.has_clips | ⚠️ Parcial | pode vir NULL conforme API/sync |
+| has_video (legacy) | legado | listings.has_video | ❌ Não usar | não decide nada no produto |
+| orders/receita | ML sync | orders / agregações | ✅ Confiável | alimenta dashboard |
+| listing_metrics_daily | jobs internos | listing_metrics_daily | ✅ Confiável quando agendado | depende do scheduler rodar |
 
 ---
 
-## 🧪 Próximos testes obrigatórios (para fechar causa raiz)
+## 🧪 Testes e validações obrigatórias
+### A) Saúde do dashboard
+- Query: SELECT MAX(date) FROM listing_metrics_daily;
+- DoD: MAX(date) deve ser a data atual (ou ontem, dependendo do horário do scheduler).
 
-### Teste A — Validar DB (postgre)
-Para o listing MLB3923303743:
-- Confirmar valores reais:
-  - has_video ∈ {true,false,null}
-  - has_clips ∈ {true,false,null}
-  - pictures_count
+### B) Execução de jobs
+- Validar job_logs diário:
+  - status SUCCESS
+  - duration e counters coerentes
 
-### Teste B — Validar pipeline (logs do /ai/analyze)
-Capturar logs com:
-- mediaInfo.hasVideo
-- mediaInfo.hasClips
-- mediaInfo.picturesCount
-- mediaVerdict final
-
-### Decisão baseada em evidência
-- Se DB NULL e log mostra false → bug de conversão (NULL → false) no mapper
-- Se DB false → falha de sync/detecção (ou API não expõe)
-- Se API não expõe → ajustar linguagem e considerar armazenar payload bruto mínimo
+### C) Mídia (clip)
+- Para anúncios conhecidos com clip:
+  - garantir que has_clips = true (se API permitir)
+  - se vier NULL, UI deve ser condicional e não afirmar ausência
 
 ---
 
-## ✅ Melhorias recomendadas (não executar agora sem decisão)
+## ✅ Melhorias recomendadas (próximas épicas)
+1) Persistência de payload bruto mínimo (auditoria)
+- Criar tabela de snapshots ou armazenar JSONB em execuções de sync para rastrear variações da API.
 
-### 1) Persistir payload bruto mínimo (debug/audit)
-Opção A: criar tabela `listing_raw_payloads` (retenção 7 dias)
-Opção B: adicionar coluna `raw_payload` (JSONB) em `listing_ai_analysis`
+2) Estratégia de visitas/analytics
+- Revisitar endpoint oficial de visits/metrics e definir pipeline (janela diária, limites, fallback).
 
-Objetivo: auditar sinais como clips/vídeo e evitar inferências.
-
-### 2) Normalização de listing_id_ext
-- Hoje: "MLB3923303743"
-- Normalizar para extrair NUM:
-  - 3923303743
-Para construir URLs editáveis e padronizar integrações.
-
----
-
-## 📌 DoD do ML Data Audit (para esta etapa)
-- Conseguimos afirmar com certeza se has_video/has_clips são confiáveis ou não.
-- O sistema nunca converte NULL em ausência.
-- Os textos exibidos respeitam a confiabilidade do dado.
+3) DataQuality Score
+- Expor por dimensão a confiabilidade do dado (confiável / parcial / indisponível).
