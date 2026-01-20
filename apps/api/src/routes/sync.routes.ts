@@ -842,22 +842,19 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             error: ordersError.message,
           }, 'Erro ao sincronizar orders do ML');
 
-          // Se for 401/403, marcar conexão como revoked
+          // Se for 401/403, marcar conexão como reauth_required
           if (statusCode === 401 || statusCode === 403) {
-            await prisma.marketplaceConnection.updateMany({
-              where: {
-                tenant_id: tenantId,
-                type: Marketplace.mercadolivre,
-              },
-              data: {
-                status: ConnectionStatus.revoked,
-              },
+            const { markConnectionReauthRequired } = await import('../utils/mark-connection-reauth');
+            await markConnectionReauthRequired({
+              tenantId,
+              statusCode,
+              errorMessage: mlErrorBody?.message || `ML API Error ${statusCode}`,
             });
 
-            return reply.status(401).send({
-              error: 'AUTH_REVOKED',
-              message: 'Conexão expirada ou revogada. Reconecte sua conta.',
-              code: 'AUTH_REVOKED',
+            return reply.status(409).send({
+              error: 'CONNECTION_EXPIRED',
+              message: 'Conexão com Mercado Livre expirou. Reconecte.',
+              code: 'CONNECTION_EXPIRED',
               mlError: {
                 status: statusCode,
                 message: mlErrorBody?.message || 'Unauthorized',
@@ -919,9 +916,18 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           totalDuration,
         }, 'Refresh completo concluído');
 
+        // Nunca retornar success:true com fetched=0 se houver erro HTTP da API
+        // Se houver erro HTTP (statusCode), não considerar success
+        const hasHttpError = ordersResult.errors.some(err => 
+          err.includes('ML API Error') || err.includes('401') || err.includes('403') || err.includes('400')
+        );
+        const ordersSuccess = !hasHttpError && ordersResult.success && 
+          (ordersResult.fetched !== undefined ? ordersResult.fetched > 0 : ordersResult.ordersProcessed > 0) &&
+          ordersResult.errors.length === 0;
+
         // Retornar resultado consolidado
         return reply.status(200).send({
-          message: 'Refresh concluído com sucesso',
+          message: ordersSuccess ? 'Refresh concluído com sucesso' : 'Refresh concluído com avisos',
           data: {
             orders: {
               fetched: ordersResult.fetched ?? 0,
@@ -932,7 +938,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
               fallbackUsed: ordersResult.fallbackUsed ?? false,
               fallbackFetched: ordersResult.fallbackFetched ?? 0,
               totalGMV: ordersResult.totalGMV,
-              success: ordersResult.success,
+              success: ordersSuccess,
               errors: ordersResult.errors.length > 0 ? ordersResult.errors : undefined,
             },
             metrics: {

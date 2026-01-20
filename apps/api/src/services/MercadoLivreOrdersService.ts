@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { PrismaClient, Marketplace, ConnectionStatus, OrderStatus } from '@prisma/client';
+import { markConnectionReauthRequired } from '../utils/mark-connection-reauth';
 
 const prisma = new PrismaClient();
 
@@ -456,12 +457,25 @@ export class MercadoLivreOrdersService {
       console.log('[ML-ORDERS] Token renovado com sucesso');
     } catch (error) {
       if (error instanceof AxiosError) {
-        console.error('[ML-ORDERS] Erro ao renovar token:', error.response?.data);
+        const status = error.response?.status;
+        const data = error.response?.data;
+        console.error('[ML-ORDERS] Erro ao renovar token:', data);
         
-        await prisma.marketplaceConnection.update({
-          where: { id: this.connectionId },
-          data: { status: ConnectionStatus.expired },
-        });
+        // Se for 401/403, marcar como reauth_required
+        if (status === 401 || status === 403) {
+          await markConnectionReauthRequired({
+            tenantId: this.tenantId,
+            statusCode: status,
+            errorMessage: data?.message || 'Token refresh failed',
+            connectionId: this.connectionId,
+          });
+        } else {
+          // Outros erros: marcar como expired
+          await prisma.marketplaceConnection.update({
+            where: { id: this.connectionId },
+            data: { status: ConnectionStatus.expired },
+          });
+        }
       }
       throw new Error('Falha ao renovar token. Reconecte a conta do Mercado Livre.');
     }
@@ -552,6 +566,16 @@ export class MercadoLivreOrdersService {
             
             // Não engolir erros HTTP - propagar para o caller
             if (status === 401 || status === 403 || status === 400) {
+              // Marcar conexão como reauth_required se for 401/403
+              if (status === 401 || status === 403) {
+                await markConnectionReauthRequired({
+                  tenantId: this.tenantId,
+                  statusCode: status,
+                  errorMessage: data?.message || `ML API Error ${status}`,
+                  connectionId: this.connectionId,
+                });
+              }
+
               // Criar erro customizado com informações sanitizadas
               const mlError = new Error(`ML API Error ${status}: ${data?.message || dataStr}`);
               (mlError as any).statusCode = status;
@@ -611,13 +635,23 @@ export class MercadoLivreOrdersService {
           
           console.error(`[ML-ORDERS] Fallback - ❌ Erro API ML (${status}):`, dataStr);
           
-          // Não engolir erros HTTP - propagar
-          if (status === 401 || status === 403 || status === 400) {
-            const mlError = new Error(`ML API Error ${status}: ${data?.message || dataStr}`);
-            (mlError as any).statusCode = status;
-            (mlError as any).mlErrorBody = data;
-            throw mlError;
-          }
+            // Não engolir erros HTTP - propagar
+            if (status === 401 || status === 403 || status === 400) {
+              // Marcar conexão como reauth_required se for 401/403
+              if (status === 401 || status === 403) {
+                await markConnectionReauthRequired({
+                  tenantId: this.tenantId,
+                  statusCode: status,
+                  errorMessage: data?.message || `ML API Error ${status}`,
+                  connectionId: this.connectionId,
+                });
+              }
+
+              const mlError = new Error(`ML API Error ${status}: ${data?.message || dataStr}`);
+              (mlError as any).statusCode = status;
+              (mlError as any).mlErrorBody = data;
+              throw mlError;
+            }
         }
         throw error;
       }

@@ -28,6 +28,7 @@ enum ConnectionStatus {
   active
   expired
   revoked
+  reauth_required
 }
 
 enum ListingStatus {
@@ -141,6 +142,9 @@ model MarketplaceConnection {
   refresh_token       String?
   expires_at          DateTime?
   status              ConnectionStatus
+  last_error_code     String?          // Código do último erro HTTP (ex: "401", "403")
+  last_error_at       DateTime?       // Quando ocorreu o último erro
+  last_error_message  String?          // Mensagem do último erro (sanitizada)
   created_at          DateTime         @default(now())
   updated_at          DateTime         @updatedAt
 

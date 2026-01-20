@@ -15,6 +15,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp, AlertCircle, Link as LinkIcon } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth';
+import { useToast } from '@/hooks/use-toast';
 
 function OverviewContent() {
   const router = useRouter();
@@ -22,6 +23,7 @@ function OverviewContent() {
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const { data: connectionStatus } = useMercadoLivreStatus();
+  const { toast } = useToast();
 
   useEffect(() => {
     const saved = localStorage.getItem('overview-period-days');
@@ -91,6 +93,26 @@ function OverviewContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        
+        // Se for erro de conexão expirada (409 ou 401 com CONNECTION_EXPIRED)
+        if (response.status === 409 || (response.status === 401 && errorData.code === 'CONNECTION_EXPIRED')) {
+          toast({
+            title: 'Conexão com Mercado Livre expirou',
+            description: errorData.message || 'Reconecte sua conta do Mercado Livre para continuar.',
+            variant: 'destructive',
+            action: (
+              <Button
+                size="sm"
+                onClick={handleReconnect}
+                className="mt-2"
+              >
+                Reconectar Mercado Livre
+              </Button>
+            ),
+          });
+          return;
+        }
+        
         throw new Error(errorData.message || 'Falha ao atualizar dados');
       }
 
@@ -99,9 +121,18 @@ function OverviewContent() {
 
       // Refetch dos dados após atualização (sem recarregar a página)
       await refetch();
+      
+      toast({
+        title: 'Dados atualizados!',
+        description: 'As informações do dashboard foram sincronizadas com o Mercado Livre.',
+      });
     } catch (error) {
       console.error('Erro ao atualizar dados:', error);
-      alert(error instanceof Error ? error.message : 'Erro ao atualizar dados');
+      toast({
+        title: 'Erro ao atualizar',
+        description: error instanceof Error ? error.message : 'Ocorreu um erro ao sincronizar os dados.',
+        variant: 'destructive',
+      });
     } finally {
       setIsRefreshing(false);
     }
