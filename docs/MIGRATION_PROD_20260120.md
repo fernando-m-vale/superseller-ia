@@ -1,7 +1,7 @@
 # Migration PROD: Adicionar campos de erro e status reauth_required
 
 **Data:** 2026-01-20  
-**Migration:** `20260120000000_add_connection_error_fields_and_reauth_status`
+**Migration:** `20260120222324_add_connection_error_fields_and_reauth_status`
 
 ## Objetivo
 
