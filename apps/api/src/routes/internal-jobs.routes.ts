@@ -246,17 +246,12 @@ export const internalJobsRoutes: FastifyPluginCallback = (app, _, done) => {
         // Executar rebuild usando syncListingMetricsDaily com período customizado
         const syncService = new MercadoLivreSyncService(tenantId);
         
-        // Calcular periodDays baseado no intervalo (from até hoje)
-        // O método syncListingMetricsDaily busca dados dos últimos N dias e salva no dia atual
-        // Para garantir que MAX(date) seja hoje, usamos o número de dias desde 'from' até hoje
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const periodDays = Math.ceil((today.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24));
+        // Calcular periodDays baseado no intervalo (from até to)
+        const periodDays = Math.ceil((dateTo.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         
-        // Chamar syncListingMetricsDaily que já faz UPSERT idempotente
-        // NOTA: O método atual salva tudo no dia atual como agregado do período
-        // Isso garante que MAX(date) seja hoje, mas não distribui por dia
-        const result = await syncService.syncListingMetricsDaily(periodDays);
+        // Chamar syncListingMetricsDaily que agora gera série diária real
+        // O método agora persiste métricas por dia usando payment.date_approved
+        const result = await syncService.syncListingMetricsDaily(tenantId, dateFrom, dateTo, periodDays);
 
         const duration = Date.now() - startTime;
 

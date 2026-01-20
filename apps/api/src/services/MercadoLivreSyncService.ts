@@ -1128,13 +1128,20 @@ export class MercadoLivreSyncService {
   /**
    * Sincroniza métricas diárias dos anúncios do Mercado Livre
    * 
-   * Busca métricas dos últimos periodDays e persiste em listing_metrics_daily.
-   * Como a API do ML não fornece métricas diárias diretamente, usa aproximação
-   * baseada em dados agregados e distribuição proporcional.
+   * Busca pedidos pagos dos últimos periodDays e persiste série diária real
+   * em listing_metrics_daily, agregando por listing e por dia usando payment.date_approved.
    * 
-   * @param periodDays Período em dias para buscar métricas (padrão: 30)
+   * @param tenantId Tenant ID (requerido para rebuild com intervalo customizado)
+   * @param dateFrom Data inicial do range (inclusive)
+   * @param dateTo Data final do range (inclusive)
+   * @param periodDays Período em dias para contexto (padrão: 30)
    */
-  async syncListingMetricsDaily(periodDays: number = 30): Promise<{
+  async syncListingMetricsDaily(
+    tenantId: string,
+    dateFrom: Date,
+    dateTo: Date,
+    periodDays: number = 30
+  ): Promise<{
     success: boolean;
     listingsProcessed: number;
     metricsCreated: number;
@@ -1157,7 +1164,24 @@ export class MercadoLivreSyncService {
     };
 
     try {
-      console.log(`[ML-METRICS] Iniciando sync de métricas diárias para tenant: ${this.tenantId} (${periodDays} dias)`);
+      // Normalizar datas para UTC midnight
+      const today = new Date(dateTo);
+      today.setUTCHours(0, 0, 0, 0);
+      
+      const fromDate = new Date(dateFrom);
+      fromDate.setUTCHours(0, 0, 0, 0);
+
+      // Gerar array de dias do range (inclusive)
+      const dayStrings: string[] = [];
+      const currentDate = new Date(fromDate);
+      while (currentDate <= today) {
+        const dayStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        dayStrings.push(dayStr);
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
+
+      console.log(`[ML-METRICS] Iniciando sync de métricas diárias para tenant: ${tenantId}`);
+      console.log(`[ML-METRICS] Range: ${dayStrings[0]} até ${dayStrings[dayStrings.length - 1]} (${dayStrings.length} dias)`);
 
       // 1. Carregar conexão e garantir token válido
       await this.loadConnection();
@@ -1166,7 +1190,7 @@ export class MercadoLivreSyncService {
       // 2. Buscar todos os listings ativos do tenant
       const listings = await prisma.listing.findMany({
         where: {
-          tenant_id: this.tenantId,
+          tenant_id: tenantId,
           marketplace: Marketplace.mercadolivre,
           status: ListingStatus.active,
         },
@@ -1176,17 +1200,14 @@ export class MercadoLivreSyncService {
 
       if (listings.length === 0) {
         result.success = true;
+        result.min_date = dayStrings[0] || null;
+        result.max_date = dayStrings[dayStrings.length - 1] || null;
         result.duration = Date.now() - startTime;
         return result;
       }
 
-      // 3. Calcular data de corte para o período
-      const dateFrom = new Date();
-      dateFrom.setDate(dateFrom.getDate() - periodDays);
-      dateFrom.setHours(0, 0, 0, 0);
-      const dateFromISO = dateFrom.toISOString();
-
-      // 4. Buscar pedidos pagos do período via Orders API (fonte confiável)
+      // 3. Buscar pedidos pagos do período via Orders API
+      const dateFromISO = fromDate.toISOString();
       console.log(`[ML-METRICS] Buscando pedidos pagos desde ${dateFromISO}...`);
       
       interface MLOrderItem {
@@ -1211,7 +1232,6 @@ export class MercadoLivreSyncService {
         paging: { total: number; offset: number; limit: number };
       }
 
-      // Buscar pedidos do período via Orders API
       const allOrders: MLOrder[] = [];
       let offset = 0;
       const limit = 50;
@@ -1247,175 +1267,119 @@ export class MercadoLivreSyncService {
 
       console.log(`[ML-METRICS] Encontrados ${paidOrders.length} pedidos pagos no período (de ${allOrders.length} total)`);
 
-      // 5. Agrupar pedidos por listing_id_ext e calcular métricas
-      const metricsByListing = new Map<string, { orders: number; gmv: number }>();
+      // 4. Agregar pedidos por listing e por dia usando payment.date_approved
+      // Estrutura: Map<listingIdExt, Map<dayStr, { orders: number, gmv: number }>>
+      const metricsByListingAndDay = new Map<string, Map<string, { orders: number; gmv: number }>>();
       
       for (const order of paidOrders) {
+        // Encontrar payment approved
+        const paidPayment = order.payments?.find(p => p.status === 'approved' && p.date_approved);
+        if (!paidPayment || !paidPayment.date_approved) continue;
+
+        // Normalizar date_approved para YYYY-MM-DD (UTC)
+        const paymentDate = new Date(paidPayment.date_approved);
+        paymentDate.setUTCHours(0, 0, 0, 0);
+        const dayStr = paymentDate.toISOString().split('T')[0];
+
+        // Verificar se o dia está no range
+        if (!dayStrings.includes(dayStr)) {
+          continue; // Pular dias fora do range
+        }
+
+        // Agregar por listing e dia
         for (const orderItem of order.order_items || []) {
           const listingIdExt = orderItem.item.id;
-          const existing = metricsByListing.get(listingIdExt) || { orders: 0, gmv: 0 };
+          
+          if (!metricsByListingAndDay.has(listingIdExt)) {
+            metricsByListingAndDay.set(listingIdExt, new Map());
+          }
+          
+          const dayMap = metricsByListingAndDay.get(listingIdExt)!;
+          const existing = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
           
           existing.orders += orderItem.quantity;
           existing.gmv += orderItem.quantity * orderItem.unit_price;
           
-          metricsByListing.set(listingIdExt, existing);
+          dayMap.set(dayStr, existing);
         }
       }
 
-      // 6. Para cada listing, buscar visitas e persistir métricas agregadas
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
+      // 5. Para cada listing, fazer UPSERT para cada dia do range
+      const upsertPromises: Promise<void>[] = [];
+      
       for (const listing of listings) {
-        try {
-          // Buscar métricas de orders do período (se existirem)
-          const orderMetrics = metricsByListing.get(listing.listing_id_ext);
-          const orders_30d = orderMetrics?.orders || 0;
-          const gmv_30d = orderMetrics?.gmv || 0;
+        const dayMap = metricsByListingAndDay.get(listing.listing_id_ext) || new Map();
+        
+        for (const dayStr of dayStrings) {
+          const dayMetrics = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
+          const dayDate = new Date(dayStr + 'T00:00:00.000Z');
 
-          // Tentar buscar visitas via endpoint /items/{id}
-          // Nota: visits pode não estar disponível ou ser lifetime, não período
-          let visits_30d: number | null = null;
-          let visitsSource = 'unknown';
-          
-          try {
-            const itemData = await this.executeWithRetryOn401(async () => {
-              const response = await axios.get(`${ML_API_BASE}/items/${listing.listing_id_ext}`, {
-                headers: { Authorization: `Bearer ${this.accessToken}` },
-              });
-              return response.data as MercadoLivreItem;
-            });
-
-            // Se visits existir no payload, pode ser lifetime ou período - marcar como ml_items_aggregate
-            if (itemData.visits !== undefined && itemData.visits !== null) {
-              visits_30d = itemData.visits;
-              visitsSource = 'ml_items_aggregate'; // Pode ser lifetime, não período
-            }
-          } catch (error) {
-            // Se falhar ao buscar item, visits permanece null (unknown)
-            console.log(`[ML-METRICS] Não foi possível buscar visitas para ${listing.listing_id_ext}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
-          }
-
-          // Determinar origem dos dados
-          let dataSource: string;
-          if (orders_30d > 0) {
-            dataSource = 'ml_orders_period'; // Orders do período via Orders API
-          } else if (visits_30d !== null) {
-            dataSource = visitsSource;
-          } else {
-            dataSource = 'unknown'; // Sem dados disponíveis
-          }
-
-          // Calcular conversão apenas se visits for conhecido
-          const conversion = visits_30d !== null && visits_30d > 0 ? orders_30d / visits_30d : null;
-          
-          // Impressions/clicks/ctr: null quando não houver fonte real (sem estimativas)
-          // NOTA: Não estimamos impressions/clicks/ctr - aguardar integração com Visits API ou Ads API
-          const impressions = null;
-          const clicks = null;
-          const ctr = null;
-
-          // Salvar como ponto único no dia atual (representando agregado do período)
-          const existingToday = await prisma.listingMetricsDaily.findUnique({
-            where: {
-              tenant_id_listing_id_date: {
-                tenant_id: this.tenantId,
-                listing_id: listing.id,
-                date: today,
+          // Criar promise de UPSERT
+          upsertPromises.push(
+            prisma.listingMetricsDaily.upsert({
+              where: {
+                tenant_id_listing_id_date: {
+                  tenant_id: tenantId,
+                  listing_id: listing.id,
+                  date: dayDate,
+                },
               },
-            },
-          });
-
-          if (existingToday) {
-            // Atualizar métrica existente
-            await prisma.listingMetricsDaily.update({
-              where: { id: existingToday.id },
-              data: {
-                visits: visits_30d,
-                orders: orders_30d,
-                conversion: conversion,
-                impressions: impressions,
-                clicks: clicks,
-                ctr: ctr,
-                gmv: gmv_30d,
-                source: dataSource,
+              create: {
+                tenant_id: tenantId,
+                listing_id: listing.id,
+                date: dayDate,
+                visits: null, // Não inventar dados
+                orders: dayMetrics.orders,
+                gmv: dayMetrics.gmv,
+                conversion: null, // Sem visits, não calcular conversão
+                impressions: null, // Não inventar dados
+                clicks: null, // Não inventar dados
+                ctr: null, // Não inventar dados
+                source: 'ml_orders_daily',
                 period_days: periodDays,
               },
-            });
-            result.rowsUpserted++;
-          } else {
-            // Criar nova métrica para hoje
-            await prisma.listingMetricsDaily.create({
-              data: {
-                tenant_id: this.tenantId,
-                listing_id: listing.id,
-                date: today,
-                visits: visits_30d,
-                orders: orders_30d,
-                conversion: conversion,
-                impressions: impressions,
-                clicks: clicks,
-                ctr: ctr,
-                gmv: gmv_30d,
-                source: dataSource,
+              update: {
+                visits: null, // Não inventar dados
+                orders: dayMetrics.orders,
+                gmv: dayMetrics.gmv,
+                conversion: null, // Sem visits, não calcular conversão
+                impressions: null, // Não inventar dados
+                clicks: null, // Não inventar dados
+                ctr: null, // Não inventar dados
+                source: 'ml_orders_daily',
                 period_days: periodDays,
               },
-            });
-            result.metricsCreated++;
-            result.rowsUpserted++;
-          }
-
-          // Atualizar min_date e max_date
-          const dateStr = today.toISOString().split('T')[0];
-          if (!result.min_date || dateStr < result.min_date) {
-            result.min_date = dateStr;
-          }
-          if (!result.max_date || dateStr > result.max_date) {
-            result.max_date = dateStr;
-          }
-
-          // Atualizar visits_last_7d e sales_last_7d no listing
-          // Calcular últimos 7 dias das métricas diárias
-          const last7Days = new Date();
-          last7Days.setDate(last7Days.getDate() - 7);
-          last7Days.setHours(0, 0, 0, 0);
-
-          const last7DaysMetrics = await prisma.listingMetricsDaily.findMany({
-            where: {
-              tenant_id: this.tenantId,
-              listing_id: listing.id,
-              date: {
-                gte: last7Days,
-              },
-            },
-          });
-
-          // Somar visits: null se todos forem null, senão soma apenas valores não-null
-          const visitsValues = last7DaysMetrics.map(m => m.visits).filter((v): v is number => v !== null);
-          const visitsLast7d = visitsValues.length > 0 ? visitsValues.reduce((sum, v) => sum + v, 0) : null;
-          const salesLast7d = last7DaysMetrics.reduce((sum, m) => sum + m.orders, 0);
-
-          await prisma.listing.update({
-            where: { id: listing.id },
-            data: {
-              visits_last_7d: visitsLast7d,
-              sales_last_7d: salesLast7d,
-            },
-          });
-
-          result.listingsProcessed++;
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-          result.errors.push(`Listing ${listing.id}: ${errorMsg}`);
-          console.error(`[ML-METRICS] Erro ao processar listing ${listing.id}:`, errorMsg);
+            }).then(() => {
+              result.rowsUpserted++;
+            }).catch((error) => {
+              const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+              result.errors.push(`Listing ${listing.id} dia ${dayStr}: ${errorMsg}`);
+              console.error(`[ML-METRICS] Erro ao fazer UPSERT para listing ${listing.id} dia ${dayStr}:`, errorMsg);
+            })
+          );
         }
+        
+        result.listingsProcessed++;
       }
+
+      // Executar UPSERTs em batch com limite de concorrência (evitar saturar DB)
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < upsertPromises.length; i += BATCH_SIZE) {
+        const batch = upsertPromises.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(batch);
+      }
+
+      // Atualizar min_date e max_date
+      result.min_date = dayStrings[0] || null;
+      result.max_date = dayStrings[dayStrings.length - 1] || null;
 
       result.success = result.errors.length === 0;
       result.duration = Date.now() - startTime;
 
       console.log(`[ML-METRICS] Sync concluído em ${result.duration}ms`);
-      console.log(`[ML-METRICS] Processados: ${result.listingsProcessed}, Métricas criadas: ${result.metricsCreated}`);
+      console.log(`[ML-METRICS] Processados: ${result.listingsProcessed} listings, ${dayStrings.length} dias`);
+      console.log(`[ML-METRICS] Rows upserted: ${result.rowsUpserted} (esperado: ~${result.listingsProcessed * dayStrings.length})`);
+      console.log(`[ML-METRICS] Range: ${result.min_date} até ${result.max_date}`);
 
       return result;
     } catch (error) {

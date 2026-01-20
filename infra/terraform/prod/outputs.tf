@@ -190,8 +190,8 @@ output "rds_database_name" {
 # EventBridge Scheduler (se habilitado)
 # -----------------------------------------------------------------------------
 output "scheduler_daily_metrics_arn" {
-  description = "EventBridge Scheduler ARN for daily metrics rebuild (if enabled)"
-  value       = var.enable_scheduler ? aws_scheduler_schedule.daily_metrics_rebuild[0].arn : null
+  description = "ARN do schedule de rebuild diário (quando habilitado). Temporariamente desabilitado porque o scheduler TF ainda não está carregado no módulo."
+  value       = null
 }
 
 output "scheduler_rebuild_endpoint" {
@@ -205,6 +205,6 @@ output "scheduler_ml_sync_endpoint" {
 }
 
 output "scheduler_execution_role_arn" {
-  description = "Scheduler Execution Role ARN (if enabled)"
-  value       = var.enable_scheduler ? aws_iam_role.scheduler_execution[0].arn : null
+  description = "ARN da role de execução do scheduler (quando habilitado). Temporariamente desabilitado porque o scheduler TF ainda não está carregado no módulo."
+  value       = null
 }

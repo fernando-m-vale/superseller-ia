@@ -683,8 +683,18 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           days: daysBack,
         }, 'Requisição de sync de performance recebida');
 
+        // Calcular range de datas (dateFrom até today)
+        // Para periodDays=30, queremos 30 dias incluindo hoje: hoje-29 até hoje
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        
+        const dateFrom = new Date(today);
+        dateFrom.setUTCDate(dateFrom.getUTCDate() - (daysBack - 1)); // Incluir hoje no range (hoje-29 para 30 dias)
+        
+        const dateTo = new Date(today); // Incluir hoje no range
+
         const syncService = new MercadoLivreSyncService(tenantId);
-        const result = await syncService.syncListingMetricsDaily(daysBack);
+        const result = await syncService.syncListingMetricsDaily(tenantId, dateFrom, dateTo, daysBack);
 
         const hasAuthRevoked = result.errors.some(err => 
           err.includes('AUTH_REVOKED') || 
@@ -788,8 +798,18 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         }, 'Requisição de sync de métricas recebida');
 
         // Instanciar service e executar sync
+        // Calcular range de datas (dateFrom até today)
+        // Para periodDays=30, queremos 30 dias incluindo hoje: hoje-29 até hoje
+        const today = new Date();
+        today.setUTCHours(0, 0, 0, 0);
+        
+        const dateFrom = new Date(today);
+        dateFrom.setUTCDate(dateFrom.getUTCDate() - (daysBack - 1)); // Incluir hoje no range (hoje-29 para 30 dias)
+        
+        const dateTo = new Date(today); // Incluir hoje no range
+
         const syncService = new MercadoLivreSyncService(tenantId);
-        const result = await syncService.syncListingMetricsDaily(daysBack);
+        const result = await syncService.syncListingMetricsDaily(tenantId, dateFrom, dateTo, daysBack);
 
         // Verificar se há erro de autenticação revogada
         const hasAuthRevoked = result.errors.some(err => 
