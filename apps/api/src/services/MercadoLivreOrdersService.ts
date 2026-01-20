@@ -68,6 +68,10 @@ interface OrderSyncResult {
   totalGMV: number;
   errors: string[];
   duration: number;
+  fetched?: number; // Total de orders buscados da API
+  inRangeCount?: number; // Orders dentro do range após filtro local
+  fallbackUsed?: boolean; // Se foi usado fallback (busca sem filtro)
+  fallbackFetched?: number; // Quantos orders foram buscados no fallback
 }
 
 export class MercadoLivreOrdersService {
@@ -119,26 +123,64 @@ export class MercadoLivreOrdersService {
       // 2. Verificar/renovar token se necessário
       await this.ensureValidToken();
 
-      // 3. Normalizar datas para UTC midnight
+      // 3. Normalizar datas para UTC (from: 00:00:00.000Z, to: 23:59:59.999Z)
       const dateFromUtc = new Date(dateFrom);
       dateFromUtc.setUTCHours(0, 0, 0, 0);
-      const dateFromISO = dateFromUtc.toISOString();
+      const dateFromISO = dateFromUtc.toISOString(); // YYYY-MM-DDT00:00:00.000Z
 
-      console.log(`[ML-ORDERS] Buscando pedidos desde: ${dateFromISO}`);
+      const dateToUtc = new Date(dateTo);
+      dateToUtc.setUTCHours(23, 59, 59, 999);
+      const dateToISO = dateToUtc.toISOString(); // YYYY-MM-DDT23:59:59.999Z
 
-      // 4. Buscar pedidos da API do ML
-      const orders = await this.fetchOrders(dateFromISO);
-      console.log(`[ML-ORDERS] Encontrados ${orders.length} pedidos`);
+      // Logs estruturados para debug
+      console.log(`[ML-ORDERS] ========== SYNC ORDERS BY RANGE ==========`);
+      console.log(`[ML-ORDERS] Tenant ID: ${this.tenantId}`);
+      console.log(`[ML-ORDERS] Connection ID: ${this.connectionId}`);
+      console.log(`[ML-ORDERS] Seller ID: ${this.providerAccountId}`);
+      console.log(`[ML-ORDERS] Range From: ${dateFromISO}`);
+      console.log(`[ML-ORDERS] Range To: ${dateToISO}`);
 
+      // 4. Buscar pedidos da API do ML com filtro de data
+      const orders = await this.fetchOrders(dateFromISO, dateToISO);
+      result.fetched = orders.length;
+      console.log(`[ML-ORDERS] Orders buscados da API: ${orders.length}`);
+
+      // 5. Filtrar orders localmente pelo range (date_created)
+      const ordersInRange = orders.filter(order => {
+        const orderDate = new Date(order.date_created);
+        return orderDate >= dateFromUtc && orderDate <= dateToUtc;
+      });
+      result.inRangeCount = ordersInRange.length;
+      console.log(`[ML-ORDERS] Orders dentro do range após filtro local: ${ordersInRange.length}`);
+
+      // 6. Fallback: se fetched === 0, buscar últimos pedidos sem filtro
+      let finalOrders = ordersInRange;
       if (orders.length === 0) {
-        console.log('[ML-ORDERS] Nenhum pedido encontrado para sincronizar');
+        console.log(`[ML-ORDERS] ⚠️  Nenhum pedido encontrado com filtro. Tentando fallback (últimos 100 pedidos sem filtro)...`);
+        const fallbackOrders = await this.fetchOrdersFallback(100);
+        result.fallbackUsed = true;
+        result.fallbackFetched = fallbackOrders.length;
+        console.log(`[ML-ORDERS] Fallback: ${fallbackOrders.length} pedidos buscados`);
+
+        // Filtrar localmente pelo range
+        const fallbackInRange = fallbackOrders.filter(order => {
+          const orderDate = new Date(order.date_created);
+          return orderDate >= dateFromUtc && orderDate <= dateToUtc;
+        });
+        console.log(`[ML-ORDERS] Fallback: ${fallbackInRange.length} pedidos dentro do range`);
+        finalOrders = fallbackInRange;
+        result.inRangeCount = fallbackInRange.length;
+      }
+
+      if (finalOrders.length === 0) {
+        console.log(`[ML-ORDERS] ⚠️  Nenhum pedido encontrado no range ${dateFromISO} até ${dateToISO}`);
         result.success = true;
         result.duration = Date.now() - startTime;
         return result;
       }
 
-      // 5. Processar cada pedido
-      for (const order of orders) {
+      // 7. Processar cada pedido
+      for (const order of finalOrders) {
         try {
           const { created, gmv } = await this.upsertOrder(order);
           result.ordersProcessed++;
@@ -392,32 +434,33 @@ export class MercadoLivreOrdersService {
   }
 
   /**
-   * Busca pedidos da API do Mercado Livre
+   * Busca pedidos da API do Mercado Livre com filtro de data (from até to)
    */
-  private async fetchOrders(dateFrom: string): Promise<MLOrder[]> {
+  private async fetchOrders(dateFrom: string, dateTo: string): Promise<MLOrder[]> {
     const allOrders: MLOrder[] = [];
     let offset = 0;
     const limit = 50;
 
-    console.log(`[ML-ORDERS] ========== INICIANDO FETCH DE PEDIDOS ==========`);
+    console.log(`[ML-ORDERS] ========== INICIANDO FETCH DE PEDIDOS COM FILTRO ==========`);
     console.log(`[ML-ORDERS] Seller ID: ${this.providerAccountId}`);
-    console.log(`[ML-ORDERS] Data From: ${dateFrom}`);
-    // Log seguro: não expor token
+    console.log(`[ML-ORDERS] Date From: ${dateFrom}`);
+    console.log(`[ML-ORDERS] Date To: ${dateTo}`);
 
     while (true) {
       const orders = await this.executeWithRetryOn401(async () => {
         try {
           const url = `${ML_API_BASE}/orders/search`;
-          const params = {
+          const params: Record<string, string | number> = {
             seller: this.providerAccountId,
             'order.date_created.from': dateFrom,
+            'order.date_created.to': dateTo,
             sort: 'date_desc',
             offset,
             limit,
           };
           
           console.log(`[ML-ORDERS] Chamando API: ${url}`);
-          console.log(`[ML-ORDERS] Params:`, JSON.stringify(params));
+          console.log(`[ML-ORDERS] Query params enviados:`, JSON.stringify(params, null, 2));
 
           const response = await axios.get<MLOrdersSearchResponse>(url, {
             headers: { Authorization: `Bearer ${this.accessToken}` },
@@ -432,6 +475,11 @@ export class MercadoLivreOrdersService {
           if (response.data.results.length > 0) {
             const firstOrder = response.data.results[0];
             console.log(`[ML-ORDERS] Exemplo de pedido: ID=${firstOrder.id}, Status=${firstOrder.status}, Total=${firstOrder.total_amount}, Date=${firstOrder.date_created}`);
+          } else if (offset === 0) {
+            console.log(`[ML-ORDERS] ⚠️  WARN: Nenhum pedido encontrado com os filtros aplicados`);
+            console.log(`[ML-ORDERS] Seller ID: ${this.providerAccountId}`);
+            console.log(`[ML-ORDERS] Date From: ${dateFrom}`);
+            console.log(`[ML-ORDERS] Date To: ${dateTo}`);
           }
 
           return response.data;
@@ -459,6 +507,50 @@ export class MercadoLivreOrdersService {
 
     console.log(`[ML-ORDERS] ========== FIM DO FETCH: ${allOrders.length} pedidos ==========`);
     return allOrders;
+  }
+
+  /**
+   * Busca últimos N pedidos sem filtro de data (fallback quando filtro retorna 0)
+   */
+  private async fetchOrdersFallback(limit: number = 100): Promise<MLOrder[]> {
+    console.log(`[ML-ORDERS] ========== FALLBACK: BUSCANDO ÚLTIMOS ${limit} PEDIDOS SEM FILTRO ==========`);
+    
+    try {
+      const url = `${ML_API_BASE}/orders/search`;
+      const params: Record<string, string | number> = {
+        seller: this.providerAccountId,
+        sort: 'date_desc',
+        offset: 0,
+        limit,
+      };
+      
+      console.log(`[ML-ORDERS] Fallback - Chamando API: ${url}`);
+      console.log(`[ML-ORDERS] Fallback - Query params:`, JSON.stringify(params, null, 2));
+
+      const response = await this.executeWithRetryOn401(async () => {
+        return await axios.get<MLOrdersSearchResponse>(url, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          params,
+        });
+      });
+
+      console.log(`[ML-ORDERS] Fallback - Resposta status: ${response.status}`);
+      console.log(`[ML-ORDERS] Fallback - Total disponível: ${response.data.paging.total}`);
+      console.log(`[ML-ORDERS] Fallback - Results: ${response.data.results.length}`);
+
+      if (response.data.results.length > 0) {
+        const firstOrder = response.data.results[0];
+        const lastOrder = response.data.results[response.data.results.length - 1];
+        console.log(`[ML-ORDERS] Fallback - Primeiro pedido: ID=${firstOrder.id}, Date=${firstOrder.date_created}`);
+        console.log(`[ML-ORDERS] Fallback - Último pedido: ID=${lastOrder.id}, Date=${lastOrder.date_created}`);
+      }
+
+      return response.data.results;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      console.error(`[ML-ORDERS] Fallback - Erro ao buscar pedidos:`, errorMsg);
+      return [];
+    }
   }
 
   /**

@@ -887,9 +887,13 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           message: 'Refresh concluído com sucesso',
           data: {
             orders: {
+              fetched: ordersResult.fetched ?? 0,
               processed: ordersResult.ordersProcessed,
               created: ordersResult.ordersCreated,
               updated: ordersResult.ordersUpdated,
+              inRangeCount: ordersResult.inRangeCount ?? ordersResult.ordersProcessed,
+              fallbackUsed: ordersResult.fallbackUsed ?? false,
+              fallbackFetched: ordersResult.fallbackFetched ?? 0,
               totalGMV: ordersResult.totalGMV,
               success: ordersResult.success,
               errors: ordersResult.errors.length > 0 ? ordersResult.errors : undefined,
