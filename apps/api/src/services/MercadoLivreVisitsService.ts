@@ -167,18 +167,262 @@ export class MercadoLivreVisitsService {
   async fetchVisitsTimeWindow(itemId: string, lastDays: number): Promise<VisitsTimeWindowResponse['visits']> {
     return this.executeWithRetryOn401(async () => {
       const url = `${ML_API_BASE}/items/${itemId}/visits/time_window`;
+      const params = {
+        last: lastDays,
+        unit: 'day',
+      };
+
       console.log(`[ML-VISITS] Buscando visitas para item ${itemId}, últimos ${lastDays} dias`);
+      console.log(`[ML-VISITS] Request: GET ${url}`);
+      console.log(`[ML-VISITS] Query params:`, JSON.stringify(params, null, 2));
 
       const response = await axios.get<VisitsTimeWindowResponse>(url, {
         headers: { Authorization: `Bearer ${this.accessToken}` },
-        params: {
-          last: lastDays,
-          unit: 'day',
-        },
+        params,
       });
+
+      console.log(`[ML-VISITS] Response status: ${response.status}, visits count: ${response.data.visits?.length || 0}`);
 
       return response.data.visits || [];
     });
+  }
+
+  /**
+   * Sincroniza visitas por range de datas
+   * 
+   * @param tenantId ID do tenant
+   * @param dateFrom Data inicial (UTC midnight)
+   * @param dateTo Data final (UTC end of day)
+   * @returns Resultado da sincronização
+   */
+  async syncVisitsByRange(
+    tenantId: string,
+    dateFrom: Date,
+    dateTo: Date
+  ): Promise<{
+    success: boolean;
+    listingsProcessed: number;
+    rowsUpserted: number;
+    min_date: string | null;
+    max_date: string | null;
+    errors: string[];
+    duration: number;
+  }> {
+    const startTime = Date.now();
+    const result = {
+      success: false,
+      listingsProcessed: 0,
+      rowsUpserted: 0,
+      min_date: null as string | null,
+      max_date: null as string | null,
+      errors: [] as string[],
+      duration: 0,
+    };
+
+    try {
+      this.tenantId = tenantId;
+      
+      // Normalizar range para UTC midnight
+      const fromDate = new Date(dateFrom);
+      fromDate.setUTCHours(0, 0, 0, 0);
+      const toDate = new Date(dateTo);
+      toDate.setUTCHours(23, 59, 59, 999);
+
+      // Calcular número de dias
+      const daysDiff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      console.log(`[ML-VISITS] ========== SYNC VISITS BY RANGE ==========`);
+      console.log(`[ML-VISITS] Tenant ID: ${tenantId}`);
+      console.log(`[ML-VISITS] Date From: ${fromDate.toISOString()}`);
+      console.log(`[ML-VISITS] Date To: ${toDate.toISOString()}`);
+      console.log(`[ML-VISITS] Days: ${daysDiff}`);
+
+      // 1. Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      // 2. Buscar listings do tenant
+      const listings = await prisma.listing.findMany({
+        where: {
+          tenant_id: tenantId,
+          marketplace: Marketplace.mercadolivre,
+          status: ListingStatus.active,
+        },
+        select: {
+          id: true,
+          listing_id_ext: true,
+        },
+      });
+
+      console.log(`[ML-VISITS] Encontrados ${listings.length} listings ativos`);
+
+      if (listings.length === 0) {
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        result.min_date = fromDate.toISOString().split('T')[0];
+        result.max_date = toDate.toISOString().split('T')[0];
+        return result;
+      }
+
+      // 3. Processar listings em batches (5-10 concorrentes)
+      const batchSize = 5;
+      const batches: typeof listings[] = [];
+      for (let i = 0; i < listings.length; i += batchSize) {
+        batches.push(listings.slice(i, i + batchSize));
+      }
+
+      console.log(`[ML-VISITS] Processando ${batches.length} lotes de até ${batchSize} listings`);
+
+      // Processar cada lote
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+        console.log(`[ML-VISITS] Processando lote ${batchIndex + 1}/${batches.length} (${batch.length} listings)`);
+
+        // Processar listings do lote em paralelo
+        const batchPromises = batch.map(async (listing) => {
+          try {
+            // Buscar visitas da API do ML
+            let visits: Array<{ date: string; visits: number }> = [];
+            try {
+              visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
+            } catch (error: any) {
+              // Tratar erros HTTP
+              if (axios.isAxiosError(error)) {
+                const status = error.response?.status;
+                const data = error.response?.data;
+
+                // 401/403: marcar conexão como reauth_required
+                if (status === 401 || status === 403) {
+                  const { markConnectionReauthRequired } = await import('../utils/mark-connection-reauth');
+                  await markConnectionReauthRequired({
+                    tenantId,
+                    statusCode: status,
+                    errorMessage: data?.message || `ML API Error ${status}`,
+                    connectionId: this.connectionId,
+                  });
+                  throw error;
+                }
+
+                // 429: retry simples com backoff (2 tentativas)
+                if (status === 429) {
+                  console.log(`[ML-VISITS] Rate limit (429) para listing ${listing.id}. Aguardando 2s e retry...`);
+                  await new Promise(resolve => setTimeout(resolve, 2000));
+
+                  try {
+                    visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
+                  } catch (retryError) {
+                    const errorMsg = `Erro após retry (429) para listing ${listing.id}: ${retryError instanceof Error ? retryError.message : 'Erro desconhecido'}`;
+                    console.error(`[ML-VISITS] ${errorMsg}`);
+                    result.errors.push(errorMsg);
+                    return; // Continuar para próximo listing
+                  }
+                } else {
+                  // Outros erros
+                  const errorMsg = `Erro ao buscar visitas para listing ${listing.id} (${status}): ${data?.message || error.message}`;
+                  console.error(`[ML-VISITS] ${errorMsg}`);
+                  result.errors.push(errorMsg);
+                  return; // Continuar para próximo listing
+                }
+              } else {
+                throw error;
+              }
+            }
+
+            // Criar mapa de visitas por data (YYYY-MM-DD)
+            const visitsMap = new Map<string, number>();
+            for (const visitData of visits) {
+              const visitDate = new Date(visitData.date);
+              visitDate.setUTCHours(0, 0, 0, 0);
+              const dateKey = visitDate.toISOString().split('T')[0];
+              visitsMap.set(dateKey, visitData.visits);
+            }
+
+            // Gerar array de dias do range
+            const dayStrings: string[] = [];
+            const currentDate = new Date(fromDate);
+            while (currentDate <= toDate) {
+              dayStrings.push(currentDate.toISOString().split('T')[0]);
+              currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+            }
+
+            // 4. Para cada dia do range, fazer UPSERT
+            for (const dayStr of dayStrings) {
+              const dayDate = new Date(dayStr + 'T00:00:00.000Z');
+              const visitsCount = visitsMap.get(dayStr);
+
+              // visits=null = não buscado / erro
+              // visits=0 = buscado e veio 0
+              const visitsValue = visitsCount !== undefined ? visitsCount : null;
+
+              // UPSERT apenas visits (não sobrescrever orders/gmv)
+              await prisma.listingMetricsDaily.upsert({
+                where: {
+                  tenant_id_listing_id_date: {
+                    tenant_id: tenantId,
+                    listing_id: listing.id,
+                    date: dayDate,
+                  },
+                },
+                create: {
+                  tenant_id: tenantId,
+                  listing_id: listing.id,
+                  date: dayDate,
+                  visits: visitsValue,
+                  orders: 0, // Default para novos registros
+                  gmv: 0, // Default para novos registros
+                  source: 'ml_visits_daily',
+                  period_days: daysDiff,
+                  impressions: null,
+                  clicks: null,
+                  ctr: null,
+                  conversion: null,
+                },
+                update: {
+                  visits: visitsValue, // Atualizar apenas visits
+                  source: 'ml_visits_daily',
+                },
+              });
+
+              result.rowsUpserted++;
+            }
+
+            result.listingsProcessed++;
+            console.log(`[ML-VISITS] Listing ${listing.id} processado: ${visits.length} dias de visitas`);
+          } catch (error) {
+            // Erro não tratado acima
+            const errorMsg = `Erro ao processar listing ${listing.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+            console.error(`[ML-VISITS] ${errorMsg}`);
+            result.errors.push(errorMsg);
+          }
+        });
+
+        // Aguardar lote atual terminar antes de processar próximo
+        await Promise.allSettled(batchPromises);
+
+        // Pequeno delay entre lotes para evitar rate-limit
+        if (batchIndex < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      result.success = result.errors.length === 0 || result.rowsUpserted > 0;
+      result.duration = Date.now() - startTime;
+      result.min_date = fromDate.toISOString().split('T')[0];
+      result.max_date = toDate.toISOString().split('T')[0];
+
+      console.log(`[ML-VISITS] Sync concluído em ${result.duration}ms`);
+      console.log(`[ML-VISITS] Listings processados: ${result.listingsProcessed}`);
+      console.log(`[ML-VISITS] Rows upserted: ${result.rowsUpserted}`);
+      console.log(`[ML-VISITS] Min date: ${result.min_date}, Max date: ${result.max_date}`);
+
+      return result;
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      result.errors.push(errorMsg);
+      result.duration = Date.now() - startTime;
+      console.error('[ML-VISITS] Erro fatal no sync:', errorMsg);
+      return result;
+    }
   }
 
   /**

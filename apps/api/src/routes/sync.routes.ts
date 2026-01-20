@@ -904,6 +904,28 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
+        // 3. Sincronizar visitas do Mercado Livre
+        app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando sync de visitas...');
+        const visitsService = new MercadoLivreVisitsService(tenantId);
+        const visitsResult = await visitsService.syncVisitsByRange(tenantId, dateFromUtc, dateToUtc);
+
+        // Verificar se há erro de autenticação revogada no visits também
+        const hasAuthRevokedVisits = visitsResult.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta') ||
+          err.includes('401') ||
+          err.includes('403')
+        );
+
+        if (hasAuthRevokedVisits) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
         const totalDuration = Date.now() - startTime;
 
         app.log.info({
@@ -913,6 +935,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           ordersProcessed: ordersResult.ordersProcessed,
           ordersCreated: ordersResult.ordersCreated,
           metricsRowsUpserted: metricsResult.rowsUpserted,
+          visitsListingsProcessed: visitsResult.listingsProcessed,
+          visitsRowsUpserted: visitsResult.rowsUpserted,
           totalDuration,
         }, 'Refresh completo concluído');
 
@@ -949,9 +973,18 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
               success: metricsResult.success,
               errors: metricsResult.errors.length > 0 ? metricsResult.errors : undefined,
             },
+            visits: {
+              listingsProcessed: visitsResult.listingsProcessed,
+              rowsUpserted: visitsResult.rowsUpserted,
+              min_date: visitsResult.min_date,
+              max_date: visitsResult.max_date,
+              success: visitsResult.success,
+              errors: visitsResult.errors.length > 0 ? visitsResult.errors : undefined,
+            },
             duration: `${totalDuration}ms`,
             ordersDuration: `${ordersResult.duration}ms`,
             metricsDuration: `${metricsResult.duration}ms`,
+            visitsDuration: `${visitsResult.duration}ms`,
           },
         });
       } catch (error) {
@@ -1239,6 +1272,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         'POST /mercadolivre - Sync de anúncios',
         'POST /mercadolivre/orders - Sync de pedidos',
         'POST /mercadolivre/metrics - Sync de métricas diárias',
+        'POST /mercadolivre/visits - Sync de visitas por range',
         'POST /mercadolivre/visits/backfill - Backfill granular de visitas por dia',
         'POST /mercadolivre/full - Sync completo',
         'POST /mercadolivre/listings/from-orders - Sync de listings via orders (fallback)',
