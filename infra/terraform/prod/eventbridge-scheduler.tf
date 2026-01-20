@@ -49,53 +49,11 @@ resource "aws_iam_role" "scheduler_execution" {
 }
 
 # -----------------------------------------------------------------------------
-# EventBridge Connection - Autenticacao com X-Internal-Key
+# IAM Policy para Scheduler - Permissão para invocar HTTP endpoints
 # -----------------------------------------------------------------------------
-resource "aws_cloudwatch_event_connection" "internal_jobs" {
-  count              = var.enable_scheduler ? 1 : 0
-  name               = "superseller-internal-jobs"
-  description        = "Connection para jobs internos do SuperSeller com X-Internal-Key"
-  authorization_type = "API_KEY"
-
-  auth_parameters {
-    api_key {
-      key   = "X-Internal-Key"
-      value = data.aws_secretsmanager_secret_version.internal_jobs_key[0].secret_string
-    }
-  }
-}
-
-# -----------------------------------------------------------------------------
-# EventBridge API Destination - Rebuild Daily Metrics
-# -----------------------------------------------------------------------------
-resource "aws_cloudwatch_event_api_destination" "rebuild_daily_metrics" {
-  count               = var.enable_scheduler ? 1 : 0
-  name                = "superseller-rebuild-daily-metrics"
-  description         = "API destination para rebuild de daily metrics"
-  invocation_endpoint = "https://${local.api_fqdn}/api/v1/jobs/rebuild-daily-metrics"
-  http_method         = "POST"
-  connection_arn      = aws_cloudwatch_event_connection.internal_jobs[0].arn
-
-  invocation_rate_limit_per_second = 1
-}
-
-# -----------------------------------------------------------------------------
-# EventBridge API Destination - ML Sync (opcional)
-# -----------------------------------------------------------------------------
-resource "aws_cloudwatch_event_api_destination" "ml_sync" {
-  count               = var.enable_scheduler && var.enable_ml_sync_schedule ? 1 : 0
-  name                = "superseller-ml-sync"
-  description         = "API destination para sync do Mercado Livre"
-  invocation_endpoint = "https://${local.api_fqdn}/api/v1/jobs/sync-mercadolivre"
-  http_method         = "POST"
-  connection_arn      = aws_cloudwatch_event_connection.internal_jobs[0].arn
-
-  invocation_rate_limit_per_second = 1
-}
-
-resource "aws_iam_role_policy" "scheduler_invoke_api" {
+resource "aws_iam_role_policy" "scheduler_invoke_http" {
   count = var.enable_scheduler ? 1 : 0
-  name  = "invoke-api-destination"
+  name  = "invoke-http-endpoint"
   role  = aws_iam_role.scheduler_execution[0].id
 
   policy = jsonencode({
@@ -104,12 +62,11 @@ resource "aws_iam_role_policy" "scheduler_invoke_api" {
       {
         Effect = "Allow"
         Action = [
-          "events:InvokeApiDestination"
+          "scheduler:InvokeHttp"
         ]
-        Resource = concat(
-          [aws_cloudwatch_event_api_destination.rebuild_daily_metrics[0].arn],
-          var.enable_ml_sync_schedule ? [aws_cloudwatch_event_api_destination.ml_sync[0].arn] : []
-        )
+        Resource = [
+          "arn:aws:scheduler:${var.aws_region}:${var.aws_account_id}:schedule/${aws_scheduler_schedule_group.superseller[0].name}/*"
+        ]
       }
     ]
   })
@@ -144,8 +101,18 @@ resource "aws_scheduler_schedule" "daily_metrics_rebuild" {
   schedule_expression_timezone = var.scheduler_timezone
 
   target {
-    arn      = aws_cloudwatch_event_api_destination.rebuild_daily_metrics[0].arn
+    arn      = "arn:aws:scheduler:::aws-sdk:scheduler:invokeHttp"
     role_arn = aws_iam_role.scheduler_execution[0].arn
+
+    http_target {
+      endpoint    = "https://${local.api_fqdn}/api/v1/jobs/rebuild-daily-metrics"
+      http_method = "POST"
+      
+      header_parameters = {
+        "X-Internal-Key" = data.aws_secretsmanager_secret_version.internal_jobs_key[0].secret_string
+        "Content-Type"   = "application/json"
+      }
+    }
 
     input = jsonencode({
       tenantId = var.scheduler_tenant_id
@@ -185,8 +152,18 @@ resource "aws_scheduler_schedule" "ml_sync" {
   schedule_expression_timezone = var.scheduler_timezone
 
   target {
-    arn      = aws_cloudwatch_event_api_destination.ml_sync[0].arn
+    arn      = "arn:aws:scheduler:::aws-sdk:scheduler:invokeHttp"
     role_arn = aws_iam_role.scheduler_execution[0].arn
+
+    http_target {
+      endpoint    = "https://${local.api_fqdn}/api/v1/jobs/sync-mercadolivre"
+      http_method = "POST"
+      
+      header_parameters = {
+        "X-Internal-Key" = data.aws_secretsmanager_secret_version.internal_jobs_key[0].secret_string
+        "Content-Type"   = "application/json"
+      }
+    }
 
     input = jsonencode({
       tenantId = var.scheduler_tenant_id

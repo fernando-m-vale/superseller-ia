@@ -194,14 +194,14 @@ output "scheduler_daily_metrics_arn" {
   value       = var.enable_scheduler ? aws_scheduler_schedule.daily_metrics_rebuild[0].arn : null
 }
 
-output "scheduler_api_destination_arn" {
-  description = "EventBridge API Destination ARN (if enabled)"
-  value       = var.enable_scheduler ? aws_cloudwatch_event_api_destination.rebuild_daily_metrics[0].arn : null
+output "scheduler_rebuild_endpoint" {
+  description = "Scheduler rebuild daily metrics endpoint (if enabled)"
+  value       = var.enable_scheduler ? "https://${local.api_fqdn}/api/v1/jobs/rebuild-daily-metrics" : null
 }
 
-output "scheduler_connection_arn" {
-  description = "EventBridge Connection ARN (if enabled)"
-  value       = var.enable_scheduler ? aws_cloudwatch_event_connection.internal_jobs[0].arn : null
+output "scheduler_ml_sync_endpoint" {
+  description = "Scheduler ML sync endpoint (if enabled)"
+  value       = var.enable_scheduler && var.enable_ml_sync_schedule ? "https://${local.api_fqdn}/api/v1/jobs/sync-mercadolivre" : null
 }
 
 output "scheduler_execution_role_arn" {
