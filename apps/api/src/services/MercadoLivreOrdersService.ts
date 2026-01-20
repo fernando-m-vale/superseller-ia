@@ -535,22 +535,39 @@ export class MercadoLivreOrdersService {
 
       // Criar order items
       console.log(`[ML-ORDERS] Criando ${mlOrder.order_items?.length || 0} items...`);
+      
+      // Buscar listings em batch antes de criar items (mais eficiente)
+      const listingIdExts = (mlOrder.order_items || []).map(item => item.item.id);
+      const listings = await prisma.listing.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+          listing_id_ext: { in: listingIdExts },
+        },
+        select: {
+          id: true,
+          listing_id_ext: true,
+        },
+      });
+
+      // Criar mapa de lookup: listing_id_ext -> listing.id
+      const listingMap = new Map<string, string>();
+      for (const listing of listings) {
+        listingMap.set(listing.listing_id_ext, listing.id);
+      }
+
+      // Criar order items com listing_id preenchido
       for (const item of mlOrder.order_items || []) {
-        // Tentar encontrar o listing correspondente
-        const listing = await prisma.listing.findUnique({
-          where: {
-            tenant_id_marketplace_listing_id_ext: {
-              tenant_id: this.tenantId,
-              marketplace: Marketplace.mercadolivre,
-              listing_id_ext: item.item.id,
-            },
-          },
-        });
+        const listingId = listingMap.get(item.item.id) || null;
+        
+        if (!listingId) {
+          console.log(`[ML-ORDERS] ⚠️  Listing não encontrado para item ${item.item.id} (${item.item.title})`);
+        }
 
         await prisma.orderItem.create({
           data: {
             order_id: order.id,
-            listing_id: listing?.id || null,
+            listing_id: listingId, // Preencher com ID do listing encontrado ou null
             listing_id_ext: item.item.id,
             title: item.item.title,
             quantity: item.quantity,
@@ -559,7 +576,7 @@ export class MercadoLivreOrdersService {
           },
         });
       }
-      console.log(`[ML-ORDERS] ✓ Items criados com sucesso`);
+      console.log(`[ML-ORDERS] ✓ Items criados com sucesso (${listings.length}/${listingIdExts.length} com listing_id preenchido)`);
 
       return { created: true, gmv: totalAmount };
     }

@@ -1206,78 +1206,48 @@ export class MercadoLivreSyncService {
         return result;
       }
 
-      // 3. Buscar pedidos pagos do período via Orders API
-      const dateFromISO = fromDate.toISOString();
-      console.log(`[ML-METRICS] Buscando pedidos pagos desde ${dateFromISO}...`);
-      
-      interface MLOrderItem {
-        item: { id: string; title: string };
-        quantity: number;
-        unit_price: number;
-      }
-      
-      interface MLPayment {
-        status: string;
-        date_approved: string | null;
-      }
-      
-      interface MLOrder {
-        id: number;
-        order_items: MLOrderItem[];
-        payments: MLPayment[];
-      }
-      
-      interface MLOrdersSearchResponse {
-        results: MLOrder[];
-        paging: { total: number; offset: number; limit: number };
-      }
+      // 3. Buscar pedidos pagos do período do banco de dados (order_items + orders)
+      // Usar dados já persistidos para garantir consistência e performance
+      console.log(`[ML-METRICS] Buscando pedidos pagos do banco desde ${fromDate.toISOString()} até ${today.toISOString()}...`);
 
-      const allOrders: MLOrder[] = [];
-      let offset = 0;
-      const limit = 50;
-
-      while (true) {
-        const response = await this.executeWithRetryOn401(async () => {
-          return await axios.get<MLOrdersSearchResponse>(`${ML_API_BASE}/orders/search`, {
-            headers: { Authorization: `Bearer ${this.accessToken}` },
-            params: {
-              seller: this.providerAccountId,
-              'order.date_created.from': dateFromISO,
-              sort: 'date_desc',
-              offset,
-              limit,
+      // Buscar order_items com JOIN em orders para filtrar por tenant e status
+      // Agregar por listing_id e por dia usando paid_date (ou order_date como fallback)
+      const orderItems = await prisma.orderItem.findMany({
+        where: {
+          order: {
+            tenant_id: tenantId,
+            marketplace: Marketplace.mercadolivre,
+            status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+            order_date: {
+              gte: fromDate,
+              lte: today,
             },
-          });
-        });
-
-        allOrders.push(...response.data.results);
-        
-        if (offset + limit >= response.data.paging.total || response.data.paging.total === 0) {
-          break;
-        }
-        
-        offset += limit;
-      }
-
-      // Filtrar apenas pedidos pagos (com payment approved)
-      const paidOrders = allOrders.filter(order => {
-        const paidPayment = order.payments?.find(p => p.status === 'approved');
-        return paidPayment && paidPayment.date_approved;
+          },
+          listing_id: { not: null }, // Apenas items com listing_id preenchido
+        },
+        include: {
+          order: {
+            select: {
+              id: true,
+              paid_date: true,
+              order_date: true,
+            },
+          },
+        },
       });
 
-      console.log(`[ML-METRICS] Encontrados ${paidOrders.length} pedidos pagos no período (de ${allOrders.length} total)`);
+      console.log(`[ML-METRICS] Encontrados ${orderItems.length} order_items no período`);
 
-      // 4. Agregar pedidos por listing e por dia usando payment.date_approved
-      // Estrutura: Map<listingIdExt, Map<dayStr, { orders: number, gmv: number }>>
+      // 4. Agregar por listing_id e por dia
+      // Estrutura: Map<listingId, Map<dayStr, { orders: number, gmv: number }>>
       const metricsByListingAndDay = new Map<string, Map<string, { orders: number; gmv: number }>>();
       
-      for (const order of paidOrders) {
-        // Encontrar payment approved
-        const paidPayment = order.payments?.find(p => p.status === 'approved' && p.date_approved);
-        if (!paidPayment || !paidPayment.date_approved) continue;
+      for (const orderItem of orderItems) {
+        if (!orderItem.listing_id) continue; // Pular items sem listing_id (não deveria acontecer após backfill)
 
-        // Normalizar date_approved para YYYY-MM-DD (UTC)
-        const paymentDate = new Date(paidPayment.date_approved);
+        // Usar paid_date se disponível, senão order_date como fallback
+        const orderDate = orderItem.order.paid_date || orderItem.order.order_date;
+        const paymentDate = new Date(orderDate);
         paymentDate.setUTCHours(0, 0, 0, 0);
         const dayStr = paymentDate.toISOString().split('T')[0];
 
@@ -1286,29 +1256,28 @@ export class MercadoLivreSyncService {
           continue; // Pular dias fora do range
         }
 
-        // Agregar por listing e dia
-        for (const orderItem of order.order_items || []) {
-          const listingIdExt = orderItem.item.id;
-          
-          if (!metricsByListingAndDay.has(listingIdExt)) {
-            metricsByListingAndDay.set(listingIdExt, new Map());
-          }
-          
-          const dayMap = metricsByListingAndDay.get(listingIdExt)!;
-          const existing = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
-          
-          existing.orders += orderItem.quantity;
-          existing.gmv += orderItem.quantity * orderItem.unit_price;
-          
-          dayMap.set(dayStr, existing);
+        // Agregar por listing_id e dia
+        if (!metricsByListingAndDay.has(orderItem.listing_id)) {
+          metricsByListingAndDay.set(orderItem.listing_id, new Map());
         }
+        
+        const dayMap = metricsByListingAndDay.get(orderItem.listing_id)!;
+        const existing = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
+        
+        existing.orders += orderItem.quantity;
+        existing.gmv += Number(orderItem.total_price); // Usar total_price já calculado
+        
+        dayMap.set(dayStr, existing);
       }
+
+      console.log(`[ML-METRICS] Agregados ${metricsByListingAndDay.size} listings com métricas`);
 
       // 5. Para cada listing, fazer UPSERT para cada dia do range
       const upsertPromises: Promise<void>[] = [];
       
       for (const listing of listings) {
-        const dayMap = metricsByListingAndDay.get(listing.listing_id_ext) || new Map();
+        // Usar listing.id em vez de listing_id_ext (agora agregamos por listing_id)
+        const dayMap = metricsByListingAndDay.get(listing.id) || new Map();
         
         for (const dayStr of dayStrings) {
           const dayMetrics = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
