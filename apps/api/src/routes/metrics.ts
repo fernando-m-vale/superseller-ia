@@ -167,8 +167,9 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       });
 
       // Contar dias com visitas vs total de dias no período
+      // filledDays = count(dias onde visits != null) na série completa
       const totalDaysInPeriod = periodDays; // Deve ser exatamente periodDays
-      const filledDays = Array.from(metricsByDayMap.values()).filter(m => m.visits !== null).length;
+      const filledDays = combinedSeries.filter(day => day.visits !== null).length;
 
       // Top 3 produtos por receita (período dinâmico)
       // Usar dados de listing_metrics_daily para consistência
