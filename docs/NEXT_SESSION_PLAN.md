@@ -1,49 +1,41 @@
-# NEXT SESSION PLAN — 2026-01-19 → Próxima sessão
+# NEXT SESSION PLAN — 2026-01-20
 
 ## 🎯 Objetivo da sessão
-Ativar operação automática e validar que o produto fica “sempre atualizado” sem intervenção manual.
+Destravar completamente a automação de dados e consolidar a Onda 3.2.1 como FINALIZADA.
 
-## ✅ Estado atual (já entregue)
-- Mídia unificada para "Clip (vídeo)" (hasClips fonte de verdade).
-- Endpoints internos prontos e protegidos:
-  - POST /api/v1/jobs/sync-mercadolivre
-  - POST /api/v1/jobs/rebuild-daily-metrics
-  - X-Internal-Key via INTERNAL_JOBS_KEY
-- Frontend com botão "Atualizar dados" no Dashboard Overview.
-- PR #82 (Devin) com scheduler EventBridge + Terraform + documentação (OPERATIONS_SCHEDULER.md).
+## 🔥 Prioridade Absoluta (ordem exata)
+1. Rebuild manual de métricas diárias funcionar via API
+2. Terraform apply do Scheduler sem erros
+3. Confirmar atualização real do dashboard (7 e 30 dias)
 
-## 🧪 Checklist de execução (ordem exata)
-### 1) Configurar segredo e env var
-- [ ] Criar secret no AWS Secrets Manager: prod/INTERNAL_JOBS_KEY
-- [ ] Adicionar INTERNAL_JOBS_KEY nas env vars do App Runner (service api)
-- [ ] Redeploy/refresh do App Runner se necessário
+## 🔧 Tarefas técnicas
+### 1️⃣ API — Jobs Internos
+- Validar valor exato de INTERNAL_JOBS_KEY
+- Garantir que middleware internal-auth compara corretamente
+- Testar rebuild-daily-metrics via curl/PowerShell
+- Confirmar registro em job_logs
 
-### 2) Testar endpoints internos manualmente
-- [ ] Chamar /api/v1/jobs/rebuild-daily-metrics para últimos 30 dias:
-  Body: { tenantId, from: "<hoje-30>", to: "<hoje>" }
-- [ ] Confirmar resposta do endpoint com MAX(date) atualizado
-- [ ] Consultar DB:
-  - SELECT MAX(date) FROM listing_metrics_daily;
-- [ ] Validar UI:
-  - Dashboard 30 dias mostra dados até a data atual
-  - Dashboard 7 dias mostra janela correta e dados presentes (quando houver)
+### 2️⃣ Infra — EventBridge Scheduler
+- Refatorar Terraform para usar:
+  - aws_scheduler_connection
+  - aws_scheduler_api_destination
+- Eliminar uso de aws_cloudwatch_event_api_destination no scheduler
+- Executar terraform apply com:
+  enable_scheduler=true
+  scheduler_tenant_id=935498cf-062c-41f2-bda1-982f1abd8c61
 
-### 3) Ativar scheduler (EventBridge)
-- [ ] Merge PR #82
-- [ ] Aplicar Terraform:
-  terraform apply -var="enable_scheduler=true" -var="scheduler_tenant_id=<TENANT_ID>"
-- [ ] Validar primeira execução no CloudWatch + job_logs
+### 3️⃣ Dados — Validação
+- Confirmar MAX(date) em listing_metrics_daily = data atual
+- Conferir impacto no dashboard overview
+- Validar consistência entre 7 dias e 30 dias
 
-### 4) Observabilidade / Operação
-- [ ] Criar/validar rotina de monitoramento:
-  - job_logs: execuções diárias com status SUCCESS
-  - App Runner logs: sem erros nas rotas internas
-- [ ] Se falhar:
-  - rollback do schedule (disable_scheduler=false ou pausar schedule)
-  - reexecução manual do rebuild
+## ❌ Fora de escopo (explicitamente)
+- Benchmark
+- Ads
+- Automações avançadas
+- IA Propositiva
 
-## ✅ DoD da próxima sessão
-- INTERNAL_JOBS_KEY configurado e validado.
-- Rebuild manual atualiza listing_metrics_daily até hoje.
-- Dashboard 7/30 dias reflete dados atualizados.
-- Scheduler ativo e rodando diariamente (com evidência em job_logs).
+## 📌 DoD da próxima sessão
+- Dashboard reflete dados atualizados até hoje
+- Rebuild pode ser executado manualmente e automaticamente
+- Onda 3.2.1 marcada como DONE

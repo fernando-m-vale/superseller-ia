@@ -1,56 +1,33 @@
-# PROJECT CONTEXT — SuperSeller IA (2026-01-19)
+# PROJECT CONTEXT — SuperSeller IA
+Atualizado em: 2026-01-19
 
-## 🧠 O que é o SuperSeller IA
-Plataforma que analisa anúncios em marketplaces (foco atual: Mercado Livre) e entrega:
-- Diagnóstico por dimensão (Cadastro, Mídia, SEO, Competitividade, Performance)
-- Score determinístico e explicável
-- Plano de ação priorizado
-- IA como amplificador (explica e reescreve, sem contradizer regras)
+## 🧠 Visão do Produto
+SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
+O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escaláveis.
 
-## ✅ Decisões base (imutáveis)
-- IA NÃO calcula score.
-- Score e ações são determinísticos (regras).
-- IA apenas amplia valor: explica, reescreve SEO e contextualiza.
-- Nunca afirmar ausência quando dado é NULL.
-- Mídia no Mercado Livre é tratada como "Clip (vídeo)" (conceito único).
+## 🏗️ Arquitetura Consolidada
+- Frontend: Next.js (app.superselleria.com.br)
+- Backend: Fastify + App Runner (api.superselleria.com.br)
+- Banco: PostgreSQL
+- Jobs internos protegidos por X-Internal-Key
+- Automação: EventBridge Scheduler (aws_scheduler_*)
 
-## 🧱 Arquitetura atual (produção)
-- Backend: AWS App Runner (API)
-- Frontend: Next.js (deploy web)
-- Database: Postgres (RDS)
-- Observabilidade: Logs via App Runner (CloudWatch/console App Runner) + job_logs no DB
+## 🔐 Segurança
+- INTERNAL_JOBS_KEY armazenado no Secrets Manager
+- Injetado no App Runner da API
+- Middleware internal-auth valida header X-Internal-Key
 
-### Importante: Cron/Scheduler
-- Não usamos cron interno no processo do App Runner.
-- Operação confiável é feita via:
-  1) Endpoints internos idempotentes (jobs)
-  2) Scheduler externo (AWS EventBridge Scheduler) chamando os endpoints
+## 📊 Dados
+- Métricas diárias materializadas em listing_metrics_daily
+- Rebuild idempotente via endpoint interno
+- Cron ainda não ativo (dependente do Scheduler)
 
-## 🔧 Endpoints internos (jobs) — fonte de verdade operacional
-Proteção:
-- Header obrigatório: X-Internal-Key
-- Chave: INTERNAL_JOBS_KEY (Secrets Manager + env do App Runner)
-
-Endpoints:
-- POST /api/v1/jobs/sync-mercadolivre
-  - Sync listings + orders
-  - Params: tenantId, daysBack (default 30)
-  - Registra execução em job_logs
-- POST /api/v1/jobs/rebuild-daily-metrics
-  - Rebuild/UPSERT idempotente em listing_metrics_daily
-  - Body: { tenantId, from, to }
-  - Retorna resumo + MAX(date) pós rebuild
-
-## 📊 Fonte do Dashboard
-- Gráficos e cards dependem de listing_metrics_daily.
-- Se MAX(date) estiver atrasado, dashboard fica “parado”.
-- Rebuild deve ser executado diariamente via scheduler.
-
-## 📁 Documentos operacionais fixos
-- docs/ML_DATA_AUDIT.md (prioridade zero)
-- docs/DAILY_EXECUTION_LOG.md
-- docs/NEXT_SESSION_PLAN.md
-- docs/OPERATIONS_SCHEDULER.md (scheduler EventBridge + App Runner)
+## 🧭 Decisões Importantes
+- IA não calcula score
+- Score vem de regras determinísticas
+- IA apenas explica, reescreve e contextualiza
+- Clip/vídeo tratado como conceito único
+- Nenhuma feature nova antes de confiabilidade total dos dados
 
 ## 🧭 Roadmap (alto nível)
 - ONDA 1/2: Score V2 + UX (concluído)
