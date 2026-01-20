@@ -196,12 +196,12 @@ output "scheduler_daily_metrics_arn" {
 
 output "scheduler_api_destination_arn" {
   description = "EventBridge API Destination ARN (if enabled)"
-  value       = var.enable_scheduler ? aws_cloudwatch_event_api_destination.superseller_jobs[0].arn : null
+  value       = var.enable_scheduler ? aws_cloudwatch_event_api_destination.rebuild_daily_metrics[0].arn : null
 }
 
 output "scheduler_connection_arn" {
   description = "EventBridge Connection ARN (if enabled)"
-  value       = var.enable_scheduler ? aws_cloudwatch_event_connection.superseller_internal[0].arn : null
+  value       = var.enable_scheduler ? aws_cloudwatch_event_connection.internal_jobs[0].arn : null
 }
 
 output "scheduler_execution_role_arn" {

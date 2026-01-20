@@ -48,32 +48,10 @@ resource "aws_iam_role" "scheduler_execution" {
   tags = local.common_tags
 }
 
-resource "aws_iam_role_policy" "scheduler_invoke_api" {
-  count = var.enable_scheduler ? 1 : 0
-  name  = "invoke-api-destination"
-  role  = aws_iam_role.scheduler_execution[0].id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "events:InvokeApiDestination"
-        ]
-        Resource = [
-          aws_cloudwatch_event_api_destination.superseller_jobs[0].arn,
-          var.enable_ml_sync_schedule ? aws_cloudwatch_event_api_destination.superseller_ml_sync[0].arn : aws_cloudwatch_event_api_destination.superseller_jobs[0].arn
-        ]
-      }
-    ]
-  })
-}
-
 # -----------------------------------------------------------------------------
 # EventBridge Connection - Autenticacao com X-Internal-Key
 # -----------------------------------------------------------------------------
-resource "aws_cloudwatch_event_connection" "superseller_internal" {
+resource "aws_cloudwatch_event_connection" "internal_jobs" {
   count              = var.enable_scheduler ? 1 : 0
   name               = "superseller-internal-jobs"
   description        = "Connection para jobs internos do SuperSeller com X-Internal-Key"
@@ -88,17 +66,53 @@ resource "aws_cloudwatch_event_connection" "superseller_internal" {
 }
 
 # -----------------------------------------------------------------------------
-# EventBridge API Destination - Endpoint do App Runner
+# EventBridge API Destination - Rebuild Daily Metrics
 # -----------------------------------------------------------------------------
-resource "aws_cloudwatch_event_api_destination" "superseller_jobs" {
+resource "aws_cloudwatch_event_api_destination" "rebuild_daily_metrics" {
   count               = var.enable_scheduler ? 1 : 0
-  name                = "superseller-api-jobs"
-  description         = "API destination para jobs internos do SuperSeller"
+  name                = "superseller-rebuild-daily-metrics"
+  description         = "API destination para rebuild de daily metrics"
   invocation_endpoint = "https://${local.api_fqdn}/api/v1/jobs/rebuild-daily-metrics"
   http_method         = "POST"
-  connection_arn      = aws_cloudwatch_event_connection.superseller_internal[0].arn
+  connection_arn      = aws_cloudwatch_event_connection.internal_jobs[0].arn
 
   invocation_rate_limit_per_second = 1
+}
+
+# -----------------------------------------------------------------------------
+# EventBridge API Destination - ML Sync (opcional)
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_event_api_destination" "ml_sync" {
+  count               = var.enable_scheduler && var.enable_ml_sync_schedule ? 1 : 0
+  name                = "superseller-ml-sync"
+  description         = "API destination para sync do Mercado Livre"
+  invocation_endpoint = "https://${local.api_fqdn}/api/v1/jobs/sync-mercadolivre"
+  http_method         = "POST"
+  connection_arn      = aws_cloudwatch_event_connection.internal_jobs[0].arn
+
+  invocation_rate_limit_per_second = 1
+}
+
+resource "aws_iam_role_policy" "scheduler_invoke_api" {
+  count = var.enable_scheduler ? 1 : 0
+  name  = "invoke-api-destination"
+  role  = aws_iam_role.scheduler_execution[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "events:InvokeApiDestination"
+        ]
+        Resource = concat(
+          [aws_cloudwatch_event_api_destination.rebuild_daily_metrics[0].arn],
+          var.enable_ml_sync_schedule ? [aws_cloudwatch_event_api_destination.ml_sync[0].arn] : []
+        )
+      }
+    ]
+  })
 }
 
 # -----------------------------------------------------------------------------
@@ -130,7 +144,7 @@ resource "aws_scheduler_schedule" "daily_metrics_rebuild" {
   schedule_expression_timezone = var.scheduler_timezone
 
   target {
-    arn      = aws_cloudwatch_event_api_destination.superseller_jobs[0].arn
+    arn      = aws_cloudwatch_event_api_destination.rebuild_daily_metrics[0].arn
     role_arn = aws_iam_role.scheduler_execution[0].arn
 
     input = jsonencode({
@@ -156,17 +170,6 @@ resource "aws_scheduler_schedule" "daily_metrics_rebuild" {
 # -----------------------------------------------------------------------------
 # Schedule - Mercado Livre Sync (opcional)
 # -----------------------------------------------------------------------------
-resource "aws_cloudwatch_event_api_destination" "superseller_ml_sync" {
-  count               = var.enable_scheduler && var.enable_ml_sync_schedule ? 1 : 0
-  name                = "superseller-api-ml-sync"
-  description         = "API destination para sync do Mercado Livre"
-  invocation_endpoint = "https://${local.api_fqdn}/api/v1/jobs/sync-mercadolivre"
-  http_method         = "POST"
-  connection_arn      = aws_cloudwatch_event_connection.superseller_internal[0].arn
-
-  invocation_rate_limit_per_second = 1
-}
-
 resource "aws_scheduler_schedule" "ml_sync" {
   count       = var.enable_scheduler && var.enable_ml_sync_schedule ? 1 : 0
   name        = "superseller-ml-sync"
@@ -182,7 +185,7 @@ resource "aws_scheduler_schedule" "ml_sync" {
   schedule_expression_timezone = var.scheduler_timezone
 
   target {
-    arn      = aws_cloudwatch_event_api_destination.superseller_ml_sync[0].arn
+    arn      = aws_cloudwatch_event_api_destination.ml_sync[0].arn
     role_arn = aws_iam_role.scheduler_execution[0].arn
 
     input = jsonencode({
