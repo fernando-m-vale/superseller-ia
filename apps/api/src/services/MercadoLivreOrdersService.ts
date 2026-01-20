@@ -85,6 +85,19 @@ export class MercadoLivreOrdersService {
    * Sincroniza pedidos dos últimos N dias
    */
   async syncOrders(daysBack: number = 30): Promise<OrderSyncResult> {
+    const dateTo = new Date();
+    dateTo.setUTCHours(0, 0, 0, 0);
+    
+    const dateFrom = new Date(dateTo);
+    dateFrom.setUTCDate(dateFrom.getUTCDate() - (daysBack - 1)); // Incluir hoje no range
+    
+    return this.syncOrdersByRange(dateFrom, dateTo);
+  }
+
+  /**
+   * Sincroniza pedidos em um range específico de datas (dateFrom até dateTo inclusive)
+   */
+  async syncOrdersByRange(dateFrom: Date, dateTo: Date): Promise<OrderSyncResult> {
     const startTime = Date.now();
     const result: OrderSyncResult = {
       success: false,
@@ -98,6 +111,7 @@ export class MercadoLivreOrdersService {
 
     try {
       console.log(`[ML-ORDERS] Iniciando sincronização de pedidos para tenant: ${this.tenantId}`);
+      console.log(`[ML-ORDERS] Range: ${dateFrom.toISOString()} até ${dateTo.toISOString()}`);
 
       // 1. Buscar conexão do Mercado Livre
       await this.loadConnection();
@@ -105,10 +119,10 @@ export class MercadoLivreOrdersService {
       // 2. Verificar/renovar token se necessário
       await this.ensureValidToken();
 
-      // 3. Calcular data de corte
-      const dateFrom = new Date();
-      dateFrom.setDate(dateFrom.getDate() - daysBack);
-      const dateFromISO = dateFrom.toISOString();
+      // 3. Normalizar datas para UTC midnight
+      const dateFromUtc = new Date(dateFrom);
+      dateFromUtc.setUTCHours(0, 0, 0, 0);
+      const dateFromISO = dateFromUtc.toISOString();
 
       console.log(`[ML-ORDERS] Buscando pedidos desde: ${dateFromISO}`);
 

@@ -37,7 +37,7 @@ function OverviewContent() {
     }
   }, [periodDays, mounted]);
 
-  const { data, isLoading, error } = useMetricsSummary({ days: periodDays });
+  const { data, isLoading, error, refetch } = useMetricsSummary({ days: periodDays });
 
   const handleReconnect = async () => {
     try {
@@ -80,11 +80,12 @@ function OverviewContent() {
         return;
       }
 
-      // Chamar endpoint de sync de métricas com o período selecionado
-      const response = await fetch(`${apiUrl}/sync/mercadolivre/metrics?days=${periodDays}`, {
+      // Chamar endpoint de refresh (orders + metrics) com o período selecionado
+      const response = await fetch(`${apiUrl}/sync/mercadolivre/refresh?days=${periodDays}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
       });
 
@@ -93,8 +94,11 @@ function OverviewContent() {
         throw new Error(errorData.message || 'Falha ao atualizar dados');
       }
 
-      // Recarregar dados após atualização
-      window.location.reload();
+      const result = await response.json();
+      console.log('Refresh concluído:', result);
+
+      // Refetch dos dados após atualização (sem recarregar a página)
+      await refetch();
     } catch (error) {
       console.error('Erro ao atualizar dados:', error);
       alert(error instanceof Error ? error.message : 'Erro ao atualizar dados');

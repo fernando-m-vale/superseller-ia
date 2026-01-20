@@ -24,6 +24,12 @@ const MetricsSyncQuerySchema = z.object({
   days: z.coerce.number().min(1).max(90).default(30),
 });
 
+// Schema para validar query params de refresh (orders + metrics)
+const RefreshQuerySchema = z.object({
+  days: z.coerce.number().min(1).max(90).default(30),
+  force: z.coerce.boolean().optional().default(false),
+});
+
 // Schema para validar query params de re-sync de listings
 const ResyncListingsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
@@ -764,6 +770,161 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         const errorMessage = error instanceof Error ? error.message : 'Erro ao sincronizar performance';
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: errorMessage,
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/sync/mercadolivre/refresh?days=7|30&force=false
+   * 
+   * Executa refresh completo: sincroniza orders do ML e depois reconstrói métricas diárias.
+   * Fluxo:
+   * 1. Sincroniza orders do Mercado Livre para o banco (dateFrom até dateTo)
+   * 2. Reconstrói métricas diárias usando orders + order_items do banco
+   * 
+   * Retorna resultado consolidado com ordersSynced, metricsRowsUpserted, etc.
+   */
+  app.post(
+    '/mercadolivre/refresh',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+      const startTime = Date.now();
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const query = RefreshQuerySchema.parse(request.query);
+        const daysBack = query.days;
+        const force = query.force;
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          days: daysBack,
+          force,
+        }, 'Requisição de refresh (orders + metrics) recebida');
+
+        // Calcular range de datas (dateFrom até dateTo inclusive)
+        const dateToUtc = new Date();
+        dateToUtc.setUTCHours(0, 0, 0, 0);
+        
+        const dateFromUtc = new Date(dateToUtc);
+        dateFromUtc.setUTCDate(dateFromUtc.getUTCDate() - (daysBack - 1)); // Incluir hoje no range
+
+        // 1. Sincronizar orders do Mercado Livre
+        app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando sync de orders...');
+        const ordersService = new MercadoLivreOrdersService(tenantId);
+        const ordersResult = await ordersService.syncOrdersByRange(dateFromUtc, dateToUtc);
+
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = ordersResult.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.info({
+          tenantId,
+          ordersProcessed: ordersResult.ordersProcessed,
+          ordersCreated: ordersResult.ordersCreated,
+          ordersUpdated: ordersResult.ordersUpdated,
+        }, 'Sync de orders concluído');
+
+        // 2. Reconstruir métricas diárias usando orders + order_items do banco
+        app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando rebuild de métricas...');
+        const syncService = new MercadoLivreSyncService(tenantId);
+        const metricsResult = await syncService.syncListingMetricsDaily(tenantId, dateFromUtc, dateToUtc, daysBack);
+
+        // Verificar se há erro de autenticação revogada no metrics também
+        const hasAuthRevokedMetrics = metricsResult.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta')
+        );
+
+        if (hasAuthRevokedMetrics) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        const totalDuration = Date.now() - startTime;
+
+        app.log.info({
+          requestId,
+          userId,
+          tenantId,
+          ordersProcessed: ordersResult.ordersProcessed,
+          ordersCreated: ordersResult.ordersCreated,
+          metricsRowsUpserted: metricsResult.rowsUpserted,
+          totalDuration,
+        }, 'Refresh completo concluído');
+
+        // Retornar resultado consolidado
+        return reply.status(200).send({
+          message: 'Refresh concluído com sucesso',
+          data: {
+            orders: {
+              processed: ordersResult.ordersProcessed,
+              created: ordersResult.ordersCreated,
+              updated: ordersResult.ordersUpdated,
+              totalGMV: ordersResult.totalGMV,
+              success: ordersResult.success,
+              errors: ordersResult.errors.length > 0 ? ordersResult.errors : undefined,
+            },
+            metrics: {
+              listingsProcessed: metricsResult.listingsProcessed,
+              rowsUpserted: metricsResult.rowsUpserted,
+              min_date: metricsResult.min_date,
+              max_date: metricsResult.max_date,
+              success: metricsResult.success,
+              errors: metricsResult.errors.length > 0 ? metricsResult.errors : undefined,
+            },
+            duration: `${totalDuration}ms`,
+            ordersDuration: `${ordersResult.duration}ms`,
+            metricsDuration: `${metricsResult.duration}ms`,
+          },
+        });
+      } catch (error) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        app.log.error({
+          requestId,
+          userId,
+          tenantId,
+          err: error,
+        }, 'Erro ao processar refresh');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'Parâmetros inválidos',
+            details: error.errors,
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao processar refresh';
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: errorMessage,
