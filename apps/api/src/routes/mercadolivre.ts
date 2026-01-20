@@ -178,88 +178,270 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
 
     // Rota de Callback
     app.get('/callback', async (req: FastifyRequest, reply: FastifyReply) => {
-    try {
-      const { code, state } = req.query as { code: string; state: string };
-      
-      if (!code) return reply.status(400).send({ error: 'No code provided' });
-
-      let decodedState;
-      try {
-        const jsonState = Buffer.from(state, 'base64').toString('utf-8');
-        decodedState = JSON.parse(jsonState);
-      } catch (e) {
-        return reply.status(400).send({ error: 'Invalid state parameter' });
-      }
-
-      const { tenantId } = decodedState;
-
-      const credentials = await getMercadoLivreCredentials();
-      
-      const tokenResponse = await axios.post(
-        `${ML_API_BASE}/oauth/token`,
-        new URLSearchParams({
-          grant_type: 'authorization_code',
-          client_id: credentials.clientId,
-          client_secret: credentials.clientSecret,
-          code: code,
-          redirect_uri: credentials.redirectUri,
-        }),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-      );
-
-      const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
-      const providerAccountId = String(mlUserId);
-
-      const existingConnection = await prisma.marketplaceConnection.findFirst({
-        where: {
-          tenant_id: tenantId,
-          type: Marketplace.mercadolivre, 
-          provider_account_id: providerAccountId,
-        },
-      });
-
-      if (existingConnection) {
-        await prisma.marketplaceConnection.update({
-          where: { id: existingConnection.id },
-          data: {
-            access_token: access_token,
-            refresh_token: refresh_token,
-            expires_at: new Date(Date.now() + expires_in * 1000),
-            status: ConnectionStatus.active, 
-          },
-        });
-      } else {
-        await prisma.marketplaceConnection.create({
-          data: {
-            tenant_id: tenantId,
-            type: Marketplace.mercadolivre, 
-            provider_account_id: providerAccountId,
-            access_token: access_token,
-            refresh_token: refresh_token,
-            expires_at: new Date(Date.now() + expires_in * 1000),
-            status: ConnectionStatus.active, 
-          },
-        });
-      }
-
-      // Disparar sync completo de forma assíncrona (fire-and-forget)
-      // Não aguarda conclusão para não bloquear o redirect
-      triggerFullSync(tenantId).catch(err => {
-        app.log.error({ err }, `Failed to trigger sync after reconnection for tenant ${tenantId}`);
-      });
-
-      // Redirecionar para /overview após login bem-sucedido
+      const requestId = (req as any).requestId || 'unknown';
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.superselleria.com.br';
-      return reply.redirect(`${appUrl}/overview?success=true`);
+
+      try {
+        // ========== ETAPA 1: ENTRADA ==========
+        const { code, state } = req.query as { code: string; state: string };
+        
+        const hasCode = !!code;
+        const codePrefix = code ? code.substring(0, 6) : 'missing';
+        const stateLen = state ? state.length : 0;
+        const stateRawPrefix = state ? state.substring(0, 10) : 'missing';
+
+        app.log.info({
+          requestId,
+          hasCode,
+          codePrefix,
+          stateLen,
+          stateRawPrefix,
+        }, '[ML-CALLBACK] Entrada do callback');
+
+        if (!code) {
+          app.log.warn({ requestId }, '[ML-CALLBACK] Code não fornecido');
+          return reply.redirect(`${appUrl}/overview?ml_connect=error&code=NO_CODE`);
+        }
+
+        if (!state) {
+          app.log.warn({ requestId }, '[ML-CALLBACK] State não fornecido');
+          return reply.redirect(`${appUrl}/overview?ml_connect=error&code=NO_STATE`);
+        }
+
+        // ========== ETAPA 2: DECODE DO STATE ==========
+        let decodedState: { tenantId: string; userId: string; nonce: string };
+        try {
+          // Decode URI component primeiro
+          const decodedStateStr = decodeURIComponent(state);
+          // Depois decode base64
+          const jsonState = Buffer.from(decodedStateStr, 'base64').toString('utf-8');
+          decodedState = JSON.parse(jsonState);
+
+          app.log.info({
+            requestId,
+            stateDecodedJson: {
+              tenantId: decodedState.tenantId,
+              userId: decodedState.userId,
+              nonce: decodedState.nonce ? decodedState.nonce.substring(0, 8) : 'missing',
+            },
+          }, '[ML-CALLBACK] State decodificado com sucesso');
+        } catch (e) {
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          const errorStack = e instanceof Error ? e.stack : undefined;
+          
+          app.log.error({
+            requestId,
+            error: errorMsg,
+            stack: errorStack,
+            stateRawPrefix,
+          }, '[ML-CALLBACK] Erro ao decodificar state');
+
+          return reply.redirect(`${appUrl}/overview?ml_connect=error&code=STATE_INVALID`);
+        }
+
+        const { tenantId, userId } = decodedState;
+
+        if (!tenantId || !userId) {
+          app.log.warn({
+            requestId,
+            tenantId: !!tenantId,
+            userId: !!userId,
+          }, '[ML-CALLBACK] tenantId ou userId ausente no state decodificado');
+          return reply.redirect(`${appUrl}/overview?ml_connect=error&code=STATE_INVALID`);
+        }
+
+        // ========== ETAPA 3: VERIFICAR REDIRECT_URI ==========
+        const credentials = await getMercadoLivreCredentials();
+        const redirectUri = credentials.redirectUri;
+
+        if (!redirectUri || redirectUri.trim() === '') {
+          app.log.error({ requestId }, '[ML-CALLBACK] ML_REDIRECT_URI não configurado');
+          return reply.status(500).send({
+            error: 'ML_REDIRECT_URI_MISSING',
+            message: 'Redirect URI não configurado',
+            code: 'ML_REDIRECT_URI_MISSING',
+          });
+        }
+
+        app.log.info({
+          requestId,
+          redirectUri,
+          tenantId,
+          userId,
+        }, '[ML-CALLBACK] Redirect URI verificado, iniciando token exchange');
+
+        // ========== ETAPA 4: TOKEN EXCHANGE COM ML ==========
+        let tokenResponse;
+        try {
+          tokenResponse = await axios.post(
+            `${ML_API_BASE}/oauth/token`,
+            new URLSearchParams({
+              grant_type: 'authorization_code',
+              client_id: credentials.clientId,
+              client_secret: credentials.clientSecret,
+              code: code,
+              redirect_uri: redirectUri,
+            }),
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+          );
+
+          app.log.info({
+            requestId,
+            hasAccessToken: !!tokenResponse.data.access_token,
+            hasRefreshToken: !!tokenResponse.data.refresh_token,
+            expiresIn: tokenResponse.data.expires_in,
+            mlUserId: tokenResponse.data.user_id,
+          }, '[ML-CALLBACK] Token exchange bem-sucedido');
+        } catch (tokenError: any) {
+          const statusCode = tokenError.response?.status;
+          const errorBody = tokenError.response?.data || {};
+          const errorDescription = errorBody.error_description || errorBody.error || 'Unknown error';
+          
+          // Sanitizar body (remover tokens se existirem)
+          const sanitizedBody = { ...errorBody };
+          if (sanitizedBody.access_token) delete sanitizedBody.access_token;
+          if (sanitizedBody.refresh_token) delete sanitizedBody.refresh_token;
+
+          app.log.error({
+            requestId,
+            statusCode,
+            errorDescription,
+            sanitizedBody,
+            redirectUri,
+          }, '[ML-CALLBACK] Erro no token exchange com ML');
+
+          return reply.status(502).send({
+            error: 'ML_TOKEN_EXCHANGE_FAILED',
+            message: `Falha ao trocar código por token: ${errorDescription}`,
+            code: 'ML_TOKEN_EXCHANGE_FAILED',
+            mlError: {
+              status: statusCode,
+              description: errorDescription,
+            },
+          });
+        }
+
+        const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
+        const providerAccountId = String(mlUserId);
+
+        // ========== ETAPA 5: PERSISTÊNCIA NO BANCO ==========
+        try {
+          const existingConnection = await prisma.marketplaceConnection.findFirst({
+            where: {
+              tenant_id: tenantId,
+              type: Marketplace.mercadolivre, 
+              provider_account_id: providerAccountId,
+            },
+          });
+
+          if (existingConnection) {
+            app.log.info({
+              requestId,
+              connectionId: existingConnection.id,
+              action: 'update',
+              tenantId,
+              providerAccountId,
+            }, '[ML-CALLBACK] Atualizando conexão existente');
+
+            await prisma.marketplaceConnection.update({
+              where: { id: existingConnection.id },
+              data: {
+                access_token: access_token,
+                refresh_token: refresh_token,
+                expires_at: new Date(Date.now() + expires_in * 1000),
+                status: ConnectionStatus.active,
+                // Limpar campos de erro ao reconectar
+                last_error_code: null,
+                last_error_at: null,
+                last_error_message: null,
+              },
+            });
+
+            app.log.info({
+              requestId,
+              connectionId: existingConnection.id,
+            }, '[ML-CALLBACK] Conexão atualizada com sucesso');
+          } else {
+            app.log.info({
+              requestId,
+              action: 'create',
+              tenantId,
+              providerAccountId,
+            }, '[ML-CALLBACK] Criando nova conexão');
+
+            const newConnection = await prisma.marketplaceConnection.create({
+              data: {
+                tenant_id: tenantId,
+                type: Marketplace.mercadolivre, 
+                provider_account_id: providerAccountId,
+                access_token: access_token,
+                refresh_token: refresh_token,
+                expires_at: new Date(Date.now() + expires_in * 1000),
+                status: ConnectionStatus.active,
+              },
+            });
+
+            app.log.info({
+              requestId,
+              connectionId: newConnection.id,
+            }, '[ML-CALLBACK] Nova conexão criada com sucesso');
+          }
+        } catch (dbError: any) {
+          const errorCode = dbError.code;
+          const errorMeta = dbError.meta;
+          const errorStack = dbError.stack;
+
+          app.log.error({
+            requestId,
+            errorCode,
+            errorMeta,
+            stack: errorStack,
+            tenantId,
+            providerAccountId,
+          }, '[ML-CALLBACK] Erro ao persistir conexão no banco');
+
+          return reply.status(500).send({
+            error: 'DB_PERSIST_FAILED',
+            message: 'Falha ao salvar conexão no banco de dados',
+            code: 'DB_PERSIST_FAILED',
+            dbError: {
+              code: errorCode,
+              meta: errorMeta,
+            },
+          });
+        }
+
+        // ========== ETAPA 6: DISPARAR SYNC E REDIRECIONAR ==========
+        // Disparar sync completo de forma assíncrona (fire-and-forget)
+        triggerFullSync(tenantId).catch(err => {
+          app.log.error({ 
+            requestId,
+            err,
+            tenantId,
+          }, '[ML-CALLBACK] Falha ao disparar sync após reconexão');
+        });
+
+        app.log.info({
+          requestId,
+          tenantId,
+          providerAccountId,
+        }, '[ML-CALLBACK] Callback concluído com sucesso, redirecionando');
+
+        // Redirecionar para /overview após login bem-sucedido
+        return reply.redirect(`${appUrl}/overview?ml_connect=success`);
 
       } catch (error) {
-        app.log.error({ err: error }, 'Failed to complete Mercado Livre connection');
-        // Em produção, não retornar detalhes do erro
-        const isProduction = process.env.NODE_ENV === 'production';
-        return reply.status(500).send({ 
-          error: 'Failed to complete Mercado Livre connection',
-          message: isProduction ? 'Erro ao completar conexão' : String(error),
-        });
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack : undefined;
+
+        app.log.error({
+          requestId,
+          error: errorMsg,
+          stack: errorStack,
+        }, '[ML-CALLBACK] Erro não tratado no callback');
+
+        // Redirecionar com código de erro genérico
+        return reply.redirect(`${appUrl}/overview?ml_connect=error&code=UNKNOWN_ERROR`);
       }
     });
 

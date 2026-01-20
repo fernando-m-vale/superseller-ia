@@ -70,13 +70,20 @@ export async function getMercadoLivreCredentials(): Promise<MercadoLivreCredenti
     '';
 
   const redirectUri =
-    process.env.MERCADOLIVRE_REDIRECT_URI ||
     process.env.ML_REDIRECT_URI ||
+    process.env.MERCADOLIVRE_REDIRECT_URI ||
     'http://localhost:3001/api/v1/auth/mercadolivre/callback';
 
   if (!clientId || !clientSecret) {
     throw new Error(
       'Mercado Livre credentials not configured. Check MERCADOLIVRE_CLIENT_ID / MERCADOLIVRE_CLIENT_SECRET or ML_APP_ID / ML_APP_SECRET.',
+    );
+  }
+
+  // Validar que redirectUri não está vazio
+  if (!redirectUri || redirectUri.trim() === '') {
+    throw new Error(
+      'ML_REDIRECT_URI não configurado. Configure ML_REDIRECT_URI ou MERCADOLIVRE_REDIRECT_URI.',
     );
   }
 
