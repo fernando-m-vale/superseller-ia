@@ -1,6 +1,6 @@
 import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Marketplace, ConnectionStatus } from '@prisma/client';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
 import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
@@ -826,20 +826,54 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         // 1. Sincronizar orders do Mercado Livre
         app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando sync de orders...');
         const ordersService = new MercadoLivreOrdersService(tenantId);
-        const ordersResult = await ordersService.syncOrdersByRange(dateFromUtc, dateToUtc);
+        
+        let ordersResult;
+        try {
+          ordersResult = await ordersService.syncOrdersByRange(dateFromUtc, dateToUtc);
+        } catch (ordersError: any) {
+          // Não engolir erros da API do ML - propagar com status code apropriado
+          const statusCode = ordersError.statusCode || 500;
+          const mlErrorBody = ordersError.mlErrorBody || null;
+          
+          app.log.error({
+            tenantId,
+            statusCode,
+            mlErrorBody,
+            error: ordersError.message,
+          }, 'Erro ao sincronizar orders do ML');
 
-        // Verificar se há erro de autenticação revogada
-        const hasAuthRevoked = ordersResult.errors.some(err => 
-          err.includes('AUTH_REVOKED') || 
-          err.includes('Conexão expirada') || 
-          err.includes('Reconecte sua conta')
-        );
+          // Se for 401/403, marcar conexão como revoked
+          if (statusCode === 401 || statusCode === 403) {
+            await prisma.marketplaceConnection.updateMany({
+              where: {
+                tenant_id: tenantId,
+                type: Marketplace.mercadolivre,
+              },
+              data: {
+                status: ConnectionStatus.revoked,
+              },
+            });
 
-        if (hasAuthRevoked) {
-          return reply.status(401).send({
-            error: 'AUTH_REVOKED',
-            message: 'Conexão expirada. Reconecte sua conta.',
-            code: 'AUTH_REVOKED',
+            return reply.status(401).send({
+              error: 'AUTH_REVOKED',
+              message: 'Conexão expirada ou revogada. Reconecte sua conta.',
+              code: 'AUTH_REVOKED',
+              mlError: {
+                status: statusCode,
+                message: mlErrorBody?.message || 'Unauthorized',
+              },
+            });
+          }
+
+          // Retornar 502 Bad Gateway para outros erros da API do ML
+          return reply.status(502).send({
+            error: 'ML API Error',
+            message: `Erro ao buscar orders do Mercado Livre: ${ordersError.message}`,
+            mlError: {
+              status: statusCode,
+              message: mlErrorBody?.message || ordersError.message,
+              body: mlErrorBody, // Sanitizado (sem token)
+            },
           });
         }
 
@@ -848,6 +882,9 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           ordersProcessed: ordersResult.ordersProcessed,
           ordersCreated: ordersResult.ordersCreated,
           ordersUpdated: ordersResult.ordersUpdated,
+          fetched: ordersResult.fetched,
+          inRangeCount: ordersResult.inRangeCount,
+          fallbackUsed: ordersResult.fallbackUsed,
         }, 'Sync de orders concluído');
 
         // 2. Reconstruir métricas diárias usando orders + order_items do banco

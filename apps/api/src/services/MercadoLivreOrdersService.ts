@@ -78,11 +78,38 @@ export class MercadoLivreOrdersService {
   private tenantId: string;
   private accessToken: string = '';
   private providerAccountId: string = '';
+  private sellerId: string = ''; // ID real do usuário do ML (de users/me)
   private connectionId: string = '';
   private refreshToken: string = '';
 
   constructor(tenantId: string) {
     this.tenantId = tenantId;
+  }
+
+  /**
+   * Busca informações do usuário atual do ML (users/me)
+   * Usa o ID retornado como fonte de verdade para seller
+   */
+  private async fetchMe(): Promise<{ id: number; nickname: string; site_id: string }> {
+    const response = await this.executeWithRetryOn401(async () => {
+      return await axios.get(`${ML_API_BASE}/users/me`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+    });
+
+    const me = response.data;
+    console.log(`[ML-ORDERS] users/me: id=${me.id}, nickname=${me.nickname}, site_id=${me.site_id}`);
+
+    // Se providerAccountId divergir de me.id, logar WARN
+    if (this.providerAccountId && String(me.id) !== String(this.providerAccountId)) {
+      console.log(`[ML-ORDERS] ⚠️  WARN: providerAccountId (${this.providerAccountId}) diverge de me.id (${me.id}). Usando me.id como seller.`);
+    }
+
+    return {
+      id: me.id,
+      nickname: me.nickname,
+      site_id: me.site_id,
+    };
   }
 
   /**
@@ -122,6 +149,19 @@ export class MercadoLivreOrdersService {
 
       // 2. Verificar/renovar token se necessário
       await this.ensureValidToken();
+
+      // 3. Buscar users/me para obter seller ID real
+      try {
+        const me = await this.fetchMe();
+        this.sellerId = String(me.id);
+        console.log(`[ML-ORDERS] Seller ID confirmado via users/me: ${this.sellerId}`);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+        console.error(`[ML-ORDERS] Erro ao buscar users/me: ${errorMsg}`);
+        // Continuar com providerAccountId como fallback, mas logar
+        this.sellerId = this.providerAccountId;
+        console.log(`[ML-ORDERS] Usando providerAccountId como fallback: ${this.sellerId}`);
+      }
 
       // 3. Normalizar datas para UTC (from: 00:00:00.000Z, to: 23:59:59.999Z)
       const dateFromUtc = new Date(dateFrom);
@@ -207,10 +247,27 @@ export class MercadoLivreOrdersService {
 
       return result;
     } catch (error) {
+      // Não engolir erros - propagar para o caller
       const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      
+      // Se for erro da API do ML com statusCode, propagar
+      if ((error as any).statusCode) {
+        console.error('[ML-ORDERS] Erro da API do ML propagado:', errorMsg);
+        throw error; // Propagar erro com statusCode
+      }
+      
+      // Erros de autenticação/token: propagar
+      if (errorMsg.includes('Conexão') || errorMsg.includes('token') || errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('AUTH_REVOKED')) {
+        console.error('[ML-ORDERS] Erro de autenticação propagado:', errorMsg);
+        throw error; // Propagar erros de autenticação
+      }
+      
+      // Outros erros: adicionar ao result e retornar (não propagar)
       result.errors.push(errorMsg);
       result.duration = Date.now() - startTime;
-      console.error('[ML-ORDERS] Erro fatal na sincronização:', errorMsg);
+      console.error('[ML-ORDERS] Erro não crítico na sincronização:', errorMsg);
+      result.success = false;
+      
       return result;
     }
   }
@@ -451,7 +508,7 @@ export class MercadoLivreOrdersService {
         try {
           const url = `${ML_API_BASE}/orders/search`;
           const params: Record<string, string | number> = {
-            seller: this.providerAccountId,
+            seller: this.sellerId || this.providerAccountId, // Usar sellerId (de users/me) como fonte de verdade
             'order.date_created.from': dateFrom,
             'order.date_created.to': dateTo,
             sort: 'date_desc',
@@ -461,6 +518,7 @@ export class MercadoLivreOrdersService {
           
           console.log(`[ML-ORDERS] Chamando API: ${url}`);
           console.log(`[ML-ORDERS] Query params enviados:`, JSON.stringify(params, null, 2));
+          console.log(`[ML-ORDERS] Seller usado: ${params.seller} (sellerId=${this.sellerId}, providerAccountId=${this.providerAccountId})`);
 
           const response = await axios.get<MLOrdersSearchResponse>(url, {
             headers: { Authorization: `Bearer ${this.accessToken}` },
@@ -486,9 +544,21 @@ export class MercadoLivreOrdersService {
         } catch (error) {
           if (axios.isAxiosError(error)) {
             const status = error.response?.status;
-            const data = JSON.stringify(error.response?.data);
-            console.error(`[ML-ORDERS] ❌ Erro API ML (${status}):`, data);
+            const data = error.response?.data;
+            const dataStr = JSON.stringify(data);
+            
+            console.error(`[ML-ORDERS] ❌ Erro API ML (${status}):`, dataStr);
             console.error(`[ML-ORDERS] Headers da resposta:`, JSON.stringify(error.response?.headers));
+            
+            // Não engolir erros HTTP - propagar para o caller
+            if (status === 401 || status === 403 || status === 400) {
+              // Criar erro customizado com informações sanitizadas
+              const mlError = new Error(`ML API Error ${status}: ${data?.message || dataStr}`);
+              (mlError as any).statusCode = status;
+              (mlError as any).mlErrorBody = data; // Sanitizado (sem token)
+              throw mlError;
+            }
+            
             throw error;
           }
           throw error;
@@ -515,42 +585,67 @@ export class MercadoLivreOrdersService {
   private async fetchOrdersFallback(limit: number = 100): Promise<MLOrder[]> {
     console.log(`[ML-ORDERS] ========== FALLBACK: BUSCANDO ÚLTIMOS ${limit} PEDIDOS SEM FILTRO ==========`);
     
-    try {
-      const url = `${ML_API_BASE}/orders/search`;
-      const params: Record<string, string | number> = {
-        seller: this.providerAccountId,
-        sort: 'date_desc',
-        offset: 0,
-        limit,
-      };
-      
-      console.log(`[ML-ORDERS] Fallback - Chamando API: ${url}`);
-      console.log(`[ML-ORDERS] Fallback - Query params:`, JSON.stringify(params, null, 2));
+    const url = `${ML_API_BASE}/orders/search`;
+    const params: Record<string, string | number> = {
+      seller: this.sellerId || this.providerAccountId, // Usar sellerId (de users/me) como fonte de verdade
+      sort: 'date_desc',
+      offset: 0,
+      limit,
+    };
+    
+    console.log(`[ML-ORDERS] Fallback - Chamando API: ${url}`);
+    console.log(`[ML-ORDERS] Fallback - Query params:`, JSON.stringify(params, null, 2));
+    console.log(`[ML-ORDERS] Fallback - Seller usado: ${params.seller}`);
 
-      const response = await this.executeWithRetryOn401(async () => {
+    const response = await this.executeWithRetryOn401(async () => {
+      try {
         return await axios.get<MLOrdersSearchResponse>(url, {
           headers: { Authorization: `Bearer ${this.accessToken}` },
           params,
         });
-      });
-
-      console.log(`[ML-ORDERS] Fallback - Resposta status: ${response.status}`);
-      console.log(`[ML-ORDERS] Fallback - Total disponível: ${response.data.paging.total}`);
-      console.log(`[ML-ORDERS] Fallback - Results: ${response.data.results.length}`);
-
-      if (response.data.results.length > 0) {
-        const firstOrder = response.data.results[0];
-        const lastOrder = response.data.results[response.data.results.length - 1];
-        console.log(`[ML-ORDERS] Fallback - Primeiro pedido: ID=${firstOrder.id}, Date=${firstOrder.date_created}`);
-        console.log(`[ML-ORDERS] Fallback - Último pedido: ID=${lastOrder.id}, Date=${lastOrder.date_created}`);
+      } catch (error) {
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          const data = error.response?.data;
+          const dataStr = JSON.stringify(data);
+          
+          console.error(`[ML-ORDERS] Fallback - ❌ Erro API ML (${status}):`, dataStr);
+          
+          // Não engolir erros HTTP - propagar
+          if (status === 401 || status === 403 || status === 400) {
+            const mlError = new Error(`ML API Error ${status}: ${data?.message || dataStr}`);
+            (mlError as any).statusCode = status;
+            (mlError as any).mlErrorBody = data;
+            throw mlError;
+          }
+        }
+        throw error;
       }
+    });
 
-      return response.data.results;
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
-      console.error(`[ML-ORDERS] Fallback - Erro ao buscar pedidos:`, errorMsg);
-      return [];
+    const httpStatus = response.status;
+    const pagingTotal = response.data.paging.total;
+    const resultsLength = response.data.results.length;
+
+    console.log(`[ML-ORDERS] Fallback - HTTP Status: ${httpStatus}`);
+    console.log(`[ML-ORDERS] Fallback - Paging Total: ${pagingTotal}`);
+    console.log(`[ML-ORDERS] Fallback - Results Length: ${resultsLength}`);
+
+    // Se paging.total > 0 mas results.length === 0, logar WARN
+    if (pagingTotal > 0 && resultsLength === 0) {
+      console.log(`[ML-ORDERS] Fallback - ⚠️  WARN: paging.total=${pagingTotal} mas results.length=0. Possível problema de paginação ou offset.`);
     }
+
+    if (resultsLength > 0) {
+      const firstOrder = response.data.results[0];
+      const lastOrder = response.data.results[resultsLength - 1];
+      console.log(`[ML-ORDERS] Fallback - Primeiro pedido: ID=${firstOrder.id}, Date=${firstOrder.date_created}`);
+      console.log(`[ML-ORDERS] Fallback - Último pedido: ID=${lastOrder.id}, Date=${lastOrder.date_created}`);
+    } else if (pagingTotal === 0) {
+      console.log(`[ML-ORDERS] Fallback - ⚠️  WARN: Nenhum pedido encontrado (paging.total=0). Verificar seller ID e token.`);
+    }
+
+    return response.data.results;
   }
 
   /**
