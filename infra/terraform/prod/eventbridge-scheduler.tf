@@ -62,7 +62,8 @@ resource "aws_iam_role_policy" "scheduler_invoke_api" {
           "events:InvokeApiDestination"
         ]
         Resource = [
-          aws_cloudwatch_event_api_destination.superseller_jobs[0].arn
+          aws_cloudwatch_event_api_destination.superseller_jobs[0].arn,
+          var.enable_ml_sync_schedule ? aws_cloudwatch_event_api_destination.superseller_ml_sync[0].arn : aws_cloudwatch_event_api_destination.superseller_jobs[0].arn
         ]
       }
     ]
@@ -129,16 +130,13 @@ resource "aws_scheduler_schedule" "daily_metrics_rebuild" {
   schedule_expression_timezone = var.scheduler_timezone
 
   target {
-    arn      = "arn:aws:scheduler:::aws-sdk:eventbridge:invokeApiDestination"
+    arn      = aws_cloudwatch_event_api_destination.superseller_jobs[0].arn
     role_arn = aws_iam_role.scheduler_execution[0].arn
 
     input = jsonencode({
-      ApiDestinationArn = aws_cloudwatch_event_api_destination.superseller_jobs[0].arn
-      Input = jsonencode({
-        tenantId = var.scheduler_tenant_id
-        from     = "2024-01-01"
-        to       = "2024-12-31"
-      })
+      tenantId = var.scheduler_tenant_id
+      from     = "2024-01-01"
+      to       = "2024-12-31"
     })
 
     retry_policy {
@@ -184,15 +182,12 @@ resource "aws_scheduler_schedule" "ml_sync" {
   schedule_expression_timezone = var.scheduler_timezone
 
   target {
-    arn      = "arn:aws:scheduler:::aws-sdk:eventbridge:invokeApiDestination"
+    arn      = aws_cloudwatch_event_api_destination.superseller_ml_sync[0].arn
     role_arn = aws_iam_role.scheduler_execution[0].arn
 
     input = jsonencode({
-      ApiDestinationArn = aws_cloudwatch_event_api_destination.superseller_ml_sync[0].arn
-      Input = jsonencode({
-        tenantId = var.scheduler_tenant_id
-        daysBack = 30
-      })
+      tenantId = var.scheduler_tenant_id
+      daysBack = 30
     })
 
     retry_policy {
