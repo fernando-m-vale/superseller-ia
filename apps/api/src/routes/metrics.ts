@@ -84,94 +84,47 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       }));
 
       // ============ DADOS DE VENDAS (período dinâmico baseado em query.days) ============
-      // IMPORTANTE: Usar o mesmo período para totais E gráfico para consistência
+      // IMPORTANTE: Usar listing_metrics_daily que já tem série diária real
       const periodDays = query.days;
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - periodDays);
-      cutoffDate.setHours(0, 0, 0, 0);
+      
+      // Calcular range de datas em UTC (dateFrom até dateTo inclusive)
+      // Para periodDays=30, queremos 30 dias incluindo hoje: hoje-29 até hoje
+      const dateToUtc = new Date();
+      dateToUtc.setUTCHours(0, 0, 0, 0);
+      
+      const dateFromUtc = new Date(dateToUtc);
+      dateFromUtc.setUTCDate(dateFromUtc.getUTCDate() - (periodDays - 1)); // Incluir hoje no range
+      
+      // Gerar array de dias do range (inclusive) em formato YYYY-MM-DD (UTC)
+      const dayStrings: string[] = [];
+      const currentDate = new Date(dateFromUtc);
+      while (currentDate <= dateToUtc) {
+        const dayStr = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD em UTC
+        dayStrings.push(dayStr);
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
 
-      app.log.info(`[METRICS] Buscando pedidos para tenant ${tenantId}, período ${periodDays} dias, desde ${cutoffDate.toISOString()}`);
+      app.log.info(`[METRICS] Buscando métricas para tenant ${tenantId}, período ${periodDays} dias, range: ${dayStrings[0]} até ${dayStrings[dayStrings.length - 1]}`);
 
-      // Primeiro, contar TODOS os pedidos do tenant (sem filtro de status) para debug
-      const totalOrdersInDb = await prisma.order.count({
-        where: { tenant_id: tenantId },
-      });
-      app.log.info(`[METRICS] Total de pedidos no banco para este tenant: ${totalOrdersInDb}`);
-
+      // Buscar métricas diárias do período (já agregadas por dia)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ordersWhereClause: any = {
+      const metricsWhereClause: any = {
         tenant_id: tenantId,
-        order_date: { gte: cutoffDate },
-        // GMV inclui pedidos pagos, enviados e entregues
-        status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+        date: {
+          gte: dateFromUtc,
+          lte: dateToUtc,
+        },
+        ...(query.marketplace ? {
+          listing: { marketplace: query.marketplace },
+        } : {}),
       };
 
-      if (query.marketplace) {
-        ordersWhereClause.marketplace = query.marketplace;
-      }
-
-      // Buscar todos os pedidos do período para totais E série
-      const allOrders = await prisma.order.findMany({
-        where: ordersWhereClause,
+      const dailyMetrics = await prisma.listingMetricsDaily.findMany({
+        where: metricsWhereClause,
         select: {
-          order_date: true,
-          total_amount: true,
-          status: true,
-        },
-        orderBy: { order_date: 'asc' },
-      });
-
-      app.log.info(`[METRICS] Pedidos encontrados com filtro de status (paid/shipped/delivered): ${allOrders.length}`);
-
-      // Se não encontrou com filtro de status, buscar sem filtro para debug
-      if (allOrders.length === 0 && totalOrdersInDb > 0) {
-        const ordersWithoutStatusFilter = await prisma.order.findMany({
-          where: {
-            tenant_id: tenantId,
-            order_date: { gte: cutoffDate },
-          },
-          select: {
-            status: true,
-            order_date: true,
-            total_amount: true,
-          },
-          take: 10,
-        });
-        app.log.info(`[METRICS] Amostra de pedidos sem filtro de status: ${JSON.stringify(ordersWithoutStatusFilter.map(o => ({ status: o.status, date: o.order_date, amount: o.total_amount })))}`);
-      }
-
-      // Calcular totais a partir dos mesmos dados da série (consistência)
-      const totalOrders = allOrders.length;
-      const totalRevenue = allOrders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-      const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-      // Agrupar por dia para série temporal
-      const salesSeriesMap = new Map<string, { date: string; revenue: number; orders: number }>();
-      
-      for (const order of allOrders) {
-        const dateStr = order.order_date.toISOString().split('T')[0];
-        const existing = salesSeriesMap.get(dateStr) || { date: dateStr, revenue: 0, orders: 0 };
-        existing.revenue += Number(order.total_amount);
-        existing.orders += 1;
-        salesSeriesMap.set(dateStr, existing);
-      }
-
-      const salesSeries = Array.from(salesSeriesMap.values()).sort((a, b) =>
-        a.date.localeCompare(b.date)
-      );
-
-      // Buscar visitas agregadas por dia (ignorar NULL na soma)
-      const visitsByDay = await prisma.listingMetricsDaily.groupBy({
-        by: ['date'],
-        where: {
-          tenant_id: tenantId,
-          date: { gte: cutoffDate },
-          visits: { not: null }, // Ignorar NULL na agregação
-          ...(query.marketplace ? {
-            listing: { marketplace: query.marketplace },
-          } : {}),
-        },
-        _sum: {
+          date: true,
+          orders: true,
+          gmv: true,
           visits: true,
         },
         orderBy: {
@@ -179,57 +132,65 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         },
       });
 
-      // Criar mapa de visitas por dia (YYYY-MM-DD) -> soma(visits)
-      const visitsMap = new Map<string, number>();
-      for (const dayData of visitsByDay) {
-        const dateStr = dayData.date.toISOString().split('T')[0];
-        visitsMap.set(dateStr, Number(dayData._sum.visits) || 0);
+      // Agregar métricas por dia (somar orders e gmv de todos os listings por dia)
+      const metricsByDayMap = new Map<string, { orders: number; revenue: number; visits: number | null }>();
+      
+      for (const metric of dailyMetrics) {
+        const dateStr = metric.date.toISOString().split('T')[0]; // YYYY-MM-DD em UTC
+        const existing = metricsByDayMap.get(dateStr) || { orders: 0, revenue: 0, visits: null };
+        
+        existing.orders += metric.orders;
+        existing.revenue += Number(metric.gmv);
+        
+        // Para visits: somar apenas valores não-null, manter null se todos forem null
+        if (metric.visits !== null) {
+          existing.visits = (existing.visits ?? 0) + metric.visits;
+        }
+        
+        metricsByDayMap.set(dateStr, existing);
       }
+
+      // Calcular totais do período
+      const totalOrders = Array.from(metricsByDayMap.values()).reduce((sum, m) => sum + m.orders, 0);
+      const totalRevenue = Array.from(metricsByDayMap.values()).reduce((sum, m) => sum + m.revenue, 0);
+      const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      // Montar série completa com todos os dias do range (preencher dias sem vendas)
+      const combinedSeries = dayStrings.map((dayStr) => {
+        const dayMetrics = metricsByDayMap.get(dayStr);
+        return {
+          date: dayStr,
+          revenue: dayMetrics?.revenue ?? 0,
+          orders: dayMetrics?.orders ?? 0,
+          visits: dayMetrics?.visits ?? null, // null quando não há visitas disponíveis
+        };
+      });
 
       // Contar dias com visitas vs total de dias no período
-      const totalDaysInPeriod = periodDays;
-      const filledDays = visitsByDay.length;
+      const totalDaysInPeriod = periodDays; // Deve ser exatamente periodDays
+      const filledDays = Array.from(metricsByDayMap.values()).filter(m => m.visits !== null).length;
 
-      // Combinar salesSeries com visits (adicionar visits a cada dia)
-      const combinedSeries = salesSeries.map((day) => ({
-        ...day,
-        visits: visitsMap.get(day.date) ?? null, // null quando não há visitas disponíveis
-      }));
-
-      // Adicionar dias que têm visitas mas não têm vendas
-      for (const [dateStr, visits] of visitsMap.entries()) {
-        if (!salesSeries.find(s => s.date === dateStr)) {
-          combinedSeries.push({
-            date: dateStr,
-            revenue: 0,
-            orders: 0,
-            visits: visits,
-          });
-        }
-      }
-
-      // Ordenar por data
-      combinedSeries.sort((a, b) => a.date.localeCompare(b.date));
-
-      // Top 3 produtos por receita (últimos 30 dias)
-      const topListings = await prisma.orderItem.groupBy({
-        by: ['listing_id_ext'],
+      // Top 3 produtos por receita (período dinâmico)
+      // Usar dados de listing_metrics_daily para consistência
+      const topListingsMetrics = await prisma.listingMetricsDaily.groupBy({
+        by: ['listing_id'],
         where: {
-          order: {
-            tenant_id: tenantId,
-            order_date: { gte: cutoffDate },
-            status: { in: [OrderStatus.paid, OrderStatus.shipped, OrderStatus.delivered] },
+          tenant_id: tenantId,
+          date: {
+            gte: dateFromUtc,
+            lte: dateToUtc,
           },
+          ...(query.marketplace ? {
+            listing: { marketplace: query.marketplace },
+          } : {}),
         },
         _sum: {
-          total_price: true,
-        },
-        _count: {
-          id: true,
+          gmv: true,
+          orders: true,
         },
         orderBy: {
           _sum: {
-            total_price: 'desc',
+            gmv: 'desc',
           },
         },
         take: 3,
@@ -237,11 +198,10 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
 
       // Buscar detalhes dos listings
       const topListingsWithDetails = await Promise.all(
-        topListings.map(async (item) => {
-          const listing = await prisma.listing.findFirst({
+        topListingsMetrics.map(async (item) => {
+          const listing = await prisma.listing.findUnique({
             where: {
-              tenant_id: tenantId,
-              listing_id_ext: item.listing_id_ext,
+              id: item.listing_id,
             },
             select: {
               id: true,
@@ -252,13 +212,13 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
 
           return {
             title: listing?.title || 'Produto desconhecido',
-            revenue: Number(item._sum.total_price) || 0,
-            orders: item._count.id,
+            revenue: Number(item._sum.gmv) || 0,
+            orders: Number(item._sum.orders) || 0,
           };
         })
       );
 
-      app.log.info(`[METRICS] Retornando: totalOrders=${totalOrders}, totalRevenue=${totalRevenue}, salesSeries.length=${salesSeries.length}`);
+      app.log.info(`[METRICS] Retornando: totalOrders=${totalOrders}, totalRevenue=${totalRevenue}, salesSeries.length=${combinedSeries.length}, periodDays=${periodDays}`);
 
       return reply.send({
         // Listings data

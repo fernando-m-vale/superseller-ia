@@ -198,6 +198,10 @@ export const internalJobsRoutes: FastifyPluginCallback = (app, _, done) => {
         const dateFrom = new Date(from);
         const dateTo = new Date(to);
         
+        // Normalizar para UTC midnight
+        dateFrom.setUTCHours(0, 0, 0, 0);
+        dateTo.setUTCHours(0, 0, 0, 0);
+        
         if (isNaN(dateFrom.getTime()) || isNaN(dateTo.getTime())) {
           return reply.status(400).send({
             error: 'Bad Request',
@@ -213,7 +217,7 @@ export const internalJobsRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Limitar intervalo máximo (90 dias)
-        const daysDiff = Math.ceil((dateTo.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24));
+        const daysDiff = Math.ceil((dateTo.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         if (daysDiff > 90) {
           return reply.status(400).send({
             error: 'Bad Request',
