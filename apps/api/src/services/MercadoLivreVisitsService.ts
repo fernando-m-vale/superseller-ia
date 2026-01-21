@@ -851,7 +851,8 @@ export class MercadoLivreVisitsService {
               }
             }
 
-            console.log(`[ML-VISITS] [${listingRequestId}] ✓ Processado: ${visits.length} dias de visitas`);
+            const visitsCount = visits ? visits.length : 0;
+            console.log(`[ML-VISITS] [${listingRequestId}] ✓ Processado: ${visitsCount} dias de visitas`);
             result.listingsProcessed++;
             return { success: true, listingId: listing.id };
           } catch (error) {
