@@ -1,66 +1,42 @@
-# DAILY EXECUTION LOG — 2026-01-19
+# DAILY EXECUTION LOG — 2026-01-20
 
 ## 🎯 Foco do dia
-- Consolidar Onda 3.2.1 (Hotfix Confiança)
-- Ativar rebuild manual de métricas diárias
-- Avançar na automação via EventBridge Scheduler
-- Investigar e ajustar fluxo de desligamento da infra para redução de custos
-
----
+Consolidar série diária real no Overview (orders/GMV) e iniciar sincronização de VISITS.
 
 ## ✅ Planejado
-- [x] Unificar conceito de mídia (clip/vídeo) para Mercado Livre
-- [x] Garantir MediaVerdict como fonte única de verdade
-- [x] Corrigir URL de edição do anúncio no Mercado Livre
-- [x] Criar endpoints internos de jobs (sync + rebuild)
-- [x] Criar botão de atualização manual no dashboard
-- [ ] Executar rebuild manual com sucesso via API
-- [ ] Ativar scheduler via Terraform
-- [x] Desligar App Runner ao final do dia
-- [x] Desligar NAT Gateway para reduzir custos
-
----
+- [x] Corrigir série diária (range inclusive + UTC) no endpoint /metrics/overview
+- [x] Corrigir agregação orders/GMV por dia via listing_metrics_daily
+- [x] Corrigir vínculo de order_items com listings (listing_id)
+- [x] Criar refresh que sincroniza orders + rebuild metrics
+- [x] Corrigir reconexão Mercado Livre (tratamento de erros + schema reauth_required + migrations em PROD)
+- [x] Implementar sincronização de visits e expor no /overview
+- [ ] Validar visits no DB e na UI com valores > 0
+- [ ] Garantir consistência de datas ML vs SuperSeller (timezone e definição de “dia”)
 
 ## 🧠 Descobertas
-- Mercado Livre trata apenas **clip** (não existe distinção real de vídeo)
-- `has_video` é legado no banco e não deve guiar decisões
-- `has_clips` é a única fonte válida para mídia
-- MediaVerdict v2 (baseado em clip) elimina contradições em UI, IA e Action Plan
-- Endpoints internos de jobs estão corretos, mas autenticação ainda não validada
-- Scheduler do EventBridge **não aceita** ARNs de `aws_cloudwatch_event_api_destination`
-- Scheduler exige recursos próprios (`aws_scheduler_*`)
-- Terraform não é ferramenta adequada para **liga/desliga diário** de NAT
-- NAT Gateway é recurso caro e frágil para workflows dinâmicos
-- Outputs do Terraform podem bloquear operações mesmo quando o recurso não é o alvo
+- Série diária (orders/GMV) estava “esparsa” e com range errado; corrigimos para periodDays dias completos e contínuos, em UTC.
+- order_items não tinha listing_id preenchido (quebrava agregação por listing); corrigimos ingestão + script de backfill.
+- Refresh falhava em trazer pedidos por problema de conexão e filtros na API ML; evoluímos o sync, logs e tratamento.
+- Reconexão do ML quebrou por migration não aplicada em PROD (P2022 coluna inexistente); resolvido com migrate deploy/manual.
+- VISITS agora não grava mais NULL (default 0 quando fetch ok), porém **todos os valores continuam 0** → precisamos investigar a API/endpoint/escopo/shape retornado pelo ML.
 
----
-
-## ⚠️ Bloqueios / problemas encontrados
-- Rebuild manual retornando 401 (problema na validação do `X-Internal-Key`)
-- `terraform apply` do scheduler falhando por formato inválido de ARN
-- Tentativa de desligar NAT via Terraform bloqueada por inconsistência no módulo
-- Necessidade de remover/ignorar scheduler temporariamente para operações de custo
-- NAT precisou ser excluído manualmente via console AWS para atingir objetivo imediato
-
----
+## ⚠️ Bloqueios / riscos
+- VISITS persistindo 0 em todos os dias mesmo com vendas e visitas no painel do ML.
+  Possíveis causas:
+  - endpoint incorreto / parâmetro last/unit incompatível
+  - itemId format errado (MLB... vs numérico, ou outra variação)
+  - escopo/permissão do token não inclui estatísticas/visitas
+  - retorno da API traz visits em outro campo/shape ou por timezone diferente (dia ML ≠ dia UTC)
+  - rate limiting / fallback retornando payload vazio silenciosamente
 
 ## 📌 Decisões tomadas
-- **Onda 3.2.1 permanece prioritária e válida**
-- Clip/vídeo tratado como conceito único definitivamente
-- `has_video` mantido apenas como legado (não decisório)
-- Jobs internos são base da confiabilidade do dashboard
-- **Terraform não será usado para liga/desliga diário de NAT**
-- NAT Gateway pode ser gerenciado fora do Terraform quando necessário
-- Desligamento manual hoje foi decisão consciente de gestão de custo
-- Amanhã será definida estratégia oficial de power management (Opção A vs Opção B)
+- Não automatizar liga/desliga do ambiente por enquanto; criar runbook manual para reduzir custo.
+- Manter padrão UTC em todo pipeline (orders, metrics, overview) para consistência interna.
+- Próxima sessão focar 100% em VISITS (provar endpoint/retorno e persistência) antes de avançar IA Score V2.
 
----
-
-## ➡️ Próximo passo claro (para 2026-01-20)
-1. Resolver autenticação dos endpoints internos (`X-Internal-Key`)
-2. Executar rebuild manual com sucesso e validar impacto no dashboard
-3. Decidir estratégia definitiva de NAT Gateway:
-   - **Opção A**: NAT fixo (custo previsível, menor fricção)
-   - **Opção B**: NAT dinâmico fora do Terraform (economia máxima)
-4. Documentar fluxo oficial de ligar/desligar infra AWS
-5. Marcar **Onda 3.2.1 como DONE** após dados estarem 100% confiáveis
+## ➡️ Próximo passo claro
+1) Debug de VISITS via logs e chamada direta ao ML (1 itemId) para confirmar:
+   - status code, payload, campos e contagem de pontos
+2) Ajustar integração de VISITS (endpoint/parâmetros/escopo) até obter visits > 0 no DB
+3) Validar /overview: visitsCoverage.filledDays = periodDays e gráfico exibindo visitas
+4) Só depois retomar “IA SCORE V2 (Onda 1)”

@@ -1,92 +1,77 @@
-# NEXT SESSION PLAN — 2026-01-20
+# NEXT SESSION PLAN — 2026-01-21
 
-## 🎯 Objetivo principal da sessão
-Destravar completamente a automação de dados e consolidar a **Onda 3.2.1 como FINALIZADA**, garantindo confiabilidade total do produto.
+## ✅ Status atual (hoje encerrou)
+- Orders/GMV: OK (série diária contínua, UTC, overview preenchendo periodDays)
+- Conexão Mercado Livre: OK (reauth_required + erros tratados + migration aplicada em PROD)
+- Visits: PARCIAL
+  - ✅ Pipeline e persistência estão rodando (rowsUpserted bate)
+  - ✅ Não grava mais NULL (default 0 quando fetch ok)
+  - ❌ Todos os values ainda 0 → gráfico zerado
 
----
+## 🎯 Prioridade absoluta (P0) — VISITS > 0 no DB
+### Objetivo (DoD)
+- Pelo menos 1 dia no range com `SUM(visits) > 0`
+- `/metrics/overview?days=7|30` retorna `visitsByDay` com valores > 0 em dias reais
+- UI exibe série de visitas (e não mostra “visitas indisponíveis”)
 
-## 🔥 Prioridade Absoluta (ordem exata)
-1. Rebuild manual de métricas diárias funcionar via API
-2. Terraform apply do Scheduler sem erros
-3. Confirmar atualização real do dashboard (7 e 30 dias)
+### Checklist técnico (ordem)
+1) Confirmar endpoint real de visitas (chamada direta com token)
+   - Escolher 1 listing_id_ext (ex: MLBxxxx)
+   - Fazer request manual (curl/Postman) com access_token:
+     - endpoint usado no código hoje
+     - validar status code + body
+   - Se retornar 0 ou vazio, testar endpoints alternativos do ML (verificar doc oficial):
+     - possibilidade de endpoint agregado por item/intervalo
+     - necessidade de seller_id, date_from/date_to, ou outro recurso
 
-> ⚠️ Nada abaixo pode comprometer ou atrasar esses três pontos.
+2) Verificar itemId/identificador
+   - listing_id_ext no DB está no formato correto para endpoint?
+   - Se endpoint exigir numérico, converter/obter o id correto (resolver via /items/{id} ou outro recurso)
 
----
+3) Verificar permissões/escopo do token
+   - Token pode estar ok para orders, mas não para visitas (estatísticas)
+   - Se precisar escopo adicional, ajustar flow ou reautorização com permissões corretas
 
-## 🔧 Tarefas técnicas
+4) Validar timezone/dia
+   - Confirmar se a API do ML retorna por dia “local” (BRT) ou UTC
+   - Ajustar normalização para mapear corretamente (YYYY-MM-DD) sem “escorregar” 1 dia
 
-### 1️⃣ API — Jobs Internos
-- Validar valor exato de `INTERNAL_JOBS_KEY`
-- Garantir que middleware `internal-auth` compara corretamente o header
-- Testar `rebuild-daily-metrics` via curl / PowerShell
-- Confirmar registro correto das execuções em `job_logs`
+5) Persistência
+   - Garantir UPSERT atualiza `visits` corretamente
+   - Garantir que quando fetch ok e dia não está no payload, o default 0 é aplicado (já implementado)
+   - Garantir que quando fetch falha, o valor fique NULL (coverage coerente)
 
----
+### Queries de validação
+- Agregado geral:
+  SELECT COUNT(*) total_rows, COUNT(visits) rows_with_visits, COALESCE(SUM(visits),0) total_visits
+  FROM listing_metrics_daily
+  WHERE tenant_id='<tenant>' AND date>='<from>' AND date<='<to>';
 
-### 2️⃣ Infra — EventBridge Scheduler
-- Refatorar Terraform para usar **exclusivamente**:
-  - `aws_scheduler_connection`
-  - `aws_scheduler_api_destination`
-- Eliminar qualquer uso de:
-  - `aws_cloudwatch_event_api_destination`
-- Executar:
-terraform apply
--var="enable_scheduler=true"
--var="scheduler_tenant_id=935498cf-062c-41f2-bda1-982f1abd8c61"
+- Série por dia:
+  SELECT date::date, SUM(visits) visits
+  FROM listing_metrics_daily
+  WHERE tenant_id='<tenant>' AND date>='<from>' AND date<='<to>'
+  GROUP BY 1 ORDER BY 1;
 
+- Por listing:
+  SELECT l.listing_id_ext, COUNT(*) days, COUNT(m.visits) days_with_visits, COALESCE(SUM(m.visits),0) total_visits
+  FROM listing_metrics_daily m
+  JOIN listings l ON l.id=m.listing_id
+  WHERE m.tenant_id='<tenant>' AND m.date>='<from>' AND m.date<='<to>'
+  GROUP BY 1 ORDER BY total_visits DESC;
 
----
+## 🟢 Após VISITS (retomar plano épico já aprovado)
+### ONDA 1 — IA SCORE V2 (AÇÃO + EXPLICABILIDADE)
+- Criar `apps/api/src/services/ScoreActionEngine.ts`
+- Implementar `explainScore(scoreBreakdown, dataQuality)`
+- Enriquecer `POST /api/v1/ai/analyze/:listingId` com:
+  - `actionPlan[]`
+  - `scoreExplanation[]`
+- Testes obrigatórios:
+  - performance indisponível
+  - mídia incompleta
+  - ordenação por impacto
 
-### 3️⃣ Dados — Validação
-- Confirmar `MAX(date)` em `listing_metrics_daily` = data atual
-- Conferir impacto real no dashboard overview
-- Validar consistência entre visualizações de **7 dias** e **30 dias**
-
----
-
-## 🔌 4️⃣ Gestão de Custos & Power Management (NOVO BLOCO — suporte à execução)
-
-> Este bloco **não substitui** nem compete com a Onda 3.2.1.  
-> Ele existe para **evitar bloqueios operacionais** e **reduzir custo enquanto desenvolvemos**.
-
-### 🎯 Objetivo
-Definir um fluxo **simples, confiável e reversível** para ligar/desligar a infra AWS sem depender de `terraform apply` diário frágil.
-
-### Escopo
-- Revisar estratégia atual de desligamento:
-- App Runner (Lambda) ✅
-- NAT Gateway (manual hoje)
-- Decidir abordagem oficial:
-- NAT fixo (custo previsível, menos dor)
-- ou NAT dinâmico fora do Terraform (scripts/Lambda)
-- Separar claramente:
-- **Infra estrutural** (Terraform)
-- **Operação diária** (Lambda / scripts)
-
-### Fora de escopo deste bloco
-- Scheduler como dependência de power ON/OFF
-- Otimizações avançadas de rede
-- Multi-AZ ou HA
-
-📌 Resultado esperado:
-- Ritual diário de economia de custos **sem quebrar Terraform**
-- Menos fricção no fim/início do dia
-- Base sólida para escalar sem sustos de custo
-
----
-
-## ❌ Fora de escopo (explicitamente mantido)
-- Benchmark
-- Ads
-- Automações avançadas
-- IA Propositiva
-
----
-
-## 📌 DoD da próxima sessão
-- Dashboard reflete dados atualizados até hoje
-- Rebuild pode ser executado manualmente e automaticamente
-- Scheduler criado com sucesso (ou decisão consciente de adiar)
-- Fluxo de desligamento da infra documentado e sem improviso
-- **Onda 3.2.1 marcada como DONE**
+## 🧯 Operação / custos (manual)
+- Aplicar runbook `docs/RUNBOOK_ENV_TOGGLE.md` para desligar quando não estiver usando
+- Atenção: desligar RDS pode impedir API/Web e jobs; reativar antes de testar

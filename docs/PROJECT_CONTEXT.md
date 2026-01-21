@@ -34,3 +34,46 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - ONDA 3: IA como amplificador (em progresso)
 - Operação: jobs internos + scheduler (fase atual, crítico para clientes reais)
 - Próxima épica: Benchmark/Ads/Automações (após dados e operação sólidos)
+
+
+
+## ✅ Estado atual (2026-01-20)
+### Produção
+- Deploy está verde.
+- Dashboard Overview está funcionando para:
+  - totalListings, activeListings, stock, pedidos e receita
+  - série diária contínua (periodDays dias) em UTC
+- Conexão Mercado Livre:
+  - tratada com `reauth_required`
+  - callback com diagnóstico + códigos de erro
+  - migrations aplicadas em PROD
+
+### Data pipeline
+- `orders` + `order_items`: OK
+- `listing_metrics_daily.orders/gmv`: OK
+- `listing_metrics_daily.visits`: pipeline implementado, porém valores ainda 0 (P0)
+
+## 🔥 Prioridade Zero (base do produto)
+ML Data Audit (confiabilidade dos dados) antes de IA Score/benchmark/monetização.
+
+## 📌 Decisões importantes já tomadas
+- Score e ações determinísticas (regras) vêm antes de LLM.
+- Não automatizar liga/desliga do ambiente agora; criar runbook manual para reduzir custo.
+
+## 🧭 Próxima entrega crítica
+VISITS reais no banco (valores > 0) e exibidos no overview.
+
+## 🚀 Plano épico aprovado (próxima fase)
+### ONDA 1 — IA SCORE V2 (AÇÃO + EXPLICABILIDADE)
+- Backend Action Engine (ScoreActionEngine.ts)
+- explainScore()
+- Payload enriquecido no /ai/analyze/:listingId com actionPlan e scoreExplanation
+- Testes obrigatórios
+
+### ONDA 2 — UX do Score
+- Breakdown interativo com tooltips
+- Action Plan com priorização, CTA
+
+### ONDA 3 — IA como amplificador (Devin)
+- IA explica plano (sem contradizer regras)
+- IA reescreve SEO com base nas regras
