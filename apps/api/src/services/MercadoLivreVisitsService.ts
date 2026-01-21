@@ -162,9 +162,9 @@ export class MercadoLivreVisitsService {
    * 
    * @param itemId ID do item no Mercado Livre
    * @param lastDays Número de dias para buscar (ex: 2, 30)
-   * @returns Array de visitas por dia
+   * @returns Array de visitas por dia ou null se erro
    */
-  async fetchVisitsTimeWindow(itemId: string, lastDays: number): Promise<VisitsTimeWindowResponse['visits']> {
+  async fetchVisitsTimeWindow(itemId: string, lastDays: number): Promise<Array<{ date: string; visits: number }> | null> {
     return this.executeWithRetryOn401(async () => {
       const url = `${ML_API_BASE}/items/${itemId}/visits/time_window`;
       const params = {
@@ -176,14 +176,85 @@ export class MercadoLivreVisitsService {
       console.log(`[ML-VISITS] Request: GET ${url}`);
       console.log(`[ML-VISITS] Query params:`, JSON.stringify(params, null, 2));
 
-      const response = await axios.get<VisitsTimeWindowResponse>(url, {
-        headers: { Authorization: `Bearer ${this.accessToken}` },
-        params,
-      });
+      try {
+        const response = await axios.get(url, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          params,
+        });
 
-      console.log(`[ML-VISITS] Response status: ${response.status}, visits count: ${response.data.visits?.length || 0}`);
+        const statusCode = response.status;
+        console.log(`[ML-VISITS] Response status: ${statusCode}, itemId: ${itemId}`);
 
-      return response.data.visits || [];
+        // Parser robusto do retorno do ML
+        let visitsArray: Array<{ date: string; visits: number }> = [];
+        
+        const responseData = response.data as any;
+        
+        if (responseData) {
+          // Tentar responseData.results
+          if (Array.isArray(responseData.results)) {
+            visitsArray = responseData.results.map((item: any) => ({
+              date: item.date || item.day || item.fecha,
+              visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
+            }));
+          }
+          // Tentar responseData.visits (formato esperado do ML)
+          else if (Array.isArray(responseData.visits)) {
+            visitsArray = responseData.visits.map((item: any) => ({
+              date: item.date || item.day || item.fecha,
+              visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
+            }));
+          }
+          // Tentar responseData diretamente se for array
+          else if (Array.isArray(responseData)) {
+            visitsArray = responseData.map((item: any) => ({
+              date: item.date || item.day || item.fecha,
+              visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
+            }));
+          }
+        }
+
+        // Normalizar datas para YYYY-MM-DD em UTC
+        visitsArray = visitsArray.map(item => {
+          let normalizedDate: string;
+          try {
+            const dateObj = new Date(item.date);
+            normalizedDate = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD
+          } catch {
+            // Se falhar, usar como está se já for YYYY-MM-DD
+            normalizedDate = item.date || '';
+          }
+          return {
+            date: normalizedDate,
+            visits: typeof item.visits === 'number' ? item.visits : 0,
+          };
+        });
+
+        // Log de diagnóstico (primeiro item ou sample)
+        if (itemId) {
+          const payloadKeys = Object.keys(responseData || {});
+          const payloadSample = JSON.stringify(responseData || {}).slice(0, 400);
+          const minDate = visitsArray.length > 0 ? visitsArray[0].date : null;
+          const maxDate = visitsArray.length > 0 ? visitsArray[visitsArray.length - 1].date : null;
+          
+          console.log(`[ML-VISITS] Diagnóstico itemId=${itemId} periodDays=${lastDays} statusCode=${statusCode}`);
+          console.log(`[ML-VISITS] Payload keys: ${payloadKeys.join(', ')}`);
+          console.log(`[ML-VISITS] Payload sample: ${payloadSample}`);
+          console.log(`[ML-VISITS] Visits retornados: ${visitsArray.length}`);
+          console.log(`[ML-VISITS] Date range retornado: ${minDate} até ${maxDate}`);
+        }
+
+        return visitsArray;
+      } catch (error) {
+        // Se for erro HTTP, propagar
+        if (axios.isAxiosError(error)) {
+          throw error;
+        }
+        throw error;
+      }
+    }).catch((error) => {
+      // Retornar null em caso de erro (chamada falhou)
+      return null;
     });
   }
 
@@ -278,13 +349,28 @@ export class MercadoLivreVisitsService {
         const batch = batches[batchIndex];
         console.log(`[ML-VISITS] Processando lote ${batchIndex + 1}/${batches.length} (${batch.length} listings)`);
 
+        // Gerar array de dias do range (YYYY-MM-DD UTC) ANTES do loop
+        const dayStrings: string[] = [];
+        const currentDate = new Date(fromDate);
+        while (currentDate <= toDate) {
+          dayStrings.push(currentDate.toISOString().split('T')[0]); // YYYY-MM-DD
+          currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        }
+
+        console.log(`[ML-VISITS] Range de datas gerado: ${dayStrings[0]} até ${dayStrings[dayStrings.length - 1]} (${dayStrings.length} dias)`);
+
         // Processar listings do lote em paralelo
         const batchPromises = batch.map(async (listing) => {
+          let fetchSuccess = false;
+          let visitsMap = new Map<string, number>();
+          
           try {
             // Buscar visitas da API do ML
-            let visits: Array<{ date: string; visits: number }> = [];
+            let visits: Array<{ date: string; visits: number }> | null = null;
+            
             try {
               visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
+              fetchSuccess = visits !== null;
             } catch (error: any) {
               // Tratar erros HTTP
               if (axios.isAxiosError(error)) {
@@ -300,7 +386,11 @@ export class MercadoLivreVisitsService {
                     errorMessage: data?.message || `ML API Error ${status}`,
                     connectionId: this.connectionId,
                   });
-                  throw error;
+                  
+                  const errorMsg = `Erro de autenticação (${status}) para listing ${listing.id}. Abortando.`;
+                  console.error(`[ML-VISITS] ${errorMsg}`);
+                  result.errors.push(errorMsg);
+                  return; // Continuar para próximo listing
                 }
 
                 // 429: retry simples com backoff (2 tentativas)
@@ -310,49 +400,59 @@ export class MercadoLivreVisitsService {
 
                   try {
                     visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
+                    fetchSuccess = visits !== null;
                   } catch (retryError) {
                     const errorMsg = `Erro após retry (429) para listing ${listing.id}: ${retryError instanceof Error ? retryError.message : 'Erro desconhecido'}`;
                     console.error(`[ML-VISITS] ${errorMsg}`);
                     result.errors.push(errorMsg);
-                    return; // Continuar para próximo listing
+                    fetchSuccess = false;
+                    // visits permanece null - não atualizar nada para este listing
                   }
                 } else {
-                  // Outros erros
+                  // Outros erros (5xx, timeout, etc)
                   const errorMsg = `Erro ao buscar visitas para listing ${listing.id} (${status}): ${data?.message || error.message}`;
                   console.error(`[ML-VISITS] ${errorMsg}`);
                   result.errors.push(errorMsg);
-                  return; // Continuar para próximo listing
+                  fetchSuccess = false;
+                  // visits permanece null - não atualizar nada para este listing
                 }
               } else {
-                throw error;
+                const errorMsg = `Erro não-Axios para listing ${listing.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+                console.error(`[ML-VISITS] ${errorMsg}`);
+                result.errors.push(errorMsg);
+                fetchSuccess = false;
               }
             }
 
-            // Criar mapa de visitas por data (YYYY-MM-DD)
-            const visitsMap = new Map<string, number>();
-            for (const visitData of visits) {
-              const visitDate = new Date(visitData.date);
-              visitDate.setUTCHours(0, 0, 0, 0);
-              const dateKey = visitDate.toISOString().split('T')[0];
-              visitsMap.set(dateKey, visitData.visits);
-            }
-
-            // Gerar array de dias do range
-            const dayStrings: string[] = [];
-            const currentDate = new Date(fromDate);
-            while (currentDate <= toDate) {
-              dayStrings.push(currentDate.toISOString().split('T')[0]);
-              currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+            // Se fetch foi bem-sucedido, criar mapa de visitas por data
+            if (fetchSuccess && visits !== null && visits.length > 0) {
+              for (const visitData of visits) {
+                // visitData.date já deve estar normalizado para YYYY-MM-DD
+                const dateKey = visitData.date;
+                visitsMap.set(dateKey, visitData.visits);
+              }
+              
+              console.log(`[ML-VISITS] Listing ${listing.id}: ${visits.length} pontos de visitas mapeados`);
             }
 
             // 4. Para cada dia do range, fazer UPSERT
+            // Se fetch OK: gravar visitsMap.get(day) ?? 0 (0 = buscado e veio 0/ausente)
+            // Se fetch falhou: gravar NULL (ou não atualizar)
+            let listingRowsUpserted = 0;
+            
             for (const dayStr of dayStrings) {
               const dayDate = new Date(dayStr + 'T00:00:00.000Z');
-              const visitsCount = visitsMap.get(dayStr);
-
-              // visits=null = não buscado / erro
-              // visits=0 = buscado e veio 0
-              const visitsValue = visitsCount !== undefined ? visitsCount : null;
+              
+              let visitsValue: number | null;
+              if (fetchSuccess) {
+                // Se fetch OK: 0 significa "buscado e veio 0/ausente", não NULL
+                visitsValue = visitsMap.get(dayStr) ?? 0;
+              } else {
+                // Se fetch falhou: NULL significa "não foi possível buscar"
+                visitsValue = null;
+                // Não atualizar se fetch falhou (ou atualizar como NULL explicitamente)
+                // Vamos atualizar como NULL para manter consistência
+              }
 
               // UPSERT apenas visits (não sobrescrever orders/gmv)
               await prisma.listingMetricsDaily.upsert({
@@ -378,21 +478,23 @@ export class MercadoLivreVisitsService {
                   conversion: null,
                 },
                 update: {
-                  visits: visitsValue, // Atualizar apenas visits
+                  visits: visitsValue, // Atualizar apenas visits (preserva orders/gmv)
                   source: 'ml_visits_daily',
                 },
               });
 
+              listingRowsUpserted++;
               result.rowsUpserted++;
             }
 
             result.listingsProcessed++;
-            console.log(`[ML-VISITS] Listing ${listing.id} processado: ${visits.length} dias de visitas`);
+            console.log(`[ML-VISITS] Listing ${listing.id} processado: fetchSuccess=${fetchSuccess}, rowsUpserted=${listingRowsUpserted}, visitsPoints=${visitsMap.size}`);
           } catch (error) {
             // Erro não tratado acima
             const errorMsg = `Erro ao processar listing ${listing.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
             console.error(`[ML-VISITS] ${errorMsg}`);
             result.errors.push(errorMsg);
+            // Não incrementar rowsUpserted se houve erro não tratado
           }
         });
 
@@ -470,6 +572,11 @@ export class MercadoLivreVisitsService {
         try {
           const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
 
+          if (!visits) {
+            console.warn(`[ML-VISITS] Nenhuma visita retornada para listing ${listing.id}`);
+            continue;
+          }
+
           // 4. Persistir visitas (1 row por dia)
           for (const visitData of visits) {
             const visitDate = new Date(visitData.date);
@@ -538,6 +645,12 @@ export class MercadoLivreVisitsService {
               
               try {
                 const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
+                
+                if (!visits) {
+                  console.warn(`[ML-VISITS] Nenhuma visita retornada após retry para listing ${listing.id}`);
+                  continue;
+                }
+                
                 // Processar visitas normalmente após retry
                 for (const visitData of visits) {
                   const visitDate = new Date(visitData.date);
@@ -689,6 +802,11 @@ export class MercadoLivreVisitsService {
             console.log(`[ML-VISITS] [${listingRequestId}] Buscando visitas para listing ${listing.listing_id_ext}`);
             const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
 
+            if (!visits) {
+              console.warn(`[ML-VISITS] [${listingRequestId}] Nenhuma visita retornada`);
+              return { success: false, listingId: listing.id };
+            }
+
             // Persistir visitas
             for (const visitData of visits) {
               const visitDate = new Date(visitData.date);
@@ -754,6 +872,12 @@ export class MercadoLivreVisitsService {
                 
                 try {
                   const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
+                  
+                  if (!visits) {
+                    console.warn(`[ML-VISITS] [${listingRequestId}] Nenhuma visita retornada após retry`);
+                    return { success: false, listingId: listing.id };
+                  }
+                  
                   // Processar visitas após retry
                   for (const visitData of visits) {
                     const visitDate = new Date(visitData.date);
