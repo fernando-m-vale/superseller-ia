@@ -40,33 +40,65 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 ---
 
 ### C) Visits (visitas por listing/dia)
-**Status:** 🟡 PARCIAL (pipeline roda, mas valores ainda 0)
+**Status:** ✅ **RESOLVIDO**
 
-**O que funciona**
-- Endpoint/serviço roda e “upserta” linhas no range
-- Não grava mais NULL quando fetch ok (default 0)
-- coverage no /overview não acusa mais indisponível quando preenchido
+**Sintoma original**
+- Pipeline rodava e "upsertava" linhas (`rowsUpserted` correto)
+- Mas `visits` no DB permanecia 0/NULL em todos os dias
+- UI mostrava "visitas indisponíveis" mesmo após refresh
 
-**Problema atual**
-- Todos os valores persistidos ainda estão 0 (mesmo com visitas no painel do Mercado Livre)
-- Precisa validar:
-  - endpoint correto
-  - shape do payload
-  - permissões/escopo do token
-  - timezone/dia
-  - formato do itemId
+**Causa raiz**
+- Parser não suportava formato real da API do ML
+- Formato real: `response.data.results[]` com campos `date`, `total` e `visits_detail[]` (quantity)
+- Parser buscava `entry.visits` que não existia no formato real
+- Datas em formato ISO (`2026-01-22T00:00:00Z`) não eram normalizadas antes de salvar no map
 
-**DoD**
-- `SUM(visits) > 0` para pelo menos alguns dias
-- /overview exibindo série de visitas > 0 e coverage correto
+**Fix implementado**
+1. Parser ajustado para extrair na ordem:
+   - `entry.visits` (se existir)
+   - `entry.total` (se existir)
+   - soma de `entry.visits_detail[].quantity` (se array)
+2. Normalização de datas: ISO → `YYYY-MM-DD` UTC antes de salvar no map
+3. Type guard com `VisitPoint` e `isVisitPoint` para filtrar null corretamente
+4. Garantia: `0` somente quando fetch ok e dia ausente; erro → `NULL`
+
+**Evidência de resolução**
+- `positive_days = 91` (dias com visitas > 0)
+- `total_visits_period = 803` (soma total no período)
+- `null_days = 36` (esperado quando fetch falha ou dia ausente)
+- `zero_days = 29` (dias com fetch ok mas 0 visitas)
+- UI Dashboard Overview exibe gráfico de "Visitas" com valores reais
+- Tooltip mostra valores corretos (ex: "Visitas: 40")
+
+**Observabilidade**
+- `visits_status`: 'ok' | 'partial' | 'unavailable'
+- `failures_summary`: contagem por `errorType` (RATE_LIMIT, FORBIDDEN, etc.)
+- Instrumentação: `visitsMap` sum, `intersectionCount`, read-back do DB, DB fingerprint no startup
 
 ---
 
 ## 📌 Próximas ações (prioridade)
-1) Confirmar endpoint real e payload de VISITS do ML com request manual (1 item)
-2) Ajustar integração/parse/identificador conforme necessário
-3) Reprocessar visits (7 e 30 dias) e validar no DB
-4) Só depois seguir para IA Score V2
+1) ✅ **Confirmar endpoint real e payload de VISITS** — CONCLUÍDO
+2) ✅ **Ajustar integração/parse** — CONCLUÍDO
+3) ✅ **Reprocessar visits e validar no DB** — CONCLUÍDO
+4) Validar comportamento de orders quando connection active muda de sellerId
+5) Estabilizar testes quebrados (ai-recommendations, metrics.test)
+6) Validar botão "Atualizar dados" no UI
+
+## 🔍 Pendências / Pontos de atenção
+
+### Orders — Limit clamp
+**Status:** ✅ RESOLVIDO
+- **Incidente:** Erro 400 "Limit must be a lower or equal than 51" em produção
+- **Fix:** Clamp explícito `limit = Math.min(requestedLimit ?? 51, 51)` em `fetchOrders` e `fetchOrdersFallback`
+- **Decisão:** Erro 400 de orders não interrompe refresh de metrics/visits; apenas 401/403 interrompem
+
+### Orders — Connection active vs revoked
+**Status:** 🟡 PONTO DE ATENÇÃO
+- Existem múltiplas conexões ML no banco (active vs revoked)
+- Sistema usa sempre a conexão `active` mais recente
+- **Risco:** Se connection active mudou de `sellerId`, orders podem não refletir seller atual
+- **Ação:** Investigar se orders=0 quando connection mudou de sellerId é comportamento esperado
 
 ## 🧪 Queries padrão de auditoria
 ### Range geral (orders/gmv/visits)

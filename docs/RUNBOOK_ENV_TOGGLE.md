@@ -63,16 +63,43 @@ Se você usa NAT Gateway para subnets privadas, ele é um dos maiores custos.
 - VPC → Route Tables → garantir rota `0.0.0.0/0` para o NAT nas subnets privadas
 
 ## 3) App Runner
-- Execute a Lambda “start” (ou Start/Resume no console)
+- Execute a Lambda "start" (ou Start/Resume no console)
 - Validar endpoints:
-  - /status
-  - /api/v1/metrics/overview?days=7
+  - Frontend: `https://app.superselleria.com.br` (Next.js)
+  - Backend: `https://api.superselleria.com.br` (Fastify)
+  - Health: `/status` ou `/api/v1/health`
 
 ---
 
 # ✅ Checklist rápido pós-ON (DoD)
-- API responde /status
-- Web carrega /overview
-- Refresh funciona sem 401/403
-- Query simples no DB retorna (orders/metrics):
-  SELECT COUNT(*) FROM listing_metrics_daily WHERE tenant_id='<tenant>';
+
+## Identificação de ambientes
+- **Frontend:** `app.superselleria.com.br` (Next.js)
+- **Backend:** `https://api.superselleria.com.br` (Fastify/App Runner)
+
+## Validação básica
+1. API responde `/status` ou `/api/v1/health`
+2. Web carrega `/overview`
+3. Refresh funciona sem 401/403
+
+## Validação de dados (pós-refresh)
+```bash
+# Executar refresh
+curl -X POST "https://api.superselleria.com.br/api/v1/sync/mercadolivre/refresh?days=30&force=true" \
+  -H "Authorization: Bearer <token>"
+
+# Validar visits no DB
+SELECT 
+  COUNT(*) AS total_rows,
+  COUNT(visits) AS rows_with_visits,
+  COALESCE(SUM(visits), 0) AS total_visits,
+  COUNT(CASE WHEN visits > 0 THEN 1 END) AS positive_days
+FROM listing_metrics_daily
+WHERE tenant_id = '<tenant>'
+  AND date >= CURRENT_DATE - INTERVAL '30 days';
+```
+
+## Conferir UI
+- Dashboard Overview exibe gráfico de "Visitas" com valores > 0
+- Tooltip mostra valores reais (ex: "Visitas: 40")
+- Série de visitas contínua no período selecionado

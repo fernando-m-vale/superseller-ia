@@ -1,42 +1,38 @@
-# DAILY EXECUTION LOG — 2026-01-20
+# DAILY EXECUTION LOG — 2026-01-22
 
 ## 🎯 Foco do dia
-Consolidar série diária real no Overview (orders/GMV) e iniciar sincronização de VISITS.
+Diagnóstico e correção do sync de visits + robustez do refresh (orders limit clamp).
 
-## ✅ Planejado
-- [x] Corrigir série diária (range inclusive + UTC) no endpoint /metrics/overview
-- [x] Corrigir agregação orders/GMV por dia via listing_metrics_daily
-- [x] Corrigir vínculo de order_items com listings (listing_id)
-- [x] Criar refresh que sincroniza orders + rebuild metrics
-- [x] Corrigir reconexão Mercado Livre (tratamento de erros + schema reauth_required + migrations em PROD)
-- [x] Implementar sincronização de visits e expor no /overview
-- [ ] Validar visits no DB e na UI com valores > 0
-- [ ] Garantir consistência de datas ML vs SuperSeller (timezone e definição de “dia”)
+## ✅ Planejado / Feito
+- [x] Instrumentar `syncVisitsByRange` com logs detalhados (visitsMap sum, intersectionCount, read-back)
+- [x] Corrigir parser de visits para formato real do ML (results.total/visits_detail)
+- [x] Normalizar datas ISO para YYYY-MM-DD UTC antes de salvar no map
+- [x] Adicionar type guard (`VisitPoint`, `isVisitPoint`) para corrigir erro TypeScript TS2322
+- [x] Corrigir erro 400 "Limit must be a lower or equal than 51" em orders (clamp explícito)
+- [x] Tratamento: erro 400 de orders não interrompe refresh de metrics/visits
+- [x] Validar visits no DB: `positive_days = 91`, `total_visits_period = 803`
+- [x] Validar UI: gráfico de visitas exibindo valores reais
 
 ## 🧠 Descobertas
-- Série diária (orders/GMV) estava “esparsa” e com range errado; corrigimos para periodDays dias completos e contínuos, em UTC.
-- order_items não tinha listing_id preenchido (quebrava agregação por listing); corrigimos ingestão + script de backfill.
-- Refresh falhava em trazer pedidos por problema de conexão e filtros na API ML; evoluímos o sync, logs e tratamento.
-- Reconexão do ML quebrou por migration não aplicada em PROD (P2022 coluna inexistente); resolvido com migrate deploy/manual.
-- VISITS agora não grava mais NULL (default 0 quando fetch ok), porém **todos os valores continuam 0** → precisamos investigar a API/endpoint/escopo/shape retornado pelo ML.
+- **Formato real da API ML:** `response.data.results[]` com campos `date`, `total` e `visits_detail[]` (quantity)
+- Parser anterior buscava `entry.visits` que não existia no formato real
+- Datas em formato ISO (`2026-01-22T00:00:00Z`) precisavam normalização antes de salvar no map
+- **Múltiplas conexões ML:** existe connection `active` (provider_account_id = 189663082) e `revoked` (2019955315)
+- Sistema usa sempre a conexão `active` mais recente; divergências de `sellerId` podem explicar diferenças em orders
 
 ## ⚠️ Bloqueios / riscos
-- VISITS persistindo 0 em todos os dias mesmo com vendas e visitas no painel do ML.
-  Possíveis causas:
-  - endpoint incorreto / parâmetro last/unit incompatível
-  - itemId format errado (MLB... vs numérico, ou outra variação)
-  - escopo/permissão do token não inclui estatísticas/visitas
-  - retorno da API traz visits em outro campo/shape ou por timezone diferente (dia ML ≠ dia UTC)
-  - rate limiting / fallback retornando payload vazio silenciosamente
+- **Erro 400 orders limit:** ocorreu em produção; corrigido com clamp `limit <= 51`
+- **Orders com connection active vs revoked:** investigar se orders=0 quando connection mudou de sellerId é comportamento esperado
 
 ## 📌 Decisões tomadas
-- Não automatizar liga/desliga do ambiente por enquanto; criar runbook manual para reduzir custo.
-- Manter padrão UTC em todo pipeline (orders, metrics, overview) para consistência interna.
-- Próxima sessão focar 100% em VISITS (provar endpoint/retorno e persistência) antes de avançar IA Score V2.
+- **Visitas:** `0` apenas quando fetch ok e dia ausente no mapa; erro → `NULL`
+- **Parser:** extrai na ordem: `entry.visits` → `entry.total` → soma de `visits_detail[].quantity`
+- **Orders limit:** clamp explícito `limit = Math.min(requestedLimit ?? 51, 51)` em todos os lugares
+- **Erro 400 orders:** não interrompe refresh de metrics/visits; apenas 401/403 interrompem com `reauth_required`
+- **Instrumentação:** adicionada para diagnóstico (visitsMap sum, intersectionCount, read-back, DB fingerprint)
 
 ## ➡️ Próximo passo claro
-1) Debug de VISITS via logs e chamada direta ao ML (1 itemId) para confirmar:
-   - status code, payload, campos e contagem de pontos
-2) Ajustar integração de VISITS (endpoint/parâmetros/escopo) até obter visits > 0 no DB
-3) Validar /overview: visitsCoverage.filledDays = periodDays e gráfico exibindo visitas
-4) Só depois retomar “IA SCORE V2 (Onda 1)”
+1) Validar comportamento de orders quando connection active mudou de sellerId
+2) Corrigir testes quebrados (ai-recommendations, metrics.test)
+3) Validar botão "Atualizar dados" no UI e garantir que chama endpoint correto e atualiza gráfico
+4) Fechar ML Data Audit (visits resolvido, orders validado, testes estáveis)
