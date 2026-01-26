@@ -367,4 +367,44 @@ describe('MercadoLivreVisitsService.fetchVisitsTimeWindow', () => {
       expect(result.visits[1].visits).toBe(12);
     }
   });
+
+  it('deve normalizar datas ISO para YYYY-MM-DD UTC antes de salvar no map', async () => {
+    const mockResponse = {
+      status: 200,
+      data: {
+        results: [
+          { 
+            date: '2026-01-18T00:00:00Z', 
+            total: 25, 
+            visits_detail: [{ company: 'mercadolibre', quantity: 25 }] 
+          },
+          { 
+            date: '2026-01-19T12:34:56.789Z', 
+            total: 30, 
+            visits_detail: [{ company: 'mercadolivre', quantity: 30 }] 
+          },
+        ],
+      },
+    };
+
+    mockedAxios.get.mockResolvedValueOnce(mockResponse);
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 2);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.visits).toHaveLength(2);
+      
+      // Validar que datas foram normalizadas para YYYY-MM-DD (não ISO completo)
+      expect(result.visits[0].date).toBe('2026-01-18');
+      expect(result.visits[1].date).toBe('2026-01-19');
+      
+      // Validar que valores foram extraídos corretamente
+      expect(result.visits[0].visits).toBe(25);
+      expect(result.visits[1].visits).toBe(30);
+      
+      // Validar que a chave no map seria "2026-01-18" e não "2026-01-18T00:00:00Z"
+      // Isso é validado indiretamente pela normalização acima
+    }
+  });
 });

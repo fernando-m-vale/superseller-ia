@@ -77,6 +77,31 @@ async function main() {
       app.log.debug({ routes: app.printRoutes() }, 'Routes registered');
     }
 
+    // DB Fingerprint: identificar qual DB a API está usando
+    try {
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient();
+      
+      const dbFingerprint = await prisma.$queryRaw<Array<{ current_database: string | null; inet_server_addr: string | null; inet_server_port: number | null }>>`
+        SELECT current_database() as current_database, inet_server_addr() as inet_server_addr, inet_server_port() as inet_server_port
+      `;
+      
+      if (dbFingerprint.length > 0) {
+        const fp = dbFingerprint[0];
+        app.log.info({
+          dbFingerprint: {
+            database: fp.current_database,
+            serverAddr: fp.inet_server_addr,
+            serverPort: fp.inet_server_port,
+          },
+        }, 'DB Fingerprint: API conectada ao banco');
+      }
+      
+      await prisma.$disconnect();
+    } catch (err) {
+      app.log.warn({ err }, 'Erro ao obter DB fingerprint (não crítico)');
+    }
+
     await app.listen({ port: env.PORT, host: '0.0.0.0' });
     app.log.info({ port: env.PORT }, 'HTTP Server running');
 

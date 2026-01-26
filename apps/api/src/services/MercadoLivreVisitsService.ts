@@ -520,10 +520,47 @@ export class MercadoLivreVisitsService {
             // Tratar resultado
             if (fetchResult.ok) {
               // Sucesso: criar mapa de visitas por data
+              // IMPORTANTE: Garantir normalização de data para YYYY-MM-DD UTC antes de salvar no map
               for (const visitData of fetchResult.visits) {
-                const dateKey = visitData.date;
-                visitsMap.set(dateKey, visitData.visits);
+                // Normalizar date para YYYY-MM-DD UTC (garantir que nunca fica ISO completo)
+                let normalizedDateKey: string;
+                try {
+                  const dateObj = new Date(visitData.date);
+                  if (isNaN(dateObj.getTime())) {
+                    // Se falhar parsing, usar como está se já for YYYY-MM-DD
+                    normalizedDateKey = visitData.date.length === 10 ? visitData.date : '';
+                  } else {
+                    normalizedDateKey = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD UTC
+                  }
+                } catch {
+                  normalizedDateKey = visitData.date.length === 10 ? visitData.date : '';
+                }
+                
+                if (normalizedDateKey) {
+                  visitsMap.set(normalizedDateKey, visitData.visits);
+                } else {
+                  console.warn(`[ML-VISITS] Listing ${listing.id}: data inválida ignorada: ${visitData.date}`);
+                }
               }
+              
+              // Instrumentação: calcular métricas do visitsMap
+              const mapKeys = Array.from(visitsMap.keys());
+              const mapKeysSample = mapKeys.slice(0, 5);
+              const mapSum = Array.from(visitsMap.values()).reduce((acc, val) => acc + val, 0);
+              const mapMinKey = mapKeys.length > 0 ? mapKeys.sort()[0] : null;
+              const mapMaxKey = mapKeys.length > 0 ? mapKeys.sort()[mapKeys.length - 1] : null;
+              
+              // Calcular intersectionCount (keys em visitsMap que existem em dayStrings)
+              const intersectionCount = mapKeys.filter(key => dayStrings.includes(key)).length;
+              
+              console.log(`[ML-VISITS] Listing ${listing.id} (${listing.listing_id_ext}) visitsMap diagnóstico:`);
+              console.log(`[ML-VISITS]   - mapSize: ${visitsMap.size}`);
+              console.log(`[ML-VISITS]   - mapKeysSample: ${JSON.stringify(mapKeysSample)}`);
+              console.log(`[ML-VISITS]   - mapSum: ${mapSum}`);
+              console.log(`[ML-VISITS]   - mapMinKey: ${mapMinKey}`);
+              console.log(`[ML-VISITS]   - mapMaxKey: ${mapMaxKey}`);
+              console.log(`[ML-VISITS]   - dayStrings range: ${dayStrings[0]} até ${dayStrings[dayStrings.length - 1]} (${dayStrings.length} dias)`);
+              console.log(`[ML-VISITS]   - intersectionCount: ${intersectionCount} (keys do map que existem em dayStrings)`);
               
               listingsOk++;
               console.log(`[ML-VISITS] Listing ${listing.id}: ${fetchResult.visits.length} pontos de visitas mapeados`);
@@ -562,9 +599,23 @@ export class MercadoLivreVisitsService {
                   listingsFailed--; // Descontar falha anterior
                   failuresByType[errorType] = (failuresByType[errorType] || 1) - 1;
                   
+                  // Normalizar datas antes de salvar no map (mesma lógica do fetch principal)
                   for (const visitData of retryResult.visits) {
-                    const dateKey = visitData.date;
-                    visitsMap.set(dateKey, visitData.visits);
+                    let normalizedDateKey: string;
+                    try {
+                      const dateObj = new Date(visitData.date);
+                      if (isNaN(dateObj.getTime())) {
+                        normalizedDateKey = visitData.date.length === 10 ? visitData.date : '';
+                      } else {
+                        normalizedDateKey = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD UTC
+                      }
+                    } catch {
+                      normalizedDateKey = visitData.date.length === 10 ? visitData.date : '';
+                    }
+                    
+                    if (normalizedDateKey) {
+                      visitsMap.set(normalizedDateKey, visitData.visits);
+                    }
                   }
                   
                   fetchResult = retryResult; // Usar resultado do retry
@@ -593,16 +644,23 @@ export class MercadoLivreVisitsService {
             
             const fetchOk = fetchResult?.ok === true;
             
-            for (const dayStr of dayStrings) {
+            for (let dayIndex = 0; dayIndex < dayStrings.length; dayIndex++) {
+              const dayStr = dayStrings[dayIndex];
               const dayDate = new Date(dayStr + 'T00:00:00.000Z');
               
               let visitsValue: number | null;
+              const mapValue = visitsMap.get(dayStr);
               if (fetchOk) {
                 // Se fetch OK: 0 significa "buscado e veio 0/ausente", não NULL
-                visitsValue = visitsMap.get(dayStr) ?? 0;
+                visitsValue = mapValue ?? 0;
               } else {
                 // Se fetch falhou: NULL significa "não foi possível buscar"
                 visitsValue = null;
+              }
+
+              // Instrumentação: logar os 3 primeiros dias
+              if (dayIndex < 3) {
+                console.log(`[ML-VISITS] Listing ${listing.id} upsert[${dayIndex}]: dayStr=${dayStr}, mapValue=${mapValue ?? 'undefined'}, visitsValue=${visitsValue}, fetchOk=${fetchOk}`);
               }
 
               // UPSERT apenas visits (não sobrescrever orders/gmv)
@@ -633,6 +691,32 @@ export class MercadoLivreVisitsService {
                   source: 'ml_visits_daily',
                 },
               });
+
+              // Read-back após upsert do 1º dia
+              if (dayIndex === 0) {
+                try {
+                  const dbReadBack = await prisma.listingMetricsDaily.findUnique({
+                    where: {
+                      tenant_id_listing_id_date: {
+                        tenant_id: tenantId,
+                        listing_id: listing.id,
+                        date: dayDate,
+                      },
+                    },
+                    select: {
+                      visits: true,
+                    },
+                  });
+                  const dbReadBackVisits = dbReadBack?.visits ?? null;
+                  console.log(`[ML-VISITS] Listing ${listing.id} read-back após upsert[0]: dayStr=${dayStr}, visitsValue escrito=${visitsValue}, dbReadBackVisits=${dbReadBackVisits}`);
+                  
+                  if (visitsValue !== null && visitsValue > 0 && dbReadBackVisits === 0) {
+                    console.error(`[ML-VISITS] ⚠️ Listing ${listing.id} MISMATCH: escreveu visitsValue=${visitsValue} mas DB retornou ${dbReadBackVisits}`);
+                  }
+                } catch (readBackError) {
+                  console.error(`[ML-VISITS] Erro no read-back para listing ${listing.id}:`, readBackError);
+                }
+              }
 
               listingRowsUpserted++;
               result.rowsUpserted++;
