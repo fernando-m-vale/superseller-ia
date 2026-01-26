@@ -206,30 +206,87 @@ export class MercadoLivreVisitsService {
         
         const responseData = response.data as any;
         
+        /**
+         * Extrai o valor de visitas de um entry seguindo a ordem de prioridade:
+         * 1. entry.visits (se number)
+         * 2. entry.total (se number)
+         * 3. soma de entry.visits_detail[].quantity (se array)
+         * 4. null (ignorar item)
+         */
+        const extractVisitsValue = (entry: any): number | null => {
+          // Prioridade 1: entry.visits
+          if (typeof entry.visits === 'number') {
+            return entry.visits;
+          }
+          
+          // Prioridade 2: entry.total
+          if (typeof entry.total === 'number') {
+            return entry.total;
+          }
+          
+          // Prioridade 3: soma de entry.visits_detail[].quantity
+          if (Array.isArray(entry.visits_detail) && entry.visits_detail.length > 0) {
+            const sum = entry.visits_detail.reduce((acc: number, detail: any) => {
+              const qty = typeof detail.quantity === 'number' ? detail.quantity : 0;
+              return acc + qty;
+            }, 0);
+            if (sum > 0) {
+              return sum;
+            }
+          }
+          
+          // Se nenhum campo válido encontrado, retornar null (item será ignorado)
+          return null;
+        };
+        
         if (responseData) {
-          // Tentar responseData.results
+          // Tentar responseData.results (formato real do ML)
           if (Array.isArray(responseData.results)) {
             rawShape = 'results';
-            visitsArray = responseData.results.map((item: any) => ({
-              date: item.date || item.day || item.fecha,
-              visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
-            }));
+            visitsArray = responseData.results
+              .map((item: any) => {
+                const visitsValue = extractVisitsValue(item);
+                if (visitsValue === null) {
+                  return null; // Ignorar item inválido
+                }
+                return {
+                  date: item.date || item.day || item.fecha,
+                  visits: visitsValue,
+                };
+              })
+              .filter((item: any) => item !== null); // Remover itens ignorados
           }
-          // Tentar responseData.visits (formato esperado do ML)
+          // Tentar responseData.visits (formato alternativo)
           else if (Array.isArray(responseData.visits)) {
             rawShape = 'visits';
-            visitsArray = responseData.visits.map((item: any) => ({
-              date: item.date || item.day || item.fecha,
-              visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
-            }));
+            visitsArray = responseData.visits
+              .map((item: any) => {
+                const visitsValue = extractVisitsValue(item);
+                if (visitsValue === null) {
+                  return null;
+                }
+                return {
+                  date: item.date || item.day || item.fecha,
+                  visits: visitsValue,
+                };
+              })
+              .filter((item: any) => item !== null);
           }
           // Tentar responseData diretamente se for array
           else if (Array.isArray(responseData)) {
             rawShape = 'array';
-            visitsArray = responseData.map((item: any) => ({
-              date: item.date || item.day || item.fecha,
-              visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
-            }));
+            visitsArray = responseData
+              .map((item: any) => {
+                const visitsValue = extractVisitsValue(item);
+                if (visitsValue === null) {
+                  return null;
+                }
+                return {
+                  date: item.date || item.day || item.fecha,
+                  visits: visitsValue,
+                };
+              })
+              .filter((item: any) => item !== null);
           }
         }
 
@@ -237,15 +294,21 @@ export class MercadoLivreVisitsService {
         visitsArray = visitsArray.map(item => {
           let normalizedDate: string;
           try {
+            // Aceitar date em ISO "2026-01-22T00:00:00Z" ou YYYY-MM-DD
             const dateObj = new Date(item.date);
-            normalizedDate = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD
+            if (isNaN(dateObj.getTime())) {
+              // Se falhar parsing, tentar usar como está se já for YYYY-MM-DD
+              normalizedDate = item.date || '';
+            } else {
+              normalizedDate = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD UTC
+            }
           } catch {
             // Se falhar, usar como está se já for YYYY-MM-DD
             normalizedDate = item.date || '';
           }
           return {
             date: normalizedDate,
-            visits: typeof item.visits === 'number' ? item.visits : 0,
+            visits: item.visits, // Já validado pelo extractVisitsValue
           };
         });
 
@@ -253,14 +316,21 @@ export class MercadoLivreVisitsService {
         if (itemId) {
           const payloadKeys = Object.keys(responseData || {});
           const payloadSample = JSON.stringify(responseData || {}).slice(0, 400);
-          const minDate = visitsArray.length > 0 ? visitsArray[0].date : null;
-          const maxDate = visitsArray.length > 0 ? visitsArray[visitsArray.length - 1].date : null;
+          
+          // Calcular min/max corretamente (ordem cronológica)
+          let minDate: string | null = null;
+          let maxDate: string | null = null;
+          if (visitsArray.length > 0) {
+            const dates = visitsArray.map(v => v.date).sort();
+            minDate = dates[0];
+            maxDate = dates[dates.length - 1];
+          }
           
           console.log(`[ML-VISITS] Diagnóstico itemId=${itemId} periodDays=${lastDays} statusCode=${statusCode}`);
           console.log(`[ML-VISITS] Payload keys: ${payloadKeys.join(', ')}`);
           console.log(`[ML-VISITS] Payload sample: ${payloadSample}`);
           console.log(`[ML-VISITS] Visits retornados: ${visitsArray.length}`);
-          console.log(`[ML-VISITS] Date range retornado: ${minDate} até ${maxDate}`);
+          console.log(`[ML-VISITS] Date range retornado: ${minDate || 'N/A'} até ${maxDate || 'N/A'}`);
         }
 
         return {

@@ -234,4 +234,137 @@ describe('MercadoLivreVisitsService.fetchVisitsTimeWindow', () => {
       expect(result.rawShape).toBe('array');
     }
   });
+
+  it('deve retornar ok:true e extrair visitas do formato real do ML (results com total e visits_detail)', async () => {
+    const mockResponse = {
+      status: 200,
+      data: {
+        results: [
+          { 
+            date: '2026-01-22T00:00:00Z', 
+            total: 28, 
+            visits_detail: [{ company: 'mercadolibre', quantity: 28 }] 
+          },
+          { 
+            date: '2026-01-21T00:00:00Z', 
+            total: 12, 
+            visits_detail: [{ company: 'mercadolibre', quantity: 12 }] 
+          },
+          { 
+            date: '2026-01-20T00:00:00Z', 
+            total: 0, 
+            visits_detail: [] 
+          },
+        ],
+      },
+    };
+
+    mockedAxios.get.mockResolvedValueOnce(mockResponse);
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 3);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.status).toBe(200);
+      expect(result.visits).toHaveLength(3);
+      expect(result.rawShape).toBe('results');
+      
+      // Validar valores numéricos corretos (não zero)
+      expect(result.visits[0].visits).toBe(28);
+      expect(result.visits[1].visits).toBe(12);
+      expect(result.visits[2].visits).toBe(0); // total=0 é válido
+      
+      // Validar normalização de datas para YYYY-MM-DD
+      expect(result.visits[0].date).toBe('2026-01-22');
+      expect(result.visits[1].date).toBe('2026-01-21');
+      expect(result.visits[2].date).toBe('2026-01-20');
+    }
+  });
+
+  it('deve usar entry.visits quando disponível (prioridade sobre total)', async () => {
+    const mockResponse = {
+      status: 200,
+      data: {
+        results: [
+          { 
+            date: '2026-01-22T00:00:00Z', 
+            visits: 50, // Prioridade 1
+            total: 28, 
+            visits_detail: [{ company: 'mercadolibre', quantity: 28 }] 
+          },
+        ],
+      },
+    };
+
+    mockedAxios.get.mockResolvedValueOnce(mockResponse);
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 1);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.visits[0].visits).toBe(50); // Deve usar visits, não total
+    }
+  });
+
+  it('deve somar visits_detail.quantity quando total não existe', async () => {
+    const mockResponse = {
+      status: 200,
+      data: {
+        results: [
+          { 
+            date: '2026-01-22T00:00:00Z', 
+            visits_detail: [
+              { company: 'mercadolibre', quantity: 15 },
+              { company: 'mercadolivre', quantity: 13 },
+            ] 
+          },
+        ],
+      },
+    };
+
+    mockedAxios.get.mockResolvedValueOnce(mockResponse);
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 1);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.visits[0].visits).toBe(28); // 15 + 13
+    }
+  });
+
+  it('deve ignorar items sem visits, total ou visits_detail válidos', async () => {
+    const mockResponse = {
+      status: 200,
+      data: {
+        results: [
+          { 
+            date: '2026-01-22T00:00:00Z', 
+            total: 28, 
+            visits_detail: [{ company: 'mercadolibre', quantity: 28 }] 
+          },
+          { 
+            date: '2026-01-21T00:00:00Z', 
+            // Sem visits, total ou visits_detail válidos
+          },
+          { 
+            date: '2026-01-20T00:00:00Z', 
+            total: 12, 
+            visits_detail: [{ company: 'mercadolibre', quantity: 12 }] 
+          },
+        ],
+      },
+    };
+
+    mockedAxios.get.mockResolvedValueOnce(mockResponse);
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 3);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      // Deve ter apenas 2 items (o item sem dados válidos foi ignorado)
+      expect(result.visits).toHaveLength(2);
+      expect(result.visits[0].visits).toBe(28);
+      expect(result.visits[1].visits).toBe(12);
+    }
+  });
 });
