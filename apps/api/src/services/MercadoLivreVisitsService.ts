@@ -12,6 +12,21 @@ interface VisitsTimeWindowResponse {
   }>;
 }
 
+type VisitsFetchResult =
+  | { 
+      ok: true; 
+      status: number; 
+      visits: Array<{ date: string; visits: number }>; 
+      rawShape?: string;
+    }
+  | { 
+      ok: false; 
+      status?: number; 
+      errorType: 'FORBIDDEN' | 'UNAUTHORIZED' | 'RATE_LIMIT' | 'SERVER_ERROR' | 'TIMEOUT' | 'NETWORK' | 'UNKNOWN'; 
+      message: string; 
+      details?: any;
+    };
+
 interface VisitsSyncResult {
   success: boolean;
   listingsProcessed: number;
@@ -162,21 +177,21 @@ export class MercadoLivreVisitsService {
    * 
    * @param itemId ID do item no Mercado Livre
    * @param lastDays Número de dias para buscar (ex: 2, 30)
-   * @returns Array de visitas por dia ou null se erro
+   * @returns Resultado estruturado com ok/error e detalhes
    */
-  async fetchVisitsTimeWindow(itemId: string, lastDays: number): Promise<Array<{ date: string; visits: number }> | null> {
-    return this.executeWithRetryOn401(async () => {
-      const url = `${ML_API_BASE}/items/${itemId}/visits/time_window`;
-      const params = {
-        last: lastDays,
-        unit: 'day',
-      };
+  async fetchVisitsTimeWindow(itemId: string, lastDays: number): Promise<VisitsFetchResult> {
+    try {
+      return await this.executeWithRetryOn401(async () => {
+        const url = `${ML_API_BASE}/items/${itemId}/visits/time_window`;
+        const params = {
+          last: lastDays,
+          unit: 'day',
+        };
 
-      console.log(`[ML-VISITS] Buscando visitas para item ${itemId}, últimos ${lastDays} dias`);
-      console.log(`[ML-VISITS] Request: GET ${url}`);
-      console.log(`[ML-VISITS] Query params:`, JSON.stringify(params, null, 2));
+        console.log(`[ML-VISITS] Buscando visitas para item ${itemId}, últimos ${lastDays} dias`);
+        console.log(`[ML-VISITS] Request: GET ${url}`);
+        console.log(`[ML-VISITS] Query params:`, JSON.stringify(params, null, 2));
 
-      try {
         const response = await axios.get(url, {
           headers: { Authorization: `Bearer ${this.accessToken}` },
           params,
@@ -187,12 +202,14 @@ export class MercadoLivreVisitsService {
 
         // Parser robusto do retorno do ML
         let visitsArray: Array<{ date: string; visits: number }> = [];
+        let rawShape: string = 'unknown';
         
         const responseData = response.data as any;
         
         if (responseData) {
           // Tentar responseData.results
           if (Array.isArray(responseData.results)) {
+            rawShape = 'results';
             visitsArray = responseData.results.map((item: any) => ({
               date: item.date || item.day || item.fecha,
               visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
@@ -200,6 +217,7 @@ export class MercadoLivreVisitsService {
           }
           // Tentar responseData.visits (formato esperado do ML)
           else if (Array.isArray(responseData.visits)) {
+            rawShape = 'visits';
             visitsArray = responseData.visits.map((item: any) => ({
               date: item.date || item.day || item.fecha,
               visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
@@ -207,6 +225,7 @@ export class MercadoLivreVisitsService {
           }
           // Tentar responseData diretamente se for array
           else if (Array.isArray(responseData)) {
+            rawShape = 'array';
             visitsArray = responseData.map((item: any) => ({
               date: item.date || item.day || item.fecha,
               visits: typeof item.visits === 'number' ? item.visits : (typeof item.count === 'number' ? item.count : 0),
@@ -244,18 +263,59 @@ export class MercadoLivreVisitsService {
           console.log(`[ML-VISITS] Date range retornado: ${minDate} até ${maxDate}`);
         }
 
-        return visitsArray;
-      } catch (error) {
-        // Se for erro HTTP, propagar
-        if (axios.isAxiosError(error)) {
-          throw error;
+        return {
+          ok: true,
+          status: statusCode,
+          visits: visitsArray,
+          rawShape,
+        };
+      });
+    } catch (error) {
+      // Classificar erro HTTP
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+        const code = error.code;
+        
+        let errorType: 'FORBIDDEN' | 'UNAUTHORIZED' | 'RATE_LIMIT' | 'SERVER_ERROR' | 'TIMEOUT' | 'NETWORK' | 'UNKNOWN' = 'UNKNOWN';
+        let message = error.message;
+        
+        if (status === 401) {
+          errorType = 'UNAUTHORIZED';
+          message = `Unauthorized (401): ${data?.message || 'Token inválido ou expirado'}`;
+        } else if (status === 403) {
+          errorType = 'FORBIDDEN';
+          message = `Forbidden (403): ${data?.message || 'Acesso negado'}`;
+        } else if (status === 429) {
+          errorType = 'RATE_LIMIT';
+          message = `Rate limit (429): ${data?.message || 'Muitas requisições'}`;
+        } else if (status && status >= 500) {
+          errorType = 'SERVER_ERROR';
+          message = `Server error (${status}): ${data?.message || 'Erro no servidor ML'}`;
+        } else if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
+          errorType = 'TIMEOUT';
+          message = `Timeout: ${error.message}`;
+        } else if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ENETUNREACH') {
+          errorType = 'NETWORK';
+          message = `Network error: ${error.message}`;
         }
-        throw error;
+        
+        return {
+          ok: false,
+          status,
+          errorType,
+          message,
+          details: data ? { ...data } : undefined,
+        };
       }
-    }).catch((error) => {
-      // Retornar null em caso de erro (chamada falhou)
-      return null;
-    });
+      
+      // Erro não-Axios
+      return {
+        ok: false,
+        errorType: 'UNKNOWN',
+        message: error instanceof Error ? error.message : 'Erro desconhecido',
+      };
+    }
   }
 
   /**
@@ -278,6 +338,8 @@ export class MercadoLivreVisitsService {
     max_date: string | null;
     errors: string[];
     duration: number;
+    visits_status: 'ok' | 'partial' | 'unavailable';
+    failures_summary: Record<string, number>;
   }> {
     const startTime = Date.now();
     const result = {
@@ -288,7 +350,14 @@ export class MercadoLivreVisitsService {
       max_date: null as string | null,
       errors: [] as string[],
       duration: 0,
+      visits_status: 'unavailable' as 'ok' | 'partial' | 'unavailable',
+      failures_summary: {} as Record<string, number>,
     };
+    
+    // Contadores para agregação de status
+    let listingsOk = 0;
+    let listingsFailed = 0;
+    const failuresByType: Record<string, number> = {};
 
     try {
       this.tenantId = tenantId;
@@ -361,97 +430,109 @@ export class MercadoLivreVisitsService {
 
         // Processar listings do lote em paralelo
         const batchPromises = batch.map(async (listing) => {
-          let fetchSuccess = false;
+          let fetchResult: VisitsFetchResult | null = null;
           let visitsMap = new Map<string, number>();
           
           try {
             // Buscar visitas da API do ML
-            let visits: Array<{ date: string; visits: number }> | null = null;
+            fetchResult = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
             
-            try {
-              visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
-              fetchSuccess = visits !== null;
-            } catch (error: any) {
-              // Tratar erros HTTP
-              if (axios.isAxiosError(error)) {
-                const status = error.response?.status;
-                const data = error.response?.data;
+            // Log estruturado para cada listing
+            const logData = {
+              listingId: listing.id,
+              itemIdExt: listing.listing_id_ext,
+              ok: fetchResult.ok,
+              status: fetchResult.ok ? fetchResult.status : fetchResult.status,
+              errorType: fetchResult.ok ? undefined : fetchResult.errorType,
+            };
+            console.log(`[ML-VISITS] Listing ${listing.id} fetch result:`, JSON.stringify(logData));
 
-                // 401/403: marcar conexão como reauth_required
-                if (status === 401 || status === 403) {
-                  const { markConnectionReauthRequired } = await import('../utils/mark-connection-reauth');
-                  await markConnectionReauthRequired({
-                    tenantId,
-                    statusCode: status,
-                    errorMessage: data?.message || `ML API Error ${status}`,
-                    connectionId: this.connectionId,
-                  });
-                  
-                  const errorMsg = `Erro de autenticação (${status}) para listing ${listing.id}. Abortando.`;
-                  console.error(`[ML-VISITS] ${errorMsg}`);
-                  result.errors.push(errorMsg);
-                  return; // Continuar para próximo listing
-                }
-
-                // 429: retry simples com backoff (2 tentativas)
-                if (status === 429) {
-                  console.log(`[ML-VISITS] Rate limit (429) para listing ${listing.id}. Aguardando 2s e retry...`);
-                  await new Promise(resolve => setTimeout(resolve, 2000));
-
-                  try {
-                    visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
-                    fetchSuccess = visits !== null;
-                  } catch (retryError) {
-                    const errorMsg = `Erro após retry (429) para listing ${listing.id}: ${retryError instanceof Error ? retryError.message : 'Erro desconhecido'}`;
-                    console.error(`[ML-VISITS] ${errorMsg}`);
-                    result.errors.push(errorMsg);
-                    fetchSuccess = false;
-                    // visits permanece null - não atualizar nada para este listing
-                  }
-                } else {
-                  // Outros erros (5xx, timeout, etc)
-                  const errorMsg = `Erro ao buscar visitas para listing ${listing.id} (${status}): ${data?.message || error.message}`;
-                  console.error(`[ML-VISITS] ${errorMsg}`);
-                  result.errors.push(errorMsg);
-                  fetchSuccess = false;
-                  // visits permanece null - não atualizar nada para este listing
-                }
-              } else {
-                const errorMsg = `Erro não-Axios para listing ${listing.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
-                console.error(`[ML-VISITS] ${errorMsg}`);
-                result.errors.push(errorMsg);
-                fetchSuccess = false;
-              }
-            }
-
-            // Se fetch foi bem-sucedido, criar mapa de visitas por data
-            if (fetchSuccess && visits !== null && visits.length > 0) {
-              for (const visitData of visits) {
-                // visitData.date já deve estar normalizado para YYYY-MM-DD
+            // Tratar resultado
+            if (fetchResult.ok) {
+              // Sucesso: criar mapa de visitas por data
+              for (const visitData of fetchResult.visits) {
                 const dateKey = visitData.date;
                 visitsMap.set(dateKey, visitData.visits);
               }
               
-              console.log(`[ML-VISITS] Listing ${listing.id}: ${visits.length} pontos de visitas mapeados`);
+              listingsOk++;
+              console.log(`[ML-VISITS] Listing ${listing.id}: ${fetchResult.visits.length} pontos de visitas mapeados`);
+            } else {
+              // Falha: classificar e contar
+              listingsFailed++;
+              const errorType = fetchResult.errorType;
+              failuresByType[errorType] = (failuresByType[errorType] || 0) + 1;
+              
+              // 401/403: marcar conexão como reauth_required
+              if (errorType === 'UNAUTHORIZED' || errorType === 'FORBIDDEN') {
+                const { markConnectionReauthRequired } = await import('../utils/mark-connection-reauth');
+                await markConnectionReauthRequired({
+                  tenantId,
+                  statusCode: fetchResult.status || 401,
+                  errorMessage: fetchResult.message,
+                  connectionId: this.connectionId,
+                });
+                
+                const errorMsg = `Erro de autenticação (${fetchResult.status}) para listing ${listing.id}: ${fetchResult.message}`;
+                console.error(`[ML-VISITS] ${errorMsg}`);
+                result.errors.push(errorMsg);
+                return; // Continuar para próximo listing
+              }
+
+              // 429: retry simples com backoff (2 tentativas)
+              if (errorType === 'RATE_LIMIT') {
+                console.log(`[ML-VISITS] Rate limit (429) para listing ${listing.id}. Aguardando 2s e retry...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                const retryResult = await this.fetchVisitsTimeWindow(listing.listing_id_ext, daysDiff);
+                
+                if (retryResult.ok) {
+                  // Retry bem-sucedido
+                  listingsOk++;
+                  listingsFailed--; // Descontar falha anterior
+                  failuresByType[errorType] = (failuresByType[errorType] || 1) - 1;
+                  
+                  for (const visitData of retryResult.visits) {
+                    const dateKey = visitData.date;
+                    visitsMap.set(dateKey, visitData.visits);
+                  }
+                  
+                  fetchResult = retryResult; // Usar resultado do retry
+                  console.log(`[ML-VISITS] Listing ${listing.id}: retry bem-sucedido, ${retryResult.visits.length} pontos mapeados`);
+                } else {
+                  // Retry também falhou
+                  failuresByType[retryResult.errorType] = (failuresByType[retryResult.errorType] || 0) + 1;
+                  const errorMsg = `Erro após retry (429) para listing ${listing.id}: ${retryResult.message}`;
+                  console.error(`[ML-VISITS] ${errorMsg}`);
+                  result.errors.push(errorMsg);
+                  // fetchResult permanece com erro - não atualizar nada para este listing
+                }
+              } else {
+                // Outros erros (5xx, timeout, network, etc)
+                const errorMsg = `Erro ao buscar visitas para listing ${listing.id}: ${fetchResult.message}`;
+                console.error(`[ML-VISITS] ${errorMsg}`);
+                result.errors.push(errorMsg);
+                // fetchResult permanece com erro - não atualizar nada para este listing
+              }
             }
 
             // 4. Para cada dia do range, fazer UPSERT
             // Se fetch OK: gravar visitsMap.get(day) ?? 0 (0 = buscado e veio 0/ausente)
-            // Se fetch falhou: gravar NULL (ou não atualizar)
+            // Se fetch falhou: gravar NULL
             let listingRowsUpserted = 0;
+            
+            const fetchOk = fetchResult?.ok === true;
             
             for (const dayStr of dayStrings) {
               const dayDate = new Date(dayStr + 'T00:00:00.000Z');
               
               let visitsValue: number | null;
-              if (fetchSuccess) {
+              if (fetchOk) {
                 // Se fetch OK: 0 significa "buscado e veio 0/ausente", não NULL
                 visitsValue = visitsMap.get(dayStr) ?? 0;
               } else {
                 // Se fetch falhou: NULL significa "não foi possível buscar"
                 visitsValue = null;
-                // Não atualizar se fetch falhou (ou atualizar como NULL explicitamente)
-                // Vamos atualizar como NULL para manter consistência
               }
 
               // UPSERT apenas visits (não sobrescrever orders/gmv)
@@ -488,7 +569,7 @@ export class MercadoLivreVisitsService {
             }
 
             result.listingsProcessed++;
-            console.log(`[ML-VISITS] Listing ${listing.id} processado: fetchSuccess=${fetchSuccess}, rowsUpserted=${listingRowsUpserted}, visitsPoints=${visitsMap.size}`);
+            console.log(`[ML-VISITS] Listing ${listing.id} processado: fetchOk=${fetchOk}, rowsUpserted=${listingRowsUpserted}, visitsPoints=${visitsMap.size}`);
           } catch (error) {
             // Erro não tratado acima
             const errorMsg = `Erro ao processar listing ${listing.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
@@ -507,15 +588,34 @@ export class MercadoLivreVisitsService {
         }
       }
 
+      // Calcular visits_status
+      // 'ok' se todos listings tiveram ok:true
+      // 'partial' se mistura de ok:true e ok:false
+      // 'unavailable' se nenhum listing teve ok:true
+      if (listingsOk > 0 && listingsFailed === 0) {
+        result.visits_status = 'ok';
+      } else if (listingsOk > 0 && listingsFailed > 0) {
+        result.visits_status = 'partial';
+      } else {
+        result.visits_status = 'unavailable';
+      }
+      
+      result.failures_summary = failuresByType;
       result.success = result.errors.length === 0 || result.rowsUpserted > 0;
       result.duration = Date.now() - startTime;
       result.min_date = fromDate.toISOString().split('T')[0];
       result.max_date = toDate.toISOString().split('T')[0];
 
-      console.log(`[ML-VISITS] Sync concluído em ${result.duration}ms`);
+      console.log(`[ML-VISITS] ========== SYNC VISITS CONCLUÍDO ==========`);
+      console.log(`[ML-VISITS] Tenant ID: ${tenantId}`);
+      console.log(`[ML-VISITS] Duration: ${result.duration}ms`);
       console.log(`[ML-VISITS] Listings processados: ${result.listingsProcessed}`);
+      console.log(`[ML-VISITS] Listings OK: ${listingsOk}, Listings Failed: ${listingsFailed}`);
       console.log(`[ML-VISITS] Rows upserted: ${result.rowsUpserted}`);
+      console.log(`[ML-VISITS] Visits status: ${result.visits_status}`);
+      console.log(`[ML-VISITS] Failures summary:`, JSON.stringify(result.failures_summary));
       console.log(`[ML-VISITS] Min date: ${result.min_date}, Max date: ${result.max_date}`);
+      console.log(`[ML-VISITS] Erros: ${result.errors.length}`);
 
       return result;
     } catch (error) {
@@ -570,15 +670,15 @@ export class MercadoLivreVisitsService {
       // 3. Processar cada listing
       for (const listing of listings) {
         try {
-          const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
+          const fetchResult = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
 
-          if (!visits) {
-            console.warn(`[ML-VISITS] Nenhuma visita retornada para listing ${listing.id}`);
+          if (!fetchResult.ok) {
+            console.warn(`[ML-VISITS] Nenhuma visita retornada para listing ${listing.id}: ${fetchResult.message}`);
             continue;
           }
 
           // 4. Persistir visitas (1 row por dia)
-          for (const visitData of visits) {
+          for (const visitData of fetchResult.visits) {
             const visitDate = new Date(visitData.date);
             visitDate.setHours(0, 0, 0, 0);
 
@@ -644,15 +744,15 @@ export class MercadoLivreVisitsService {
               await new Promise(resolve => setTimeout(resolve, 2000));
               
               try {
-                const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
+                const retryResult = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
                 
-                if (!visits) {
-                  console.warn(`[ML-VISITS] Nenhuma visita retornada após retry para listing ${listing.id}`);
+                if (!retryResult.ok) {
+                  console.warn(`[ML-VISITS] Nenhuma visita retornada após retry para listing ${listing.id}: ${retryResult.message}`);
                   continue;
                 }
                 
                 // Processar visitas normalmente após retry
-                for (const visitData of visits) {
+                for (const visitData of retryResult.visits) {
                   const visitDate = new Date(visitData.date);
                   visitDate.setHours(0, 0, 0, 0);
 
@@ -800,15 +900,15 @@ export class MercadoLivreVisitsService {
           
           try {
             console.log(`[ML-VISITS] [${listingRequestId}] Buscando visitas para listing ${listing.listing_id_ext}`);
-            const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
+            const fetchResult = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
 
-            if (!visits) {
-              console.warn(`[ML-VISITS] [${listingRequestId}] Nenhuma visita retornada`);
+            if (!fetchResult.ok) {
+              console.warn(`[ML-VISITS] [${listingRequestId}] Nenhuma visita retornada: ${fetchResult.message}`);
               return { success: false, listingId: listing.id };
             }
 
             // Persistir visitas
-            for (const visitData of visits) {
+            for (const visitData of fetchResult.visits) {
               const visitDate = new Date(visitData.date);
               visitDate.setHours(0, 0, 0, 0);
 
@@ -851,7 +951,7 @@ export class MercadoLivreVisitsService {
               }
             }
 
-            const visitsCount = visits ? visits.length : 0;
+            const visitsCount = fetchResult.ok ? fetchResult.visits.length : 0;
             console.log(`[ML-VISITS] [${listingRequestId}] ✓ Processado: ${visitsCount} dias de visitas`);
             result.listingsProcessed++;
             return { success: true, listingId: listing.id };
@@ -872,15 +972,15 @@ export class MercadoLivreVisitsService {
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 
                 try {
-                  const visits = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
+                  const retryResult = await this.fetchVisitsTimeWindow(listing.listing_id_ext, lastDays);
                   
-                  if (!visits) {
-                    console.warn(`[ML-VISITS] [${listingRequestId}] Nenhuma visita retornada após retry`);
+                  if (!retryResult.ok) {
+                    console.warn(`[ML-VISITS] [${listingRequestId}] Nenhuma visita retornada após retry: ${retryResult.message}`);
                     return { success: false, listingId: listing.id };
                   }
                   
                   // Processar visitas após retry
-                  for (const visitData of visits) {
+                  for (const visitData of retryResult.visits) {
                     const visitDate = new Date(visitData.date);
                     visitDate.setHours(0, 0, 0, 0);
 

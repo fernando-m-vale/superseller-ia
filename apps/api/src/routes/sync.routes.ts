@@ -979,6 +979,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
               min_date: visitsResult.min_date,
               max_date: visitsResult.max_date,
               success: visitsResult.success,
+              visits_status: visitsResult.visits_status,
+              failures_summary: visitsResult.failures_summary,
               errors: visitsResult.errors.length > 0 ? visitsResult.errors : undefined,
             },
             duration: `${totalDuration}ms`,
