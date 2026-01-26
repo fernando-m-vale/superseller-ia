@@ -181,4 +181,57 @@ describe('MercadoLivreVisitsService.fetchVisitsTimeWindow', () => {
       expect(result.errorType).toBe('SERVER_ERROR');
     }
   });
+
+  it('deve retornar ok:false com UNAUTHORIZED quando API retorna 401 após retry', async () => {
+    const mockError = {
+      isAxiosError: true,
+      response: {
+        status: 401,
+        data: { message: 'Unauthorized' },
+      },
+      code: undefined,
+      message: 'Request failed with status code 401',
+    };
+
+    mockedAxios.isAxiosError.mockReturnValue(true);
+    mockedAxios.get.mockRejectedValueOnce(mockError);
+
+    // Mock executeWithRetryOn401 para lançar erro após retry
+    (service as any).executeWithRetryOn401 = async (fn: () => Promise<any>) => {
+      try {
+        return await fn();
+      } catch (error) {
+        throw error; // Propagar erro
+      }
+    };
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 2);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(401);
+      expect(result.errorType).toBe('UNAUTHORIZED');
+    }
+  });
+
+  it('deve retornar ok:true quando API retorna 200 e payload em formato array direto', async () => {
+    const mockResponse = {
+      status: 200,
+      data: [
+        { date: '2024-01-01', visits: 3 },
+        { date: '2024-01-02', visits: 7 },
+      ],
+    };
+
+    mockedAxios.get.mockResolvedValueOnce(mockResponse);
+
+    const result = await service.fetchVisitsTimeWindow('MLB123', 2);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.status).toBe(200);
+      expect(result.visits).toHaveLength(2);
+      expect(result.rawShape).toBe('array');
+    }
+  });
 });

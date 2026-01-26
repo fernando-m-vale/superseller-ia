@@ -1131,6 +1131,134 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/mercadolivre/visits?days=7|30
+   * 
+   * Sincroniza visitas do Mercado Livre por range de dias
+   * 
+   * Query params:
+   * - days: número de dias para buscar (7 ou 30, padrão: 7)
+   */
+  app.post(
+    '/mercadolivre/visits',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const startTime = Date.now();
+      
+      try {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const query = MetricsSyncQuerySchema.parse(request.query);
+        const daysBack = query.days;
+
+        // Calcular range de datas (UTC midnight)
+        const dateToUtc = new Date();
+        dateToUtc.setUTCHours(0, 0, 0, 0);
+        
+        const dateFromUtc = new Date(dateToUtc);
+        dateFromUtc.setUTCDate(dateFromUtc.getUTCDate() - (daysBack - 1)); // Incluir hoje no range
+        
+        // Ajustar dateToUtc para end of day para filtros de API
+        const dateToUtcEndOfDay = new Date(dateToUtc);
+        dateToUtcEndOfDay.setUTCHours(23, 59, 59, 999);
+
+        app.log.info({ 
+          requestId, 
+          userId, 
+          tenantId, 
+          days: daysBack,
+          dateFrom: dateFromUtc.toISOString(), 
+          dateTo: dateToUtcEndOfDay.toISOString(),
+        }, 'Requisição de sync de visitas recebida');
+
+        // Sincronizar visitas
+        const visitsService = new MercadoLivreVisitsService(tenantId);
+        const visitsResult = await visitsService.syncVisitsByRange(tenantId, dateFromUtc, dateToUtcEndOfDay);
+
+        // Verificar se há erro de autenticação revogada
+        const hasAuthRevoked = visitsResult.errors.some(err => 
+          err.includes('AUTH_REVOKED') || 
+          err.includes('Conexão expirada') || 
+          err.includes('Reconecte sua conta') ||
+          err.includes('401') ||
+          err.includes('403')
+        );
+
+        if (hasAuthRevoked) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        const duration = Date.now() - startTime;
+
+        app.log.info({
+          requestId,
+          userId,
+          tenantId,
+          days: daysBack,
+          listingsProcessed: visitsResult.listingsProcessed,
+          rowsUpserted: visitsResult.rowsUpserted,
+          visits_status: visitsResult.visits_status,
+          failures_summary: visitsResult.failures_summary,
+          min_date: visitsResult.min_date,
+          max_date: visitsResult.max_date,
+          duration,
+        }, 'Sync de visitas concluído');
+
+        const responseStatus = visitsResult.errors.length > 0 ? 207 : 200;
+        const responseMessage = visitsResult.errors.length > 0 
+          ? 'Sync de visitas concluído com avisos/erros' 
+          : 'Sync de visitas concluído com sucesso';
+
+        return reply.status(responseStatus).send({
+          message: responseMessage,
+          success: visitsResult.success,
+          listingsProcessed: visitsResult.listingsProcessed,
+          rowsUpserted: visitsResult.rowsUpserted,
+          min_date: visitsResult.min_date,
+          max_date: visitsResult.max_date,
+          visits_status: visitsResult.visits_status,
+          failures_summary: visitsResult.failures_summary,
+          duration: `${duration}ms`,
+          errors: visitsResult.errors.length > 0 ? visitsResult.errors : undefined,
+        });
+      } catch (error) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        app.log.error({
+          requestId,
+          userId,
+          tenantId,
+          err: error,
+        }, 'Erro ao processar sync de visitas');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'Parâmetros inválidos',
+            details: error.errors,
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao sincronizar visitas';
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: errorMessage,
+        });
+      }
+    }
+  );
+
+  /**
    * POST /api/v1/sync/mercadolivre/visits/backfill
    * 
    * Backfill granular de visitas por dia (30 dias) para todos os listings do tenant.
