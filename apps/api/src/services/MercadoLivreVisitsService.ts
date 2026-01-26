@@ -5,18 +5,20 @@ const prisma = new PrismaClient();
 
 const ML_API_BASE = 'https://api.mercadolibre.com';
 
+type VisitPoint = {
+  date: string; // ISO date string (YYYY-MM-DD)
+  visits: number;
+};
+
 interface VisitsTimeWindowResponse {
-  visits: Array<{
-    date: string; // ISO date string (YYYY-MM-DD)
-    visits: number;
-  }>;
+  visits: Array<VisitPoint>;
 }
 
 type VisitsFetchResult =
   | { 
       ok: true; 
       status: number; 
-      visits: Array<{ date: string; visits: number }>; 
+      visits: VisitPoint[]; 
       rawShape?: string;
     }
   | { 
@@ -201,7 +203,7 @@ export class MercadoLivreVisitsService {
         console.log(`[ML-VISITS] Response status: ${statusCode}, itemId: ${itemId}`);
 
         // Parser robusto do retorno do ML
-        let visitsArray: Array<{ date: string; visits: number }> = [];
+        let visitsArray: VisitPoint[] = [];
         let rawShape: string = 'unknown';
         
         const responseData = response.data as any;
@@ -239,12 +241,15 @@ export class MercadoLivreVisitsService {
           return null;
         };
         
+        // Type predicate para filtrar null
+        const isVisitPoint = (p: VisitPoint | null): p is VisitPoint => p !== null;
+        
         if (responseData) {
           // Tentar responseData.results (formato real do ML)
           if (Array.isArray(responseData.results)) {
             rawShape = 'results';
             visitsArray = responseData.results
-              .map((item: any) => {
+              .map((item: any): VisitPoint | null => {
                 const visitsValue = extractVisitsValue(item);
                 if (visitsValue === null) {
                   return null; // Ignorar item inválido
@@ -254,13 +259,13 @@ export class MercadoLivreVisitsService {
                   visits: visitsValue,
                 };
               })
-              .filter((item: any) => item !== null); // Remover itens ignorados
+              .filter(isVisitPoint); // Remover itens ignorados com type guard
           }
           // Tentar responseData.visits (formato alternativo)
           else if (Array.isArray(responseData.visits)) {
             rawShape = 'visits';
             visitsArray = responseData.visits
-              .map((item: any) => {
+              .map((item: any): VisitPoint | null => {
                 const visitsValue = extractVisitsValue(item);
                 if (visitsValue === null) {
                   return null;
@@ -270,13 +275,13 @@ export class MercadoLivreVisitsService {
                   visits: visitsValue,
                 };
               })
-              .filter((item: any) => item !== null);
+              .filter(isVisitPoint);
           }
           // Tentar responseData diretamente se for array
           else if (Array.isArray(responseData)) {
             rawShape = 'array';
             visitsArray = responseData
-              .map((item: any) => {
+              .map((item: any): VisitPoint | null => {
                 const visitsValue = extractVisitsValue(item);
                 if (visitsValue === null) {
                   return null;
@@ -286,7 +291,7 @@ export class MercadoLivreVisitsService {
                   visits: visitsValue,
                 };
               })
-              .filter((item: any) => item !== null);
+              .filter(isVisitPoint);
           }
         }
 
