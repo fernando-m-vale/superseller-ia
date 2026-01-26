@@ -675,6 +675,38 @@ export class MercadoLivreSyncService {
    * @param source Origem da ingestão: "discovery" | "orders_fallback" | null
    * @param discoveryBlocked Se discovery foi bloqueado (403/PolicyAgent)
    */
+  /**
+   * Obtém seller_id de um item via GET /items/:id para auditoria
+   * Retorna seller_id se 200, null se 403 PA_UNAUTHORIZED, ou lança erro para outros casos
+   */
+  private async fetchItemSellerId(itemId: string): Promise<{ sellerId: string | null; isUnauthorized: boolean; errorCode?: string }> {
+    try {
+      const response = await axios.get(`${ML_API_BASE}/items/${itemId}`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+
+      const sellerId = response.data?.seller_id ? String(response.data.seller_id) : null;
+      return { sellerId, isUnauthorized: false };
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const data = error.response?.data;
+        const errorCode = data?.error || data?.message;
+
+        // 403 com PA_UNAUTHORIZED_RESULT_FROM_POLICIES = listing não acessível pela conexão atual
+        if (status === 403 && (errorCode === 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES' || 
+            (typeof errorCode === 'string' && errorCode.includes('UNAUTHORIZED')))) {
+          console.log(`[ML-SYNC] Listing ${itemId} não acessível (403 PA_UNAUTHORIZED): connectionId=${this.connectionId}`);
+          return { sellerId: null, isUnauthorized: true, errorCode: 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES' };
+        }
+
+        // Outros erros: propagar
+        throw error;
+      }
+      throw error;
+    }
+  }
+
   private async upsertListings(
     items: MercadoLivreItem[],
     source?: string | null,
@@ -757,6 +789,59 @@ export class MercadoLivreSyncService {
             },
           },
         });
+
+        // Para listings novos, tentar obter seller_id via GET /items/:id
+        let sellerId: string | null = null;
+        let accessStatus: 'accessible' | 'unauthorized' | 'blocked_by_policy' = 'accessible';
+        let accessBlockedCode: string | null = null;
+        let accessBlockedReason: string | null = null;
+
+        if (!existing) {
+          // Listing novo: fazer GET /items/:id para obter seller_id e verificar acesso
+          try {
+            const sellerResult = await this.fetchItemSellerId(item.id);
+            sellerId = sellerResult.sellerId;
+            
+            if (sellerResult.isUnauthorized) {
+              accessStatus = 'blocked_by_policy';
+              accessBlockedCode = sellerResult.errorCode || 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES';
+              accessBlockedReason = 'Anúncio não acessível pela conta Mercado Livre conectada (possível conexão antiga/revogada)';
+              console.log(`[ML-SYNC] Listing ${item.id} marcado como unauthorized: connectionId=${this.connectionId}, code=${accessBlockedCode}`);
+            }
+          } catch (error) {
+            // Se falhar por outro motivo (não 403 PA_UNAUTHORIZED), logar mas continuar
+            console.warn(`[ML-SYNC] Erro ao obter seller_id para listing ${item.id}:`, error instanceof Error ? error.message : 'Erro desconhecido');
+          }
+        } else {
+          // Listing existente: manter seller_id se já existir, mas verificar acesso se necessário
+          sellerId = existing.seller_id;
+          
+          // Se listing existente está marcado como unauthorized, tentar verificar novamente
+          if (existing.access_status === 'unauthorized' || existing.access_status === 'blocked_by_policy') {
+            try {
+              const sellerResult = await this.fetchItemSellerId(item.id);
+              if (!sellerResult.isUnauthorized && sellerResult.sellerId) {
+                // Agora está acessível: atualizar status
+                accessStatus = 'accessible';
+                sellerId = sellerResult.sellerId;
+                console.log(`[ML-SYNC] Listing ${item.id} agora está acessível: connectionId=${this.connectionId}, sellerId=${sellerId}`);
+              } else if (sellerResult.isUnauthorized) {
+                // Continua unauthorized: manter status
+                accessStatus = existing.access_status;
+                accessBlockedCode = sellerResult.errorCode || 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES';
+                accessBlockedReason = 'Anúncio não acessível pela conta Mercado Livre conectada (possível conexão antiga/revogada)';
+              }
+            } catch (error) {
+              // Se falhar, manter status atual
+              accessStatus = existing.access_status;
+              accessBlockedCode = existing.access_blocked_code;
+              accessBlockedReason = existing.access_blocked_reason;
+            }
+          } else {
+            // Listing acessível: manter status
+            accessStatus = existing.access_status;
+          }
+        }
 
         // Construir objeto de dados para update/create
         // REGRA: Só atualizar campos se API retornar valores válidos (não vazios/0/undefined)
@@ -845,6 +930,22 @@ export class MercadoLivreSyncService {
           listingData.source = source;
         }
         listingData.discovery_blocked = discoveryBlocked;
+
+        // Sempre atualizar marketplace_connection_id (identifica qual conexão sincronizou)
+        listingData.marketplace_connection_id = this.connectionId;
+
+        // Atualizar seller_id e access_status
+        if (sellerId !== null) {
+          listingData.seller_id = sellerId;
+        }
+        listingData.access_status = accessStatus;
+        if (accessBlockedCode) {
+          listingData.access_blocked_code = accessBlockedCode;
+          listingData.access_blocked_at = new Date();
+        }
+        if (accessBlockedReason) {
+          listingData.access_blocked_reason = accessBlockedReason;
+        }
 
         // Log seguro dos campos atualizados
         const updatedFields = Object.keys(listingData).filter(k => k !== 'score_breakdown');
@@ -1188,15 +1289,37 @@ export class MercadoLivreSyncService {
       await this.ensureValidToken();
 
       // 2. Buscar todos os listings ativos do tenant
-      const listings = await prisma.listing.findMany({
+      // Buscar conexão ativa mais recente para filtrar listings
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
         where: {
           tenant_id: tenantId,
-          marketplace: Marketplace.mercadolivre,
-          status: ListingStatus.active,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
+        },
+        orderBy: {
+          created_at: 'desc', // Mais recente primeiro
         },
       });
 
-      console.log(`[ML-METRICS] Encontrados ${listings.length} anúncios ativos`);
+      // Filtrar listings apenas da conexão ativa
+      const listingsWhere: any = {
+        tenant_id: tenantId,
+        marketplace: Marketplace.mercadolivre,
+        status: ListingStatus.active,
+      };
+
+      if (activeConnection) {
+        listingsWhere.marketplace_connection_id = activeConnection.id;
+        console.log(`[ML-METRICS] Filtrando listings pela conexão ativa: ${activeConnection.id} (provider: ${activeConnection.provider_account_id})`);
+      } else {
+        console.log(`[ML-METRICS] ⚠️  Nenhuma conexão ativa encontrada, processando todos os listings`);
+      }
+
+      const listings = await prisma.listing.findMany({
+        where: listingsWhere,
+      });
+
+      console.log(`[ML-METRICS] Encontrados ${listings.length} anúncios ativos${activeConnection ? ` (conexão: ${activeConnection.id})` : ''}`);
 
       if (listings.length === 0) {
         result.success = true;

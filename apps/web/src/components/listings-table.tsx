@@ -197,6 +197,28 @@ function AIAnalysisTab({
         dataQuality={analysis.dataQuality}
       />
 
+      {/* Listing Unauthorized - Aviso de Acesso Bloqueado */}
+      {(selectedListing?.accessStatus === 'unauthorized' || selectedListing?.accessStatus === 'blocked_by_policy') && (
+        <Card className="border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3 text-sm">
+              <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+              <div className="space-y-1">
+                <p className="text-foreground font-medium">
+                  Anúncio não acessível pela conta Mercado Livre conectada
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {selectedListing?.accessBlockedReason || 'Este anúncio pertence a uma conexão antiga/revogada ou a outro seller. Reconecte a conta correta ou remova a conexão antiga.'}
+                </p>
+                <p className="text-muted-foreground text-xs mt-2">
+                  Código: {selectedListing?.accessBlockedCode || 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Performance Indisponível - Aviso Neutro */}
       {analysis.dataQuality?.performanceAvailable === false && (
         <Card className="border-gray-200 dark:border-gray-800">

@@ -37,6 +37,12 @@ enum ListingStatus {
   deleted
 }
 
+enum ListingAccessStatus {
+  accessible
+  unauthorized
+  blocked_by_policy
+}
+
 enum QualityStatus {
   pass
   warning
@@ -148,7 +154,8 @@ model MarketplaceConnection {
   created_at          DateTime         @default(now())
   updated_at          DateTime         @updatedAt
 
-  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant  Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listings Listing[] // Listings sincronizados por esta conexão
 
   @@unique([tenant_id, type, provider_account_id])
   @@index([tenant_id])
@@ -156,33 +163,40 @@ model MarketplaceConnection {
 }
 
 model Listing {
-  id                 String        @id @default(uuid())
-  tenant_id          String
-  marketplace        Marketplace
-  listing_id_ext     String
-  title              String
-  description        String? // Descrição do anúncio para análise
-  price              Decimal       @db.Decimal(10, 2)
-  stock              Int
-  status             ListingStatus
-  category           String?
-  health_score       Float?        @default(0) // Score legado da API do ML (0-100)
-  super_seller_score Int?          @default(0) // Super Seller Score proprietário (0-100)
-  score_breakdown    Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
-  thumbnail_url      String? // URL da imagem principal
-  pictures_count     Int?          @default(0) // Quantidade de fotos
-  has_video          Boolean?      @default(false) // Tem vídeo? (baseado em video_id/videos do payload)
-  has_clips          Boolean? // Tem clips? (null = desconhecido/não detectável via API)
-  clips_source       String? // Fonte: "unknown" | "override" | "api"
-  clips_checked_at   DateTime? // Quando foi verificado/atualizado
-  visits_last_7d     Int?          @default(0) // Visitas últimos 7 dias
-  sales_last_7d      Int?          @default(0) // Vendas últimos 7 dias
-  source              String?       // Origem da ingestão: "discovery" | "orders_fallback" | null
-  discovery_blocked   Boolean       @default(false) // Se discovery foi bloqueado (403/PolicyAgent)
-  created_at         DateTime      @default(now())
-  updated_at         DateTime      @updatedAt
+  id                      String              @id @default(uuid())
+  tenant_id               String
+  marketplace             Marketplace
+  listing_id_ext          String
+  marketplace_connection_id String? // FK para marketplace_connections (identifica qual conexão criou/sincronizou)
+  seller_id               String? // ID do seller no ML (obtido via GET /items/:id para auditoria)
+  title                   String
+  description             String? // Descrição do anúncio para análise
+  price                   Decimal             @db.Decimal(10, 2)
+  stock                   Int
+  status                  ListingStatus
+  category                String?
+  health_score            Float?              @default(0) // Score legado da API do ML (0-100)
+  super_seller_score      Int?                @default(0) // Super Seller Score proprietário (0-100)
+  score_breakdown         Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
+  thumbnail_url           String? // URL da imagem principal
+  pictures_count          Int?                @default(0) // Quantidade de fotos
+  has_video               Boolean?            @default(false) // Tem vídeo? (baseado em video_id/videos do payload)
+  has_clips               Boolean? // Tem clips? (null = desconhecido/não detectável via API)
+  clips_source            String? // Fonte: "unknown" | "override" | "api"
+  clips_checked_at        DateTime? // Quando foi verificado/atualizado
+  visits_last_7d          Int?                @default(0) // Visitas últimos 7 dias
+  sales_last_7d           Int?                @default(0) // Vendas últimos 7 dias
+  source                  String? // Origem da ingestão: "discovery" | "orders_fallback" | null
+  discovery_blocked       Boolean             @default(false) // Se discovery foi bloqueado (403/PolicyAgent)
+  access_status           ListingAccessStatus @default(accessible) // Status de acesso pela conexão atual
+  access_blocked_code     String? // Código do erro que bloqueou acesso (ex: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES")
+  access_blocked_at       DateTime? // Quando foi bloqueado
+  access_blocked_reason   String? // Mensagem sanitizada do erro (sem token)
+  created_at              DateTime            @default(now())
+  updated_at              DateTime            @updatedAt
 
   tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  marketplace_connection  MarketplaceConnection? @relation(fields: [marketplace_connection_id], references: [id], onDelete: SetNull)
   listing_metrics_daily   ListingMetricsDaily[]
   listing_action_outcomes ListingActionOutcome[]
   order_items             OrderItem[]
@@ -193,6 +207,9 @@ model Listing {
   @@index([tenant_id])
   @@index([tenant_id, marketplace])
   @@index([tenant_id, status])
+  @@index([tenant_id, marketplace_connection_id])
+  @@index([marketplace_connection_id])
+  @@index([access_status])
   @@index([super_seller_score])
   @@map("listings")
 }

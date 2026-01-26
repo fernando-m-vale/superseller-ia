@@ -1,5 +1,5 @@
 import axios, { AxiosError } from 'axios';
-import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus } from '@prisma/client';
+import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus, ListingAccessStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -175,6 +175,36 @@ export class MercadoLivreVisitsService {
   }
 
   /**
+   * Marca listing como unauthorized quando recebe 403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES
+   */
+  private async markListingAsUnauthorized(itemIdExt: string, errorCode: string, errorMessage: string): Promise<void> {
+    try {
+      const listing = await prisma.listing.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+          listing_id_ext: itemIdExt,
+        },
+      });
+
+      if (listing) {
+        await prisma.listing.update({
+          where: { id: listing.id },
+          data: {
+            access_status: ListingAccessStatus.blocked_by_policy,
+            access_blocked_code: errorCode,
+            access_blocked_at: new Date(),
+            access_blocked_reason: 'Anúncio não acessível pela conta Mercado Livre conectada (possível conexão antiga/revogada)',
+          },
+        });
+        console.log(`[ML-VISITS] Listing ${itemIdExt} marcado como unauthorized: connectionId=${this.connectionId}, code=${errorCode}`);
+      }
+    } catch (error) {
+      console.error(`[ML-VISITS] Erro ao marcar listing ${itemIdExt} como unauthorized:`, error);
+    }
+  }
+
+  /**
    * Busca visitas de um item usando Visits API (time_window)
    * 
    * @param itemId ID do item no Mercado Livre
@@ -345,23 +375,33 @@ export class MercadoLivreVisitsService {
           rawShape,
         };
       });
-    } catch (error) {
-      // Classificar erro HTTP
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const data = error.response?.data;
-        const code = error.code;
-        
-        let errorType: 'FORBIDDEN' | 'UNAUTHORIZED' | 'RATE_LIMIT' | 'SERVER_ERROR' | 'TIMEOUT' | 'NETWORK' | 'UNKNOWN' = 'UNKNOWN';
-        let message = error.message;
-        
-        if (status === 401) {
-          errorType = 'UNAUTHORIZED';
-          message = `Unauthorized (401): ${data?.message || 'Token inválido ou expirado'}`;
-        } else if (status === 403) {
-          errorType = 'FORBIDDEN';
-          message = `Forbidden (403): ${data?.message || 'Acesso negado'}`;
-        } else if (status === 429) {
+        } catch (error) {
+          // Classificar erro HTTP
+          if (axios.isAxiosError(error)) {
+            const status = error.response?.status;
+            const data = error.response?.data;
+            const code = error.code;
+            const errorCode = data?.error || data?.message;
+            
+            let errorType: 'FORBIDDEN' | 'UNAUTHORIZED' | 'RATE_LIMIT' | 'SERVER_ERROR' | 'TIMEOUT' | 'NETWORK' | 'UNKNOWN' = 'UNKNOWN';
+            let message = error.message;
+            
+            if (status === 401) {
+              errorType = 'UNAUTHORIZED';
+              message = `Unauthorized (401): ${data?.message || 'Token inválido ou expirado'}`;
+            } else if (status === 403) {
+              errorType = 'FORBIDDEN';
+              message = `Forbidden (403): ${data?.message || 'Acesso negado'}`;
+              
+              // Se for 403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES, marcar listing como unauthorized
+              if (errorCode === 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES' || 
+                  (typeof errorCode === 'string' && errorCode.includes('UNAUTHORIZED'))) {
+                // Marcar listing como unauthorized (assíncrono, não bloquear)
+                this.markListingAsUnauthorized(itemId, errorCode, message).catch(err => {
+                  console.error(`[ML-VISITS] Erro ao marcar listing ${itemId} como unauthorized:`, err);
+                });
+              }
+            } else if (status === 429) {
           errorType = 'RATE_LIMIT';
           message = `Rate limit (429): ${data?.message || 'Muitas requisições'}`;
         } else if (status && status >= 500) {
@@ -456,12 +496,34 @@ export class MercadoLivreVisitsService {
       await this.loadConnection();
       await this.ensureValidToken();
 
-      // 2. Buscar listings do tenant
+      // 2. Buscar conexão ativa mais recente para filtrar listings
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: tenantId,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
+        },
+        orderBy: {
+          created_at: 'desc', // Mais recente primeiro
+        },
+      });
+
+      if (!activeConnection) {
+        console.log(`[ML-VISITS] Nenhuma conexão ativa encontrada para tenant ${tenantId}`);
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        result.min_date = fromDate.toISOString().split('T')[0];
+        result.max_date = toDate.toISOString().split('T')[0];
+        return result;
+      }
+
+      // 3. Buscar listings do tenant APENAS da conexão ativa
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: tenantId,
           marketplace: Marketplace.mercadolivre,
           status: ListingStatus.active,
+          marketplace_connection_id: activeConnection.id, // Filtrar por conexão ativa
         },
         select: {
           id: true,
@@ -809,16 +871,36 @@ export class MercadoLivreVisitsService {
       await this.loadConnection();
       await this.ensureValidToken();
 
-      // 2. Buscar todos os listings ativos do tenant
+      // 2. Buscar conexão ativa mais recente para filtrar listings
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+      if (!activeConnection) {
+        console.log(`[ML-VISITS] Nenhuma conexão ativa encontrada para tenant ${this.tenantId}`);
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        return result;
+      }
+
+      // 3. Buscar listings ativos APENAS da conexão ativa
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
           status: ListingStatus.active,
+          marketplace_connection_id: activeConnection.id,
         },
       });
 
-      console.log(`[ML-VISITS] Encontrados ${listings.length} anúncios ativos`);
+      console.log(`[ML-VISITS] Encontrados ${listings.length} anúncios ativos (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -1024,16 +1106,36 @@ export class MercadoLivreVisitsService {
       await this.loadConnection();
       await this.ensureValidToken();
 
-      // 2. Buscar todos os listings ativos do tenant
+      // 2. Buscar conexão ativa mais recente para filtrar listings
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+      if (!activeConnection) {
+        console.log(`[ML-VISITS] [${requestId}] Nenhuma conexão ativa encontrada para tenant ${this.tenantId}`);
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        return result;
+      }
+
+      // 3. Buscar listings ativos APENAS da conexão ativa
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
           status: ListingStatus.active,
+          marketplace_connection_id: activeConnection.id,
         },
       });
 
-      console.log(`[ML-VISITS] [${requestId}] Encontrados ${listings.length} anúncios ativos`);
+      console.log(`[ML-VISITS] [${requestId}] Encontrados ${listings.length} anúncios ativos (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -1281,11 +1383,31 @@ export class MercadoLivreVisitsService {
 
       console.log(`[ML-VISITS-BACKFILL] [${requestId}] Conexão carregada tenantId=${this.tenantId} sellerId=${this.providerAccountId}`);
 
-      // 2. Buscar todos os listings do tenant (marketplace=mercadolivre)
+      // 2. Buscar conexão ativa mais recente para filtrar listings
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+      if (!activeConnection) {
+        console.log(`[ML-VISITS-BACKFILL] [${requestId}] Nenhuma conexão ativa encontrada para tenant ${this.tenantId}`);
+        result.success = true;
+        result.duration = Date.now() - startTime;
+        return result;
+      }
+
+      // 3. Buscar listings APENAS da conexão ativa
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
+          marketplace_connection_id: activeConnection.id,
         },
         select: {
           id: true,
@@ -1294,7 +1416,7 @@ export class MercadoLivreVisitsService {
       });
 
       result.listingsConsidered = listings.length;
-      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Listings encontrados: ${listings.length} tenantId=${this.tenantId}`);
+      console.log(`[ML-VISITS-BACKFILL] [${requestId}] Listings encontrados: ${listings.length} tenantId=${this.tenantId} (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -1371,13 +1493,31 @@ export class MercadoLivreVisitsService {
     }
   ): Promise<void> {
     try {
-      // Buscar listing pelo itemId
-      const listing = await prisma.listing.findFirst({
+      // Buscar conexão ativa mais recente
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
         where: {
           tenant_id: this.tenantId,
-          marketplace: Marketplace.mercadolivre,
-          listing_id_ext: itemId,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
         },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+      // Buscar listing pelo itemId (apenas da conexão ativa se existir)
+      const listingWhere: any = {
+        tenant_id: this.tenantId,
+        marketplace: Marketplace.mercadolivre,
+        listing_id_ext: itemId,
+      };
+
+      if (activeConnection) {
+        listingWhere.marketplace_connection_id = activeConnection.id;
+      }
+
+      const listing = await prisma.listing.findFirst({
+        where: listingWhere,
         select: { id: true },
       });
 

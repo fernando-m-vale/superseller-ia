@@ -75,6 +75,9 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         hasVideo: listing.has_video, // null quando não sabemos (tri-state: true/false/null)
         hasClips: listing.has_clips ?? null, // null = desconhecido/não detectável via API
         listingIdExt: listing.listing_id_ext, // ID externo do marketplace (ex: MLB3923303743)
+        accessStatus: listing.access_status, // Status de acesso pela conexão atual
+        accessBlockedCode: listing.access_blocked_code ?? undefined, // Código do erro que bloqueou acesso
+        accessBlockedReason: listing.access_blocked_reason ?? undefined, // Mensagem sanitizada do erro
         createdAt: listing.created_at,
         updatedAt: listing.updated_at,
       }));

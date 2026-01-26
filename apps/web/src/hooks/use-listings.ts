@@ -40,6 +40,9 @@ export interface Listing {
   hasVideo?: boolean // Tem vídeo? (baseado em video_id/videos do payload)
   hasClips?: boolean | null // Tem clips? (null = desconhecido/não detectável via API)
   listingIdExt?: string // ID externo do marketplace (ex: MLB3923303743)
+  accessStatus?: 'accessible' | 'unauthorized' | 'blocked_by_policy' // Status de acesso pela conexão atual
+  accessBlockedCode?: string // Código do erro que bloqueou acesso
+  accessBlockedReason?: string // Mensagem sanitizada do erro
 }
 
 export interface ListingsResponse {
