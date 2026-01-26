@@ -49,6 +49,7 @@ function AIAnalysisTab({
   marketplace,
   listingIdExt,
   listingId,
+  selectedListing,
 }: {
   analysis: AIAnalysisResponse | null
   isLoading: boolean
@@ -62,6 +63,7 @@ function AIAnalysisTab({
   marketplace?: 'shopee' | 'mercadolivre'
   listingIdExt?: string
   listingId?: string
+  selectedListing?: { accessStatus?: string; accessBlockedCode?: string; accessBlockedReason?: string } | null
 }) {
   const loadingMessages = [
     'Analisando concorrentes...',
@@ -473,6 +475,9 @@ export function ListingsTable() {
   // Removida aba de Recomendações - mantendo apenas IA
   const [copiedText, setCopiedText] = useState<string | null>(null)
 
+  // Buscar listing selecionado para verificar status de acesso
+  const selectedListing = selectedListingId ? data?.items.find(l => l.id === selectedListingId) || null : null
+
   const handleOpenRecommendations = (listingId: string) => {
     setSelectedListingId(listingId)
     setSheetOpen(true)
@@ -794,6 +799,7 @@ export function ListingsTable() {
                 listingId={selectedListingId || undefined}
                 marketplace={data?.items.find(l => l.id === selectedListingId)?.marketplace}
                 listingIdExt={data?.items.find(l => l.id === selectedListingId)?.listingIdExt}
+                selectedListing={selectedListing}
               />
             </TabsContent>
           </Tabs>
