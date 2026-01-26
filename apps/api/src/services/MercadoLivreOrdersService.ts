@@ -510,7 +510,10 @@ export class MercadoLivreOrdersService {
   private async fetchOrders(dateFrom: string, dateTo: string): Promise<MLOrder[]> {
     const allOrders: MLOrder[] = [];
     let offset = 0;
-    const limit = 50;
+    // ML API limita limit a 51 (não aceita > 51)
+    // Clamp explícito: garantir que nunca exceda 51
+    const requestedLimit = 50; // Valor padrão
+    const limit = Math.min(requestedLimit ?? 51, 51); // Clamp explícito: limit nunca excede 51
 
     console.log(`[ML-ORDERS] ========== INICIANDO FETCH DE PEDIDOS COM FILTRO ==========`);
     console.log(`[ML-ORDERS] Seller ID: ${this.providerAccountId}`);
@@ -605,16 +608,21 @@ export class MercadoLivreOrdersService {
 
   /**
    * Busca últimos N pedidos sem filtro de data (fallback quando filtro retorna 0)
+   * ML API limita limit a 51 (não aceita > 51)
    */
-  private async fetchOrdersFallback(limit: number = 100): Promise<MLOrder[]> {
+  private async fetchOrdersFallback(requestedLimit: number = 100): Promise<MLOrder[]> {
+    // Clamp explícito: limit nunca excede 51 (ML API não aceita > 51)
+    const limit = Math.min(requestedLimit ?? 51, 51);
+    
     console.log(`[ML-ORDERS] ========== FALLBACK: BUSCANDO ÚLTIMOS ${limit} PEDIDOS SEM FILTRO ==========`);
+    console.log(`[ML-ORDERS] Fallback - requestedLimit=${requestedLimit}, clamped limit=${limit}`);
     
     const url = `${ML_API_BASE}/orders/search`;
     const params: Record<string, string | number> = {
       seller: this.sellerId || this.providerAccountId, // Usar sellerId (de users/me) como fonte de verdade
       sort: 'date_desc',
       offset: 0,
-      limit,
+      limit, // Garantido <= 51
     };
     
     console.log(`[ML-ORDERS] Fallback - Chamando API: ${url}`);

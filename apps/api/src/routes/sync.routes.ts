@@ -862,16 +862,42 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             });
           }
 
-          // Retornar 502 Bad Gateway para outros erros da API do ML
-          return reply.status(502).send({
-            error: 'ML API Error',
-            message: `Erro ao buscar orders do Mercado Livre: ${ordersError.message}`,
-            mlError: {
-              status: statusCode,
-              message: mlErrorBody?.message || ordersError.message,
-              body: mlErrorBody, // Sanitizado (sem token)
-            },
-          });
+          // Se for 400 (ex: limit > 51), não interromper refresh de metrics/visits
+          // Continuar com ordersResult vazio e permitir que metrics/visits executem
+          if (statusCode === 400) {
+            app.log.warn({
+              tenantId,
+              statusCode,
+              mlErrorBody,
+              error: ordersError.message,
+            }, 'Erro 400 ao sincronizar orders (ex: limit > 51). Continuando com metrics/visits...');
+            
+            // Criar ordersResult vazio para não interromper o fluxo
+            ordersResult = {
+              success: false,
+              ordersProcessed: 0,
+              ordersCreated: 0,
+              ordersUpdated: 0,
+              totalGMV: 0,
+              errors: [`Erro 400 ao buscar orders: ${ordersError.message}`],
+              duration: 0,
+              fetched: 0,
+              inRangeCount: 0,
+              fallbackUsed: false,
+              fallbackFetched: 0,
+            };
+          } else {
+            // Retornar 502 Bad Gateway para outros erros da API do ML (5xx, etc)
+            return reply.status(502).send({
+              error: 'ML API Error',
+              message: `Erro ao buscar orders do Mercado Livre: ${ordersError.message}`,
+              mlError: {
+                status: statusCode,
+                message: mlErrorBody?.message || ordersError.message,
+                body: mlErrorBody, // Sanitizado (sem token)
+              },
+            });
+          }
         }
 
         app.log.info({
