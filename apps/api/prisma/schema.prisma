@@ -148,13 +148,13 @@ model MarketplaceConnection {
   refresh_token       String?
   expires_at          DateTime?
   status              ConnectionStatus
-  last_error_code     String?          // Código do último erro HTTP (ex: "401", "403")
-  last_error_at       DateTime?       // Quando ocorreu o último erro
-  last_error_message  String?          // Mensagem do último erro (sanitizada)
+  last_error_code     String? // Código do último erro HTTP (ex: "401", "403")
+  last_error_at       DateTime? // Quando ocorreu o último erro
+  last_error_message  String? // Mensagem do último erro (sanitizada)
   created_at          DateTime         @default(now())
   updated_at          DateTime         @updatedAt
 
-  tenant  Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant   Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   listings Listing[] // Listings sincronizados por esta conexão
 
   @@unique([tenant_id, type, provider_account_id])
@@ -163,37 +163,44 @@ model MarketplaceConnection {
 }
 
 model Listing {
-  id                      String              @id @default(uuid())
-  tenant_id               String
-  marketplace             Marketplace
-  listing_id_ext          String
+  id                        String              @id @default(uuid())
+  tenant_id                 String
+  marketplace               Marketplace
+  listing_id_ext            String
   marketplace_connection_id String? // FK para marketplace_connections (identifica qual conexão criou/sincronizou)
-  seller_id               String? // ID do seller no ML (obtido via GET /items/:id para auditoria)
-  title                   String
-  description             String? // Descrição do anúncio para análise
-  price                   Decimal             @db.Decimal(10, 2)
-  stock                   Int
-  status                  ListingStatus
-  category                String?
-  health_score            Float?              @default(0) // Score legado da API do ML (0-100)
-  super_seller_score      Int?                @default(0) // Super Seller Score proprietário (0-100)
-  score_breakdown         Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
-  thumbnail_url           String? // URL da imagem principal
-  pictures_count          Int?                @default(0) // Quantidade de fotos
-  has_video               Boolean?            @default(false) // Tem vídeo? (baseado em video_id/videos do payload)
-  has_clips               Boolean? // Tem clips? (null = desconhecido/não detectável via API)
-  clips_source            String? // Fonte: "unknown" | "override" | "api"
-  clips_checked_at        DateTime? // Quando foi verificado/atualizado
-  visits_last_7d          Int?                @default(0) // Visitas últimos 7 dias
-  sales_last_7d           Int?                @default(0) // Vendas últimos 7 dias
-  source                  String? // Origem da ingestão: "discovery" | "orders_fallback" | null
-  discovery_blocked       Boolean             @default(false) // Se discovery foi bloqueado (403/PolicyAgent)
-  access_status           ListingAccessStatus @default(accessible) // Status de acesso pela conexão atual
-  access_blocked_code     String? // Código do erro que bloqueou acesso (ex: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES")
-  access_blocked_at       DateTime? // Quando foi bloqueado
-  access_blocked_reason   String? // Mensagem sanitizada do erro (sem token)
-  created_at              DateTime            @default(now())
-  updated_at              DateTime            @updatedAt
+  seller_id                 String? // ID do seller no ML (obtido via GET /items/:id para auditoria)
+  title                     String
+  description               String? // Descrição do anúncio para análise
+  price                     Decimal             @db.Decimal(10, 2)
+  price_final               Decimal?            @db.Decimal(10, 2) // Preço final (com promoção, se houver)
+  original_price            Decimal?            @db.Decimal(10, 2) // Preço original antes da promoção
+  has_promotion             Boolean             @default(false) // Tem promoção ativa?
+  discount_percent          Int? // Percentual de desconto (0-100)
+  promotion_type            String? // Tipo de promoção (ex: "flash_sale", "discount", "free_shipping")
+  promotion_checked_at      DateTime? // Quando foi verificada a promoção
+  pictures_json             Json? // Array completo de pictures do ML com secure_url etc.
+  stock                     Int
+  status                    ListingStatus
+  category                  String?
+  health_score              Float?              @default(0) // Score legado da API do ML (0-100)
+  super_seller_score        Int?                @default(0) // Super Seller Score proprietário (0-100)
+  score_breakdown           Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
+  thumbnail_url             String? // URL da imagem principal
+  pictures_count            Int?                @default(0) // Quantidade de fotos
+  has_video                 Boolean?            @default(false) // Tem vídeo? (baseado em video_id/videos do payload)
+  has_clips                 Boolean? // Tem clips? (null = desconhecido/não detectável via API)
+  clips_source              String? // Fonte: "unknown" | "override" | "api"
+  clips_checked_at          DateTime? // Quando foi verificado/atualizado
+  visits_last_7d            Int?                @default(0) // Visitas últimos 7 dias
+  sales_last_7d             Int?                @default(0) // Vendas últimos 7 dias
+  source                    String? // Origem da ingestão: "discovery" | "orders_fallback" | null
+  discovery_blocked         Boolean             @default(false) // Se discovery foi bloqueado (403/PolicyAgent)
+  access_status             ListingAccessStatus @default(accessible) // Status de acesso pela conexão atual
+  access_blocked_code       String? // Código do erro que bloqueou acesso (ex: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES")
+  access_blocked_at         DateTime? // Quando foi bloqueado
+  access_blocked_reason     String? // Mensagem sanitizada do erro (sem token)
+  created_at                DateTime            @default(now())
+  updated_at                DateTime            @updatedAt
 
   tenant                  Tenant                 @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   marketplace_connection  MarketplaceConnection? @relation(fields: [marketplace_connection_id], references: [id], onDelete: SetNull)
@@ -267,15 +274,15 @@ model ListingMetricsDaily {
   tenant_id   String
   listing_id  String
   date        DateTime @db.Date
-  impressions Int?     // Nullable: null = não disponível (sem estimativas)
-  clicks      Int?     // Nullable: null = não disponível (sem estimativas)
+  impressions Int? // Nullable: null = não disponível (sem estimativas)
+  clicks      Int? // Nullable: null = não disponível (sem estimativas)
   ctr         Decimal? @db.Decimal(5, 4) // Nullable: null = não disponível (sem estimativas)
-  visits      Int?     // Nullable: null = unknown, 0 = zero real
+  visits      Int? // Nullable: null = unknown, 0 = zero real
   conversion  Decimal? @db.Decimal(5, 4) // Nullable quando visits é null
   orders      Int      @default(0)
   gmv         Decimal  @db.Decimal(10, 2)
-  source      String?  // Origem: 'ml_orders_period' | 'ml_visits_period' | 'unknown' | 'ml_items_aggregate'
-  period_days Int?     // Período agregado (ex: 30 para agregado de 30 dias)
+  source      String? // Origem: 'ml_orders_period' | 'ml_visits_period' | 'unknown' | 'ml_items_aggregate'
+  period_days Int? // Período agregado (ex: 30 para agregado de 30 dias)
   created_at  DateTime @default(now())
 
   tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
@@ -436,10 +443,10 @@ model ListingAIAnalysis {
   tenant_id      String
   listing_id     String
   period_days    Int      @default(30) // Período de métricas usado na análise
-  fingerprint    String   // SHA256 hash dos dados relevantes (listing + metrics + prompt_version)
+  fingerprint    String // SHA256 hash dos dados relevantes (listing + metrics + prompt_version)
   model          String   @default("gpt-4o") // Modelo usado na análise
   prompt_version String   @default("ai-v1.2") // Versão do prompt para invalidar cache quando mudar
-  result_json    Json     // Resultado completo da análise (AIAnalysisResult + score)
+  result_json    Json // Resultado completo da análise (AIAnalysisResult + score)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 

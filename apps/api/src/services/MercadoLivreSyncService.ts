@@ -21,7 +21,7 @@ interface MercadoLivreItem {
   health?: number; // 0.0-1.0 (qualidade geral)
   quality_grade?: string; // "good", "regular", "bad" - fallback para health
   listing_type_id?: string; // gold_special, gold_pro, etc
-  pictures?: Array<{ id: string; url?: string; size?: string }>;
+  pictures?: Array<{ id: string; url?: string; secure_url?: string; size?: string }>;
   attributes?: Array<{ id: string; value_name: string }>;
   video_id?: string | null;
   videos?: Array<{ id: string; type?: string }>;
@@ -33,6 +33,17 @@ interface MercadoLivreItem {
   // Campos adicionais para Super Seller Score
   sold_quantity?: number;
   visits?: number;
+  // Campos de promoção (podem não existir)
+  original_price?: number; // Preço original antes da promoção
+  sale_price?: number; // Preço de venda (com promoção)
+  base_price?: number; // Preço base
+  deals?: Array<{
+    id?: string;
+    type?: string;
+    discount_percent?: number;
+    start_date?: string;
+    end_date?: string;
+  }>;
 }
 
 interface TokenRefreshResponse {
@@ -903,6 +914,70 @@ export class MercadoLivreSyncService {
           listingData.thumbnail_url = null;
         }
         // Se é update e não veio thumbnail, NÃO atualizar (manter valor existente)
+
+        // Atualizar pictures_json (array completo de pictures do ML)
+        if (Array.isArray(item.pictures) && item.pictures.length > 0) {
+          listingData.pictures_json = item.pictures as any; // Cast para Json do Prisma
+        } else if (!existing) {
+          // Se é criação e não tem pictures, setar null
+          listingData.pictures_json = null;
+        }
+        // Se é update e não veio pictures, NÃO atualizar (manter valor existente)
+
+        // Processar campos de promoção
+        const now = new Date();
+        let hasPromotion = false;
+        let priceFinal: number | null = null;
+        let originalPrice: number | null = null;
+        let discountPercent: number | null = null;
+        let promotionType: string | null = null;
+
+        // Verificar se há promoção via deals
+        if (item.deals && Array.isArray(item.deals) && item.deals.length > 0) {
+          // Pegar o primeiro deal ativo (assumindo que deals já vem filtrado por data)
+          const activeDeal = item.deals[0];
+          hasPromotion = true;
+          promotionType = activeDeal.type || 'discount';
+          discountPercent = activeDeal.discount_percent || null;
+        }
+
+        // Verificar promoção via sale_price vs original_price/base_price
+        if (item.sale_price !== undefined && item.sale_price !== null) {
+          const salePrice = item.sale_price;
+          const basePrice = item.base_price ?? item.original_price ?? item.price;
+          
+          if (salePrice < basePrice) {
+            hasPromotion = true;
+            priceFinal = salePrice;
+            originalPrice = basePrice;
+            
+            // Calcular desconto percentual se não veio nos deals
+            if (discountPercent === null && originalPrice > 0) {
+              discountPercent = Math.round(((originalPrice - salePrice) / originalPrice) * 100);
+            }
+            
+            // Se não tem tipo de promoção, inferir
+            if (!promotionType) {
+              promotionType = 'discount';
+            }
+          }
+        }
+
+        // Se não encontrou promoção, usar price como price_final
+        if (!hasPromotion) {
+          priceFinal = item.price;
+          originalPrice = null;
+          discountPercent = null;
+          promotionType = null;
+        }
+
+        // Atualizar campos de promoção
+        listingData.has_promotion = hasPromotion;
+        listingData.price_final = priceFinal !== null ? priceFinal : item.price;
+        listingData.original_price = originalPrice;
+        listingData.discount_percent = discountPercent;
+        listingData.promotion_type = promotionType;
+        listingData.promotion_checked_at = now;
 
         // Atualizar has_video (tri-state: true/false/null)
         // - true: tem vídeo confirmado via API
