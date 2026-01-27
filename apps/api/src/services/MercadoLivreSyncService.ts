@@ -1201,27 +1201,59 @@ export class MercadoLivreSyncService {
           const itemIds = chunk.map(l => l.listing_id_ext);
           
           // Instrumentação: logar request
-          console.log(`[ML-SYNC-RECONCILE] Request GET /items/:id para ${itemIds.length} listings: [${itemIds.slice(0, 3).join(', ')}${itemIds.length > 3 ? '...' : ''}]`);
+          console.log(`[ML-SYNC-RECONCILE] Request GET /items?ids=... para ${itemIds.length} listings: [${itemIds.slice(0, 3).join(', ')}${itemIds.length > 3 ? '...' : ''}]`);
           
           let items: MercadoLivreItem[] = [];
-          let httpStatus: number | undefined;
+          let httpStatusMap = new Map<string, number>(); // itemId -> HTTP status code
+          let batchHttpStatus: number | undefined;
           
           try {
-            items = await this.fetchItemsDetails(itemIds);
-            httpStatus = 200; // fetchItemsDetails usa batch, assumir 200 se não lançar erro
+            // fetchItemsDetails usa batch API que retorna array de { code, body }
+            // Precisamos capturar o código de cada item individualmente
+            const response = await this.executeWithRetryOn401(async () => {
+              return await axios.get(`${ML_API_BASE}/items`, {
+                headers: { Authorization: `Bearer ${this.accessToken}` },
+                params: { ids: itemIds.join(',') },
+              });
+            });
+
+            batchHttpStatus = response.status;
+            console.log(`[ML-SYNC-RECONCILE] Batch response HTTP ${batchHttpStatus}, processando ${response.data.length} resultados`);
+
+            // A API retorna um array de objetos { code, body }
+            for (const itemResponse of response.data) {
+              const itemCode = itemResponse.code;
+              const itemId = itemResponse.body?.id;
+              
+              if (itemId) {
+                httpStatusMap.set(itemId, itemCode);
+                
+                // Instrumentação: logar para cada item
+                if (itemCode === 200) {
+                  console.log(`[ML-SYNC-RECONCILE] Item ${itemId}: HTTP ${itemCode}, status=${itemResponse.body.status}`);
+                } else {
+                  console.log(`[ML-SYNC-RECONCILE] Item ${itemId}: HTTP ${itemCode} (não encontrado ou erro)`);
+                }
+              }
+            }
+
+            items = response.data
+              .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
+              .map((item: { code: number; body: MercadoLivreItem }) => item.body);
           } catch (fetchError) {
             if (axios.isAxiosError(fetchError)) {
-              httpStatus = fetchError.response?.status;
-              console.error(`[ML-SYNC-RECONCILE] Erro HTTP ${httpStatus} ao buscar items:`, fetchError.message);
+              batchHttpStatus = fetchError.response?.status;
+              console.error(`[ML-SYNC-RECONCILE] Erro HTTP ${batchHttpStatus} ao buscar items:`, fetchError.message);
             }
             throw fetchError;
           }
 
           // Criar mapa de itemId -> status real
-          const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string }>();
+          const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string; httpStatus: number }>();
           for (const item of items) {
             const realStatus = this.mapMLStatusToListingStatus(item.status);
-            statusMap.set(item.id, { status: realStatus, mlStatusRaw: item.status });
+            const httpStatus = httpStatusMap.get(item.id) || batchHttpStatus || 200;
+            statusMap.set(item.id, { status: realStatus, mlStatusRaw: item.status, httpStatus });
           }
 
           // Atualizar listings com status diferente
@@ -1231,6 +1263,7 @@ export class MercadoLivreSyncService {
             
             if (!statusInfo) {
               // Listing não encontrado no ML
+              const httpStatus = httpStatusMap.get(listing.listing_id_ext) || batchHttpStatus || 404;
               result.details.push({
                 listing_id_ext: listing.listing_id_ext,
                 oldStatus: listing.status,
@@ -1242,10 +1275,10 @@ export class MercadoLivreSyncService {
               continue;
             }
 
-            const { status: realStatus, mlStatusRaw } = statusInfo;
+            const { status: realStatus, mlStatusRaw, httpStatus } = statusInfo;
             
             // Instrumentação: logar para cada listing
-            console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext}: DB=${listing.status}, ML=${mlStatusRaw} (mapped=${realStatus}), HTTP=${httpStatus || 'N/A'}`);
+            console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext}: DB=${listing.status}, ML=${mlStatusRaw} (mapped=${realStatus}), HTTP=${httpStatus}`);
             
             if (realStatus !== listing.status) {
               try {
