@@ -12,10 +12,7 @@
 import { createHash } from 'crypto';
 
 // Current prompt version - increment when prompt changes significantly
-<<<<<<< HEAD
-// V2.1 uses structured JSON format (verdict/actions/title/description/images/promo)
-=======
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
+// V2.1 uses structured JSON format with diagnostic, title_analysis, description_analysis, media_analysis, price_analysis, and actions
 export const PROMPT_VERSION = 'ai-v2.1';
 
 /**

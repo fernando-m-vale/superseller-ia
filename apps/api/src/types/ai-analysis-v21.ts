@@ -1,60 +1,13 @@
 /**
  * AI Analysis Result V2.1
  * 
-<<<<<<< HEAD
- * Estrutura JSON estruturada retornada pela IA V2.1.
- * Mais rica e estruturada que V1, com actions, title, description, images, promo.
-=======
  * Contrato estruturado e acionável para análise de anúncios pela IA.
  * Versão 2.1: modo agressivo + ações concretas + análise de descrição.
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
  */
 
 import { z } from 'zod';
 
 /**
-<<<<<<< HEAD
- * Schema Zod para validação do resultado V2.1
- */
-export const AIAnalysisResultV21Schema = z.object({
-  verdict: z.object({
-    headline: z.string(),
-    summary: z.string().optional(),
-  }),
-  actions: z.array(
-    z.object({
-      priority: z.number().int().min(1).max(3), // 1 = mais importante, 3 = menos importante
-      instruction: z.string(),
-      before: z.string().optional(),
-      after: z.string().optional(),
-      expectedImpact: z.string().optional(),
-    })
-  ),
-  title: z.object({
-    suggested: z.string(),
-    keywords: z.array(z.string()).optional(),
-    rationale: z.string().optional(),
-  }),
-  description: z.object({
-    bullets: z.array(z.string()),
-    fullText: z.string().optional(),
-  }),
-  images: z.object({
-    plan: z.array(
-      z.object({
-        slot: z.number().int().min(1),
-        description: z.string(),
-        purpose: z.string().optional(),
-      })
-    ),
-  }),
-  promo: z.object({
-    priceBase: z.number().optional(),
-    priceFinal: z.number().optional(),
-    discount: z.number().optional(),
-    recommendation: z.string().optional(),
-  }).optional(),
-=======
  * Ação concreta e acionável para melhorar o anúncio
  */
 export const ActionItemV21Schema = z.object({
@@ -217,29 +170,11 @@ export const AIAnalysisResultV21Schema = z.object({
     performance_available: z.boolean().describe('Se dados de performance estão disponíveis'),
     warnings: z.array(z.string()).describe('Avisos sobre qualidade dos dados'),
   }),
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
 });
 
 export type AIAnalysisResultV21 = z.infer<typeof AIAnalysisResultV21Schema>;
 
 /**
-<<<<<<< HEAD
- * Adaptador V1 compatível gerado a partir de V2.1
- */
-export interface V1CompatibleResult {
-  critique: string;
-  growthHacks: Array<{
-    title: string;
-    description: string;
-    priority: 'high' | 'medium' | 'low';
-    estimatedImpact: string;
-  }>;
-  seoSuggestions: {
-    suggestedTitle: string;
-    titleRationale: string;
-    suggestedDescriptionPoints: string[];
-    keywords: string[];
-=======
  * Fallback seguro quando a análise falha
  */
 export function createFallbackAnalysisV21(
@@ -346,45 +281,10 @@ export function createFallbackAnalysisV21(
       performance_available: performanceAvailable,
       warnings: [error],
     },
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
   };
 }
 
 /**
-<<<<<<< HEAD
- * Converte resultado V2.1 para formato V1 compatível
- */
-export function convertV21ToV1(v21: AIAnalysisResultV21): V1CompatibleResult {
-  // Mapear actions para growthHacks
-  const growthHacks = v21.actions
-    .sort((a, b) => a.priority - b.priority) // Ordenar por priority (1 = mais importante)
-    .slice(0, 3) // Pegar apenas os 3 primeiros
-    .map((action, index) => {
-      // Mapear priority numérico para string
-      let priorityStr: 'high' | 'medium' | 'low' = 'medium';
-      if (action.priority === 1) priorityStr = 'high';
-      else if (action.priority === 2) priorityStr = 'medium';
-      else if (action.priority === 3) priorityStr = 'low';
-
-      return {
-        title: action.instruction.split('.')[0] || action.instruction.substring(0, 50), // Primeira frase ou primeiros 50 chars
-        description: action.instruction + (action.expectedImpact ? ` ${action.expectedImpact}` : ''),
-        priority: priorityStr,
-        estimatedImpact: action.expectedImpact || 'Impacto a ser medido',
-      };
-    });
-
-  return {
-    critique: v21.verdict.headline + (v21.verdict.summary ? ` ${v21.verdict.summary}` : ''),
-    growthHacks,
-    seoSuggestions: {
-      suggestedTitle: v21.title.suggested,
-      titleRationale: v21.title.rationale || v21.title.suggested,
-      suggestedDescriptionPoints: v21.description.bullets,
-      keywords: v21.title.keywords || [],
-    },
-  };
-=======
  * Valida e parseia resposta da IA para V2.1
  * Retorna resultado validado ou fallback em caso de erro
  */
@@ -428,5 +328,82 @@ export function parseAIResponseV21(
     );
     return { success: false, data: fallback, error: errorMessage };
   }
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
+}
+
+/**
+ * Adaptador V1 compatível gerado a partir de V2.1
+ * Converte o schema V2.1 completo para o formato V1 usado pelo frontend
+ */
+export interface V1CompatibleResult {
+  critique: string;
+  growthHacks: Array<{
+    title: string;
+    description: string;
+    priority: 'high' | 'medium' | 'low';
+    estimatedImpact: string;
+  }>;
+  seoSuggestions: {
+    suggestedTitle: string;
+    titleRationale: string;
+    suggestedDescriptionPoints: string[];
+    keywords: string[];
+  };
+}
+
+/**
+ * Converte resultado V2.1 para formato V1 compatível
+ */
+export function convertV21ToV1(v21: AIAnalysisResultV21): V1CompatibleResult {
+  // Mapear actions para growthHacks
+  const priorityMap: Record<string, 'high' | 'medium' | 'low'> = {
+    critical: 'high',
+    high: 'high',
+    medium: 'medium',
+    low: 'low',
+  };
+
+  const growthHacks = v21.actions
+    .sort((a, b) => {
+      const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    })
+    .slice(0, 3) // Pegar apenas os 3 primeiros
+    .map((action) => ({
+      title: action.title,
+      description: action.description,
+      priority: priorityMap[action.priority] || 'medium',
+      estimatedImpact: action.impact.estimated_gain,
+    }));
+
+  // Extrair título sugerido (primeira sugestão ou título atual)
+  const suggestedTitle = v21.title_analysis.suggestions.length > 0
+    ? v21.title_analysis.suggestions[0].text
+    : v21.title_analysis.current;
+
+  // Extrair rationale do título
+  const titleRationale = v21.title_analysis.suggestions.length > 0
+    ? v21.title_analysis.suggestions[0].rationale
+    : 'Título otimizado para SEO e conversão';
+
+  // Extrair bullets da descrição sugerida
+  const suggestedDescriptionPoints = v21.description_analysis.suggested_structure
+    .map(section => section.content)
+    .filter(content => content.trim().length > 0);
+
+  // Extrair keywords recomendadas
+  const keywords = [
+    ...v21.title_analysis.keywords.present,
+    ...v21.title_analysis.keywords.recommended,
+  ];
+
+  return {
+    critique: v21.critique,
+    growthHacks,
+    seoSuggestions: {
+      suggestedTitle,
+      titleRationale,
+      suggestedDescriptionPoints,
+      keywords,
+    },
+  };
 }
