@@ -910,9 +910,18 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           fallbackUsed: ordersResult.fallbackUsed,
         }, 'Sync de orders concluído');
 
-        // 2. Reconstruir métricas diárias usando orders + order_items do banco
-        app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando rebuild de métricas...');
+        // 2. Reconciliar status de listings antes de sync (corrige paused→active no ML)
+        app.log.info({ tenantId }, 'Reconciliando status de listings com Mercado Livre...');
         const syncService = new MercadoLivreSyncService(tenantId);
+        const reconcileResult = await syncService.reconcileListingStatus(true); // Apenas listings não-active
+        app.log.info({
+          tenantId,
+          listingsUpdated: reconcileResult.updated,
+          errors: reconcileResult.errors.length,
+        }, 'Reconciliação de status concluída');
+
+        // 3. Reconstruir métricas diárias usando orders + order_items do banco
+        app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando rebuild de métricas...');
         const metricsResult = await syncService.syncListingMetricsDaily(tenantId, dateFromUtc, dateToUtc, daysBack);
 
         // Verificar se há erro de autenticação revogada no metrics também
@@ -930,7 +939,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // 3. Sincronizar visitas do Mercado Livre
+        // 4. Sincronizar visitas do Mercado Livre
         app.log.info({ tenantId, dateFrom: dateFromUtc.toISOString(), dateTo: dateToUtc.toISOString() }, 'Iniciando sync de visitas...');
         const visitsService = new MercadoLivreVisitsService(tenantId);
         const visitsResult = await visitsService.syncVisitsByRange(tenantId, dateFromUtc, dateToUtc);
@@ -958,6 +967,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           requestId,
           userId,
           tenantId,
+          listingsStatusReconciled: reconcileResult.updated,
           ordersProcessed: ordersResult.ordersProcessed,
           ordersCreated: ordersResult.ordersCreated,
           metricsRowsUpserted: metricsResult.rowsUpserted,
@@ -979,6 +989,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         return reply.status(200).send({
           message: ordersSuccess ? 'Refresh concluído com sucesso' : 'Refresh concluído com avisos',
           data: {
+            reconcile: {
+              listingsUpdated: reconcileResult.updated,
+              errors: reconcileResult.errors.length > 0 ? reconcileResult.errors : undefined,
+            },
             orders: {
               fetched: ordersResult.fetched ?? 0,
               processed: ordersResult.ordersProcessed,

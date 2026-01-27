@@ -9,10 +9,12 @@ import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { OpenAIService } from '../services/OpenAIService';
 import { IAScoreService } from '../services/IAScoreService';
+import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
+import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
 import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError } from '../utils/sanitize-error';
 import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, ListingStatus } from '@prisma/client';
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
 import { getMediaVerdict } from '../utils/media-verdict';
@@ -177,6 +179,46 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             error: 'Not Found',
             message: 'Anúncio não encontrado',
           });
+        }
+
+        // Step 1.5: Reconciliar status do listing se for Mercado Livre (opcional, melhor UX)
+        if (listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
+          try {
+            const syncService = new MercadoLivreSyncService(tenantId);
+            const reconcileResult = await syncService.reconcileSingleListingStatus(listing.listing_id_ext);
+            
+            if (reconcileResult.updated && reconcileResult.status) {
+              // Atualizar listing local para usar status atualizado
+              listing.status = reconcileResult.status;
+              
+              if (reconcileResult.status === ListingStatus.active) {
+                // Se listing mudou para active, executar backfill de visits para garantir dados atualizados
+                request.log.info({ 
+                  listingId,
+                  listingIdExt: listing.listing_id_ext,
+                  oldStatus: listing.status,
+                  newStatus: reconcileResult.status,
+                }, 'Listing reconciliado e agora está active, executando backfill de visits');
+                
+                try {
+                  const visitsService = new MercadoLivreVisitsService(tenantId);
+                  // Backfill dos últimos 30 dias para garantir dados atualizados
+                  await visitsService.syncVisitsByRange(
+                    tenantId,
+                    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 dias atrás
+                    new Date() // Hoje
+                  );
+                  request.log.info({ listingId }, 'Backfill de visits concluído após reconciliação');
+                } catch (visitsError) {
+                  // Não falhar a análise se backfill falhar, apenas logar
+                  request.log.warn({ listingId, error: visitsError }, 'Erro no backfill de visits após reconciliação (não crítico)');
+                }
+              }
+            }
+          } catch (reconcileError) {
+            // Não falhar a análise se reconciliação falhar, apenas logar
+            request.log.warn({ listingId, error: reconcileError }, 'Erro na reconciliação de status (não crítico)');
+          }
         }
 
         // Step 2: Calculate score to get metrics for fingerprint

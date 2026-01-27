@@ -1065,6 +1065,175 @@ export class MercadoLivreSyncService {
   /**
    * Mapeia status do ML para o enum ListingStatus
    */
+  /**
+   * Reconcilia status de um listing específico com o status real no Mercado Livre
+   * 
+   * @param listingIdExt ID externo do listing (ex: MLB4167251409)
+   * @returns Status real do listing ou null se não encontrado/erro
+   */
+  async reconcileSingleListingStatus(listingIdExt: string): Promise<{ status: ListingStatus | null; updated: boolean; error?: string }> {
+    try {
+      // 1. Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      // 2. Buscar listing no DB
+      const listing = await prisma.listing.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          marketplace: Marketplace.mercadolivre,
+          listing_id_ext: listingIdExt,
+        },
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+
+      if (!listing) {
+        return { status: null, updated: false, error: 'Listing não encontrado no DB' };
+      }
+
+      // 3. Buscar status real via GET /items/:id
+      const items = await this.fetchItemsDetails([listingIdExt]);
+      
+      if (items.length === 0) {
+        return { status: null, updated: false, error: 'Listing não encontrado no ML' };
+      }
+
+      const realStatus = this.mapMLStatusToListingStatus(items[0].status);
+
+      // 4. Atualizar se diferente
+      if (realStatus !== listing.status) {
+        await prisma.listing.update({
+          where: { id: listing.id },
+          data: { status: realStatus },
+        });
+        console.log(`[ML-SYNC-RECONCILE] Listing ${listingIdExt} atualizado: ${listing.status} → ${realStatus}`);
+        return { status: realStatus, updated: true };
+      }
+
+      return { status: realStatus, updated: false };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
+      console.error(`[ML-SYNC-RECONCILE] Erro ao reconciliar listing ${listingIdExt}:`, errorMsg);
+      return { status: null, updated: false, error: errorMsg };
+    }
+  }
+
+  /**
+   * Reconcilia status de listings com o status real no Mercado Livre
+   * Busca listings da conexão ativa e atualiza status via GET /items/:id
+   * 
+   * @param onlyNonActive Se true, reconcilia apenas listings com status != active (otimização)
+   * @returns Número de listings atualizados
+   */
+  async reconcileListingStatus(onlyNonActive: boolean = true): Promise<{ updated: number; errors: string[] }> {
+    const result = { updated: 0, errors: [] as string[] };
+
+    try {
+      // 1. Carregar conexão e garantir token válido
+      await this.loadConnection();
+      await this.ensureValidToken();
+
+      // 2. Buscar conexão ativa mais recente
+      const activeConnection = await prisma.marketplaceConnection.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          type: Marketplace.mercadolivre,
+          status: ConnectionStatus.active,
+        },
+        orderBy: {
+          created_at: 'desc',
+        },
+      });
+
+      if (!activeConnection) {
+        console.log(`[ML-SYNC-RECONCILE] Nenhuma conexão ativa encontrada para tenant ${this.tenantId}`);
+        return result;
+      }
+
+      // 3. Buscar listings da conexão ativa
+      const whereClause: any = {
+        tenant_id: this.tenantId,
+        marketplace: Marketplace.mercadolivre,
+        marketplace_connection_id: activeConnection.id,
+      };
+
+      if (onlyNonActive) {
+        whereClause.status = { not: ListingStatus.active };
+      }
+
+      const listings = await prisma.listing.findMany({
+        where: whereClause,
+        select: {
+          id: true,
+          listing_id_ext: true,
+          status: true,
+        },
+      });
+
+      console.log(`[ML-SYNC-RECONCILE] Encontrados ${listings.length} listings para reconciliar (conexão: ${activeConnection.id})`);
+
+      if (listings.length === 0) {
+        return result;
+      }
+
+      // 4. Processar em lotes de 20 (limite da API ML)
+      const chunks = this.chunkArray(listings, 20);
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        console.log(`[ML-SYNC-RECONCILE] Processando lote ${i + 1}/${chunks.length} (${chunk.length} listings)`);
+
+        try {
+          // Buscar status real via GET /items/:id (batch)
+          const itemIds = chunk.map(l => l.listing_id_ext);
+          const items = await this.fetchItemsDetails(itemIds);
+
+          // Criar mapa de itemId -> status real
+          const statusMap = new Map<string, ListingStatus>();
+          for (const item of items) {
+            const realStatus = this.mapMLStatusToListingStatus(item.status);
+            statusMap.set(item.id, realStatus);
+          }
+
+          // Atualizar listings com status diferente
+          for (const listing of chunk) {
+            const realStatus = statusMap.get(listing.listing_id_ext);
+            
+            if (realStatus && realStatus !== listing.status) {
+              try {
+                await prisma.listing.update({
+                  where: { id: listing.id },
+                  data: { status: realStatus },
+                });
+                result.updated++;
+                console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext} atualizado: ${listing.status} → ${realStatus}`);
+              } catch (updateError) {
+                const errorMsg = `Erro ao atualizar listing ${listing.listing_id_ext}: ${updateError instanceof Error ? updateError.message : 'Erro desconhecido'}`;
+                console.error(`[ML-SYNC-RECONCILE] ${errorMsg}`);
+                result.errors.push(errorMsg);
+              }
+            }
+          }
+        } catch (error) {
+          const errorMsg = `Erro no lote ${i + 1}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+          console.error(`[ML-SYNC-RECONCILE] ${errorMsg}`);
+          result.errors.push(errorMsg);
+        }
+      }
+
+      console.log(`[ML-SYNC-RECONCILE] Reconciliação concluída: ${result.updated} listings atualizados, ${result.errors.length} erros`);
+      return result;
+    } catch (error) {
+      const errorMsg = `Erro fatal na reconciliação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+      console.error(`[ML-SYNC-RECONCILE] ${errorMsg}`);
+      result.errors.push(errorMsg);
+      return result;
+    }
+  }
+
   private mapMLStatusToListingStatus(mlStatus: string): ListingStatus {
     switch (mlStatus.toLowerCase()) {
       case 'active':
