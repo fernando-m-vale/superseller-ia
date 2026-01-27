@@ -50,6 +50,18 @@ interface SyncResult {
   duration: number;
 }
 
+type ReconcileDetail = {
+  listing_id_ext: string;
+  oldStatus: string;
+  mlStatus: string;
+  updated: boolean;
+  httpStatus?: number;
+  errorCode?: string;
+  blockedBy?: string;
+  message?: string;
+  actionTaken?: 'none' | 'marked_blocked_by_policy' | 'marked_unauthorized' | 'cleared_block' | 'updated_status' | 'skipped' | 'no_change';
+};
+
 export class MercadoLivreSyncService {
   private tenantId: string;
   private accessToken: string = '';
@@ -1136,16 +1148,7 @@ export class MercadoLivreSyncService {
     unauthorized: number;
     skipped: number;
     errors: string[];
-    details: Array<{ 
-      listing_id_ext: string; 
-      oldStatus: string; 
-      mlStatus: string; 
-      updated: boolean; 
-      httpStatus?: number; 
-      errorCode?: string; 
-      blockedBy?: string;
-      actionTaken?: string; // e.g. "marked_blocked_by_policy", "status_updated", "skipped", "no_change"
-    }>;
+    details: ReconcileDetail[];
   }> {
     const result = { 
       candidates: 0,
@@ -1155,7 +1158,7 @@ export class MercadoLivreSyncService {
       unauthorized: 0,
       skipped: 0,
       errors: [] as string[],
-      details: [] as Array<{ listing_id_ext: string; oldStatus: string; mlStatus: string; updated: boolean; httpStatus?: number; errorCode?: string; blockedBy?: string }>,
+      details: [] as ReconcileDetail[],
     };
 
     try {
@@ -1202,6 +1205,10 @@ export class MercadoLivreSyncService {
           id: true,
           listing_id_ext: true,
           status: true,
+          access_status: true, // Para verificar se precisa limpar bloqueio
+          access_blocked_code: true,
+          access_blocked_reason: true,
+          access_blocked_at: true,
         },
       });
 
@@ -1226,6 +1233,9 @@ export class MercadoLivreSyncService {
           // Instrumentação: logar request
           console.log(`[ML-SYNC-RECONCILE] Request GET /items?ids=... para ${itemIds.length} listings: [${itemIds.slice(0, 3).join(', ')}${itemIds.length > 3 ? '...' : ''}]`);
           
+          // Declarar maps no escopo do try para serem acessíveis no loop de listings
+          const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string; httpStatus: number }>();
+          const errorMap = new Map<string, { code: number; errorCode?: string; blockedBy?: string; message?: string }>();
           let batchHttpStatus: number | undefined;
           
           try {
@@ -1243,9 +1253,6 @@ export class MercadoLivreSyncService {
             console.log(`[ML-SYNC-RECONCILE] Batch response HTTP ${batchHttpStatus}, processando ${response.data.length} resultados para ${itemIds.length} IDs`);
 
             // Mapear resultados pelo índice (ordem dos IDs enviados)
-            const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string; httpStatus: number }>();
-            const errorMap = new Map<string, { code: number; errorCode?: string; blockedBy?: string; message?: string }>();
-            
             for (let i = 0; i < response.data.length; i++) {
               const itemResponse = response.data[i];
               const itemCode = itemResponse.code;
@@ -1334,7 +1341,14 @@ export class MercadoLivreSyncService {
                   // Verificar se realmente persistiu
                   const verify = await prisma.listing.findUnique({
                     where: { id: listing.id },
-                    select: { access_status: true, access_blocked_code: true },
+                    select: { 
+                      id: true,
+                      listing_id_ext: true,
+                      access_status: true, 
+                      access_blocked_code: true,
+                      access_blocked_reason: true,
+                      access_blocked_at: true,
+                    },
                   });
                   
                   if (verify?.access_status === ListingAccessStatus.blocked_by_policy) {
@@ -1347,6 +1361,7 @@ export class MercadoLivreSyncService {
                       httpStatus,
                       errorCode,
                       blockedBy,
+                      message,
                       actionTaken: 'marked_blocked_by_policy',
                     });
                     console.log(`[ML-SYNC-RECONCILE] 🔒 Listing ${listing.listing_id_ext} marcado como blocked_by_policy: code=${errorCode}, persisted=${verify.access_status === ListingAccessStatus.blocked_by_policy}`);
@@ -1382,6 +1397,7 @@ export class MercadoLivreSyncService {
                     updated: false,
                     httpStatus,
                     errorCode,
+                    message,
                     actionTaken: 'marked_unauthorized',
                   });
                   console.log(`[ML-SYNC-RECONCILE] 🔐 Listing ${listing.listing_id_ext} marcado como unauthorized: code=${errorCode}`);
@@ -1403,6 +1419,7 @@ export class MercadoLivreSyncService {
                 httpStatus,
                 errorCode,
                 blockedBy,
+                message,
                 actionTaken: 'skipped',
               });
               continue;
@@ -1454,7 +1471,7 @@ export class MercadoLivreSyncService {
                   mlStatus: mlStatusRaw,
                   updated: true,
                   httpStatus,
-                  actionTaken: 'status_updated',
+                  actionTaken: 'updated_status',
                 });
                 if (result.updated <= 10) {
                   console.log(`[ML-SYNC-RECONCILE] ✅ Listing ${listing.listing_id_ext} atualizado: ${listing.status} → ${realStatus} (ML: ${mlStatusRaw})`);
@@ -1496,7 +1513,7 @@ export class MercadoLivreSyncService {
                 mlStatus: mlStatusRaw,
                 updated: false,
                 httpStatus,
-                actionTaken: 'no_change',
+                actionTaken: listing.access_status && listing.access_status !== ListingAccessStatus.accessible ? 'cleared_block' : 'none',
               });
             }
           }
