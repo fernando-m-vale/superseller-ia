@@ -518,11 +518,12 @@ export class MercadoLivreVisitsService {
       }
 
       // 3. Buscar listings do tenant APENAS da conexão ativa
+      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits)
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: tenantId,
           marketplace: Marketplace.mercadolivre,
-          status: ListingStatus.active,
+          status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
           marketplace_connection_id: activeConnection.id, // Filtrar por conexão ativa
         },
         select: {
@@ -531,7 +532,7 @@ export class MercadoLivreVisitsService {
         },
       });
 
-      console.log(`[ML-VISITS] Encontrados ${listings.length} listings ativos`);
+      console.log(`[ML-VISITS] Encontrados ${listings.length} listings ativos/pausados`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -890,17 +891,18 @@ export class MercadoLivreVisitsService {
         return result;
       }
 
-      // 3. Buscar listings ativos APENAS da conexão ativa
+      // 3. Buscar listings ativos/pausados APENAS da conexão ativa
+      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits)
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
-          status: ListingStatus.active,
+          status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
           marketplace_connection_id: activeConnection.id,
         },
       });
 
-      console.log(`[ML-VISITS] Encontrados ${listings.length} anúncios ativos (conexão: ${activeConnection.id})`);
+      console.log(`[ML-VISITS] Encontrados ${listings.length} anúncios ativos/pausados (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -1125,17 +1127,18 @@ export class MercadoLivreVisitsService {
         return result;
       }
 
-      // 3. Buscar listings ativos APENAS da conexão ativa
+      // 3. Buscar listings ativos/pausados APENAS da conexão ativa
+      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits)
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
-          status: ListingStatus.active,
+          status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
           marketplace_connection_id: activeConnection.id,
         },
       });
 
-      console.log(`[ML-VISITS] [${requestId}] Encontrados ${listings.length} anúncios ativos (conexão: ${activeConnection.id})`);
+      console.log(`[ML-VISITS] [${requestId}] Encontrados ${listings.length} anúncios ativos/pausados (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;

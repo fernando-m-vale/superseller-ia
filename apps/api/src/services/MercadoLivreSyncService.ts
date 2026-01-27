@@ -1126,10 +1126,20 @@ export class MercadoLivreSyncService {
    * Busca listings da conexão ativa e atualiza status via GET /items/:id
    * 
    * @param onlyNonActive Se true, reconcilia apenas listings com status != active (otimização)
-   * @returns Número de listings atualizados
+   * @returns Detalhes da reconciliação incluindo lista de listings processados
    */
-  async reconcileListingStatus(onlyNonActive: boolean = true): Promise<{ updated: number; errors: string[] }> {
-    const result = { updated: 0, errors: [] as string[] };
+  async reconcileListingStatus(onlyNonActive: boolean = true): Promise<{ 
+    updated: number; 
+    checked: number;
+    errors: string[];
+    details: Array<{ listing_id_ext: string; oldStatus: string; mlStatus: string; updated: boolean; httpStatus?: number }>;
+  }> {
+    const result = { 
+      updated: 0, 
+      checked: 0,
+      errors: [] as string[],
+      details: [] as Array<{ listing_id_ext: string; oldStatus: string; mlStatus: string; updated: boolean; httpStatus?: number }>,
+    };
 
     try {
       // 1. Carregar conexão e garantir token válido
@@ -1189,32 +1199,90 @@ export class MercadoLivreSyncService {
         try {
           // Buscar status real via GET /items/:id (batch)
           const itemIds = chunk.map(l => l.listing_id_ext);
-          const items = await this.fetchItemsDetails(itemIds);
+          
+          // Instrumentação: logar request
+          console.log(`[ML-SYNC-RECONCILE] Request GET /items/:id para ${itemIds.length} listings: [${itemIds.slice(0, 3).join(', ')}${itemIds.length > 3 ? '...' : ''}]`);
+          
+          let items: MercadoLivreItem[] = [];
+          let httpStatus: number | undefined;
+          
+          try {
+            items = await this.fetchItemsDetails(itemIds);
+            httpStatus = 200; // fetchItemsDetails usa batch, assumir 200 se não lançar erro
+          } catch (fetchError) {
+            if (axios.isAxiosError(fetchError)) {
+              httpStatus = fetchError.response?.status;
+              console.error(`[ML-SYNC-RECONCILE] Erro HTTP ${httpStatus} ao buscar items:`, fetchError.message);
+            }
+            throw fetchError;
+          }
 
           // Criar mapa de itemId -> status real
-          const statusMap = new Map<string, ListingStatus>();
+          const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string }>();
           for (const item of items) {
             const realStatus = this.mapMLStatusToListingStatus(item.status);
-            statusMap.set(item.id, realStatus);
+            statusMap.set(item.id, { status: realStatus, mlStatusRaw: item.status });
           }
 
           // Atualizar listings com status diferente
           for (const listing of chunk) {
-            const realStatus = statusMap.get(listing.listing_id_ext);
+            result.checked++;
+            const statusInfo = statusMap.get(listing.listing_id_ext);
             
-            if (realStatus && realStatus !== listing.status) {
+            if (!statusInfo) {
+              // Listing não encontrado no ML
+              result.details.push({
+                listing_id_ext: listing.listing_id_ext,
+                oldStatus: listing.status,
+                mlStatus: 'NOT_FOUND',
+                updated: false,
+                httpStatus,
+              });
+              console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext} não encontrado no ML (status HTTP: ${httpStatus})`);
+              continue;
+            }
+
+            const { status: realStatus, mlStatusRaw } = statusInfo;
+            
+            // Instrumentação: logar para cada listing
+            console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext}: DB=${listing.status}, ML=${mlStatusRaw} (mapped=${realStatus}), HTTP=${httpStatus || 'N/A'}`);
+            
+            if (realStatus !== listing.status) {
               try {
                 await prisma.listing.update({
                   where: { id: listing.id },
                   data: { status: realStatus },
                 });
                 result.updated++;
-                console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext} atualizado: ${listing.status} → ${realStatus}`);
+                result.details.push({
+                  listing_id_ext: listing.listing_id_ext,
+                  oldStatus: listing.status,
+                  mlStatus: mlStatusRaw,
+                  updated: true,
+                  httpStatus,
+                });
+                console.log(`[ML-SYNC-RECONCILE] ✅ Listing ${listing.listing_id_ext} atualizado: ${listing.status} → ${realStatus} (ML: ${mlStatusRaw})`);
               } catch (updateError) {
                 const errorMsg = `Erro ao atualizar listing ${listing.listing_id_ext}: ${updateError instanceof Error ? updateError.message : 'Erro desconhecido'}`;
-                console.error(`[ML-SYNC-RECONCILE] ${errorMsg}`);
+                console.error(`[ML-SYNC-RECONCILE] ❌ ${errorMsg}`);
                 result.errors.push(errorMsg);
+                result.details.push({
+                  listing_id_ext: listing.listing_id_ext,
+                  oldStatus: listing.status,
+                  mlStatus: mlStatusRaw,
+                  updated: false,
+                  httpStatus,
+                });
               }
+            } else {
+              // Status já está correto
+              result.details.push({
+                listing_id_ext: listing.listing_id_ext,
+                oldStatus: listing.status,
+                mlStatus: mlStatusRaw,
+                updated: false,
+                httpStatus,
+              });
             }
           }
         } catch (error) {
@@ -1224,7 +1292,8 @@ export class MercadoLivreSyncService {
         }
       }
 
-      console.log(`[ML-SYNC-RECONCILE] Reconciliação concluída: ${result.updated} listings atualizados, ${result.errors.length} erros`);
+      console.log(`[ML-SYNC-RECONCILE] Reconciliação concluída: ${result.checked} verificados, ${result.updated} atualizados, ${result.errors.length} erros`);
+      console.log(`[ML-SYNC-RECONCILE] Detalhes:`, JSON.stringify(result.details.slice(0, 10), null, 2)); // Amostra dos primeiros 10
       return result;
     } catch (error) {
       const errorMsg = `Erro fatal na reconciliação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
@@ -1471,10 +1540,11 @@ export class MercadoLivreSyncService {
       });
 
       // Filtrar listings apenas da conexão ativa
+      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits/orders)
       const listingsWhere: any = {
         tenant_id: tenantId,
         marketplace: Marketplace.mercadolivre,
-        status: ListingStatus.active,
+        status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
       };
 
       if (activeConnection) {
@@ -1488,7 +1558,7 @@ export class MercadoLivreSyncService {
         where: listingsWhere,
       });
 
-      console.log(`[ML-METRICS] Encontrados ${listings.length} anúncios ativos${activeConnection ? ` (conexão: ${activeConnection.id})` : ''}`);
+      console.log(`[ML-METRICS] Encontrados ${listings.length} anúncios ativos/pausados${activeConnection ? ` (conexão: ${activeConnection.id})` : ''}`);
 
       if (listings.length === 0) {
         result.success = true;

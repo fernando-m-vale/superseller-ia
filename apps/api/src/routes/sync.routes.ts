@@ -916,8 +916,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         const reconcileResult = await syncService.reconcileListingStatus(true); // Apenas listings não-active
         app.log.info({
           tenantId,
-          listingsUpdated: reconcileResult.updated,
+          reconcileChecked: reconcileResult.checked,
+          reconcileUpdated: reconcileResult.updated,
           errors: reconcileResult.errors.length,
+          detailsSample: reconcileResult.details.slice(0, 5), // Amostra dos primeiros 5
         }, 'Reconciliação de status concluída');
 
         // 3. Reconstruir métricas diárias usando orders + order_items do banco
@@ -967,7 +969,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           requestId,
           userId,
           tenantId,
-          listingsStatusReconciled: reconcileResult.updated,
+          reconcileChecked: reconcileResult.checked,
+          reconcileUpdated: reconcileResult.updated,
           ordersProcessed: ordersResult.ordersProcessed,
           ordersCreated: ordersResult.ordersCreated,
           metricsRowsUpserted: metricsResult.rowsUpserted,
@@ -990,8 +993,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           message: ordersSuccess ? 'Refresh concluído com sucesso' : 'Refresh concluído com avisos',
           data: {
             reconcile: {
-              listingsUpdated: reconcileResult.updated,
+              checked: reconcileResult.checked,
+              updated: reconcileResult.updated,
               errors: reconcileResult.errors.length > 0 ? reconcileResult.errors : undefined,
+              details: reconcileResult.details.slice(0, 20), // Amostra dos primeiros 20 para não sobrecarregar response
             },
             orders: {
               fetched: ordersResult.fetched ?? 0,
