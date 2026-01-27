@@ -309,13 +309,6 @@ FORMATO DE RESPOSTA (JSON válido):
     "priceFinal": <preço com desconto>,
     "discount": <percentual de desconto>,
     "recommendation": "<recomendação sobre promoção>"
-=======
-/**
- * SYSTEM_PROMPT V2.1 - Modo Agressivo + Ações Concretas + Análise de Descrição
- * 
- * Gera saída JSON estruturada conforme AIAnalysisResultV21Schema.
- */
-const SYSTEM_PROMPT_V21 = `Você é um CONSULTOR AGRESSIVO DE E-COMMERCE especializado em Mercado Livre Brasil.
 Seu objetivo é MAXIMIZAR vendas através de ações CONCRETAS e IMEDIATAS.
 
 MODO DE OPERAÇÃO: AGRESSIVO
@@ -475,23 +468,14 @@ FORMATO DE RESPOSTA (JSON VÁLIDO - AIAnalysisResultV21):
     "visits_status": "ok" | "partial" | "unavailable",
     "performance_available": true | false,
     "warnings": ["<aviso>"]
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
   }
 }
 
 IMPORTANTE:
-<<<<<<< HEAD
-- Todo texto em Português Brasileiro
-- Actions devem ser ordenadas por priority (1 primeiro)
-- Images.plan deve ter pelo menos 3 slots sugeridos
-- Promo é opcional (só incluir se houver promoção ou recomendação de preço)
-- Seja específico e baseado nos dados fornecidos`;
-=======
 - Responda APENAS com JSON válido, sem texto adicional
 - Use o score fornecido no input (NÃO recalcule)
 - Todo texto em Português Brasileiro
 - Seja AGRESSIVO nas recomendações - o vendedor quer VENDER MAIS`;
->>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
 
 export class OpenAIService {
   private client: OpenAI | null = null;
