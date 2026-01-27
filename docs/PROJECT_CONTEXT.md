@@ -39,6 +39,13 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - **Erro 400:** não interrompe refresh de metrics/visits; apenas 401/403 interrompem com `reauth_required`
 - **Fallback:** quando filtro retorna 0, busca últimos pedidos sem filtro e filtra localmente
 
+### Decisões arquiteturais (access control)
+- **Separação de responsabilidades:** `status` (active/paused) vs `access_status` (accessible/unauthorized/blocked_by_policy)
+- **Não ingerir dados quando `access_status != accessible`:** Visits/metrics não processam listings bloqueados
+- **Reconciliação periódica:** Verifica status real via batch API autenticada (`/items?ids=...`)
+- **Não alterar `status` quando bloqueado:** Se PolicyAgent bloqueia, `status` permanece desconhecido (não alterar)
+- **Limpeza automática:** Quando listing volta a ser acessível, limpa `access_blocked_*` e marca `access_status='accessible'`
+
 ## 🧭 Roadmap (alto nível)
 - ONDA 1/2: Score V2 + UX (concluído)
 - ONDA 3: IA como amplificador (em progresso)
@@ -65,15 +72,30 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - `orders` + `order_items`: OK
 - `listing_metrics_daily.orders/gmv`: OK
 - `listing_metrics_daily.visits`: ✅ **RESOLVIDO** — valores > 0 no DB e UI
+- **Access Control:** Listings bloqueados por PolicyAgent marcados corretamente (`access_status='blocked_by_policy'`)
+- **Reconciliação:** Status de listings (`active`/`paused`) sincronizado com ML via batch API autenticada
 
 ## 🔥 Prioridade Zero (base do produto)
-**ML Data Audit (confiabilidade dos dados) — visits corrigido e validado** ✅
+**ML Data Audit (confiabilidade dos dados) — CONCLUÍDO** ✅
 
-Status: Visits funcionando. Próximo foco: estabilizar orders quando connection active muda de sellerId.
+Status: 
+- ✅ **Visits funcionando** — dados confiáveis, 0 NULL quando fetch ok
+- ✅ **Sistema resiliente a bloqueios da API ML** — PolicyAgent tratado corretamente
+- ✅ **Reconciliação de status** — paused vs active sincronizado
+
+Próximo foco: estabilizar orders quando connection active muda de sellerId + estrutura multi-contas.
 
 ## 📌 Decisões importantes já tomadas
 - Score e ações determinísticas (regras) vêm antes de LLM.
 - Não automatizar liga/desliga do ambiente agora; criar runbook manual para reduzir custo.
+- **Não ingerir dados quando `access_status != accessible`:** Garante que apenas dados acessíveis são processados
+- **Backfill manual por enquanto:** Automação de backfill de visits/metrics será implementada futuramente
+- **Multi-conexões:** Sistema usa sempre a conexão `active` mais recente; suporte a múltiplas conexões simultâneas será implementado no futuro
+
+## 🚧 Riscos conhecidos (backlog)
+- **Multi-conexões:** Sistema não suporta múltiplas conexões ativas simultaneamente (usa sempre a mais recente)
+- **Inserção manual de anúncios:** Não implementado; sistema depende de sync do Mercado Livre
+- **Backfill automático:** Por enquanto, backfill de visits/metrics é manual; automação futura
 
 ## 🧭 Próxima entrega crítica
 ✅ **VISITS reais no banco (valores > 0) e exibidos no overview** — CONCLUÍDO

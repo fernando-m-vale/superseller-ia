@@ -69,11 +69,65 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - `zero_days = 29` (dias com fetch ok mas 0 visitas)
 - UI Dashboard Overview exibe gráfico de "Visitas" com valores reais
 - Tooltip mostra valores corretos (ex: "Visitas: 40")
+- **0 NULL visits** quando fetch é bem-sucedido
+- **`rowsUpserted` consistentes** com dados reais no DB
 
 **Observabilidade**
 - `visits_status`: 'ok' | 'partial' | 'unavailable'
 - `failures_summary`: contagem por `errorType` (RATE_LIMIT, FORBIDDEN, etc.)
 - Instrumentação: `visitsMap` sum, `intersectionCount`, read-back do DB, DB fingerprint no startup
+
+---
+
+### D) Access Control & PolicyAgent Handling
+**Status:** ✅ **RESOLVIDO**
+
+**Sintoma original**
+- Alguns listings retornavam `403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES` mesmo com token válido
+- UI mostrava "Dados indisponíveis via API" de forma genérica
+- Listings "órfãos" (de conexões antigas/revogadas) não eram identificados
+
+**Causa raiz**
+- Listings podem estar vinculados a conexões antigas/revogadas
+- PolicyAgent do Mercado Livre bloqueia acesso a anúncios de outros sellers ou conexões antigas
+- Sistema não distinguia entre "erro genérico da API" e "bloqueio específico por PolicyAgent"
+- Sync processava listings bloqueados, gerando `NULL` em visits/metrics sem motivo claro
+
+**Fix implementado**
+1. **Introdução de `access_status`:**
+   - `accessible`: Listing acessível via API
+   - `unauthorized`: Erro de autenticação/autorização (401/403 não-PolicyAgent)
+   - `blocked_by_policy`: Bloqueado por PolicyAgent (403 com `PA_UNAUTHORIZED_RESULT_FROM_POLICIES`)
+2. **Campos de diagnóstico:**
+   - `access_blocked_code`: Código do erro (ex: `PA_UNAUTHORIZED_RESULT_FROM_POLICIES`)
+   - `access_blocked_reason`: Mensagem do erro
+   - `access_blocked_at`: Timestamp do bloqueio
+3. **Reconciliação de status:**
+   - Batch API `/items?ids=...` autenticada para verificar status real
+   - Mapeia resultados por índice (ordem dos IDs enviados)
+   - Atualiza `status` (active/paused) quando divergente do ML
+   - Marca `access_status` quando bloqueado por PolicyAgent
+   - **Não altera `status` quando bloqueado** (status real fica desconhecido)
+4. **Filtros de sync:**
+   - Processa apenas listings com `access_status='accessible'` E `status IN ('active', 'paused')`
+   - Exclui explicitamente `blocked_by_policy` e `unauthorized`
+5. **UX/UI:**
+   - Mensagens específicas: "Anúncio bloqueado por PolicyAgent do Mercado Livre" (com código)
+   - Não mostra "Dados indisponíveis via API" genérico para bloqueios específicos
+
+**Evidência de resolução**
+- Listings bloqueados marcados corretamente: `access_status='blocked_by_policy'`
+- `reconcile.blockedByPolicy >= 1` para listings com 403 PolicyAgent
+- `reconcile.details` inclui `actionTaken='marked_blocked_by_policy'`
+- UI exibe mensagem específica para listings bloqueados
+- Sync não processa listings bloqueados (visits/metrics não tentam buscar dados inacessíveis)
+- **Reconciliação funciona:** Listings `paused` no DB mas `active` no ML são atualizados
+
+**Observabilidade**
+- `/refresh` retorna `reconcile.details` com:
+  - `listing_id_ext`, `oldStatus`, `mlStatus`, `httpStatus`, `errorCode`, `blockedBy`, `message`, `actionTaken`
+- Logs estruturados (limitados aos primeiros 10 listings)
+- Estatísticas: `candidates`, `checked`, `updated`, `blockedByPolicy`, `unauthorized`, `skipped`, `errors`
 
 ---
 
