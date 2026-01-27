@@ -10,6 +10,12 @@ describe('AI Fingerprint Utility', () => {
     has_video: true,
     status: 'active',
     stock: 10,
+    // V2.1 fields
+    price_final: 89.99,
+    has_promotion: true,
+    discount_percent: 10,
+    description: 'This is a test product description',
+    has_clips: false,
     updated_at: new Date('2024-01-01T00:00:00Z'), // Should not affect fingerprint
   };
 
@@ -126,6 +132,12 @@ describe('AI Fingerprint Utility', () => {
           category_id: input.listing.category_id,
           price: input.listing.price,
           title: input.listing.title,
+          // V2.1 fields
+          price_final: input.listing.price_final,
+          has_promotion: input.listing.has_promotion,
+          discount_percent: input.listing.discount_percent,
+          description_length: input.listing.description_length,
+          has_clips: input.listing.has_clips,
         },
         metrics: {
           visitsCoverage: input.metrics.visitsCoverage,
@@ -173,6 +185,12 @@ describe('AI Fingerprint Utility', () => {
           category: null,
           pictures_count: null,
           has_video: null,
+          // V2.1 fields with null values
+          price_final: null,
+          has_promotion: null,
+          discount_percent: null,
+          description: null,
+          has_clips: null,
         },
         {
           ...mockMetrics,
@@ -185,6 +203,12 @@ describe('AI Fingerprint Utility', () => {
       expect(input.listing.pictures_count).toBe(0); // Defaults to 0
       expect(input.listing.has_video).toBeNull();
       expect(input.metrics.revenue).toBeNull();
+      // V2.1 fields
+      expect(input.listing.price_final).toBe(99.99); // Fallback to price
+      expect(input.listing.has_promotion).toBe(false); // Defaults to false
+      expect(input.listing.discount_percent).toBeNull();
+      expect(input.listing.description_length).toBe(0); // Empty description
+      expect(input.listing.has_clips).toBeNull();
     });
   });
 });

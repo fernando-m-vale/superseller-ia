@@ -28,6 +28,12 @@ describe('AI Analyze Cache Behavior', () => {
     has_video: true,
     status: 'active',
     stock: 10,
+    // V2.1 fields
+    price_final: 89.99,
+    has_promotion: true,
+    discount_percent: 10,
+    description: 'This is a test product description',
+    has_clips: false,
     updated_at: new Date('2024-01-01T00:00:00Z'),
   };
 
