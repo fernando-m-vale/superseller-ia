@@ -18,6 +18,7 @@ import { PrismaClient, Prisma, ListingStatus } from '@prisma/client';
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
 import { getMediaVerdict } from '../utils/media-verdict';
+import { convertV21ToV1, type AIAnalysisResultV21, type V1CompatibleResult } from '../types/ai-analysis-v21';
 
 const prisma = new PrismaClient();
 
@@ -257,6 +258,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             model: string;
           };
           savedRecommendations: number;
+          // V2.1 fields (opcional para compatibilidade)
+          analysisV21?: AIAnalysisResultV21;
+          v1Compat?: V1CompatibleResult;
         };
 
         let cachedResult: CachedAnalysisResult | null = null;
@@ -282,6 +286,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 listingId,
                 fingerprint: fingerprint.substring(0, 16) + '...',
                 cacheHit: true,
+                hasV21: !!(cachedResult.analysisV21),
               },
               'AI analysis cache hit'
             );
@@ -290,15 +295,186 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         // Step 5: If cache miss or forceRefresh, call OpenAI
         if (!cachedResult) {
-          const result = await service.analyzeAndSaveRecommendations(
-            listingId,
-            userId,
-            requestId,
-            PERIOD_DAYS
-          );
+          // Tentar V2.1 primeiro, com fallback para V1
+          let analysisV21: AIAnalysisResultV21 | null = null;
+          let v1Compat: V1CompatibleResult | null = null;
+          let result: {
+            analysis: any;
+            savedRecommendations: number;
+            dataQuality: any;
+            score: any;
+          } | null = null;
 
-          // Step 6: Save to cache
           try {
+            // Construir input canônico
+            const input = await service.buildAIAnalyzeInput(listingId, userId, requestId, PERIOD_DAYS);
+            
+            // Calcular score
+            const scoreService = new IAScoreService(tenantId);
+            const scoreResult = await scoreService.calculateScore(listingId, PERIOD_DAYS);
+
+            // Tentar V2.1
+            request.log.info({ listingId, requestId }, 'Attempting AI analysis V2.1');
+            analysisV21 = await service.analyzeListingV21(input, scoreResult);
+            v1Compat = convertV21ToV1(analysisV21);
+            
+            request.log.info({ listingId, requestId, actionsCount: analysisV21.actions.length }, 'AI analysis V2.1 successful');
+
+            // Usar V1 compatível para salvar recomendações (reutilizar lógica existente)
+            // Criar objeto compatível com formato V1 para salvar recomendações
+            const v1AnalysisResult = {
+              score: scoreResult.score.final,
+              critique: v1Compat.critique,
+              growthHacks: v1Compat.growthHacks,
+              seoSuggestions: v1Compat.seoSuggestions,
+              analyzedAt: new Date().toISOString(),
+              model: 'gpt-4o',
+            };
+
+            // Salvar recomendações usando lógica V1 (reutilizar código existente)
+            let savedCount = 0;
+            const listingForRecs = await prisma.listing.findFirst({
+              where: {
+                id: listingId,
+                tenant_id: tenantId,
+              },
+            });
+
+            if (listingForRecs) {
+              for (const hack of v1Compat.growthHacks) {
+                const priorityMap: Record<string, number> = {
+                  high: 90,
+                  medium: 70,
+                  low: 50,
+                };
+
+                try {
+                  await prisma.recommendation.upsert({
+                    where: {
+                      tenant_id_listing_id_type_rule_trigger: {
+                        tenant_id: tenantId,
+                        listing_id: listingId,
+                        type: RecommendationType.content,
+                        rule_trigger: `ai_growth_hack:${hack.title.substring(0, 50)}`,
+                      },
+                    },
+                    update: {
+                      status: RecommendationStatus.pending,
+                      priority: priorityMap[hack.priority] || 70,
+                      title: hack.title,
+                      description: hack.description,
+                      impact_estimate: hack.estimatedImpact,
+                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1' },
+                      updated_at: new Date(),
+                    },
+                    create: {
+                      tenant_id: tenantId,
+                      listing_id: listingId,
+                      type: RecommendationType.content,
+                      status: RecommendationStatus.pending,
+                      priority: priorityMap[hack.priority] || 70,
+                      title: hack.title,
+                      description: hack.description,
+                      impact_estimate: hack.estimatedImpact,
+                      rule_trigger: `ai_growth_hack:${hack.title.substring(0, 50)}`,
+                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1' },
+                    },
+                  });
+                  savedCount++;
+                } catch (error) {
+                  request.log.warn({ err: error, listingId }, 'Error saving growth hack recommendation');
+                }
+              }
+
+              // Salvar SEO suggestion
+              if (v1Compat.seoSuggestions?.suggestedTitle) {
+                try {
+                  await prisma.recommendation.upsert({
+                    where: {
+                      tenant_id_listing_id_type_rule_trigger: {
+                        tenant_id: tenantId,
+                        listing_id: listingId,
+                        type: RecommendationType.seo,
+                        rule_trigger: 'ai_seo_title_suggestion',
+                      },
+                    },
+                    update: {
+                      status: RecommendationStatus.pending,
+                      priority: 80,
+                      title: 'Otimizar título para SEO',
+                      description: v1Compat.seoSuggestions.titleRationale,
+                      impact_estimate: 'Melhoria no CTR e visibilidade',
+                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1', suggestedTitle: v1Compat.seoSuggestions.suggestedTitle },
+                      updated_at: new Date(),
+                    },
+                    create: {
+                      tenant_id: tenantId,
+                      listing_id: listingId,
+                      type: RecommendationType.seo,
+                      status: RecommendationStatus.pending,
+                      priority: 80,
+                      title: 'Otimizar título para SEO',
+                      description: v1Compat.seoSuggestions.titleRationale,
+                      impact_estimate: 'Melhoria no CTR e visibilidade',
+                      rule_trigger: 'ai_seo_title_suggestion',
+                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1', suggestedTitle: v1Compat.seoSuggestions.suggestedTitle },
+                    },
+                  });
+                  savedCount++;
+                } catch (error) {
+                  request.log.warn({ err: error, listingId }, 'Error saving SEO recommendation');
+                }
+              }
+            }
+
+            // Criar objeto result compatível
+            result = {
+              analysis: v1AnalysisResult,
+              savedRecommendations: savedCount,
+              dataQuality: input.dataQuality,
+              score: scoreResult,
+            };
+          } catch (v21Error) {
+            // Fallback para V1 se V2.1 falhar
+            request.log.warn(
+              { 
+                listingId, 
+                requestId, 
+                err: v21Error,
+                errorMessage: v21Error instanceof Error ? v21Error.message : 'Unknown error',
+              }, 
+              'AI analysis V2.1 failed, falling back to V1'
+            );
+
+            // Executar fluxo V1 original
+            result = await service.analyzeAndSaveRecommendations(
+              listingId,
+              userId,
+              requestId,
+              PERIOD_DAYS
+            );
+          }
+
+          // Step 6: Save to cache (incluindo V2.1 se disponível)
+          try {
+            const cachePayload: any = {
+              analysis: {
+                score: result.analysis.score,
+                critique: result.analysis.critique,
+                growthHacks: result.analysis.growthHacks,
+                seoSuggestions: result.analysis.seoSuggestions,
+                analyzedAt: result.analysis.analyzedAt,
+                model: result.analysis.model,
+              },
+              savedRecommendations: result.savedRecommendations,
+            };
+
+            // Incluir V2.1 se disponível
+            if (analysisV21 && v1Compat) {
+              cachePayload.analysisV21 = analysisV21;
+              cachePayload.v1Compat = v1Compat;
+            }
+
             await prisma.listingAIAnalysis.upsert({
               where: {
                 tenant_id_listing_id_period_days_fingerprint: {
@@ -311,17 +487,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               update: {
                 model: result.analysis.model || 'gpt-4o',
                 prompt_version: PROMPT_VERSION,
-                result_json: {
-                  analysis: {
-                    score: result.analysis.score,
-                    critique: result.analysis.critique,
-                    growthHacks: result.analysis.growthHacks,
-                    seoSuggestions: result.analysis.seoSuggestions,
-                    analyzedAt: result.analysis.analyzedAt,
-                    model: result.analysis.model,
-                  },
-                  savedRecommendations: result.savedRecommendations,
-                } as unknown as Prisma.InputJsonValue,
+                result_json: cachePayload as unknown as Prisma.InputJsonValue,
                 updated_at: new Date(),
               },
               create: {
@@ -331,17 +497,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 fingerprint,
                 model: result.analysis.model || 'gpt-4o',
                 prompt_version: PROMPT_VERSION,
-                result_json: {
-                  analysis: {
-                    score: result.analysis.score,
-                    critique: result.analysis.critique,
-                    growthHacks: result.analysis.growthHacks,
-                    seoSuggestions: result.analysis.seoSuggestions,
-                    analyzedAt: result.analysis.analyzedAt,
-                    model: result.analysis.model,
-                  },
-                  savedRecommendations: result.savedRecommendations,
-                } as unknown as Prisma.InputJsonValue,
+                result_json: cachePayload as unknown as Prisma.InputJsonValue,
               },
             });
           } catch (cacheError) {
@@ -420,28 +576,36 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             'AI analysis complete (cache miss)'
           );
 
+          // Preparar resposta com V1 + V2.1 (se disponível)
+          const responseData: any = {
+            listingId,
+            score: result.score.score.final,
+            scoreBreakdown: result.score.score.breakdown,
+            potentialGain: result.score.score.potential_gain,
+            critique: result.analysis.critique,
+            growthHacks: result.analysis.growthHacks,
+            seoSuggestions: result.analysis.seoSuggestions,
+            savedRecommendations: result.savedRecommendations,
+            analyzedAt: result.analysis.analyzedAt,
+            model: result.analysis.model,
+            metrics30d: result.score.metrics_30d,
+            dataQuality: result.dataQuality,
+            cacheHit: false,
+            // IA Score V2: Action Plan and Score Explanation
+            actionPlan,
+            scoreExplanation,
+            // MediaVerdict - Fonte única de verdade para mídia
+            mediaVerdict,
+          };
+
+          // Incluir V2.1 se disponível
+          if (analysisV21) {
+            responseData.analysisV21 = analysisV21;
+          }
+
           return reply.status(200).send({
             message: 'Análise concluída com sucesso',
-            data: {
-              listingId,
-              score: result.score.score.final,
-              scoreBreakdown: result.score.score.breakdown,
-              potentialGain: result.score.score.potential_gain,
-              critique: result.analysis.critique,
-              growthHacks: result.analysis.growthHacks,
-              seoSuggestions: result.analysis.seoSuggestions,
-              savedRecommendations: result.savedRecommendations,
-              analyzedAt: result.analysis.analyzedAt,
-              model: result.analysis.model,
-              metrics30d: result.score.metrics_30d,
-              dataQuality: result.dataQuality,
-              cacheHit: false,
-              // IA Score V2: Action Plan and Score Explanation
-              actionPlan,
-              scoreExplanation,
-              // MediaVerdict - Fonte única de verdade para mídia
-              mediaVerdict,
-            },
+            data: responseData,
           });
         }
 

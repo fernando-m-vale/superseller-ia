@@ -34,6 +34,7 @@ import { ScoreBreakdown } from '@/components/ai/ScoreBreakdown'
 import { ScoreExplanation } from '@/components/ai/ScoreExplanation'
 import { ActionPlan } from '@/components/ai/ActionPlan'
 import { PerformanceUnavailableModal } from '@/components/ai/PerformanceUnavailableModal'
+import { AIAnalysisV21Panel } from '@/components/ai/AIAnalysisV21Panel'
 
 // Componente da aba de Análise IA
 function AIAnalysisTab({
@@ -758,11 +759,17 @@ export function ListingsTable() {
           </SheetHeader>
 
           <Tabs value="ai" className="mt-6">
-            <TabsList className="grid w-full grid-cols-1">
+            <TabsList className={`grid w-full ${aiAnalysis?.analysisV21 ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="ai">
                 <Sparkles className="h-4 w-4 mr-2" />
                 Inteligência Artificial
               </TabsTrigger>
+              {aiAnalysis?.analysisV21 && (
+                <TabsTrigger value="ai-v21">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Análise V2.1 (Agressiva)
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="ai" className="mt-4">
@@ -809,6 +816,11 @@ export function ListingsTable() {
                 selectedListing={selectedListing}
               />
             </TabsContent>
+            {aiAnalysis?.analysisV21 && (
+              <TabsContent value="ai-v21" className="mt-4">
+                <AIAnalysisV21Panel analysisV21={aiAnalysis.analysisV21} />
+              </TabsContent>
+            )}
           </Tabs>
         </SheetContent>
       </Sheet>

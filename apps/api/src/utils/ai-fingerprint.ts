@@ -12,7 +12,8 @@
 import { createHash } from 'crypto';
 
 // Current prompt version - increment when prompt changes significantly
-export const PROMPT_VERSION = 'ai-v1.2';
+// V2.1 uses structured JSON format (verdict/actions/title/description/images/promo)
+export const PROMPT_VERSION = 'ai-v2.1';
 
 /**
  * Data structure for fingerprint generation

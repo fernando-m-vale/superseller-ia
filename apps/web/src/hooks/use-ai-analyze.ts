@@ -73,6 +73,44 @@ interface AIAnalysisApiResponse {
     message: string
     shortMessage: string
   }
+  // V2.1 - Análise estruturada (opcional)
+  analysisV21?: {
+    verdict: {
+      headline: string
+      summary?: string
+    }
+    actions: Array<{
+      priority: number
+      instruction: string
+      before?: string
+      after?: string
+      expectedImpact?: string
+    }>
+    title: {
+      suggested: string
+      keywords?: string[]
+      rationale?: string
+    }
+    description: {
+      bullets: string[]
+      fullText?: string
+    }
+    images: {
+      plan: Array<{
+        slot: number
+        description: string
+        purpose?: string
+        goal?: string
+        whatToShow?: string
+      }>
+    }
+    promo?: {
+      priceBase?: number
+      priceFinal?: number
+      discount?: number
+      recommendation?: string
+    }
+  }
 }
 
 // Interface adaptada para o frontend
@@ -142,6 +180,42 @@ export interface AIAnalysisResponse {
     message: string
     shortMessage: string
   }
+  // V2.1 - Análise estruturada (opcional)
+  analysisV21?: {
+    verdict: {
+      headline: string
+      summary?: string
+    }
+    actions: Array<{
+      priority: number
+      instruction: string
+      before?: string
+      after?: string
+      expectedImpact?: string
+    }>
+    title: {
+      suggested: string
+      keywords?: string[]
+      rationale?: string
+    }
+    description: {
+      bullets: string[]
+      fullText?: string
+    }
+    images: {
+      plan: Array<{
+        slot: number
+        description: string
+        purpose?: string
+      }>
+    }
+    promo?: {
+      priceBase?: number
+      priceFinal?: number
+      discount?: number
+      recommendation?: string
+    }
+  }
 }
 
 /**
@@ -176,6 +250,9 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     scoreExplanation: apiResponse.scoreExplanation,
     // MediaVerdict - Fonte única de verdade para mídia
     mediaVerdict: apiResponse.mediaVerdict,
+    // V2.1 - Análise estruturada (opcional, não processada pelo adaptador)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    analysisV21: 'analysisV21' in apiResponse ? (apiResponse as any).analysisV21 : undefined,
   }
 }
 
@@ -291,6 +368,11 @@ export function useAIAnalyze(listingId: string | null) {
       
       // Adaptar resposta da API para o formato esperado pelo frontend
       const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
+      
+      // Incluir analysisV21 se disponível (não é processado pelo adaptador)
+      if (result.data?.analysisV21) {
+        adaptedData.analysisV21 = result.data.analysisV21
+      }
       
       setState({
         data: adaptedData,
