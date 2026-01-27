@@ -518,12 +518,13 @@ export class MercadoLivreVisitsService {
       }
 
       // 3. Buscar listings do tenant APENAS da conexão ativa
-      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits)
+      // IMPORTANTE: Incluir active E paused, mas EXCLUIR blocked_by_policy e unauthorized
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: tenantId,
           marketplace: Marketplace.mercadolivre,
           status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
+          access_status: ListingAccessStatus.accessible, // Apenas listings acessíveis
           marketplace_connection_id: activeConnection.id, // Filtrar por conexão ativa
         },
         select: {
@@ -532,7 +533,7 @@ export class MercadoLivreVisitsService {
         },
       });
 
-      console.log(`[ML-VISITS] Encontrados ${listings.length} listings ativos/pausados`);
+      console.log(`[ML-VISITS] Encontrados ${listings.length} listings ativos/pausados acessíveis`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -892,17 +893,18 @@ export class MercadoLivreVisitsService {
       }
 
       // 3. Buscar listings ativos/pausados APENAS da conexão ativa
-      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits)
+      // IMPORTANTE: Incluir active E paused, mas EXCLUIR blocked_by_policy e unauthorized
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
           status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
+          access_status: ListingAccessStatus.accessible, // Apenas listings acessíveis
           marketplace_connection_id: activeConnection.id,
         },
       });
 
-      console.log(`[ML-VISITS] Encontrados ${listings.length} anúncios ativos/pausados (conexão: ${activeConnection.id})`);
+      console.log(`[ML-VISITS] Encontrados ${listings.length} anúncios ativos/pausados acessíveis (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;
@@ -1128,17 +1130,18 @@ export class MercadoLivreVisitsService {
       }
 
       // 3. Buscar listings ativos/pausados APENAS da conexão ativa
-      // IMPORTANTE: Incluir active E paused para processar ambos (paused pode ter visits)
+      // IMPORTANTE: Incluir active E paused, mas EXCLUIR blocked_by_policy e unauthorized
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: this.tenantId,
           marketplace: Marketplace.mercadolivre,
           status: { in: [ListingStatus.active, ListingStatus.paused] }, // Processar active e paused
+          access_status: ListingAccessStatus.accessible, // Apenas listings acessíveis
           marketplace_connection_id: activeConnection.id,
         },
       });
 
-      console.log(`[ML-VISITS] [${requestId}] Encontrados ${listings.length} anúncios ativos/pausados (conexão: ${activeConnection.id})`);
+      console.log(`[ML-VISITS] [${requestId}] Encontrados ${listings.length} anúncios ativos/pausados acessíveis (conexão: ${activeConnection.id})`);
 
       if (listings.length === 0) {
         result.success = true;

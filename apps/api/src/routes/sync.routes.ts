@@ -916,8 +916,12 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         const reconcileResult = await syncService.reconcileListingStatus(true); // Apenas listings não-active
         app.log.info({
           tenantId,
+          reconcileCandidates: reconcileResult.candidates,
           reconcileChecked: reconcileResult.checked,
           reconcileUpdated: reconcileResult.updated,
+          reconcileBlockedByPolicy: reconcileResult.blockedByPolicy,
+          reconcileUnauthorized: reconcileResult.unauthorized,
+          reconcileSkipped: reconcileResult.skipped,
           errors: reconcileResult.errors.length,
           detailsSample: reconcileResult.details.slice(0, 5), // Amostra dos primeiros 5
         }, 'Reconciliação de status concluída');
@@ -969,8 +973,11 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           requestId,
           userId,
           tenantId,
+          reconcileCandidates: reconcileResult.candidates,
           reconcileChecked: reconcileResult.checked,
           reconcileUpdated: reconcileResult.updated,
+          reconcileBlockedByPolicy: reconcileResult.blockedByPolicy,
+          reconcileUnauthorized: reconcileResult.unauthorized,
           ordersProcessed: ordersResult.ordersProcessed,
           ordersCreated: ordersResult.ordersCreated,
           metricsRowsUpserted: metricsResult.rowsUpserted,
@@ -993,8 +1000,12 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           message: ordersSuccess ? 'Refresh concluído com sucesso' : 'Refresh concluído com avisos',
           data: {
             reconcile: {
+              candidates: reconcileResult.candidates,
               checked: reconcileResult.checked,
-              updated: reconcileResult.updated,
+              listingsUpdated: reconcileResult.updated,
+              blockedByPolicy: reconcileResult.blockedByPolicy,
+              unauthorized: reconcileResult.unauthorized,
+              skipped: reconcileResult.skipped,
               errors: reconcileResult.errors.length > 0 ? reconcileResult.errors : undefined,
               details: reconcileResult.details.slice(0, 20), // Amostra dos primeiros 20 para não sobrecarregar response
             },
