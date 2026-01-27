@@ -14,7 +14,7 @@ import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService
 import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError } from '../utils/sanitize-error';
 import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
-import { PrismaClient, Prisma, ListingStatus } from '@prisma/client';
+import { PrismaClient, Prisma, ListingStatus, RecommendationType, RecommendationStatus } from '@prisma/client';
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
 import { getMediaVerdict } from '../utils/media-verdict';
@@ -282,7 +282,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
 
           if (cached && cached.result_json) {
-            cachedResult = cached.result_json as CachedAnalysisResult;
+            cachedResult = cached.result_json as unknown as CachedAnalysisResult;
             
             request.log.info(
               {
@@ -312,8 +312,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           } | null = null;
 
           try {
-            // Construir input canônico
-            const input = await service.buildAIAnalyzeInput(listingId, userId, requestId, PERIOD_DAYS);
+            // Construir input V2.1 canônico
+            const inputV21 = await service.buildAIAnalyzeInputV21(listingId, userId, requestId, PERIOD_DAYS);
             
             // Calcular score
             const scoreService = new IAScoreService(tenantId);
@@ -321,7 +321,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
             // Tentar V2.1
             request.log.info({ listingId, requestId }, 'Attempting AI analysis V2.1');
-            analysisV21 = await service.analyzeListingV21(input, scoreResult);
+            analysisV21 = await service.analyzeListingV21(inputV21, scoreResult);
             v1Compat = convertV21ToV1(analysisV21);
             
             request.log.info({ listingId, requestId, actionsCount: analysisV21.actions.length }, 'AI analysis V2.1 successful');
@@ -437,7 +437,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             result = {
               analysis: v1AnalysisResult,
               savedRecommendations: savedCount,
-              dataQuality: input.dataQuality,
+              dataQuality: inputV21.dataQuality,
               score: scoreResult,
             };
           } catch (v21Error) {

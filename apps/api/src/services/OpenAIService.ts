@@ -11,13 +11,15 @@ import OpenAI from 'openai';
 import { PrismaClient, Listing, RecommendationType, RecommendationStatus } from '@prisma/client';
 import { AIAnalyzeInputV1, AIAnalyzeInputV21 } from '../types/ai-analyze-input';
 import { 
-  AIAnalysisResultV21, 
+  type AIAnalysisResultV21, 
+  AIAnalysisResultV21Schema,
   parseAIResponseV21, 
-  createFallbackAnalysisV21 
+  createFallbackAnalysisV21,
+  type V1CompatibleResult,
+  convertV21ToV1
 } from '../types/ai-analysis-v21';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
 import { getMediaVerdict } from '../utils/media-verdict';
-import { AIAnalysisResultV21, AIAnalysisResultV21Schema, V1CompatibleResult, convertV21ToV1 } from '../types/ai-analysis-v21';
 
 const prisma = new PrismaClient();
 
