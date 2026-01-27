@@ -3,11 +3,18 @@
  * 
  * Provides AI-powered analysis for e-commerce listings using GPT-4o.
  * Generates actionable "Growth Hacks" and SEO suggestions for Mercado Livre sellers.
+ * 
+ * V2.1: Modo agressivo + ações concretas + análise de descrição + saída JSON estruturada.
  */
 
 import OpenAI from 'openai';
 import { PrismaClient, Listing, RecommendationType, RecommendationStatus } from '@prisma/client';
-import { AIAnalyzeInputV1 } from '../types/ai-analyze-input';
+import { AIAnalyzeInputV1, AIAnalyzeInputV21 } from '../types/ai-analyze-input';
+import { 
+  AIAnalysisResultV21, 
+  parseAIResponseV21, 
+  createFallbackAnalysisV21 
+} from '../types/ai-analysis-v21';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
 import { getMediaVerdict } from '../utils/media-verdict';
 import { AIAnalysisResultV21, AIAnalysisResultV21Schema, V1CompatibleResult, convertV21ToV1 } from '../types/ai-analysis-v21';
@@ -238,6 +245,7 @@ IMPORTANTE:
 - Não invente métricas ou informações não presentes no JSON
 - Considere o contexto do Mercado Livre Brasil (frete, parcelamento, confiança)`;
 
+<<<<<<< HEAD
 const SYSTEM_PROMPT_V21 = `Você é um ESPECIALISTA EM SEO, CONVERSÃO E PERFORMANCE no Mercado Livre Brasil, com profundo conhecimento do algoritmo, comportamento do consumidor brasileiro e melhores práticas de e-commerce.
 
 IMPORTANTE: O SCORE JÁ FOI CALCULADO baseado em dados reais. Você NÃO deve calcular um novo score.
@@ -297,15 +305,189 @@ FORMATO DE RESPOSTA (JSON válido):
     "priceFinal": <preço com desconto>,
     "discount": <percentual de desconto>,
     "recommendation": "<recomendação sobre promoção>"
+=======
+/**
+ * SYSTEM_PROMPT V2.1 - Modo Agressivo + Ações Concretas + Análise de Descrição
+ * 
+ * Gera saída JSON estruturada conforme AIAnalysisResultV21Schema.
+ */
+const SYSTEM_PROMPT_V21 = `Você é um CONSULTOR AGRESSIVO DE E-COMMERCE especializado em Mercado Livre Brasil.
+Seu objetivo é MAXIMIZAR vendas através de ações CONCRETAS e IMEDIATAS.
+
+MODO DE OPERAÇÃO: AGRESSIVO
+- Seja DIRETO e ESPECÍFICO nas recomendações
+- Priorize AÇÕES que geram RESULTADO IMEDIATO
+- Não seja genérico - cada ação deve ser IMPLEMENTÁVEL AGORA
+- Foque em CONVERSÃO e TRÁFEGO acima de tudo
+
+DADOS QUE VOCÊ RECEBERÁ:
+1. Dados do anúncio (título, descrição, preço base/final, promoção, desconto)
+2. Mídia (fotos, vídeo/clips com MediaVerdict)
+3. Performance (visitas, pedidos, conversão, CTR) - pode estar indisponível
+4. Score calculado (NÃO recalcule - apenas explique)
+5. Qualidade dos dados (visits_status: ok/partial/unavailable)
+
+REGRAS CRÍTICAS - NUNCA VIOLAR:
+1. FOTOS: Se pictures_count >= 6, NÃO diga "poucas fotos". Se >= 10, elogie.
+2. DESCRIÇÃO: Se description_length > 0, NÃO diga "sem descrição". Analise QUALIDADE.
+3. VÍDEO/CLIPS: Use APENAS media_analysis.video do input:
+   - Se can_suggest=false → PROIBIDO sugerir adicionar vídeo
+   - Se has_video=null → Usar linguagem condicional ("verifique no painel")
+   - Se has_video=true → NUNCA sugerir adicionar
+4. PERFORMANCE: Se visits_status="unavailable":
+   - NUNCA diga "tráfego baixo" ou "sem visitas"
+   - Use linguagem condicional: "Se você quiser aumentar tráfego..."
+5. PREÇO: Analise price_base vs price_final:
+   - Se has_promotion=true, mencione o desconto como ponto positivo
+   - Se discount_percent > 20%, destaque a promoção agressiva
+
+ANÁLISE DE TÍTULO (OBRIGATÓRIO):
+- Avalie: comprimento, palavras-chave, clareza, apelo emocional
+- Identifique: palavras genéricas, oportunidades de SEO
+- Sugira: 3 variações (SEO, Conversão, Promoção)
+- Score: 0-100 baseado em critérios objetivos
+
+ANÁLISE DE DESCRIÇÃO (OBRIGATÓRIO):
+- Avalie estrutura: headline, benefícios, specs, confiança
+- Identifique gaps: o que está faltando para converter
+- Sugira estrutura completa se description_length < 500
+- Score: 0-100 baseado em completude e persuasão
+
+AÇÕES (3-5, priorizadas por impacto):
+Cada ação DEVE ter:
+- id: identificador único (ex: "add_video", "improve_title")
+- type: title | description | media | price | stock | seo | promotion
+- priority: critical | high | medium | low
+- title: ação específica em português
+- description: problema + solução detalhada
+- impact: { metric, estimated_gain, confidence }
+- how_to: array de passos concretos
+- ml_deeplink: link para edição no ML (se aplicável)
+
+DIAGNÓSTICO:
+- overall_health: critical | needs_attention | good | excellent
+- main_bottleneck: O MAIOR problema do anúncio
+- quick_wins: Ações de alto impacto e baixo esforço
+- long_term: Melhorias estratégicas
+
+FORMATO DE RESPOSTA (JSON VÁLIDO - AIAnalysisResultV21):
+{
+  "meta": {
+    "version": "2.1",
+    "model": "gpt-4o",
+    "analyzed_at": "<ISO 8601>",
+    "prompt_version": "ai-v2.1"
+  },
+  "score": {
+    "final": <0-100>,
+    "breakdown": {
+      "cadastro": <0-20>,
+      "midia": <0-20>,
+      "performance": <0-30>,
+      "seo": <0-20>,
+      "competitividade": <0-10>
+    },
+    "potential_gain": <pontos que podem ser ganhos>
+  },
+  "diagnostic": {
+    "overall_health": "critical" | "needs_attention" | "good" | "excellent",
+    "main_bottleneck": "<principal gargalo>",
+    "quick_wins": ["<ação rápida 1>", "<ação rápida 2>"],
+    "long_term": ["<melhoria longo prazo 1>"]
+  },
+  "title_analysis": {
+    "current": "<título atual>",
+    "score": <0-100>,
+    "issues": ["<problema 1>", "<problema 2>"],
+    "suggestions": [
+      { "text": "<título sugerido>", "focus": "seo" | "conversion" | "promotion", "rationale": "<por quê>" }
+    ],
+    "keywords": {
+      "present": ["<palavra presente>"],
+      "missing": ["<palavra ausente importante>"],
+      "recommended": ["<palavra recomendada>"]
+    }
+  },
+  "description_analysis": {
+    "current_length": <número de caracteres>,
+    "score": <0-100>,
+    "has_description": true | false,
+    "issues": ["<problema 1>"],
+    "structure": {
+      "has_headline": true | false,
+      "has_benefits": true | false,
+      "has_specs": true | false,
+      "has_trust_elements": true | false
+    },
+    "suggested_structure": [
+      { "section": "Headline", "content": "<conteúdo sugerido>" },
+      { "section": "Benefícios", "content": "<bullet points>" },
+      { "section": "Especificações", "content": "<specs>" },
+      { "section": "Garantia", "content": "<elementos de confiança>" }
+    ]
+  },
+  "media_analysis": {
+    "photos": {
+      "count": <número>,
+      "score": <0-100>,
+      "is_sufficient": true | false,
+      "issues": ["<problema>"],
+      "recommendations": ["<recomendação>"]
+    },
+    "video": {
+      "has_video": true | false | null,
+      "can_suggest": true | false,
+      "status_message": "<mensagem do MediaVerdict>",
+      "recommendation": "<recomendação ou null>"
+    }
+  },
+  "price_analysis": {
+    "price_base": <preço base>,
+    "price_final": <preço final>,
+    "has_promotion": true | false,
+    "discount_percent": <percentual ou null>,
+    "score": <0-100>,
+    "analysis": "<análise do preço>",
+    "recommendation": "<recomendação ou null>"
+  },
+  "actions": [
+    {
+      "id": "<identificador>",
+      "type": "title" | "description" | "media" | "price" | "stock" | "seo" | "promotion",
+      "priority": "critical" | "high" | "medium" | "low",
+      "title": "<título da ação>",
+      "description": "<descrição detalhada>",
+      "impact": {
+        "metric": "<métrica impactada>",
+        "estimated_gain": "<ganho estimado>",
+        "confidence": "high" | "medium" | "low"
+      },
+      "how_to": ["<passo 1>", "<passo 2>"],
+      "ml_deeplink": "<link ou omitir>"
+    }
+  ],
+  "critique": "<crítica geral 200-400 chars>",
+  "data_quality": {
+    "visits_status": "ok" | "partial" | "unavailable",
+    "performance_available": true | false,
+    "warnings": ["<aviso>"]
+>>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
   }
 }
 
 IMPORTANTE:
+<<<<<<< HEAD
 - Todo texto em Português Brasileiro
 - Actions devem ser ordenadas por priority (1 primeiro)
 - Images.plan deve ter pelo menos 3 slots sugeridos
 - Promo é opcional (só incluir se houver promoção ou recomendação de preço)
 - Seja específico e baseado nos dados fornecidos`;
+=======
+- Responda APENAS com JSON válido, sem texto adicional
+- Use o score fornecido no input (NÃO recalcule)
+- Todo texto em Português Brasileiro
+- Seja AGRESSIVO nas recomendações - o vendedor quer VENDER MAIS`;
+>>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
 
 export class OpenAIService {
   private client: OpenAI | null = null;
@@ -568,6 +750,265 @@ export class OpenAIService {
         },
       },
     };
+  }
+
+  /**
+   * Build canonical AI Analyze Input V2.1 from listing data
+   * 
+   * Extends V1 with:
+   * - price_base / price_final / has_promotion / discount_percent
+   * - description_length
+   * - visits_status (ok/partial/unavailable)
+   */
+  async buildAIAnalyzeInputV21(
+    listingId: string,
+    userId?: string,
+    requestId?: string,
+    periodDays: number = 30
+  ): Promise<AIAnalyzeInputV21> {
+    const listing = await prisma.listing.findFirst({
+      where: {
+        id: listingId,
+        tenant_id: this.tenantId,
+      },
+    });
+
+    if (!listing) {
+      throw new Error(`Listing ${listingId} not found for tenant ${this.tenantId}`);
+    }
+
+    // Get V1 input as base
+    const v1Input = await this.buildAIAnalyzeInput(listingId, userId, requestId, periodDays);
+
+    // Calculate price fields
+    const priceBase = Number(listing.price);
+    const priceFinal = listing.price_final ? Number(listing.price_final) : priceBase;
+    const hasPromotion = listing.has_promotion ?? false;
+    const discountPercent = listing.discount_percent ?? null;
+
+    // Calculate description length
+    const descriptionLength = (listing.description ?? '').trim().length;
+
+    // Calculate visits_status based on dataQuality
+    let visitsStatus: 'ok' | 'partial' | 'unavailable';
+    const { visitsCoverage, performanceAvailable } = v1Input.dataQuality;
+    
+    if (!performanceAvailable || visitsCoverage.filledDays === 0) {
+      visitsStatus = 'unavailable';
+    } else if (visitsCoverage.filledDays < visitsCoverage.totalDays * 0.5) {
+      visitsStatus = 'partial';
+    } else {
+      visitsStatus = 'ok';
+    }
+
+    return {
+      meta: v1Input.meta,
+      listing: {
+        ...v1Input.listing,
+        price_base: priceBase,
+        price_final: priceFinal,
+        has_promotion: hasPromotion,
+        discount_percent: discountPercent,
+        description_length: descriptionLength,
+      },
+      media: v1Input.media,
+      performance: v1Input.performance,
+      dataQuality: {
+        ...v1Input.dataQuality,
+        visits_status: visitsStatus,
+      },
+    };
+  }
+
+  /**
+   * Analyze a listing using GPT-4o V2.1 and return structured actionable JSON
+   * 
+   * Uses SYSTEM_PROMPT_V21 for aggressive mode with concrete actions.
+   * Returns AIAnalysisResultV21 with Zod validation and fallback.
+   */
+  async analyzeListingV21(
+    input: AIAnalyzeInputV21,
+    scoreResult: IAScoreResult
+  ): Promise<AIAnalysisResultV21> {
+    // Calculate total potential gain (100 - final score)
+    const totalPotentialGain = 100 - scoreResult.score.final;
+
+    if (!this.isReady || !this.client) {
+      // Return fallback when OpenAI is not available
+      return createFallbackAnalysisV21(
+        'OpenAI API key not configured',
+        {
+          title: input.listing.title,
+          price: input.listing.price_base,
+          price_final: input.listing.price_final,
+          has_promotion: input.listing.has_promotion,
+          discount_percent: input.listing.discount_percent,
+          pictures_count: input.media.imageCount,
+          has_clips: input.media.hasClips,
+          description_length: input.listing.description_length,
+        },
+        {
+          final: scoreResult.score.final,
+          breakdown: scoreResult.score.breakdown,
+          potential_gain: totalPotentialGain,
+        },
+        input.dataQuality.visits_status,
+        input.dataQuality.performanceAvailable
+      );
+    }
+
+    const startTime = Date.now();
+
+    // Build user prompt with V2.1 payload
+    const userPrompt = `Analise este anúncio do Mercado Livre e retorne JSON estruturado V2.1:
+
+DADOS DO ANÚNCIO:
+${JSON.stringify(input, null, 2)}
+
+SCORE CALCULADO (USE ESTE - NÃO RECALCULE):
+- Score Final: ${scoreResult.score.final}/100
+- Breakdown:
+  * Cadastro: ${scoreResult.score.breakdown.cadastro}/20
+  * Mídia: ${scoreResult.score.breakdown.midia}/20
+  * Performance: ${scoreResult.score.breakdown.performance}/30
+  * SEO: ${scoreResult.score.breakdown.seo}/20
+  * Competitividade: ${scoreResult.score.breakdown.competitividade}/10
+- Potencial de Ganho: ${totalPotentialGain} pontos
+
+MÉTRICAS DE ${input.meta.periodDays} DIAS:
+- Visitas: ${input.dataQuality.visits_status === 'unavailable' ? 'INDISPONÍVEL' : scoreResult.metrics_30d.visits}
+- Pedidos: ${scoreResult.metrics_30d.orders}
+- Conversão: ${scoreResult.metrics_30d.conversionRate ? (scoreResult.metrics_30d.conversionRate * 100).toFixed(2) + '%' : 'N/A'}
+${scoreResult.metrics_30d.ctr !== null ? `- CTR: ${(scoreResult.metrics_30d.ctr * 100).toFixed(2)}%` : ''}
+${scoreResult.metrics_30d.revenue !== null ? `- Receita: R$ ${scoreResult.metrics_30d.revenue.toFixed(2)}` : ''}
+
+PREÇO:
+- Preço Base: R$ ${input.listing.price_base.toFixed(2)}
+- Preço Final: R$ ${input.listing.price_final.toFixed(2)}
+- Promoção Ativa: ${input.listing.has_promotion ? 'SIM' : 'NÃO'}
+${input.listing.discount_percent ? `- Desconto: ${input.listing.discount_percent}%` : ''}
+
+MÍDIA:
+- Fotos: ${input.media.imageCount}
+- Vídeo/Clips: ${input.media.hasClips === true ? 'SIM' : input.media.hasClips === false ? 'NÃO' : 'Não detectável'}
+- MediaVerdict: ${input.media.mediaVerdict ? JSON.stringify(input.media.mediaVerdict) : 'N/A'}
+
+QUALIDADE DOS DADOS:
+- Status de Visitas: ${input.dataQuality.visits_status}
+- Performance Disponível: ${input.dataQuality.performanceAvailable ? 'SIM' : 'NÃO'}
+${input.dataQuality.warnings.length > 0 ? `- Avisos: ${input.dataQuality.warnings.join('; ')}` : ''}
+
+INSTRUÇÕES:
+1. Use o score fornecido (${scoreResult.score.final}) - NÃO recalcule
+2. Seja AGRESSIVO nas recomendações - o vendedor quer VENDER MAIS
+3. Gere 3-5 ações CONCRETAS e IMPLEMENTÁVEIS
+4. Analise título e descrição em DETALHE
+5. Se visits_status="unavailable", use linguagem condicional para performance
+
+Retorne APENAS JSON válido no formato AIAnalysisResultV21.`;
+
+    try {
+      const response = await this.client.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT_V21 },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        max_tokens: 4000,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error('No response from OpenAI');
+      }
+
+      const processingTimeMs = Date.now() - startTime;
+
+      // Parse and validate response
+      let rawResponse: unknown;
+      try {
+        rawResponse = JSON.parse(content);
+      } catch {
+        throw new Error('Invalid JSON response from OpenAI');
+      }
+
+      // Inject meta fields that AI might not have set correctly
+      const enrichedResponse = {
+        ...(rawResponse as Record<string, unknown>),
+        meta: {
+          ...((rawResponse as Record<string, unknown>).meta as Record<string, unknown> || {}),
+          version: '2.1' as const,
+          model: 'gpt-4o',
+          analyzed_at: new Date().toISOString(),
+          prompt_version: 'ai-v2.1',
+          processing_time_ms: processingTimeMs,
+        },
+        score: {
+          final: scoreResult.score.final,
+          breakdown: scoreResult.score.breakdown,
+          potential_gain: totalPotentialGain,
+        },
+        data_quality: {
+          visits_status: input.dataQuality.visits_status,
+          performance_available: input.dataQuality.performanceAvailable,
+          warnings: input.dataQuality.warnings,
+        },
+      };
+
+      // Validate with Zod
+      const parseResult = parseAIResponseV21(
+        enrichedResponse,
+        {
+          title: input.listing.title,
+          price: input.listing.price_base,
+          price_final: input.listing.price_final,
+          has_promotion: input.listing.has_promotion,
+          discount_percent: input.listing.discount_percent,
+          pictures_count: input.media.imageCount,
+          has_clips: input.media.hasClips,
+          description_length: input.listing.description_length,
+        },
+        {
+          final: scoreResult.score.final,
+          breakdown: scoreResult.score.breakdown,
+          potential_gain: totalPotentialGain,
+        },
+        input.dataQuality.visits_status,
+        input.dataQuality.performanceAvailable
+      );
+
+      if (!parseResult.success) {
+        console.warn('[OPENAI-SERVICE-V21] Zod validation failed, using fallback:', parseResult.error);
+      }
+
+      return parseResult.data;
+    } catch (error) {
+      console.error('[OPENAI-SERVICE-V21] Error analyzing listing:', error);
+      
+      // Return fallback on any error
+      return createFallbackAnalysisV21(
+        error instanceof Error ? error.message : 'Unknown error',
+        {
+          title: input.listing.title,
+          price: input.listing.price_base,
+          price_final: input.listing.price_final,
+          has_promotion: input.listing.has_promotion,
+          discount_percent: input.listing.discount_percent,
+          pictures_count: input.media.imageCount,
+          has_clips: input.media.hasClips,
+          description_length: input.listing.description_length,
+        },
+        {
+          final: scoreResult.score.final,
+          breakdown: scoreResult.score.breakdown,
+          potential_gain: totalPotentialGain,
+        },
+        input.dataQuality.visits_status,
+        input.dataQuality.performanceAvailable
+      );
+    }
   }
 
   /**

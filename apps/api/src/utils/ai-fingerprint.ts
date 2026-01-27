@@ -12,7 +12,10 @@
 import { createHash } from 'crypto';
 
 // Current prompt version - increment when prompt changes significantly
+<<<<<<< HEAD
 // V2.1 uses structured JSON format (verdict/actions/title/description/images/promo)
+=======
+>>>>>>> 97bc8bcb89a4380e2154f74201c70ff3d998efd1
 export const PROMPT_VERSION = 'ai-v2.1';
 
 /**
@@ -31,6 +34,12 @@ export interface FingerprintInput {
     has_video: boolean | null;
     status: string;
     stock: number;
+    // V2.1 fields
+    price_final: number;
+    has_promotion: boolean;
+    discount_percent: number | null;
+    description_length: number;
+    has_clips: boolean | null;
     // updated_at is intentionally excluded - it's volatile and doesn't affect analysis
   };
   // Metrics that affect analysis
@@ -102,6 +111,12 @@ export function generateFingerprint(input: FingerprintInput): string {
       has_video: input.listing.has_video,
       status: input.listing.status,
       stock: input.listing.stock,
+      // V2.1 fields
+      price_final: input.listing.price_final,
+      has_promotion: input.listing.has_promotion,
+      discount_percent: input.listing.discount_percent,
+      description_length: input.listing.description_length,
+      has_clips: input.listing.has_clips,
       // updated_at is intentionally excluded - it's volatile
     },
     metrics: {
@@ -136,6 +151,12 @@ export function buildFingerprintInput(
     has_video: boolean | null;
     status: string;
     stock: number;
+    // V2.1 fields
+    price_final: number | { toNumber: () => number } | null;
+    has_promotion: boolean | null;
+    discount_percent: number | null;
+    description: string | null;
+    has_clips: boolean | null;
     updated_at: Date; // Received but not included in fingerprint
   },
   metrics: {
@@ -153,6 +174,16 @@ export function buildFingerprintInput(
     ? listing.price 
     : listing.price.toNumber();
 
+  // Handle price_final - fallback to price if not set
+  let priceFinal: number;
+  if (listing.price_final === null || listing.price_final === undefined) {
+    priceFinal = price;
+  } else if (typeof listing.price_final === 'number') {
+    priceFinal = listing.price_final;
+  } else {
+    priceFinal = listing.price_final.toNumber();
+  }
+
   return {
     listing: {
       title: listing.title,
@@ -162,6 +193,12 @@ export function buildFingerprintInput(
       has_video: listing.has_video,
       status: listing.status,
       stock: listing.stock,
+      // V2.1 fields
+      price_final: priceFinal,
+      has_promotion: listing.has_promotion ?? false,
+      discount_percent: listing.discount_percent,
+      description_length: (listing.description ?? '').trim().length,
+      has_clips: listing.has_clips,
       // updated_at is intentionally excluded - it's volatile and doesn't affect analysis
     },
     metrics: {

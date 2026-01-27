@@ -37,6 +37,18 @@ export interface AIAnalyzeInputListing {
 }
 
 /**
+ * Dados estendidos do anúncio para V2.1
+ * Inclui informações de preço/promoção
+ */
+export interface AIAnalyzeInputListingV21 extends AIAnalyzeInputListing {
+  price_base: number;      // Preço base (listing.price)
+  price_final: number;     // Preço final (listing.price_final ou fallback para price)
+  has_promotion: boolean;  // Tem promoção ativa?
+  discount_percent: number | null; // Percentual de desconto (0-100)
+  description_length: number; // Comprimento da descrição em caracteres
+}
+
+/**
  * Dados de mídia do anúncio
  */
 export interface AIAnalyzeInputMedia {
@@ -91,6 +103,13 @@ export interface AIAnalyzeInputDataQuality {
 }
 
 /**
+ * Qualidade dos dados V2.1 com visits_status
+ */
+export interface AIAnalyzeInputDataQualityV21 extends AIAnalyzeInputDataQuality {
+  visits_status: 'ok' | 'partial' | 'unavailable';
+}
+
+/**
  * Payload completo V1 para análise pela IA
  */
 export interface AIAnalyzeInputV1 {
@@ -99,5 +118,17 @@ export interface AIAnalyzeInputV1 {
   media: AIAnalyzeInputMedia;
   performance: AIAnalyzeInputPerformance;
   dataQuality: AIAnalyzeInputDataQuality;
+}
+
+/**
+ * Payload completo V2.1 para análise pela IA
+ * Inclui campos estendidos de preço/promoção e visits_status
+ */
+export interface AIAnalyzeInputV21 {
+  meta: AIAnalyzeInputMeta;
+  listing: AIAnalyzeInputListingV21;
+  media: AIAnalyzeInputMedia;
+  performance: AIAnalyzeInputPerformance;
+  dataQuality: AIAnalyzeInputDataQualityV21;
 }
 

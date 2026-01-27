@@ -226,7 +226,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const scoreService = new IAScoreService(tenantId);
         const scoreResult = await scoreService.calculateScore(listingId, PERIOD_DAYS);
 
-        // Step 3: Build fingerprint from listing + metrics
+        // Step 3: Build fingerprint from listing + metrics (V2.1 includes new fields)
         const fingerprintInput = buildFingerprintInput(
           {
             title: listing.title,
@@ -236,6 +236,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             has_video: listing.has_video,
             status: listing.status,
             stock: listing.stock,
+            // V2.1 fields
+            price_final: listing.price_final,
+            has_promotion: listing.has_promotion,
+            discount_percent: listing.discount_percent,
+            description: listing.description,
+            has_clips: listing.has_clips,
             updated_at: listing.updated_at,
           },
           {
