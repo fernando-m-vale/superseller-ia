@@ -1136,7 +1136,16 @@ export class MercadoLivreSyncService {
     unauthorized: number;
     skipped: number;
     errors: string[];
-    details: Array<{ listing_id_ext: string; oldStatus: string; mlStatus: string; updated: boolean; httpStatus?: number; errorCode?: string; blockedBy?: string }>;
+    details: Array<{ 
+      listing_id_ext: string; 
+      oldStatus: string; 
+      mlStatus: string; 
+      updated: boolean; 
+      httpStatus?: number; 
+      errorCode?: string; 
+      blockedBy?: string;
+      actionTaken?: string; // e.g. "marked_blocked_by_policy", "status_updated", "skipped", "no_change"
+    }>;
   }> {
     const result = { 
       candidates: 0,
@@ -1171,7 +1180,8 @@ export class MercadoLivreSyncService {
         return result;
       }
 
-      // 3. Buscar listings da conexão ativa
+      // 3. Buscar listings da conexão ativa que precisam reconciliação
+      // Candidatos: paused OU access_status != accessible (para reconciliar bloqueios também)
       const whereClause: any = {
         tenant_id: this.tenantId,
         marketplace: Marketplace.mercadolivre,
@@ -1179,7 +1189,11 @@ export class MercadoLivreSyncService {
       };
 
       if (onlyNonActive) {
-        whereClause.status = { not: ListingStatus.active };
+        // Reconciliar: paused OU access_status != accessible (para verificar se desbloqueou)
+        whereClause.OR = [
+          { status: { not: ListingStatus.active } },
+          { access_status: { not: ListingAccessStatus.accessible } },
+        ];
       }
 
       const listings = await prisma.listing.findMany({
@@ -1212,13 +1226,12 @@ export class MercadoLivreSyncService {
           // Instrumentação: logar request
           console.log(`[ML-SYNC-RECONCILE] Request GET /items?ids=... para ${itemIds.length} listings: [${itemIds.slice(0, 3).join(', ')}${itemIds.length > 3 ? '...' : ''}]`);
           
-          let items: MercadoLivreItem[] = [];
-          let httpStatusMap = new Map<string, number>(); // itemId -> HTTP status code
           let batchHttpStatus: number | undefined;
           
           try {
-            // fetchItemsDetails usa batch API que retorna array de { code, body }
-            // Precisamos capturar o código de cada item individualmente
+            // Batch API retorna array de { code, body } na mesma ordem dos IDs enviados
+            // code=200: body contém o item completo com id, status, etc
+            // code!=200: body contém erro com code, message, blocked_by (sem id)
             const response = await this.executeWithRetryOn401(async () => {
               return await axios.get(`${ML_API_BASE}/items`, {
                 headers: { Authorization: `Bearer ${this.accessToken}` },
@@ -1227,91 +1240,75 @@ export class MercadoLivreSyncService {
             });
 
             batchHttpStatus = response.status;
-            console.log(`[ML-SYNC-RECONCILE] Batch response HTTP ${batchHttpStatus}, processando ${response.data.length} resultados`);
+            console.log(`[ML-SYNC-RECONCILE] Batch response HTTP ${batchHttpStatus}, processando ${response.data.length} resultados para ${itemIds.length} IDs`);
 
-            // A API retorna um array de objetos { code, body }
-            for (const itemResponse of response.data) {
+            // Mapear resultados pelo índice (ordem dos IDs enviados)
+            const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string; httpStatus: number }>();
+            const errorMap = new Map<string, { code: number; errorCode?: string; blockedBy?: string; message?: string }>();
+            
+            for (let i = 0; i < response.data.length; i++) {
+              const itemResponse = response.data[i];
               const itemCode = itemResponse.code;
-              const itemId = itemResponse.body?.id;
-              const errorBody = itemResponse.body as any; // Pode ser erro quando code != 200
+              const requestedItemId = itemIds[i]; // ID que foi enviado na requisição
               
-              if (itemId) {
-                httpStatusMap.set(itemId, itemCode);
+              if (itemCode === 200) {
+                // Sucesso: body contém o item completo
+                const itemBody = itemResponse.body as MercadoLivreItem;
+                const realStatus = this.mapMLStatusToListingStatus(itemBody.status);
+                statusMap.set(requestedItemId, { 
+                  status: realStatus, 
+                  mlStatusRaw: itemBody.status, 
+                  httpStatus: itemCode 
+                });
                 
-                // Instrumentação: logar para cada item
-                if (itemCode === 200) {
-                  console.log(`[ML-SYNC-RECONCILE] Item ${itemId}: HTTP ${itemCode}, status=${itemResponse.body.status}`);
-                } else {
-                  const errorCode = errorBody?.code || errorBody?.error || 'UNKNOWN';
-                  const blockedBy = errorBody?.blocked_by || 'N/A';
-                  const message = errorBody?.message || 'N/A';
-                  console.log(`[ML-SYNC-RECONCILE] Item ${itemId}: HTTP ${itemCode}, code=${errorCode}, blocked_by=${blockedBy}, message=${message}`);
+                // Logar apenas primeiros 10
+                if (result.checked < 10) {
+                  console.log(`[ML-SYNC-RECONCILE] Item ${requestedItemId}: HTTP ${itemCode}, status=${itemBody.status} (mapped=${realStatus})`);
                 }
               } else {
-                // Item não retornou ID (erro)
+                // Erro: body contém objeto de erro
+                const errorBody = itemResponse.body as any;
                 const errorCode = errorBody?.code || errorBody?.error || 'UNKNOWN';
-                const blockedBy = errorBody?.blocked_by || 'N/A';
-                console.log(`[ML-SYNC-RECONCILE] Item sem ID no response: HTTP ${itemCode}, code=${errorCode}, blocked_by=${blockedBy}`);
+                const blockedBy = errorBody?.blocked_by;
+                const message = errorBody?.message || errorBody?.error || 'N/A';
+                
+                errorMap.set(requestedItemId, {
+                  code: itemCode,
+                  errorCode,
+                  blockedBy,
+                  message,
+                });
+                
+                // Logar apenas primeiros 10
+                if (result.checked < 10) {
+                  console.log(`[ML-SYNC-RECONCILE] Item ${requestedItemId}: HTTP ${itemCode}, code=${errorCode}, blocked_by=${blockedBy || 'N/A'}, message=${message}`);
+                }
               }
             }
-
-            items = response.data
-              .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
-              .map((item: { code: number; body: MercadoLivreItem }) => item.body);
-          } catch (fetchError) {
-            if (axios.isAxiosError(fetchError)) {
-              batchHttpStatus = fetchError.response?.status;
-              console.error(`[ML-SYNC-RECONCILE] Erro HTTP ${batchHttpStatus} ao buscar items:`, fetchError.message);
-            }
-            throw fetchError;
-          }
-
-          // Criar mapa de itemId -> status real e erros
-          const statusMap = new Map<string, { status: ListingStatus; mlStatusRaw: string; httpStatus: number }>();
-          const errorMap = new Map<string, { code: number; errorCode?: string; blockedBy?: string; message?: string }>();
-          
-          // Processar itens com sucesso (code 200)
-          for (const item of items) {
-            const realStatus = this.mapMLStatusToListingStatus(item.status);
-            const httpStatus = httpStatusMap.get(item.id) || batchHttpStatus || 200;
-            statusMap.set(item.id, { status: realStatus, mlStatusRaw: item.status, httpStatus });
-          }
-          
-          // Processar erros (code != 200)
-          for (const itemResponse of response.data) {
-            const itemCode = itemResponse.code;
-            const itemId = itemResponse.body?.id;
-            const errorBody = itemResponse.body as any;
-            
-            if (itemCode !== 200 && itemId) {
-              errorMap.set(itemId, {
-                code: itemCode,
-                errorCode: errorBody?.code || errorBody?.error,
-                blockedBy: errorBody?.blocked_by,
-                message: errorBody?.message,
-              });
-            }
-          }
 
           // Atualizar listings com status diferente ou marcar como bloqueado
           for (const listing of chunk) {
             result.checked++;
             
-            // Logar informações da conexão
-            console.log(`[ML-SYNC-RECONCILE] Processando listing ${listing.listing_id_ext}: connectionId=${activeConnection.id}, providerAccountId=${activeConnection.provider_account_id}`);
+            // Logar informações da conexão (apenas primeiros 10)
+            if (result.checked <= 10) {
+              console.log(`[ML-SYNC-RECONCILE] Processando listing ${listing.listing_id_ext}: connectionId=${activeConnection.id}, providerAccountId=${activeConnection.provider_account_id}`);
+            }
             
             // Verificar se há erro (403 PolicyAgent, 401, etc)
             const errorInfo = errorMap.get(listing.listing_id_ext);
             if (errorInfo) {
               const { code: httpStatus, errorCode, blockedBy, message } = errorInfo;
               
-              // Logar erro detalhado
-              console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext}: HTTP ${httpStatus}, code=${errorCode}, blocked_by=${blockedBy}, message=${message}`);
+              // Logar erro detalhado (apenas primeiros 10)
+              if (result.checked <= 10) {
+                console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext}: HTTP ${httpStatus}, code=${errorCode}, blocked_by=${blockedBy || 'N/A'}, message=${message}`);
+              }
               
               // Tratar 403 PolicyAgent
               if (httpStatus === 403 && (errorCode === 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES' || blockedBy === 'PolicyAgent')) {
                 try {
-                  await prisma.listing.update({
+                  const updateResult = await prisma.listing.update({
                     where: { id: listing.id },
                     data: {
                       access_status: ListingAccessStatus.blocked_by_policy,
@@ -1320,17 +1317,29 @@ export class MercadoLivreSyncService {
                       access_blocked_at: new Date(),
                     },
                   });
-                  result.blockedByPolicy++;
-                  result.details.push({
-                    listing_id_ext: listing.listing_id_ext,
-                    oldStatus: listing.status,
-                    mlStatus: 'BLOCKED_BY_POLICY',
-                    updated: false,
-                    httpStatus,
-                    errorCode,
-                    blockedBy,
+                  
+                  // Verificar se realmente persistiu
+                  const verify = await prisma.listing.findUnique({
+                    where: { id: listing.id },
+                    select: { access_status: true, access_blocked_code: true },
                   });
-                  console.log(`[ML-SYNC-RECONCILE] 🔒 Listing ${listing.listing_id_ext} marcado como blocked_by_policy: code=${errorCode}`);
+                  
+                  if (verify?.access_status === ListingAccessStatus.blocked_by_policy) {
+                    result.blockedByPolicy++;
+                    result.details.push({
+                      listing_id_ext: listing.listing_id_ext,
+                      oldStatus: listing.status,
+                      mlStatus: 'BLOCKED_BY_POLICY',
+                      updated: false,
+                      httpStatus,
+                      errorCode,
+                      blockedBy,
+                      actionTaken: 'marked_blocked_by_policy',
+                    });
+                    console.log(`[ML-SYNC-RECONCILE] 🔒 Listing ${listing.listing_id_ext} marcado como blocked_by_policy: code=${errorCode}, persisted=${verify.access_status === ListingAccessStatus.blocked_by_policy}`);
+                  } else {
+                    throw new Error(`Update não persistiu: esperado blocked_by_policy, recebido ${verify?.access_status}`);
+                  }
                 } catch (updateError) {
                   const errorMsg = `Erro ao marcar listing ${listing.listing_id_ext} como blocked: ${updateError instanceof Error ? updateError.message : 'Erro desconhecido'}`;
                   console.error(`[ML-SYNC-RECONCILE] ❌ ${errorMsg}`);
@@ -1339,10 +1348,10 @@ export class MercadoLivreSyncService {
                 continue;
               }
               
-              // Tratar 401/403 de autenticação
-              if (httpStatus === 401 || (httpStatus === 403 && !errorCode?.includes('POLICY'))) {
+              // Tratar 401/403 de autenticação (não PolicyAgent)
+              if (httpStatus === 401 || (httpStatus === 403 && errorCode !== 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES' && blockedBy !== 'PolicyAgent')) {
                 try {
-                  await prisma.listing.update({
+                  const updateResult = await prisma.listing.update({
                     where: { id: listing.id },
                     data: {
                       access_status: ListingAccessStatus.unauthorized,
@@ -1351,6 +1360,7 @@ export class MercadoLivreSyncService {
                       access_blocked_at: new Date(),
                     },
                   });
+                  
                   result.unauthorized++;
                   result.details.push({
                     listing_id_ext: listing.listing_id_ext,
@@ -1359,6 +1369,7 @@ export class MercadoLivreSyncService {
                     updated: false,
                     httpStatus,
                     errorCode,
+                    actionTaken: 'marked_unauthorized',
                   });
                   console.log(`[ML-SYNC-RECONCILE] 🔐 Listing ${listing.listing_id_ext} marcado como unauthorized: code=${errorCode}`);
                 } catch (updateError) {
@@ -1369,16 +1380,17 @@ export class MercadoLivreSyncService {
                 continue;
               }
               
-              // Outros erros: apenas logar
+              // Outros erros (404, 500, etc): apenas logar e pular
               result.skipped++;
               result.details.push({
                 listing_id_ext: listing.listing_id_ext,
                 oldStatus: listing.status,
-                mlStatus: 'ERROR',
+                mlStatus: httpStatus === 404 ? 'NOT_FOUND' : 'ERROR',
                 updated: false,
                 httpStatus,
                 errorCode,
                 blockedBy,
+                actionTaken: 'skipped',
               });
               continue;
             }
@@ -1387,17 +1399,17 @@ export class MercadoLivreSyncService {
             const statusInfo = statusMap.get(listing.listing_id_ext);
             
             if (!statusInfo) {
-              // Listing não encontrado no ML (mas não é erro explícito)
-              const httpStatus = httpStatusMap.get(listing.listing_id_ext) || batchHttpStatus || 404;
+              // Não deveria acontecer se o parsing estiver correto, mas tratar como erro
               result.skipped++;
               result.details.push({
                 listing_id_ext: listing.listing_id_ext,
                 oldStatus: listing.status,
                 mlStatus: 'NOT_FOUND',
                 updated: false,
-                httpStatus,
+                httpStatus: 404,
+                actionTaken: 'skipped',
               });
-              console.log(`[ML-SYNC-RECONCILE] Listing ${listing.listing_id_ext} não encontrado no ML (status HTTP: ${httpStatus})`);
+              console.log(`[ML-SYNC-RECONCILE] ⚠️ Listing ${listing.listing_id_ext} não encontrado nos mapas (erro de parsing?)`);
               continue;
             }
 
@@ -1410,7 +1422,7 @@ export class MercadoLivreSyncService {
             
             if (realStatus !== listing.status) {
               try {
-                await prisma.listing.update({
+                const updateResult = await prisma.listing.update({
                   where: { id: listing.id },
                   data: { 
                     status: realStatus,
@@ -1421,6 +1433,7 @@ export class MercadoLivreSyncService {
                     access_blocked_at: null,
                   },
                 });
+                
                 result.updated++;
                 result.details.push({
                   listing_id_ext: listing.listing_id_ext,
@@ -1428,6 +1441,7 @@ export class MercadoLivreSyncService {
                   mlStatus: mlStatusRaw,
                   updated: true,
                   httpStatus,
+                  actionTaken: 'status_updated',
                 });
                 if (result.updated <= 10) {
                   console.log(`[ML-SYNC-RECONCILE] ✅ Listing ${listing.listing_id_ext} atualizado: ${listing.status} → ${realStatus} (ML: ${mlStatusRaw})`);
@@ -1445,13 +1459,31 @@ export class MercadoLivreSyncService {
                 });
               }
             } else {
-              // Status já está correto
+              // Status já está correto, mas verificar se precisa limpar bloqueio
+              if (listing.access_status && listing.access_status !== ListingAccessStatus.accessible) {
+                try {
+                  await prisma.listing.update({
+                    where: { id: listing.id },
+                    data: {
+                      access_status: ListingAccessStatus.accessible,
+                      access_blocked_code: null,
+                      access_blocked_reason: null,
+                      access_blocked_at: null,
+                    },
+                  });
+                } catch (updateError) {
+                  // Não crítico, apenas logar
+                  console.warn(`[ML-SYNC-RECONCILE] Erro ao limpar bloqueio de ${listing.listing_id_ext}: ${updateError instanceof Error ? updateError.message : 'Erro desconhecido'}`);
+                }
+              }
+              
               result.details.push({
                 listing_id_ext: listing.listing_id_ext,
                 oldStatus: listing.status,
                 mlStatus: mlStatusRaw,
                 updated: false,
                 httpStatus,
+                actionTaken: 'no_change',
               });
             }
           }
