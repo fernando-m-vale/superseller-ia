@@ -1285,6 +1285,19 @@ export class MercadoLivreSyncService {
                 }
               }
             }
+          } catch (fetchError) {
+            if (axios.isAxiosError(fetchError)) {
+              batchHttpStatus = fetchError.response?.status;
+              console.error(`[ML-SYNC-RECONCILE] Erro HTTP ${batchHttpStatus} ao buscar items:`, fetchError.message);
+              // Se for erro de autenticação, marcar todos os listings do lote como erro
+              if (batchHttpStatus === 401 || batchHttpStatus === 403) {
+                for (const listing of chunk) {
+                  result.errors.push(`Erro de autenticação (${batchHttpStatus}) ao reconciliar ${listing.listing_id_ext}`);
+                }
+              }
+            }
+            throw fetchError;
+          }
 
           // Atualizar listings com status diferente ou marcar como bloqueado
           for (const listing of chunk) {
