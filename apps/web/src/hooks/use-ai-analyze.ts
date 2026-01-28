@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
+import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
 
 // Interface da resposta da API (formato bruto)
 interface AIAnalysisApiResponse {
@@ -74,43 +75,7 @@ interface AIAnalysisApiResponse {
     shortMessage: string
   }
   // V2.1 - Análise estruturada (opcional)
-  analysisV21?: {
-    verdict: {
-      headline: string
-      summary?: string
-    }
-    actions: Array<{
-      priority: number
-      instruction: string
-      before?: string
-      after?: string
-      expectedImpact?: string
-    }>
-    title: {
-      suggested: string
-      keywords?: string[]
-      rationale?: string
-    }
-    description: {
-      bullets: string[]
-      fullText?: string
-    }
-    images: {
-      plan: Array<{
-        slot: number
-        description: string
-        purpose?: string
-        goal?: string
-        whatToShow?: string
-      }>
-    }
-    promo?: {
-      priceBase?: number
-      priceFinal?: number
-      discount?: number
-      recommendation?: string
-    }
-  }
+  analysisV21?: AIAnalysisResultV21
 }
 
 // Interface adaptada para o frontend
@@ -181,41 +146,7 @@ export interface AIAnalysisResponse {
     shortMessage: string
   }
   // V2.1 - Análise estruturada (opcional)
-  analysisV21?: {
-    verdict: {
-      headline: string
-      summary?: string
-    }
-    actions: Array<{
-      priority: number
-      instruction: string
-      before?: string
-      after?: string
-      expectedImpact?: string
-    }>
-    title: {
-      suggested: string
-      keywords?: string[]
-      rationale?: string
-    }
-    description: {
-      bullets: string[]
-      fullText?: string
-    }
-    images: {
-      plan: Array<{
-        slot: number
-        description: string
-        purpose?: string
-      }>
-    }
-    promo?: {
-      priceBase?: number
-      priceFinal?: number
-      discount?: number
-      recommendation?: string
-    }
-  }
+  analysisV21?: AIAnalysisResultV21
 }
 
 /**
@@ -251,8 +182,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     // MediaVerdict - Fonte única de verdade para mídia
     mediaVerdict: apiResponse.mediaVerdict,
     // V2.1 - Análise estruturada (opcional, não processada pelo adaptador)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    analysisV21: 'analysisV21' in apiResponse ? (apiResponse as any).analysisV21 : undefined,
+    // Será preenchido diretamente do response após adaptação
+    analysisV21: undefined,
   }
 }
 
@@ -260,6 +191,10 @@ export interface AIAnalysisState {
   data: AIAnalysisResponse | null
   isLoading: boolean
   error: string | null
+  // Metadados para UX de cache
+  analyzedAt?: string // analysisV21?.meta?.analyzed_at
+  cacheHit?: boolean // response.data?.cacheHit ou message includes "(cache)"
+  message?: string // response.data?.message
 }
 
 interface ErrorWithStatusCode extends Error {
@@ -279,6 +214,9 @@ export function useAIAnalyze(listingId: string | null) {
     data: null,
     isLoading: false,
     error: null,
+    analyzedAt: undefined,
+    cacheHit: undefined,
+    message: undefined,
   })
 
   // Resetar COMPLETAMENTE o state quando listingId mudar
@@ -288,10 +226,17 @@ export function useAIAnalyze(listingId: string | null) {
       data: null,
       isLoading: false,
       error: null,
+      analyzedAt: undefined,
+      cacheHit: undefined,
+      message: undefined,
     })
   }, [listingId])
 
   const analyze = async (forceRefresh: boolean = false): Promise<void> => {
+    // Proteção: evitar múltiplas requisições simultâneas
+    if (state.isLoading) {
+      return
+    }
     if (!listingId) {
       setState({ data: null, isLoading: false, error: 'ID do anúncio não fornecido' })
       return
@@ -308,6 +253,7 @@ export function useAIAnalyze(listingId: string | null) {
       }
 
       // Build URL with forceRefresh query param if needed
+      // Tentar query param primeiro (preferencial)
       const url = forceRefresh 
         ? `${apiUrl}/ai/analyze/${listingId}?forceRefresh=true`
         : `${apiUrl}/ai/analyze/${listingId}`
@@ -369,54 +315,31 @@ export function useAIAnalyze(listingId: string | null) {
       // Adaptar resposta da API para o formato esperado pelo frontend
       const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
       
-      // Incluir analysisV21 se disponível (verificar múltiplos locais possíveis)
-      const analysisV21 = result.analysisV21 
-        || result.data?.analysisV21 
-        || result.analysis?.analysisV21 
-        || result.result?.analysisV21
+      // Ler analysisV21 do schema real: response.data.analysisV21 (não response.data.data.analysisV21)
+      const analysisV21 = result.data?.analysisV21 ?? null
       
       if (analysisV21) {
-        adaptedData.analysisV21 = analysisV21
-      } else {
-        // Se não tiver analysisV21, fazer re-fetch do cache endpoint
-        // Aguardar um pouco para garantir que o cache foi salvo
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        
-        // Re-executar o POST com forceRefresh=false para pegar do cache
-        try {
-          const cacheUrl = `${apiUrl}/ai/analyze/${listingId}`
-          const cacheResponse = await fetch(cacheUrl, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({}), // REQUIRED: Fastify strict mode
-          })
-          
-          if (cacheResponse.ok) {
-            const cacheResult = await cacheResponse.json()
-            
-            // Verificar se o cache tem analysisV21
-            const cachedAnalysisV21 = cacheResult.analysisV21 
-              || cacheResult.data?.analysisV21 
-              || cacheResult.analysis?.analysisV21 
-              || cacheResult.result?.analysisV21
-            
-            if (cachedAnalysisV21) {
-              adaptedData.analysisV21 = cachedAnalysisV21
-            }
-          }
-        } catch (refetchError) {
-          // Não falhar se o re-fetch der erro, usar o que já temos
-          console.error('[AI-ANALYZE] Error re-fetching from cache:', refetchError)
-        }
+        adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
       }
+      
+      // Extrair metadados para UX de cache
+      // cacheHit pode estar em result.data.cacheHit ou result.cacheHit
+      // Também verificar se message contém "(cache)"
+      const cacheHit = result.data?.cacheHit 
+        ?? result.cacheHit 
+        ?? (result.message && result.message.includes('(cache)'))
+        ?? false
+      
+      const analyzedAt = analysisV21?.meta?.analyzed_at
+      const message = result.message ?? result.data?.message
       
       setState({
         data: adaptedData,
         isLoading: false,
         error: null,
+        analyzedAt,
+        cacheHit: Boolean(cacheHit),
+        message,
       })
     } catch (error) {
       // Log erro sem detalhes sensíveis
@@ -448,6 +371,9 @@ export function useAIAnalyze(listingId: string | null) {
         data: null,
         isLoading: false,
         error: errorMessage,
+        analyzedAt: undefined,
+        cacheHit: undefined,
+        message: undefined,
       })
       
       // Não re-throw o erro para evitar quebrar a UI
@@ -455,9 +381,19 @@ export function useAIAnalyze(listingId: string | null) {
     }
   }
 
+  // Wrapper para compatibilidade com código existente
+  const triggerAIAnalysis = async (force?: boolean) => {
+    if (state.isLoading) {
+      // Evitar múltiplas requisições simultâneas
+      return
+    }
+    await analyze(force || false)
+  }
+
   return {
     ...state,
     analyze,
+    triggerAIAnalysis,
   }
 }
 
