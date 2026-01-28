@@ -369,9 +369,48 @@ export function useAIAnalyze(listingId: string | null) {
       // Adaptar resposta da API para o formato esperado pelo frontend
       const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
       
-      // Incluir analysisV21 se disponível (não é processado pelo adaptador)
-      if (result.data?.analysisV21) {
-        adaptedData.analysisV21 = result.data.analysisV21
+      // Incluir analysisV21 se disponível (verificar múltiplos locais possíveis)
+      const analysisV21 = result.analysisV21 
+        || result.data?.analysisV21 
+        || result.analysis?.analysisV21 
+        || result.result?.analysisV21
+      
+      if (analysisV21) {
+        adaptedData.analysisV21 = analysisV21
+      } else {
+        // Se não tiver analysisV21, fazer re-fetch do cache endpoint
+        // Aguardar um pouco para garantir que o cache foi salvo
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Re-executar o POST com forceRefresh=false para pegar do cache
+        try {
+          const cacheUrl = `${apiUrl}/ai/analyze/${listingId}`
+          const cacheResponse = await fetch(cacheUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}), // REQUIRED: Fastify strict mode
+          })
+          
+          if (cacheResponse.ok) {
+            const cacheResult = await cacheResponse.json()
+            
+            // Verificar se o cache tem analysisV21
+            const cachedAnalysisV21 = cacheResult.analysisV21 
+              || cacheResult.data?.analysisV21 
+              || cacheResult.analysis?.analysisV21 
+              || cacheResult.result?.analysisV21
+            
+            if (cachedAnalysisV21) {
+              adaptedData.analysisV21 = cachedAnalysisV21
+            }
+          }
+        } catch (refetchError) {
+          // Não falhar se o re-fetch der erro, usar o que já temos
+          console.error('[AI-ANALYZE] Error re-fetching from cache:', refetchError)
+        }
       }
       
       setState({
