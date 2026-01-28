@@ -459,6 +459,7 @@ export function ListingsTable() {
   })
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'ai' | 'ai-v21'>('ai')
 
   const { data, isLoading, error, refetch } = useListings(filters)
   const { toast } = useToast()
@@ -482,6 +483,13 @@ export function ListingsTable() {
   // Removido uso de selectedRecommendations - não mais necessário
   // Removida aba de Recomendações - mantendo apenas IA
   const [copiedText, setCopiedText] = useState<string | null>(null)
+
+  // Resetar aba ativa quando o listing mudar ou quando analysisV21 não existir mais
+  useEffect(() => {
+    if (!aiAnalysis?.analysisV21 && activeTab === 'ai-v21') {
+      setActiveTab('ai')
+    }
+  }, [aiAnalysis?.analysisV21, activeTab])
 
   // Buscar listing selecionado para verificar status de acesso
   const selectedListing = selectedListingId ? data?.items.find(l => l.id === selectedListingId) || null : null
@@ -758,7 +766,7 @@ export function ListingsTable() {
             </SheetDescription>
           </SheetHeader>
 
-          <Tabs value="ai" className="mt-6">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'ai' | 'ai-v21')} className="mt-6">
             <TabsList className={`grid w-full ${aiAnalysis?.analysisV21 ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="ai">
                 <Sparkles className="h-4 w-4 mr-2" />
