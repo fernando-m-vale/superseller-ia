@@ -1,71 +1,106 @@
-# NEXT SESSION PLAN — Dia 2
+# NEXT SESSION PLAN — Dia 3
 
-## ✅ Status atual (Dia 1 concluído)
-- Orders/GMV: OK (série diária contínua, UTC, overview preenchendo periodDays)
-- Conexão Mercado Livre: OK (reauth_required + erros tratados + migration aplicada em PROD)
-- Visits: ✅ **RESOLVIDO**
-  - ✅ Pipeline e persistência funcionando
-  - ✅ Parser corrigido para formato real (results.total/visits_detail)
-  - ✅ Valores > 0 no DB: `positive_days = 91`, `total_visits_period = 803`
-  - ✅ UI exibindo gráfico de visitas com valores reais
-  - ✅ 0 NULL visits quando fetch é bem-sucedido
-- Access Control & PolicyAgent: ✅ **RESOLVIDO**
-  - ✅ Listings bloqueados marcados corretamente (`access_status='blocked_by_policy'`)
-  - ✅ Reconciliação de status (`paused` vs `active`) funcionando
-  - ✅ UI exibe mensagens específicas para bloqueios
-  - ✅ Sync não processa listings bloqueados
+## ✅ Status atual (Dia 2 em finalização)
+- **Análise IA V2.1:** Backend e frontend integrados
+- **V1 descontinuada:** UI V1 removida completamente
+- **Cache funcional:** Regeneração automática quando `analysisV21` ausente
+- **UX de cache:** Banner e botão "Regerar análise" implementados
+- **Build passando:** TypeScript errors corrigidos
 
-## 🎯 Foco do Dia 2: Orders + estrutura multi-contas
+## 🎯 Objetivo da próxima sessão
+**Encerrar pendências do Dia 2 e estabilizar completamente a Análise IA V2.1.**
 
-### PRIORIDADE 1: Orders (seller_id, connection switch)
-**Objetivo:** Garantir que orders refletem o seller da conexão ativa atual
+## 🔧 Tarefas prioritárias
 
-**Tarefas:**
-1. **Validar comportamento de orders quando connection active mudou de sellerId**
-   - Verificar se orders do seller atual (connection active) estão sendo trazidos corretamente
-   - Se connection active mudou de `sellerId`, orders podem refletir seller antigo
-   - **Ação:** Investigar se orders=0 é devido a mudança de connection ou outro problema
-   - **Evidência necessária:** Confirmar se orders do seller atual (provider_account_id da connection active) estão no DB
+### PRIORIDADE 1: Finalizar integração V2.1
+1. **Corrigir binding completo do `analysisV21` no frontend**
+   - Validar que todos os campos do schema real estão sendo renderizados
+   - Garantir que não há placeholders ou mensagens "indisponível" quando dados existem
+   - Verificar que campos opcionais são tratados corretamente (null/undefined)
 
-2. **Corrigir ingestão de orders se necessário**
-   - Se orders estão sendo buscados do seller errado, ajustar query/filtro
-   - Garantir que `orders.seller_id` corresponde ao `provider_account_id` da connection active
-   - Validar que `order_items.listing_id` está preenchido corretamente
+2. **Garantir renderização correta de:**
+   - ✅ `diagnostic.overall_health`, `main_bottleneck`, `quick_wins`, `long_term`
+   - ✅ `actions[]` ordenadas por prioridade (critical > high > medium > low)
+   - ✅ `title_analysis.suggestions[0].text` com botão copiar
+   - ✅ `description_analysis.suggested_structure` montada como texto completo
+   - ✅ `price_analysis` (price_base, price_final, has_promotion, discount_percent)
+   - ✅ `media_analysis` (photos.count, photos.score, video.status_message)
 
-3. **Validar métricas agregadas**
-   - Confirmar que `listing_metrics_daily.orders` e `gmv` refletem orders do seller atual
-   - Verificar se há discrepâncias entre orders no DB e métricas agregadas
+3. **Corrigir exibição de preço base vs preço promocional**
+   - Validar que `price_base` e `price_final` são exibidos corretamente
+   - Garantir que `has_promotion` e `discount_percent` são refletidos na UI
+   - Verificar se há discrepâncias entre dados do DB e exibição
 
-### PRIORIDADE 2: UX de multi-contas (opcional, se tempo permitir)
-**Objetivo:** Melhorar experiência quando há múltiplas conexões
+4. **Ajustar copy do modal para linguagem de usuário final**
+   - Remover termos técnicos ("V2.1", "indisponível")
+   - Usar linguagem clara e orientada ao usuário
+   - Melhorar mensagens de erro e estados vazios
 
-**Tarefas:**
-1. **Investigar estrutura para suportar múltiplas contas/conexões**
-   - Avaliar se é necessário suporte a múltiplas conexões ativas simultaneamente
-   - Se sim, definir UX: seletor de conta, filtro por conexão, etc.
-   - Se não, documentar decisão de usar sempre a conexão `active` mais recente
+### PRIORIDADE 2: Validação e testes
+1. **Abrir múltiplos anúncios**
+   - Validar que cada anúncio carrega sua análise corretamente
+   - Verificar que não há mistura de dados entre anúncios
+   - Confirmar que cache funciona por listing
 
-2. **Melhorar feedback visual para conexões**
-   - Exibir qual conexão está sendo usada (provider_account_id, nickname)
-   - Mostrar aviso se há conexões revogadas/antigas
-   - CTA para reconectar se necessário
+2. **Validar cache (não gerar nova análise sem necessidade)**
+   - Abrir anúncio com análise existente → não deve chamar OpenAI
+   - Verificar banner de cache quando `cacheHit=true`
+   - Testar botão "Regerar análise" → deve forçar nova análise
 
-### PRIORIDADE 3: Estabilização (se tempo permitir)
-1. **Corrigir testes quebrados**
-   - `ai-recommendations` (@superseller/ai export)
-   - `metrics.test` (dependente de seed/dados)
+3. **Confirmar que não há chamadas redundantes à OpenAI**
+   - Monitorar logs da API durante uso normal
+   - Verificar que cache está sendo respeitado
+   - Validar que `forceRefresh=true` realmente bypassa cache
 
-2. **Validar botão "Atualizar dados" no UI**
-   - Garantir que chama endpoint correto: `POST /api/v1/sync/mercadolivre/refresh?days=X`
-   - Validar que gráfico atualiza após refresh (React Query invalidation)
-   - Confirmar feedback visual (loading, success, error)
+4. **Validar comportamento com e sem análise existente**
+   - Anúncio sem análise → mostrar estado vazio + botão "Gerar análise"
+   - Anúncio com análise → mostrar painel V2.1 completo
+   - Anúncio com análise antiga (sem `analysisV21`) → regenerar automaticamente
+
+## 🧪 Validações obrigatórias
+
+### Funcionalidade
+- [ ] Modal abre e mostra conteúdo V2.1 (sem abas)
+- [ ] Clicar para gerar análise funciona e, ao concluir, painel V2.1 renderiza
+- [ ] Não ocorre "Application error" ao interagir com o modal
+- [ ] Painel V2.1 não quebra mesmo quando ações/imagens/promo vierem ausentes
+- [ ] Cache é respeitado (não gera nova análise sem necessidade)
+- [ ] Botão "Regerar análise" força nova análise corretamente
+
+### Dados
+- [ ] Todos os campos do `analysisV21` são renderizados quando presentes
+- [ ] Preço base vs promocional exibido corretamente
+- [ ] Ações ordenadas por prioridade (critical > high > medium > low)
+- [ ] Título e descrição sugeridos podem ser copiados
+- [ ] Links "Abrir no Mercado Livre" funcionam quando `ml_deeplink` existe
+
+### UX
+- [ ] Copy do modal é clara e orientada ao usuário final
+- [ ] Banner de cache é discreto e informativo
+- [ ] Estados vazios são amigáveis
+- [ ] Mensagens de erro são claras
+
+## 🚀 Critério de conclusão do Dia 2
+
+### Obrigatório
+- [x] Modal 100% funcional
+- [ ] Nenhum placeholder estranho
+- [ ] UX clara (sem termos técnicos)
+- [ ] Cache ativo e visível para o usuário
+- [ ] Build passando sem erros TypeScript
+- [ ] CI/CD verde
+
+### Desejável
+- [ ] Validação visual de preço promocional
+- [ ] Testes automatizados para componente V2.1
+- [ ] Documentação de uso do cache
 
 ## 🧯 Notas importantes
-- **Não reanalisar visits:** Visits está resolvido e validado; focar em orders
-- **Backfill manual:** Por enquanto, backfill é manual; não implementar automação agora
-- **Multi-conexões:** Não implementar suporte completo agora; apenas validar comportamento atual
+- **Não reativar V1:** V1 foi descontinuada; focar apenas em V2.1
+- **Cache é crítico:** Respeitar cache evita custos desnecessários com OpenAI
+- **UX primeiro:** Copy e mensagens devem ser orientadas ao usuário final, não técnico
 
-## 🟢 Após VISITS (retomar plano épico já aprovado)
+## 🟢 Após estabilizar V2.1 (próxima fase)
 ### ONDA 1 — IA SCORE V2 (AÇÃO + EXPLICABILIDADE)
 - Criar `apps/api/src/services/ScoreActionEngine.ts`
 - Implementar `explainScore(scoreBreakdown, dataQuality)`
@@ -77,6 +112,22 @@
   - mídia incompleta
   - ordenação por impacto
 
-## 🧯 Operação / custos (manual)
-- Aplicar runbook `docs/RUNBOOK_ENV_TOGGLE.md` para desligar quando não estiver usando
-- Atenção: desligar RDS pode impedir API/Web e jobs; reativar antes de testar
+## 📌 Backlog / Débitos Técnicos (registrado)
+### Produto / UX
+- Multi-conexões por marketplace
+- Filtro por conta no dashboard
+- Dashboard consolidado vs por conta
+- Identidade visual da conta conectada
+- Diferenciação clara de status:
+  - `paused`
+  - `blocked_by_policy`
+  - `unauthorized`
+- Inserção manual de anúncio (MLB…)
+
+### Dados / Engenharia
+- Reconciliação completa de status (job dedicado)
+- Backfill automático (cron / scheduler)
+- Orders x seller_id ao trocar conexão
+- Limpeza de dados históricos (soft delete / reprocess)
+
+⚠️ **Registrado explicitamente:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura.

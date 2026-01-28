@@ -5,6 +5,15 @@
 ## 🎯 Foco do dia
 **Correção definitiva do sync de visits + tratamento de bloqueios PolicyAgent**
 
+---
+
+# DAILY EXECUTION LOG — 2026-01-27 (Dia 2)
+
+## ✅ STATUS: EM FINALIZAÇÃO
+
+## 🎯 Foco do dia
+**Consolidação da Análise IA V2.1 (backend + frontend) + Descontinuação da V1 + Garantia de cache e controle de custo + Estabilização de arquitetura para evolução futura**
+
 ## ✅ Planejado / Feito
 - [x] Instrumentar `syncVisitsByRange` com logs detalhados (visitsMap sum, intersectionCount, read-back)
 - [x] Corrigir parser de visits para formato real do ML (results.total/visits_detail)
@@ -68,3 +77,61 @@
 2) Investigar estrutura para suportar múltiplas contas/conexões (UX e backend)
 3) Corrigir testes quebrados (ai-recommendations, metrics.test)
 4) Validar botão "Atualizar dados" no UI
+
+---
+
+## ✅ Planejado / Feito (Dia 2)
+- [x] Finalizar prompt e schema da IA V2.1
+- [x] Integrar V2.1 ao backend (`POST /api/v1/ai/analyze/:listingId`)
+- [x] Implementar conversão V2.1 → V1 compatível (`convertV21ToV1`)
+- [x] Ativar V2.1 na rota com fallback para V1
+- [x] Garantir cache funcional (regeneração quando `analysisV21` ausente)
+- [x] Integrar V2.1 ao frontend (types, hook, componente)
+- [x] Remover UI V1 completamente
+- [x] Implementar UX de cache (banner quando cacheHit, botão "Regerar análise")
+- [x] Corrigir binding completo do `analysisV21` no frontend
+- [x] Renderizar diagnóstico, ações, título sugerido, descrição sugerida, análise de preço, análise de mídia
+- [x] Corrigir erros de build TypeScript (tipos, variáveis não declaradas)
+- [x] Validar fluxo completo de análise por anúncio
+
+## 🧠 Descobertas (Dia 2)
+- **V2.1 gera JSON rico e confiável:** Schema estruturado com `diagnostic`, `actions`, `title_analysis`, `description_analysis`, `price_analysis`, `media_analysis`
+- **Binding cuidadoso no frontend:** Schema real da API é `response.data.analysisV21` (não `response.data.data.analysisV21`)
+- **Cache é essencial para controle de custos:** OpenAI GPT-4o é caro; cache por listing evita chamadas redundantes
+- **Limitações da API do Mercado Livre:** Exigem decisões de produto (ex: backfill manual por enquanto)
+- **Problemas atuais são de integração, não de lógica ou IA:** V2.1 funciona bem; desafio foi mapear corretamente no frontend
+
+## ⚠️ Bloqueios / Riscos (Dia 2)
+- **Mapping incompleto do analysisV21 no frontend:** Inicialmente tentou acessar campos inexistentes (`verdict`, `title.suggested`, `description.fullText`, `images.plan`) — **RESOLVIDO**
+- **Preço promocional ainda não refletido corretamente:** `price_base` vs `price_final` precisa validação visual
+- **UX com termos técnicos:** "V2.1", "indisponível" não orientados ao usuário final — precisa refinamento de copy
+- **CI rodando em commit antigo:** Commit `d7d90e9` ainda tinha código antigo; commit `0ad1bf2` corrigiu — **RESOLVIDO**
+
+## 📌 Decisões tomadas (Dia 2)
+
+### Análise IA V2.1
+- **V1 da análise de IA foi oficialmente descontinuada:** Apenas V2.1 será exibida ao usuário
+- **Cache reaproveitado da V1 para V2.1:** Cache existente é regenerado automaticamente quando `analysisV21` ausente
+- **Fallback para V1:** Se V2.1 falhar, sistema ainda pode gerar V1 (mas não exibe ao usuário)
+- **Versionamento de prompt:** `PROMPT_VERSION = 'ai-v2.1'` para invalidação de cache
+
+### Backfill e Automação
+- **Backfill automático ficará para fase futura:** Decisão consciente de manter manual por enquanto
+- **Preparar fundação para análise de imagens:** Armazenar `pictures_json`, `pictures_count` sem ativar IA visual agora
+
+### Frontend
+- **Remoção completa da UI V1:** Modal exibe apenas V2.1
+- **UX de cache:** Banner discreto quando `cacheHit=true` ou `message.includes('(cache)')`
+- **Botão "Regerar análise":** Sempre disponível quando `analysisV21` existe; chama endpoint com `forceRefresh=true`
+
+### Integração
+- **Schema real da API:** `response.data.analysisV21` (não `response.data.data.analysisV21`)
+- **Metadados para UX:** `analyzedAt`, `cacheHit`, `message` expostos no hook para feedback ao usuário
+
+## ➡️ Próximo passo claro (Dia 2 → Dia 3)
+**Encerrar pendências do Dia 2 e estabilizar completamente a Análise IA V2.1:**
+1) Validar renderização completa de todos os campos do `analysisV21`
+2) Corrigir exibição de preço base vs preço promocional
+3) Ajustar copy do modal para linguagem de usuário final (remover termos técnicos)
+4) Validar cache (não gerar nova análise sem necessidade)
+5) Confirmar que não há chamadas redundantes à OpenAI

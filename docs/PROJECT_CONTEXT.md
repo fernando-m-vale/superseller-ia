@@ -1,5 +1,5 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-01-19
+Atualizado em: 2026-01-27
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
@@ -46,13 +46,29 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - **Não alterar `status` quando bloqueado:** Se PolicyAgent bloqueia, `status` permanece desconhecido (não alterar)
 - **Limpeza automática:** Quando listing volta a ser acessível, limpa `access_blocked_*` e marca `access_status='accessible'`
 
+### Decisões arquiteturais (Análise IA V2.1)
+- **Cache de análise por listing:** Evita custos desnecessários com OpenAI; regeneração automática quando `analysisV21` ausente
+- **Regeração manual sob demanda:** Botão "Regerar análise" permite forçar nova análise quando necessário
+- **Controle de custo OpenAI:** Cache é crítico; sistema respeita cache existente e só regenera quando necessário
+- **Integração orientada a versionamento de prompt:** `PROMPT_VERSION = 'ai-v2.1'` para invalidação de cache
+- **Preparação para IA visual futura:** Armazenar `pictures_json`, `pictures_count` sem análise visual por IA neste momento (decisão consciente para evitar complexidade prematura)
+
 ## 🧭 Roadmap (alto nível)
 - ONDA 1/2: Score V2 + UX (concluído)
 - ONDA 3: IA como amplificador (em progresso)
+  - ✅ Análise IA V2.1 (backend + frontend) — **CONCLUÍDO**
+  - ⏳ Estabilização e refinamento UX — **EM PROGRESSO**
 - Operação: jobs internos + scheduler (fase atual, crítico para clientes reais)
 - Próxima épica: Benchmark/Ads/Automações (após dados e operação sólidos)
 
 
+
+## 🧠 Estado atual do produto (2026-01-27)
+- **SuperSeller IA opera com Análise IA V2.1 como padrão:** V1 foi oficialmente descontinuada
+- **Sistema está preparado para escalar IA, dados e UX:** Fundação sólida para evolução futura
+- **Cache de análise por listing:** Evita custos desnecessários com OpenAI
+- **Backfill manual por decisão consciente:** Automação futura planejada
+- **Preparação para IA visual futura:** Dados de imagens armazenados (`pictures_json`, `pictures_count`) sem análise visual ativa
 
 ## ✅ Estado atual (2026-01-22)
 ### Produção
@@ -92,15 +108,23 @@ Próximo foco: estabilizar orders quando connection active muda de sellerId + es
 - **Backfill manual por enquanto:** Automação de backfill de visits/metrics será implementada futuramente
 - **Multi-conexões:** Sistema usa sempre a conexão `active` mais recente; suporte a múltiplas conexões simultâneas será implementado no futuro
 
+## 🆔 Padronização de tenant_id
+- **Situação atual:** Inconsistência (TEXT x UUID)
+- **Curto prazo:** Cast explícito para compatibilidade
+- **Decisão registrada:** Padronizar UUID no domínio
+- **Mudança planejada, não urgente:** Não é bloqueador atual
+
 ## 🚧 Riscos conhecidos (backlog)
 - **Multi-conexões:** Sistema não suporta múltiplas conexões ativas simultaneamente (usa sempre a mais recente)
 - **Inserção manual de anúncios:** Não implementado; sistema depende de sync do Mercado Livre
 - **Backfill automático:** Por enquanto, backfill de visits/metrics é manual; automação futura
+- **UX com termos técnicos:** "V2.1", "indisponível" precisam refinamento para linguagem de usuário final
 
 ## 🧭 Próxima entrega crítica
 ✅ **VISITS reais no banco (valores > 0) e exibidos no overview** — CONCLUÍDO
+✅ **Análise IA V2.1 integrada (backend + frontend)** — CONCLUÍDO
 
-Próximo: Validar comportamento de orders quando connection active muda de sellerId.
+Próximo: Estabilizar completamente V2.1 (finalizar pendências do Dia 2).
 
 ## 🚀 Plano épico aprovado (próxima fase)
 ### ONDA 1 — IA SCORE V2 (AÇÃO + EXPLICABILIDADE)
