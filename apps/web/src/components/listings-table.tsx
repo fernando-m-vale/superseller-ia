@@ -21,7 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb, Sparkles, Copy, Check } from 'lucide-react'
+import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb, Sparkles, Copy, Check, RefreshCw, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 // Removido: applyRecommendation não é mais necessário (aba Recomendações removida)
 import { useAIAnalyze } from '@/hooks/use-ai-analyze'
@@ -475,7 +475,15 @@ export function ListingsTable() {
   // Removido: recomendações não são mais exibidas no modal (apenas IA)
   
   // Hook para análise de IA
-  const { data: aiAnalysis, isLoading: aiLoading, error: aiError, analyze: triggerAIAnalysis } = useAIAnalyze(selectedListingId)
+  const { 
+    data: aiAnalysis, 
+    isLoading: aiLoading, 
+    error: aiError, 
+    triggerAIAnalysis,
+    analyzedAt,
+    cacheHit,
+    message,
+  } = useAIAnalyze(selectedListingId)
   
   // Removido uso de selectedRecommendations - não mais necessário
   // Removida aba de Recomendações - mantendo apenas IA
@@ -757,7 +765,92 @@ export function ListingsTable() {
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-6">
+          <div className="mt-6 space-y-4">
+            {/* Banner de cache - mostrar quando analysisV21 existe e é cache */}
+            {aiAnalysis?.analysisV21 && (cacheHit || (message && message.includes('(cache)'))) && analyzedAt && (
+              <Card className="bg-muted/50">
+                <CardContent className="pt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Resultado do cache — última análise em {new Date(analyzedAt).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await triggerAIAnalysis(true) // force=true
+                        } catch {
+                          console.error('[AI-ANALYZE] Erro ao regerar análise')
+                        }
+                      }}
+                      disabled={aiLoading}
+                    >
+                      {aiLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Regenerando...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Regerar análise
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Banner quando não é cache - mostrar quando analysisV21 existe mas não é cache */}
+            {aiAnalysis?.analysisV21 && !cacheHit && !(message && message.includes('(cache)')) && analyzedAt && (
+              <Card className="bg-primary/5">
+                <CardContent className="pt-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="text-sm text-muted-foreground">
+                      Análise gerada agora em {new Date(analyzedAt).toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Botão "Regerar análise" quando analysisV21 existe (sempre disponível) */}
+            {aiAnalysis?.analysisV21 && (
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await triggerAIAnalysis(true) // force=true
+                    } catch {
+                      console.error('[AI-ANALYZE] Erro ao regerar análise')
+                    }
+                  }}
+                  disabled={aiLoading}
+                >
+                  {aiLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Regenerando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Regerar análise
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Conteúdo principal */}
             {aiAnalysis?.analysisV21 ? (
               <AIAnalysisV21Panel analysisV21={aiAnalysis.analysisV21} />
             ) : (
