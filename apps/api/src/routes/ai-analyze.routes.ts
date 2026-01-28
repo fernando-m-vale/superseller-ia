@@ -284,22 +284,37 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           if (cached && cached.result_json) {
             cachedResult = cached.result_json as unknown as CachedAnalysisResult;
             
-            request.log.info(
-              {
-                requestId,
-                userId,
-                tenantId,
-                listingId,
-                fingerprint: fingerprint.substring(0, 16) + '...',
-                cacheHit: true,
-                hasV21: !!(cachedResult.analysisV21),
-              },
-              'AI analysis cache hit'
-            );
+            // Se cache não tiver analysisV21, considerar como cache miss e regenerar
+            if (!cachedResult.analysisV21) {
+              request.log.warn(
+                {
+                  requestId,
+                  userId,
+                  tenantId,
+                  listingId,
+                  fingerprint: fingerprint.substring(0, 16) + '...',
+                },
+                'Cache hit but missing analysisV21, will regenerate'
+              );
+              cachedResult = null; // Forçar regeneração
+            } else {
+              request.log.info(
+                {
+                  requestId,
+                  userId,
+                  tenantId,
+                  listingId,
+                  fingerprint: fingerprint.substring(0, 16) + '...',
+                  cacheHit: true,
+                  hasV21: true,
+                },
+                'AI analysis cache hit with V2.1'
+              );
+            }
           }
         }
 
-        // Step 5: If cache miss or forceRefresh, call OpenAI
+        // Step 5: If cache miss or forceRefresh or cache missing V2.1, call OpenAI
         if (!cachedResult) {
           // Tentar V2.1 primeiro, com fallback para V1
           let analysisV21: AIAnalysisResultV21 | null = null;
@@ -475,10 +490,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               savedRecommendations: result.savedRecommendations,
             };
 
-            // Incluir V2.1 se disponível
-            if (analysisV21 && v1Compat) {
+            // Sempre incluir V2.1 se disponível (obrigatório para V2.1)
+            if (analysisV21) {
               cachePayload.analysisV21 = analysisV21;
-              cachePayload.v1Compat = v1Compat;
+              if (v1Compat) {
+                cachePayload.v1Compat = v1Compat;
+              }
+            } else {
+              // Se não tiver analysisV21, logar warning mas continuar
+              request.log.warn(
+                {
+                  requestId,
+                  listingId,
+                  tenantId,
+                },
+                'V2.1 analysis not available, saving cache without analysisV21'
+              );
             }
 
             await prisma.listingAIAnalysis.upsert({
@@ -604,9 +631,28 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             mediaVerdict,
           };
 
-          // Incluir V2.1 se disponível
+          // SEMPRE incluir V2.1 se disponível (obrigatório para V2.1)
           if (analysisV21) {
             responseData.analysisV21 = analysisV21;
+            request.log.info(
+              {
+                requestId,
+                listingId,
+                tenantId,
+                hasV21: true,
+              },
+              'Including analysisV21 in response'
+            );
+          } else {
+            request.log.warn(
+              {
+                requestId,
+                listingId,
+                tenantId,
+                hasV21: false,
+              },
+              'Response does not include analysisV21 (V2.1 failed or not generated)'
+            );
           }
 
           return reply.status(200).send({
@@ -678,28 +724,36 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           '[MEDIA-VERDICT-DEBUG] MediaVerdict gerado (cache)'
         );
 
+        // Preparar resposta do cache incluindo V2.1 se disponível
+        const cacheResponseData: any = {
+          listingId,
+          score: scoreResult.score.final,
+          scoreBreakdown: scoreResult.score.breakdown,
+          potentialGain: scoreResult.score.potential_gain,
+          critique: cachedResult.analysis.critique,
+          growthHacks: cachedResult.analysis.growthHacks,
+          seoSuggestions: cachedResult.analysis.seoSuggestions,
+          savedRecommendations: cachedResult.savedRecommendations,
+          analyzedAt: cachedResult.analysis.analyzedAt,
+          model: cachedResult.analysis.model,
+          metrics30d: scoreResult.metrics_30d,
+          dataQuality: scoreResult.dataQuality,
+          cacheHit: true,
+          // IA Score V2: Action Plan and Score Explanation
+          actionPlan,
+          scoreExplanation,
+          // MediaVerdict - Fonte única de verdade para mídia
+          mediaVerdict,
+        };
+
+        // Incluir V2.1 se disponível no cache
+        if (cachedResult.analysisV21) {
+          cacheResponseData.analysisV21 = cachedResult.analysisV21;
+        }
+
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',
-          data: {
-            listingId,
-            score: scoreResult.score.final,
-            scoreBreakdown: scoreResult.score.breakdown,
-            potentialGain: scoreResult.score.potential_gain,
-            critique: cachedResult.analysis.critique,
-            growthHacks: cachedResult.analysis.growthHacks,
-            seoSuggestions: cachedResult.analysis.seoSuggestions,
-            savedRecommendations: cachedResult.savedRecommendations,
-            analyzedAt: cachedResult.analysis.analyzedAt,
-            model: cachedResult.analysis.model,
-            metrics30d: scoreResult.metrics_30d,
-            dataQuality: scoreResult.dataQuality,
-            cacheHit: true,
-            // IA Score V2: Action Plan and Score Explanation
-            actionPlan,
-            scoreExplanation,
-            // MediaVerdict - Fonte única de verdade para mídia
-            mediaVerdict,
-          },
+          data: cacheResponseData,
         });
       } catch (error) {
         const { listingId } = (request.params as { listingId: string }) || {};
