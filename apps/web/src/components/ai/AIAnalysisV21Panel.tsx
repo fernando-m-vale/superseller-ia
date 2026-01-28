@@ -16,6 +16,14 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
   const { toast } = useToast()
   const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
 
+  // Proteger contra null/undefined
+  const verdict = analysisV21?.verdict
+  const actions = analysisV21?.actions ?? []
+  const title = analysisV21?.title
+  const description = analysisV21?.description
+  const images = analysisV21?.images
+  const promo = analysisV21?.promo
+
   const handleCopy = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -44,7 +52,8 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
     }
   }
 
-  const getPriorityBadge = (priority: number) => {
+  const getPriorityBadge = (priority: number | undefined) => {
+    if (!priority) return null
     if (priority === 1) {
       return <Badge variant="destructive" className="ml-2">Alta Prioridade</Badge>
     } else if (priority === 2) {
@@ -65,9 +74,9 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
           </div>
         </CardHeader>
         <CardContent>
-          <h3 className="text-lg font-semibold mb-2">{analysisV21.verdict.headline}</h3>
-          {analysisV21.verdict.summary && (
-            <p className="text-sm text-muted-foreground">{analysisV21.verdict.summary}</p>
+          <h3 className="text-lg font-semibold mb-2">{verdict?.headline ?? 'Sem veredito'}</h3>
+          {verdict?.summary && (
+            <p className="text-sm text-muted-foreground">{verdict.summary}</p>
           )}
         </CardContent>
       </Card>
@@ -85,17 +94,20 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {analysisV21.actions
-              .sort((a, b) => a.priority - b.priority)
-              .map((action, index) => (
+            {actions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma ação disponível.</p>
+            ) : (
+              actions
+                .sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999))
+                .map((action, index) => (
                 <div key={index} className="border rounded-lg p-4 space-y-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center mb-2">
-                        <span className="font-semibold text-sm">Ação {action.priority}</span>
+                        <span className="font-semibold text-sm">Ação {action.priority ?? 'N/A'}</span>
                         {getPriorityBadge(action.priority)}
                       </div>
-                      <p className="text-sm">{action.instruction}</p>
+                      <p className="text-sm">{action.instruction ?? 'Sem instrução'}</p>
                       {action.expectedImpact && (
                         <p className="text-xs text-muted-foreground mt-1">
                           Impacto esperado: {action.expectedImpact}
@@ -136,7 +148,8 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
                     </div>
                   )}
                 </div>
-              ))}
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
@@ -150,37 +163,43 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm flex-1">{analysisV21.title.suggested}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleCopy(analysisV21.title.suggested, 'Título')}
-            >
-              {copiedTexts.has(analysisV21.title.suggested) ? (
-                <>
-                  <Check className="h-4 w-4 mr-2 text-green-600" />
-                  Copiado
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copiar
-                </>
+          {title?.suggested ? (
+            <>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm flex-1">{title.suggested}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopy(title.suggested, 'Título')}
+                >
+                  {copiedTexts.has(title.suggested) ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2 text-green-600" />
+                      Copiado
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+              {title.rationale && (
+                <p className="text-xs text-muted-foreground">{title.rationale}</p>
               )}
-            </Button>
-          </div>
-          {analysisV21.title.rationale && (
-            <p className="text-xs text-muted-foreground">{analysisV21.title.rationale}</p>
-          )}
-          {analysisV21.title.keywords && analysisV21.title.keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {analysisV21.title.keywords.map((keyword, idx) => (
-                <Badge key={idx} variant="outline" className="text-xs">
-                  {keyword}
-                </Badge>
-              ))}
-            </div>
+              {title.keywords && title.keywords.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {title.keywords.map((keyword, idx) => (
+                    <Badge key={idx} variant="outline" className="text-xs">
+                      {keyword}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Título sugerido não disponível.</p>
           )}
         </CardContent>
       </Card>
@@ -194,15 +213,15 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {analysisV21.description.fullText ? (
+          {description?.fullText ? (
             <div className="space-y-2">
               <div className="flex justify-end">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleCopy(analysisV21.description.fullText!, 'Descrição completa')}
+                  onClick={() => handleCopy(description.fullText!, 'Descrição completa')}
                 >
-                  {copiedTexts.has(analysisV21.description.fullText!) ? (
+                  {copiedTexts.has(description.fullText!) ? (
                     <>
                       <Check className="h-4 w-4 mr-2 text-green-600" />
                       Copiado
@@ -216,18 +235,18 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
                 </Button>
               </div>
               <p className="text-sm whitespace-pre-wrap bg-muted p-3 rounded">
-                {analysisV21.description.fullText}
+                {description.fullText}
               </p>
             </div>
-          ) : (
+          ) : description?.bullets && description.bullets.length > 0 ? (
             <div className="space-y-2">
               <div className="flex justify-end">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleCopy(analysisV21.description.bullets.join('\n'), 'Descrição')}
+                  onClick={() => handleCopy(description.bullets.join('\n'), 'Descrição')}
                 >
-                  {copiedTexts.has(analysisV21.description.bullets.join('\n')) ? (
+                  {copiedTexts.has(description.bullets.join('\n')) ? (
                     <>
                       <Check className="h-4 w-4 mr-2 text-green-600" />
                       Copiado
@@ -241,17 +260,19 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
                 </Button>
               </div>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                {analysisV21.description.bullets.map((bullet, idx) => (
+                {description.bullets.map((bullet, idx) => (
                   <li key={idx}>{bullet}</li>
                 ))}
               </ul>
             </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Descrição sugerida não disponível.</p>
           )}
         </CardContent>
       </Card>
 
       {/* Images Plan */}
-      {analysisV21.images.plan && analysisV21.images.plan.length > 0 && (
+      {images?.plan && images.plan.length > 0 && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -264,8 +285,8 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {analysisV21.images.plan
-                .sort((a, b) => a.slot - b.slot)
+              {images.plan
+                .sort((a, b) => (a.slot ?? 999) - (b.slot ?? 999))
                 .map((image, idx) => (
                   <div key={idx} className="border rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -293,7 +314,7 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
       )}
 
       {/* Promo */}
-      {analysisV21.promo && (
+      {promo && (
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -302,33 +323,33 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {analysisV21.promo.priceBase !== undefined && analysisV21.promo.priceFinal !== undefined && (
+            {promo.priceBase !== undefined && promo.priceFinal !== undefined && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Preço Base</p>
                   <p className="text-lg font-semibold">
-                    R$ {analysisV21.promo.priceBase.toFixed(2)}
+                    R$ {promo.priceBase.toFixed(2)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Preço Final</p>
                   <p className="text-lg font-semibold text-primary">
-                    R$ {analysisV21.promo.priceFinal.toFixed(2)}
+                    R$ {promo.priceFinal.toFixed(2)}
                   </p>
                 </div>
               </div>
             )}
-            {analysisV21.promo.discount !== undefined && (
+            {promo.discount !== undefined && (
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Desconto</p>
                 <p className="text-lg font-semibold text-green-600">
-                  {analysisV21.promo.discount}% OFF
+                  {promo.discount}% OFF
                 </p>
               </div>
             )}
-            {analysisV21.promo.recommendation && (
+            {promo.recommendation && (
               <div className="pt-2 border-t">
-                <p className="text-sm">{analysisV21.promo.recommendation}</p>
+                <p className="text-sm">{promo.recommendation}</p>
               </div>
             )}
           </CardContent>

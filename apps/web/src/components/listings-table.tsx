@@ -23,10 +23,8 @@ import {
 } from '@/components/ui/sheet'
 import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb, Sparkles, Copy, Check } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 // Removido: applyRecommendation não é mais necessário (aba Recomendações removida)
 import { useAIAnalyze } from '@/hooks/use-ai-analyze'
-import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { AIAnalysisResponse } from '@/hooks/use-ai-analyze'
@@ -36,7 +34,8 @@ import { ActionPlan } from '@/components/ai/ActionPlan'
 import { PerformanceUnavailableModal } from '@/components/ai/PerformanceUnavailableModal'
 import { AIAnalysisV21Panel } from '@/components/ai/AIAnalysisV21Panel'
 
-// Componente da aba de Análise IA
+// Componente da aba de Análise IA (removido - usando apenas V2.1)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AIAnalysisTab({
   analysis,
   isLoading,
@@ -459,10 +458,8 @@ export function ListingsTable() {
   })
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null)
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState<'ai' | 'ai-v21'>('ai')
 
   const { data, isLoading, error, refetch } = useListings(filters)
-  const { toast } = useToast()
   
   // Buscar todas as recomendações pendentes do tenant (apenas para contagem na tabela)
   const { data: recommendationsData } = useRecommendations({ status: 'pending', limit: 100 })
@@ -482,17 +479,11 @@ export function ListingsTable() {
   
   // Removido uso de selectedRecommendations - não mais necessário
   // Removida aba de Recomendações - mantendo apenas IA
-  const [copiedText, setCopiedText] = useState<string | null>(null)
 
-  // Resetar aba ativa quando o listing mudar ou quando analysisV21 não existir mais
-  useEffect(() => {
-    if (!aiAnalysis?.analysisV21 && activeTab === 'ai-v21') {
-      setActiveTab('ai')
-    }
-  }, [aiAnalysis?.analysisV21, activeTab])
 
-  // Buscar listing selecionado para verificar status de acesso
-  const selectedListing = selectedListingId ? data?.items.find(l => l.id === selectedListingId) || null : null
+  // Buscar listing selecionado para verificar status de acesso (mantido para compatibilidade futura)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _selectedListing = selectedListingId ? data?.items.find(l => l.id === selectedListingId) || null : null
 
   const handleOpenRecommendations = (listingId: string) => {
     setSelectedListingId(listingId)
@@ -766,70 +757,51 @@ export function ListingsTable() {
             </SheetDescription>
           </SheetHeader>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'ai' | 'ai-v21')} className="mt-6">
-            <TabsList className={`grid w-full ${aiAnalysis?.analysisV21 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              <TabsTrigger value="ai">
-                <Sparkles className="h-4 w-4 mr-2" />
-                Inteligência Artificial
-              </TabsTrigger>
-              {aiAnalysis?.analysisV21 && (
-                <TabsTrigger value="ai-v21">
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Análise V2.1 (Agressiva)
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-            <TabsContent value="ai" className="mt-4">
-              <AIAnalysisTab
-                analysis={aiAnalysis}
-                isLoading={aiLoading}
-                error={aiError}
-                onAnalyze={async () => {
-                  try {
-                    await triggerAIAnalysis()
-                  } catch {
-                    // Erro já foi tratado no hook, apenas logar para debugging
-                    // Log erro sem detalhes sensíveis
-                    console.error('[AI-ANALYZE] Erro ao disparar análise')
-                    // Não mostrar toast de erro aqui, o componente AIAnalysisTab já exibe o erro
-                  }
-                }}
-                onForceRefresh={async () => {
-                  try {
-                    await triggerAIAnalysis(true) // forceRefresh=true
-                    toast({
-                      title: 'Análise atualizada!',
-                      description: 'Nova análise gerada com sucesso',
-                    })
-                  } catch {
-                    console.error('[AI-ANALYZE] Erro ao forçar atualização')
-                  }
-                }}
-                currentTitle={data?.items.find(l => l.id === selectedListingId)?.title || ''}
-                copiedText={copiedText}
-                onCopy={(text) => {
-                  navigator.clipboard.writeText(text)
-                  setCopiedText(text)
-                  setTimeout(() => setCopiedText(null), 2000)
-                  toast({
-                    title: 'Copiado!',
-                    description: 'Texto copiado para a área de transferência',
-                  })
-                }}
-                hasVideo={data?.items.find(l => l.id === selectedListingId)?.hasVideo}
-                listingId={selectedListingId || undefined}
-                marketplace={data?.items.find(l => l.id === selectedListingId)?.marketplace}
-                listingIdExt={data?.items.find(l => l.id === selectedListingId)?.listingIdExt}
-                selectedListing={selectedListing}
-              />
-            </TabsContent>
-            {aiAnalysis?.analysisV21 && (
-              <TabsContent value="ai-v21" className="mt-4">
-                <AIAnalysisV21Panel analysisV21={aiAnalysis.analysisV21} />
-              </TabsContent>
+          <div className="mt-6">
+            {aiAnalysis?.analysisV21 ? (
+              <AIAnalysisV21Panel analysisV21={aiAnalysis.analysisV21} />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    <CardTitle>Análise V2.1 indisponível</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Clique em 'Gerar análise' para criar agora.
+                  </p>
+                  {aiLoading ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm">Gerando análise...</span>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={async () => {
+                        try {
+                          await triggerAIAnalysis()
+                        } catch {
+                          console.error('[AI-ANALYZE] Erro ao disparar análise')
+                        }
+                      }}
+                      disabled={aiLoading}
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Gerar análise
+                    </Button>
+                  )}
+                  {aiError && (
+                    <div className="flex items-center gap-2 text-sm text-destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>Erro ao gerar análise. Tente novamente.</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
-          </Tabs>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
