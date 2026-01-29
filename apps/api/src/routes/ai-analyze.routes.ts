@@ -411,10 +411,51 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             const scoreResult = await scoreService.calculateScore(listingId, PERIOD_DAYS);
 
             // Usar PROMPT ESPECIALISTA
-            request.log.info({ listingId, requestId }, 'Attempting AI analysis Expert (ml-expert-v1)');
-            analysisV21 = await service.analyzeListingV21(inputV21, scoreResult);
+            request.log.info({ 
+              listingId, 
+              requestId,
+              listingIdExt: listing.listing_id_ext,
+              title: listing.title?.substring(0, 50),
+            }, 'Attempting AI analysis Expert (ml-expert-v1)');
             
-            request.log.info({ listingId, requestId, promptVersion: analysisV21.meta.prompt_version }, 'AI analysis Expert (ml-expert-v1) successful');
+            try {
+              analysisV21 = await service.analyzeListingV21(inputV21, scoreResult);
+              
+              request.log.info({ 
+                listingId, 
+                requestId,
+                listingIdExt: listing.listing_id_ext,
+                promptVersion: analysisV21.meta.prompt_version,
+                analyzedAt: analysisV21.meta.analyzed_at,
+                verdict: analysisV21.verdict?.substring(0, 50),
+                hasTitleFix: !!analysisV21.title_fix,
+                hasImagePlan: !!analysisV21.image_plan?.length,
+                hasDescriptionFix: !!analysisV21.description_fix,
+                hasPriceFix: !!analysisV21.price_fix,
+                algorithmHacksCount: analysisV21.algorithm_hacks?.length || 0,
+                actionPlanCount: analysisV21.final_action_plan?.length || 0,
+              }, 'AI analysis Expert (ml-expert-v1) successful');
+            } catch (expertError) {
+              const errorMessage = expertError instanceof Error ? expertError.message : 'Unknown error';
+              
+              // Se for erro de validação (AI_OUTPUT_INVALID), retornar HTTP 502
+              if (errorMessage.includes('AI_OUTPUT_INVALID')) {
+                request.log.error({
+                  listingId,
+                  requestId,
+                  error: errorMessage,
+                }, 'AI output validation failed - returning 502');
+                
+                return reply.status(502).send({
+                  error: 'AI_OUTPUT_INVALID',
+                  message: 'A resposta da IA não está no formato esperado. Tente novamente.',
+                  details: errorMessage,
+                });
+              }
+              
+              // Para outros erros, re-throw para tratamento geral
+              throw expertError;
+            }
 
             // Criar objeto result compatível (sem salvar recomendações por enquanto - Expert não tem formato V1)
             result = {

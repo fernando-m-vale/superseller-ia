@@ -282,7 +282,12 @@ Sempre considere que o vendedor quer saber exatamente:
 
 Se algum dado não puder ser analisado por limitação de API ou dados ausentes, diga isso claramente.
 Nunca invente informações.
-Nunca assuma dados não fornecidos.`;
+Nunca assuma dados não fornecidos.
+
+IMPORTANTE: Você DEVE retornar APENAS JSON válido, sem markdown, sem texto antes ou depois.
+O JSON deve começar com { e terminar com }.
+NÃO use \`\`\`json ou qualquer formatação markdown.
+NÃO adicione explicações ou comentários fora do JSON.`;
 
 /**
  * SYSTEM_PROMPT V2.1 - Modo Agressivo + Ações Concretas + Análise de Descrição
@@ -883,6 +888,7 @@ export class OpenAIService {
     }
 
     const startTime = Date.now();
+    const requestId = input.meta.requestId || 'unknown';
 
     // Build user prompt with Expert template
     const userPrompt = `Analise o anúncio do Mercado Livre com base nos dados fornecidos.
@@ -921,7 +927,48 @@ QUALIDADE DOS DADOS:
 - Performance Disponível: ${input.dataQuality.performanceAvailable ? 'SIM' : 'NÃO'}
 ${input.dataQuality.warnings.length > 0 ? `- Avisos: ${input.dataQuality.warnings.join('; ')}` : ''}
 
-Retorne APENAS JSON válido no formato definido.`;
+FORMATO DE RESPOSTA (JSON OBRIGATÓRIO - SEM TEXTO EXTRA):
+{
+  "verdict": "Frase curta, direta e incômoda sobre o anúncio",
+  "title_fix": {
+    "problem": "Onde o título atual falha para o algoritmo do Mercado Livre",
+    "impact": "Qual sinal algorítmico está sendo perdido",
+    "before": "Título atual exatamente como está no anúncio",
+    "after": "Título otimizado pronto para copiar e colar"
+  },
+  "image_plan": [
+    { "image": 1, "action": "O que essa imagem deve mostrar para converter melhor" },
+    { "image": 2, "action": "O que essa imagem deve mostrar" },
+    { "image": 3, "action": "O que essa imagem deve mostrar" }
+  ],
+  "description_fix": {
+    "diagnostic": "Problema real da descrição atual",
+    "optimized_copy": "Descrição completa pronta para colar no Mercado Livre"
+  },
+  "price_fix": {
+    "diagnostic": "Avaliação do preço considerando preço final e promoções",
+    "action": "O que fazer com preço/promoção"
+  },
+  "algorithm_hacks": [
+    {
+      "hack": "Nome curto do hack",
+      "how_to_apply": "Como executar no Mercado Livre",
+      "signal_impacted": "Sinal algorítmico impactado"
+    }
+  ],
+  "final_action_plan": [
+    "Ação concreta 1",
+    "Ação concreta 2",
+    "Ação concreta 3"
+  ]
+}
+
+IMPORTANTE:
+- Retorne APENAS o JSON acima, sem markdown, sem texto antes ou depois
+- NÃO use \`\`\`json ou qualquer formatação markdown
+- NÃO adicione explicações ou comentários
+- O JSON deve começar com { e terminar com }
+- Todos os campos são OBRIGATÓRIOS`;
 
     try {
       const response = await this.client.chat.completions.create({
@@ -937,17 +984,70 @@ Retorne APENAS JSON válido no formato definido.`;
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
+        console.error('[OPENAI-SERVICE-EXPERT] No content in response', {
+          requestId,
+          listingId: input.meta.listingId,
+          model: response.model,
+          usage: response.usage,
+        });
         throw new Error('No response from OpenAI');
       }
 
       const processingTimeMs = Date.now() - startTime;
 
-      // Parse and validate response
+      // Log raw response (com redaction de dados sensíveis)
+      const contentPreview = content.length > 1000 
+        ? content.substring(0, 1000) + '... [truncated]'
+        : content;
+      console.log('[OPENAI-SERVICE-EXPERT] Raw response received', {
+        requestId,
+        listingId: input.meta.listingId,
+        promptVersion: 'ml-expert-v1',
+        model: response.model,
+        contentLength: content.length,
+        contentPreview: contentPreview.replace(/token|api[_-]?key|secret|password/gi, '[REDACTED]'),
+        usage: response.usage,
+      });
+
+      // Parser robusto: extrair JSON mesmo se vier com markdown ou texto extra
       let rawResponse: unknown;
       try {
+        // Tentar parse direto primeiro
         rawResponse = JSON.parse(content);
-      } catch {
-        throw new Error('Invalid JSON response from OpenAI');
+      } catch (parseError) {
+        // Se falhar, tentar extrair JSON de markdown ou texto
+        console.warn('[OPENAI-SERVICE-EXPERT] Direct JSON parse failed, attempting extraction', {
+          requestId,
+          listingId: input.meta.listingId,
+          error: parseError instanceof Error ? parseError.message : 'Unknown',
+        });
+
+        // Extrair primeiro bloco JSON balanceado
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            rawResponse = JSON.parse(jsonMatch[0]);
+            console.log('[OPENAI-SERVICE-EXPERT] Successfully extracted JSON from text', {
+              requestId,
+              listingId: input.meta.listingId,
+            });
+          } catch (extractError) {
+            console.error('[OPENAI-SERVICE-EXPERT] Failed to parse extracted JSON', {
+              requestId,
+              listingId: input.meta.listingId,
+              extractedLength: jsonMatch[0].length,
+              error: extractError instanceof Error ? extractError.message : 'Unknown',
+            });
+            throw new Error(`Invalid JSON response from OpenAI: ${extractError instanceof Error ? extractError.message : 'Unknown error'}`);
+          }
+        } else {
+          console.error('[OPENAI-SERVICE-EXPERT] No JSON block found in response', {
+            requestId,
+            listingId: input.meta.listingId,
+            contentPreview: content.substring(0, 200),
+          });
+          throw new Error('No valid JSON found in OpenAI response');
+        }
       }
 
       // Validate with Zod
@@ -965,19 +1065,147 @@ Retorne APENAS JSON válido no formato definido.`;
       );
 
       if (!parseResult.success) {
-        console.warn('[OPENAI-SERVICE-EXPERT] Zod validation failed, using fallback:', parseResult.error);
-        return createFallbackAnalysisExpert(
-          `Validation error: ${parseResult.error.message}`,
-          {
-            title: input.listing.title,
-            price_base: input.listing.price_base,
-            price_final: input.listing.price_final,
-            has_promotion: input.listing.has_promotion,
-            discount_percent: input.listing.discount_percent,
-            pictures_count: input.media.imageCount,
-            description_length: input.listing.description_length,
+        // Log detalhado do erro de validação
+        const validationErrors = parseResult.error.errors.map(e => ({
+          path: e.path.join('.'),
+          message: e.message,
+          code: e.code,
+        }));
+        
+        console.error('[OPENAI-SERVICE-EXPERT] Zod validation failed', {
+          requestId,
+          listingId: input.meta.listingId,
+          errors: validationErrors,
+          rawResponseKeys: Object.keys(rawResponse as Record<string, unknown> || {}),
+          rawResponsePreview: JSON.stringify(rawResponse).substring(0, 500),
+        });
+
+        // Retry automático: tentar novamente com prompt reforçado
+        console.log('[OPENAI-SERVICE-EXPERT] Attempting retry with reinforced prompt', {
+          requestId,
+          listingId: input.meta.listingId,
+        });
+
+        try {
+          const retryPrompt = `Você retornou uma resposta fora do formato esperado.
+
+ERRO DE VALIDAÇÃO:
+${validationErrors.map(e => `- ${e.path}: ${e.message}`).join('\n')}
+
+Você DEVE retornar APENAS JSON válido no formato abaixo, sem markdown, sem texto extra:
+
+{
+  "verdict": "Frase curta, direta e incômoda sobre o anúncio",
+  "title_fix": {
+    "problem": "Onde o título atual falha para o algoritmo do Mercado Livre",
+    "impact": "Qual sinal algorítmico está sendo perdido",
+    "before": "Título atual exatamente como está no anúncio",
+    "after": "Título otimizado pronto para copiar e colar"
+  },
+  "image_plan": [
+    { "image": 1, "action": "O que essa imagem deve mostrar para converter melhor" },
+    { "image": 2, "action": "O que essa imagem deve mostrar" },
+    { "image": 3, "action": "O que essa imagem deve mostrar" }
+  ],
+  "description_fix": {
+    "diagnostic": "Problema real da descrição atual",
+    "optimized_copy": "Descrição completa pronta para colar no Mercado Livre"
+  },
+  "price_fix": {
+    "diagnostic": "Avaliação do preço considerando preço final e promoções",
+    "action": "O que fazer com preço/promoção"
+  },
+  "algorithm_hacks": [
+    {
+      "hack": "Nome curto do hack",
+      "how_to_apply": "Como executar no Mercado Livre",
+      "signal_impacted": "Sinal algorítmico impactado"
+    }
+  ],
+  "final_action_plan": [
+    "Ação concreta 1",
+    "Ação concreta 2",
+    "Ação concreta 3"
+  ]
+}
+
+Retorne SOMENTE este JSON, sem nada antes ou depois.`;
+
+          const retryResponse = await this.client.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT_EXPERT },
+              { role: 'user', content: userPrompt },
+              { role: 'assistant', content: content }, // Contexto da resposta anterior
+              { role: 'user', content: retryPrompt },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.3, // Temperatura mais baixa no retry
+            max_tokens: 4000,
+          });
+
+          const retryContent = retryResponse.choices[0]?.message?.content;
+          if (!retryContent) {
+            throw new Error('No response from OpenAI retry');
           }
-        );
+
+          // Parser robusto para retry também
+          let retryRawResponse: unknown;
+          try {
+            retryRawResponse = JSON.parse(retryContent);
+          } catch {
+            const retryJsonMatch = retryContent.match(/\{[\s\S]*\}/);
+            if (retryJsonMatch) {
+              retryRawResponse = JSON.parse(retryJsonMatch[0]);
+            } else {
+              throw new Error('No valid JSON in retry response');
+            }
+          }
+
+          const retryParseResult = parseAIResponseExpert(
+            retryRawResponse,
+            {
+              title: input.listing.title,
+              price_base: input.listing.price_base,
+              price_final: input.listing.price_final,
+              has_promotion: input.listing.has_promotion,
+              discount_percent: input.listing.discount_percent,
+              pictures_count: input.media.imageCount,
+              description_length: input.listing.description_length,
+            }
+          );
+
+          if (retryParseResult.success) {
+            console.log('[OPENAI-SERVICE-EXPERT] Retry successful', {
+              requestId,
+              listingId: input.meta.listingId,
+            });
+            const result = retryParseResult.data;
+            if (!result.meta.processing_time_ms) {
+              result.meta.processing_time_ms = Date.now() - startTime;
+            }
+            return result;
+          } else {
+            console.error('[OPENAI-SERVICE-EXPERT] Retry also failed validation', {
+              requestId,
+              listingId: input.meta.listingId,
+              retryErrors: retryParseResult.error.errors.map(e => ({
+                path: e.path.join('.'),
+                message: e.message,
+              })),
+            });
+            // Lançar erro para ser tratado no catch
+            throw new Error(`AI_OUTPUT_INVALID: Validation failed after retry. Missing fields: ${retryParseResult.error.errors.map(e => e.path.join('.')).join(', ')}`);
+          }
+        } catch (retryError) {
+          console.error('[OPENAI-SERVICE-EXPERT] Retry failed', {
+            requestId,
+            listingId: input.meta.listingId,
+            error: retryError instanceof Error ? retryError.message : 'Unknown',
+          });
+          // Lançar erro para ser tratado no catch
+          throw new Error(`AI_OUTPUT_INVALID: ${retryError instanceof Error ? retryError.message : 'Unknown error'}`);
+        }
       }
 
       // Inject processing time if not present
@@ -988,21 +1216,21 @@ Retorne APENAS JSON válido no formato definido.`;
 
       return result;
     } catch (error) {
-      console.error('[OPENAI-SERVICE-EXPERT] Error analyzing listing:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[OPENAI-SERVICE-EXPERT] Error analyzing listing', {
+        requestId,
+        listingId: input.meta.listingId,
+        error: errorMessage,
+        errorStack: error instanceof Error ? error.stack : undefined,
+      });
       
-      // Return fallback on any error
-      return createFallbackAnalysisExpert(
-        error instanceof Error ? error.message : 'Unknown error',
-        {
-          title: input.listing.title,
-          price_base: input.listing.price_base,
-          price_final: input.listing.price_final,
-          has_promotion: input.listing.has_promotion,
-          discount_percent: input.listing.discount_percent,
-          pictures_count: input.media.imageCount,
-          description_length: input.listing.description_length,
-        }
-      );
+      // Se for erro de validação (AI_OUTPUT_INVALID), lançar para ser tratado na rota
+      if (errorMessage.includes('AI_OUTPUT_INVALID')) {
+        throw error; // Re-throw para ser tratado na rota com HTTP 502
+      }
+      
+      // Para outros erros, também lançar para tratamento na rota
+      throw error; // Re-throw todos os erros para tratamento na rota
     }
   }
 
