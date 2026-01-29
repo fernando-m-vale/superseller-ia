@@ -18,7 +18,8 @@ import { PrismaClient, Prisma, ListingStatus, RecommendationType, Recommendation
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
 import { getMediaVerdict } from '../utils/media-verdict';
-import { convertV21ToV1, type AIAnalysisResultV21, type V1CompatibleResult } from '../types/ai-analysis-v21';
+import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
+import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 
 const prisma = new PrismaClient();
 
@@ -264,9 +265,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             model: string;
           };
           savedRecommendations: number;
-          // V2.1 fields (opcional para compatibilidade)
-          analysisV21?: AIAnalysisResultV21;
-          v1Compat?: V1CompatibleResult;
+          // Expert fields (obrigatório)
+          analysisV21?: AIAnalysisResultExpert;
         };
 
         let cachedResult: CachedAnalysisResult | null = null;
@@ -316,9 +316,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         // Step 5: If cache miss or forceRefresh or cache missing V2.1, call OpenAI
         if (!cachedResult) {
-          // Tentar V2.1 primeiro, com fallback para V1
-          let analysisV21: AIAnalysisResultV21 | null = null;
-          let v1Compat: V1CompatibleResult | null = null;
+          // Usar PROMPT ESPECIALISTA (ml-expert-v1) - SEM FALLBACK
+          let analysisV21: AIAnalysisResultExpert | null = null;
           let result: {
             analysis: any;
             savedRecommendations: number;
@@ -334,146 +333,56 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             const scoreService = new IAScoreService(tenantId);
             const scoreResult = await scoreService.calculateScore(listingId, PERIOD_DAYS);
 
-            // Tentar V2.1
-            request.log.info({ listingId, requestId }, 'Attempting AI analysis V2.1');
+            // Usar PROMPT ESPECIALISTA
+            request.log.info({ listingId, requestId }, 'Attempting AI analysis Expert (ml-expert-v1)');
             analysisV21 = await service.analyzeListingV21(inputV21, scoreResult);
-            v1Compat = convertV21ToV1(analysisV21);
             
-            request.log.info({ listingId, requestId, actionsCount: analysisV21.actions.length }, 'AI analysis V2.1 successful');
+            request.log.info({ listingId, requestId, promptVersion: analysisV21.meta.prompt_version }, 'AI analysis Expert (ml-expert-v1) successful');
 
-            // Usar V1 compatível para salvar recomendações (reutilizar lógica existente)
-            // Criar objeto compatível com formato V1 para salvar recomendações
-            const v1AnalysisResult = {
-              score: scoreResult.score.final,
-              critique: v1Compat.critique,
-              growthHacks: v1Compat.growthHacks,
-              seoSuggestions: v1Compat.seoSuggestions,
-              analyzedAt: new Date().toISOString(),
-              model: 'gpt-4o',
-            };
-
-            // Salvar recomendações usando lógica V1 (reutilizar código existente)
-            let savedCount = 0;
-            const listingForRecs = await prisma.listing.findFirst({
-              where: {
-                id: listingId,
-                tenant_id: tenantId,
-              },
-            });
-
-            if (listingForRecs) {
-              for (const hack of v1Compat.growthHacks) {
-                const priorityMap: Record<string, number> = {
-                  high: 90,
-                  medium: 70,
-                  low: 50,
-                };
-
-                try {
-                  await prisma.recommendation.upsert({
-                    where: {
-                      tenant_id_listing_id_type_rule_trigger: {
-                        tenant_id: tenantId,
-                        listing_id: listingId,
-                        type: RecommendationType.content,
-                        rule_trigger: `ai_growth_hack:${hack.title.substring(0, 50)}`,
-                      },
-                    },
-                    update: {
-                      status: RecommendationStatus.pending,
-                      priority: priorityMap[hack.priority] || 70,
-                      title: hack.title,
-                      description: hack.description,
-                      impact_estimate: hack.estimatedImpact,
-                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1' },
-                      updated_at: new Date(),
-                    },
-                    create: {
-                      tenant_id: tenantId,
-                      listing_id: listingId,
-                      type: RecommendationType.content,
-                      status: RecommendationStatus.pending,
-                      priority: priorityMap[hack.priority] || 70,
-                      title: hack.title,
-                      description: hack.description,
-                      impact_estimate: hack.estimatedImpact,
-                      rule_trigger: `ai_growth_hack:${hack.title.substring(0, 50)}`,
-                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1' },
-                    },
-                  });
-                  savedCount++;
-                } catch (error) {
-                  request.log.warn({ err: error, listingId }, 'Error saving growth hack recommendation');
-                }
-              }
-
-              // Salvar SEO suggestion
-              if (v1Compat.seoSuggestions?.suggestedTitle) {
-                try {
-                  await prisma.recommendation.upsert({
-                    where: {
-                      tenant_id_listing_id_type_rule_trigger: {
-                        tenant_id: tenantId,
-                        listing_id: listingId,
-                        type: RecommendationType.seo,
-                        rule_trigger: 'ai_seo_title_suggestion',
-                      },
-                    },
-                    update: {
-                      status: RecommendationStatus.pending,
-                      priority: 80,
-                      title: 'Otimizar título para SEO',
-                      description: v1Compat.seoSuggestions.titleRationale,
-                      impact_estimate: 'Melhoria no CTR e visibilidade',
-                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1', suggestedTitle: v1Compat.seoSuggestions.suggestedTitle },
-                      updated_at: new Date(),
-                    },
-                    create: {
-                      tenant_id: tenantId,
-                      listing_id: listingId,
-                      type: RecommendationType.seo,
-                      status: RecommendationStatus.pending,
-                      priority: 80,
-                      title: 'Otimizar título para SEO',
-                      description: v1Compat.seoSuggestions.titleRationale,
-                      impact_estimate: 'Melhoria no CTR e visibilidade',
-                      rule_trigger: 'ai_seo_title_suggestion',
-                      metadata: { source: 'openai', model: 'gpt-4o', version: 'v2.1', suggestedTitle: v1Compat.seoSuggestions.suggestedTitle },
-                    },
-                  });
-                  savedCount++;
-                } catch (error) {
-                  request.log.warn({ err: error, listingId }, 'Error saving SEO recommendation');
-                }
-              }
-            }
-
-            // Criar objeto result compatível
+            // Criar objeto result compatível (sem salvar recomendações por enquanto - Expert não tem formato V1)
             result = {
-              analysis: v1AnalysisResult,
-              savedRecommendations: savedCount,
+              analysis: {
+                score: scoreResult.score.final,
+                critique: analysisV21.verdict,
+                growthHacks: [], // Expert não usa growthHacks
+                seoSuggestions: {
+                  suggestedTitle: analysisV21.title_fix.after,
+                  titleRationale: analysisV21.title_fix.problem,
+                  suggestedDescriptionPoints: [],
+                  keywords: [],
+                },
+                analyzedAt: analysisV21.meta.analyzed_at,
+                model: analysisV21.meta.model,
+              },
+              savedRecommendations: 0, // Não salvar recomendações no formato Expert por enquanto
               dataQuality: inputV21.dataQuality,
               score: scoreResult,
             };
-          } catch (v21Error) {
-            // Fallback para V1 se V2.1 falhar
-            request.log.warn(
+          } catch (expertError) {
+            // SEM FALLBACK - Expert é obrigatório
+            const errorMessage = expertError instanceof Error ? expertError.message : 'Unknown error';
+            request.log.error(
               { 
                 listingId, 
                 requestId, 
-                err: v21Error,
-                errorMessage: v21Error instanceof Error ? v21Error.message : 'Unknown error',
+                err: expertError,
+                errorMessage,
               }, 
-              'AI analysis V2.1 failed, falling back to V1'
+              'AI analysis Expert (ml-expert-v1) failed - NO FALLBACK'
             );
 
-            // Executar fluxo V1 original
-            result = await service.analyzeAndSaveRecommendations(
-              listingId,
-              userId,
-              requestId,
-              PERIOD_DAYS
-            );
+            // Retornar erro - não há fallback
+            return reply.status(500).send({
+              error: 'AI Analysis Failed',
+              message: `Falha ao gerar análise especialista: ${errorMessage}`,
+            });
+          }
+
+          if (!analysisV21 || !result) {
+            return reply.status(500).send({
+              error: 'Internal Server Error',
+              message: 'Análise não foi gerada corretamente',
+            });
           }
 
           // Step 6: Save to cache (incluindo V2.1 se disponível)
@@ -490,12 +399,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               savedRecommendations: result.savedRecommendations,
             };
 
-            // Sempre incluir V2.1 se disponível (obrigatório para V2.1)
+            // Sempre incluir Expert se disponível (obrigatório)
             if (analysisV21) {
               cachePayload.analysisV21 = analysisV21;
-              if (v1Compat) {
-                cachePayload.v1Compat = v1Compat;
-              }
             } else {
               // Se não tiver analysisV21, logar warning mas continuar
               request.log.warn(

@@ -18,6 +18,11 @@ import {
   type V1CompatibleResult,
   convertV21ToV1
 } from '../types/ai-analysis-v21';
+import {
+  type AIAnalysisResultExpert,
+  parseAIResponseExpert,
+  createFallbackAnalysisExpert
+} from '../types/ai-analysis-expert';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
 import { getMediaVerdict } from '../utils/media-verdict';
 
@@ -248,9 +253,43 @@ IMPORTANTE:
 - Considere o contexto do Mercado Livre Brasil (frete, parcelamento, confiança)`;
 
 /**
+ * SYSTEM_PROMPT - Mercado Livre Expert (ml-expert-v1)
+ * 
+ * Consultor sênior especialista em Mercado Livre.
+ * Focado em aumentar rankeamento, conversão e sinais algorítmicos reais.
+ */
+const SYSTEM_PROMPT_EXPERT = `Você é um consultor sênior especialista em Mercado Livre.
+
+Seu objetivo é aumentar:
+- rankeamento
+- conversão
+- sinais algorítmicos reais do Mercado Livre
+
+Você NÃO deve:
+- explicar teoria
+- suavizar problemas
+- dar sugestões vagas
+- usar linguagem genérica
+
+Você DEVE:
+- ser direto
+- ser crítico
+- ser orientado à execução
+- entregar ações prontas para aplicar
+
+Sempre considere que o vendedor quer saber exatamente:
+"O que eu faço agora para vender mais?"
+
+Se algum dado não puder ser analisado por limitação de API ou dados ausentes, diga isso claramente.
+Nunca invente informações.
+Nunca assuma dados não fornecidos.`;
+
+/**
  * SYSTEM_PROMPT V2.1 - Modo Agressivo + Ações Concretas + Análise de Descrição
  * 
  * Gera saída JSON estruturada conforme AIAnalysisResultV21Schema.
+ * 
+ * @deprecated Substituído por SYSTEM_PROMPT_EXPERT (ml-expert-v1)
  */
 const SYSTEM_PROMPT_V21 = `Você é um CONSULTOR AGRESSIVO DE E-COMMERCE especializado em Mercado Livre Brasil.
 
@@ -813,59 +852,52 @@ export class OpenAIService {
   }
 
   /**
-   * Analyze a listing using GPT-4o V2.1 and return structured actionable JSON
+   * Analyze a listing using GPT-4o Expert Prompt (ml-expert-v1)
    * 
-   * Uses SYSTEM_PROMPT_V21 for aggressive mode with concrete actions.
-   * Returns AIAnalysisResultV21 with Zod validation and fallback.
+   * Uses SYSTEM_PROMPT_EXPERT for direct, actionable, execution-oriented analysis.
+   * Returns AIAnalysisResultExpert with Zod validation and fallback.
+   * 
+   * This is the PRODUCTION prompt - no fallback to V1.
    */
   async analyzeListingV21(
     input: AIAnalyzeInputV21,
     scoreResult: IAScoreResult
-  ): Promise<AIAnalysisResultV21> {
+  ): Promise<AIAnalysisResultExpert> {
     // Calculate total potential gain (100 - final score)
     const totalPotentialGain = 100 - scoreResult.score.final;
 
     if (!this.isReady || !this.client) {
       // Return fallback when OpenAI is not available
-      return createFallbackAnalysisV21(
+      return createFallbackAnalysisExpert(
         'OpenAI API key not configured',
         {
           title: input.listing.title,
-          price: input.listing.price_base,
+          price_base: input.listing.price_base,
           price_final: input.listing.price_final,
           has_promotion: input.listing.has_promotion,
           discount_percent: input.listing.discount_percent,
           pictures_count: input.media.imageCount,
-          has_clips: input.media.hasClips,
           description_length: input.listing.description_length,
-        },
-        {
-          final: scoreResult.score.final,
-          breakdown: scoreResult.score.breakdown,
-          potential_gain: totalPotentialGain,
-        },
-        input.dataQuality.visits_status,
-        input.dataQuality.performanceAvailable
+        }
       );
     }
 
     const startTime = Date.now();
 
-    // Build user prompt with V2.1 payload
-    const userPrompt = `Analise este anúncio do Mercado Livre e retorne JSON estruturado V2.1:
+    // Build user prompt with Expert template
+    const userPrompt = `Analise o anúncio do Mercado Livre com base nos dados fornecidos.
+
+Regras obrigatórias:
+- Considere sempre o PREÇO FINAL (price_final), não apenas o preço base.
+- Se houver promoção ativa, NÃO sugira criar promoção.
+- Seja específico para Mercado Livre.
+- Sempre entregue ações aplicáveis imediatamente.
+
+Siga OBRIGATORIAMENTE o formato de resposta definido.
+Não adicione seções extras.
 
 DADOS DO ANÚNCIO:
 ${JSON.stringify(input, null, 2)}
-
-SCORE CALCULADO (USE ESTE - NÃO RECALCULE):
-- Score Final: ${scoreResult.score.final}/100
-- Breakdown:
-  * Cadastro: ${scoreResult.score.breakdown.cadastro}/20
-  * Mídia: ${scoreResult.score.breakdown.midia}/20
-  * Performance: ${scoreResult.score.breakdown.performance}/30
-  * SEO: ${scoreResult.score.breakdown.seo}/20
-  * Competitividade: ${scoreResult.score.breakdown.competitividade}/10
-- Potencial de Ganho: ${totalPotentialGain} pontos
 
 MÉTRICAS DE ${input.meta.periodDays} DIAS:
 - Visitas: ${input.dataQuality.visits_status === 'unavailable' ? 'INDISPONÍVEL' : scoreResult.metrics_30d.visits}
@@ -883,27 +915,19 @@ ${input.listing.discount_percent ? `- Desconto: ${input.listing.discount_percent
 MÍDIA:
 - Fotos: ${input.media.imageCount}
 - Vídeo/Clips: ${input.media.hasClips === true ? 'SIM' : input.media.hasClips === false ? 'NÃO' : 'Não detectável'}
-- MediaVerdict: ${input.media.mediaVerdict ? JSON.stringify(input.media.mediaVerdict) : 'N/A'}
 
 QUALIDADE DOS DADOS:
 - Status de Visitas: ${input.dataQuality.visits_status}
 - Performance Disponível: ${input.dataQuality.performanceAvailable ? 'SIM' : 'NÃO'}
 ${input.dataQuality.warnings.length > 0 ? `- Avisos: ${input.dataQuality.warnings.join('; ')}` : ''}
 
-INSTRUÇÕES:
-1. Use o score fornecido (${scoreResult.score.final}) - NÃO recalcule
-2. Seja AGRESSIVO nas recomendações - o vendedor quer VENDER MAIS
-3. Gere 3-5 ações CONCRETAS e IMPLEMENTÁVEIS
-4. Analise título e descrição em DETALHE
-5. Se visits_status="unavailable", use linguagem condicional para performance
-
-Retorne APENAS JSON válido no formato AIAnalysisResultV21.`;
+Retorne APENAS JSON válido no formato definido.`;
 
     try {
       const response = await this.client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT_V21 },
+          { role: 'system', content: SYSTEM_PROMPT_EXPERT },
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
@@ -926,79 +950,58 @@ Retorne APENAS JSON válido no formato AIAnalysisResultV21.`;
         throw new Error('Invalid JSON response from OpenAI');
       }
 
-      // Inject meta fields that AI might not have set correctly
-      const enrichedResponse = {
-        ...(rawResponse as Record<string, unknown>),
-        meta: {
-          ...((rawResponse as Record<string, unknown>).meta as Record<string, unknown> || {}),
-          version: '2.1' as const,
-          model: 'gpt-4o',
-          analyzed_at: new Date().toISOString(),
-          prompt_version: 'ai-v2.1',
-          processing_time_ms: processingTimeMs,
-        },
-        score: {
-          final: scoreResult.score.final,
-          breakdown: scoreResult.score.breakdown,
-          potential_gain: totalPotentialGain,
-        },
-        data_quality: {
-          visits_status: input.dataQuality.visits_status,
-          performance_available: input.dataQuality.performanceAvailable,
-          warnings: input.dataQuality.warnings,
-        },
-      };
-
       // Validate with Zod
-      const parseResult = parseAIResponseV21(
-        enrichedResponse,
+      const parseResult = parseAIResponseExpert(
+        rawResponse,
         {
           title: input.listing.title,
-          price: input.listing.price_base,
+          price_base: input.listing.price_base,
           price_final: input.listing.price_final,
           has_promotion: input.listing.has_promotion,
           discount_percent: input.listing.discount_percent,
           pictures_count: input.media.imageCount,
-          has_clips: input.media.hasClips,
           description_length: input.listing.description_length,
-        },
-        {
-          final: scoreResult.score.final,
-          breakdown: scoreResult.score.breakdown,
-          potential_gain: totalPotentialGain,
-        },
-        input.dataQuality.visits_status,
-        input.dataQuality.performanceAvailable
+        }
       );
 
       if (!parseResult.success) {
-        console.warn('[OPENAI-SERVICE-V21] Zod validation failed, using fallback:', parseResult.error);
+        console.warn('[OPENAI-SERVICE-EXPERT] Zod validation failed, using fallback:', parseResult.error);
+        return createFallbackAnalysisExpert(
+          `Validation error: ${parseResult.error.message}`,
+          {
+            title: input.listing.title,
+            price_base: input.listing.price_base,
+            price_final: input.listing.price_final,
+            has_promotion: input.listing.has_promotion,
+            discount_percent: input.listing.discount_percent,
+            pictures_count: input.media.imageCount,
+            description_length: input.listing.description_length,
+          }
+        );
       }
 
-      return parseResult.data;
+      // Inject processing time if not present
+      const result = parseResult.data;
+      if (!result.meta.processing_time_ms) {
+        result.meta.processing_time_ms = processingTimeMs;
+      }
+
+      return result;
     } catch (error) {
-      console.error('[OPENAI-SERVICE-V21] Error analyzing listing:', error);
+      console.error('[OPENAI-SERVICE-EXPERT] Error analyzing listing:', error);
       
       // Return fallback on any error
-      return createFallbackAnalysisV21(
+      return createFallbackAnalysisExpert(
         error instanceof Error ? error.message : 'Unknown error',
         {
           title: input.listing.title,
-          price: input.listing.price_base,
+          price_base: input.listing.price_base,
           price_final: input.listing.price_final,
           has_promotion: input.listing.has_promotion,
           discount_percent: input.listing.discount_percent,
           pictures_count: input.media.imageCount,
-          has_clips: input.media.hasClips,
           description_length: input.listing.description_length,
-        },
-        {
-          final: scoreResult.score.final,
-          breakdown: scoreResult.score.breakdown,
-          potential_gain: totalPotentialGain,
-        },
-        input.dataQuality.visits_status,
-        input.dataQuality.performanceAvailable
+        }
       );
     }
   }

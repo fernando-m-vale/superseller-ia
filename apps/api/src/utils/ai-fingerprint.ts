@@ -12,8 +12,8 @@
 import { createHash } from 'crypto';
 
 // Current prompt version - increment when prompt changes significantly
-// V2.1 uses structured JSON format with diagnostic, title_analysis, description_analysis, media_analysis, price_analysis, and actions
-export const PROMPT_VERSION = 'ai-v2.1';
+// ml-expert-v1: Prompt especialista focado em ações diretas e implementáveis para Mercado Livre
+export const PROMPT_VERSION = 'ml-expert-v1';
 
 /**
  * Data structure for fingerprint generation
