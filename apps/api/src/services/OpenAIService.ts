@@ -337,8 +337,10 @@ REGRAS CRÍTICAS - NUNCA VIOLAR:
    - NUNCA diga "tráfego baixo" ou "sem visitas"
    - Use linguagem condicional: "Se você quiser aumentar tráfego..."
 5. PREÇO: Analise price_base vs price_final:
+   - SEMPRE use price_final como preço real do anúncio
    - Se has_promotion=true, mencione o desconto como ponto positivo
    - Se discount_percent > 20%, destaque a promoção agressiva
+   - NUNCA sugira "considerar promoção" se has_promotion=true (já existe promoção ativa)
 
 ANÁLISE DE TÍTULO (OBRIGATÓRIO):
 - Avalie: comprimento, palavras-chave, clareza, apelo emocional

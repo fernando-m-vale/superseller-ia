@@ -21,7 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Lightbulb, Sparkles, Copy, Check, RefreshCw, Clock } from 'lucide-react'
+import { Loader2, Search, AlertCircle, AlertTriangle, CheckCircle2, Sparkles, Copy, Check, RefreshCw, Clock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 // Removido: applyRecommendation não é mais necessário (aba Recomendações removida)
 import { useAIAnalyze } from '@/hooks/use-ai-analyze'
@@ -493,10 +493,7 @@ export function ListingsTable() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const _selectedListing = selectedListingId ? data?.items.find(l => l.id === selectedListingId) || null : null
 
-  const handleOpenRecommendations = (listingId: string) => {
-    setSelectedListingId(listingId)
-    setSheetOpen(true)
-  }
+  // Removido: handleOpenRecommendations não é mais necessário (coluna Dicas removida)
 
   // Removido: handleApplyRecommendation não é mais necessário (aba Recomendações removida)
 
@@ -593,19 +590,25 @@ export function ListingsTable() {
                   <TableHead>Estoque</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Super Seller Score</TableHead>
-                  <TableHead className="w-12">Dicas</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data.items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       Nenhum anúncio encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
                   data.items.map((listing) => (
-                    <TableRow key={listing.id}>
+                    <TableRow 
+                      key={listing.id}
+                      onClick={() => {
+                        setSelectedListingId(listing.id)
+                        setSheetOpen(true)
+                      }}
+                      className="cursor-pointer hover:bg-muted/50"
+                    >
                       <TableCell className="font-medium">{listing.title}</TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -677,42 +680,6 @@ export function ListingsTable() {
                           return <span className="text-muted-foreground">N/A</span>;
                         })()}
                       </TableCell>
-                      <TableCell>
-                        {(() => {
-                          const recs = recommendationsByListing.get(listing.id) || []
-                          if (recs.length === 0) {
-                            return <span className="text-muted-foreground">-</span>
-                          }
-                          
-                          // Ordenar por prioridade (maior primeiro)
-                          const sortedRecs = [...recs].sort((a, b) => b.priority - a.priority)
-                          const hasCritical = sortedRecs.some(r => r.priority >= 90)
-                          
-                          return (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-auto p-1"
-                              onClick={() => handleOpenRecommendations(listing.id)}
-                            >
-                              <div className={`flex items-center gap-1 ${
-                                hasCritical ? 'animate-pulse' : ''
-                              }`}>
-                                <Lightbulb className={`h-5 w-5 ${
-                                  hasCritical 
-                                    ? 'text-red-500 fill-red-100' 
-                                    : 'text-yellow-500 fill-yellow-100'
-                                }`} />
-                                <span className={`text-xs font-medium ${
-                                  hasCritical ? 'text-red-600' : 'text-yellow-600'
-                                }`}>
-                                  {recs.length}
-                                </span>
-                              </div>
-                            </Button>
-                          )
-                        })()}
-                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -767,44 +734,60 @@ export function ListingsTable() {
 
           <div className="mt-6 space-y-4">
             {/* Banner de cache - mostrar quando analysisV21 existe e é cache */}
-            {aiAnalysis?.analysisV21 && (cacheHit || (message && message.includes('(cache)'))) && analyzedAt && (
-              <Card className="bg-muted/50">
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Resultado do cache — última análise em {new Date(analyzedAt).toLocaleString('pt-BR')}
-                      </span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await triggerAIAnalysis(true) // force=true
-                        } catch {
-                          console.error('[AI-ANALYZE] Erro ao regerar análise')
-                        }
-                      }}
-                      disabled={aiLoading}
-                    >
-                      {aiLoading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Regenerando...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Regerar análise
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {aiAnalysis?.analysisV21 && analyzedAt && (() => {
+              const analyzedDate = new Date(analyzedAt)
+              const now = new Date()
+              const hoursDiff = (now.getTime() - analyzedDate.getTime()) / (1000 * 60 * 60)
+              const isStale = hoursDiff > 12
+              const isFromCache = cacheHit || (message && message.includes('(cache)'))
+              
+              if (isFromCache || isStale) {
+                return (
+                  <Card className={isStale ? "bg-yellow-50 border-yellow-200" : "bg-muted/50"}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          <div className="flex flex-col">
+                            <span className="text-sm text-muted-foreground">
+                              {isStale 
+                                ? `Análise feita há ${Math.round(hoursDiff)} horas — pode estar desatualizada`
+                                : `Resultado do cache — última análise em ${analyzedDate.toLocaleString('pt-BR')}`
+                              }
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await triggerAIAnalysis(true) // force=true
+                            } catch {
+                              console.error('[AI-ANALYZE] Erro ao regerar análise')
+                            }
+                          }}
+                          disabled={aiLoading}
+                        >
+                          {aiLoading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Atualizando...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              {isStale ? 'Atualizar análise' : 'Regerar análise'}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              }
+              return null
+            })()}
 
             {/* Banner quando não é cache - mostrar quando analysisV21 existe mas não é cache */}
             {aiAnalysis?.analysisV21 && !cacheHit && !(message && message.includes('(cache)')) && analyzedAt && (
@@ -852,18 +835,21 @@ export function ListingsTable() {
 
             {/* Conteúdo principal */}
             {aiAnalysis?.analysisV21 ? (
-              <AIAnalysisV21Panel analysisV21={aiAnalysis.analysisV21} />
+              <AIAnalysisV21Panel 
+                analysisV21={aiAnalysis.analysisV21} 
+                listingIdExt={_selectedListing?.listingIdExt}
+              />
             ) : (
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-primary" />
-                    <CardTitle>Análise V2.1 indisponível</CardTitle>
+                    <CardTitle>Análise indisponível</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    Clique em 'Gerar análise' para criar agora.
+                    Ainda não há análise para este anúncio. Clique em 'Gerar análise' para receber recomendações.
                   </p>
                   {aiLoading ? (
                     <div className="flex items-center gap-2">

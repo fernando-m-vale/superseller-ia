@@ -7,12 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
 import { useToast } from '@/hooks/use-toast'
+import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 
 interface AIAnalysisV21PanelProps {
   analysisV21: AIAnalysisResultV21
+  listingIdExt?: string | null // ID externo do marketplace (ex: MLB3923303743) para construir deeplink
 }
 
-export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
+export function AIAnalysisV21Panel({ analysisV21, listingIdExt }: AIAnalysisV21PanelProps) {
   const { toast } = useToast()
   const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
 
@@ -203,18 +205,26 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
                   )}
 
                   {/* ML Deeplink */}
-                  {action.ml_deeplink && (
-                    <div className="mt-3 pt-3 border-t">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(action.ml_deeplink, '_blank')}
-                      >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Abrir no Mercado Livre
-                      </Button>
-                    </div>
-                  )}
+                  {(action.ml_deeplink || listingIdExt) && (() => {
+                    // Priorizar ml_deeplink do backend, fallback para construção local
+                    const deeplinkUrl = action.ml_deeplink 
+                      || (listingIdExt ? buildMercadoLivreListingUrl(listingIdExt, null, 'view') : null)
+                    
+                    if (!deeplinkUrl) return null
+                    
+                    return (
+                      <div className="mt-3 pt-3 border-t">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(deeplinkUrl, '_blank')}
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Abrir no Mercado Livre
+                        </Button>
+                      </div>
+                    )
+                  })()}
                 </div>
               ))
             )}
