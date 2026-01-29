@@ -235,13 +235,16 @@ export function useAIAnalyze(listingId: string | null) {
   const analyze = async (forceRefresh: boolean = false): Promise<void> => {
     // Proteção: evitar múltiplas requisições simultâneas
     if (state.isLoading) {
+      console.warn('[AI-ANALYZE] Already loading, skipping request', { listingId })
       return
     }
     if (!listingId) {
+      console.error('[AI-ANALYZE] No listingId provided')
       setState({ data: null, isLoading: false, error: 'ID do anúncio não fornecido' })
       return
     }
 
+    console.log('[AI-ANALYZE] Starting analysis', { listingId, forceRefresh })
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
@@ -258,6 +261,8 @@ export function useAIAnalyze(listingId: string | null) {
         ? `${apiUrl}/ai/analyze/${listingId}?forceRefresh=true`
         : `${apiUrl}/ai/analyze/${listingId}`
 
+      console.log('[AI-ANALYZE] POST request', { url, listingId, forceRefresh })
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -266,6 +271,8 @@ export function useAIAnalyze(listingId: string | null) {
         },
         body: JSON.stringify({}), // REQUIRED: Fastify strict mode requires a valid JSON body
       })
+      
+      console.log('[AI-ANALYZE] Response status', { status: response.status, listingId })
 
       if (!response.ok) {
         // Log detalhado do erro para debugging
@@ -312,6 +319,22 @@ export function useAIAnalyze(listingId: string | null) {
 
       const result = await response.json()
       
+      console.log('[AI-ANALYZE] Response received', { 
+        listingId,
+        responseListingId: result.data?.listingId,
+        hasAnalysisV21: !!result.data?.analysisV21,
+        cacheHit: result.data?.cacheHit,
+        message: result.message,
+      })
+      
+      // Verificar se o listingId da resposta corresponde ao request
+      if (result.data?.listingId && result.data.listingId !== listingId) {
+        console.error('[AI-ANALYZE] ListingId mismatch!', {
+          requested: listingId,
+          received: result.data.listingId,
+        })
+      }
+      
       // Adaptar resposta da API para o formato esperado pelo frontend
       const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
       
@@ -320,6 +343,13 @@ export function useAIAnalyze(listingId: string | null) {
       
       if (analysisV21) {
         adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
+        console.log('[AI-ANALYZE] AnalysisV21 found', {
+          listingId,
+          promptVersion: (analysisV21 as AIAnalysisResultV21)?.meta?.prompt_version,
+          analyzedAt: (analysisV21 as AIAnalysisResultV21)?.meta?.analyzed_at,
+        })
+      } else {
+        console.warn('[AI-ANALYZE] No analysisV21 in response', { listingId })
       }
       
       // Extrair metadados para UX de cache

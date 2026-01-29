@@ -157,7 +157,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           listingId,
           periodDays: PERIOD_DAYS,
           forceRefresh,
-        }, 'Starting AI analysis');
+          promptVersion: PROMPT_VERSION,
+        }, 'Starting AI analysis with Expert prompt');
 
         const service = new OpenAIService(tenantId);
 
@@ -169,19 +170,35 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Step 1: Get listing data for fingerprint calculation
+        // IMPORTANTE: Usar id EXATO para garantir listing correto
         const listing = await prisma.listing.findFirst({
           where: {
-            id: listingId,
-            tenant_id: tenantId,
+            id: listingId, // UUID exato do listing
+            tenant_id: tenantId, // Garantir isolamento por tenant
           },
         });
 
         if (!listing) {
+          request.log.warn({
+            requestId,
+            listingId,
+            tenantId,
+          }, 'Listing not found for analysis');
           return reply.status(404).send({
             error: 'Not Found',
             message: 'Anúncio não encontrado',
           });
         }
+        
+        // Log para debug - garantir que listing correto foi encontrado
+        request.log.info({
+          requestId,
+          listingId,
+          foundListingId: listing.id,
+          listingIdExt: listing.listing_id_ext,
+          title: listing.title?.substring(0, 50),
+          marketplace: listing.marketplace,
+        }, 'Listing fetched for analysis');
 
         // Step 1.5: Reconciliar status do listing se for Mercado Livre (opcional, melhor UX)
         if (listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
@@ -271,6 +288,30 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         let cachedResult: CachedAnalysisResult | null = null;
 
+        // Se forceRefresh=true, deletar cache antigo antes de buscar
+        if (forceRefresh) {
+          try {
+            await prisma.listingAIAnalysis.deleteMany({
+              where: {
+                tenant_id: tenantId,
+                listing_id: listingId,
+                period_days: PERIOD_DAYS,
+              },
+            });
+            request.log.info(
+              {
+                requestId,
+                userId,
+                tenantId,
+                listingId,
+              },
+              'Cache invalidated due to forceRefresh=true'
+            );
+          } catch (deleteError) {
+            request.log.warn({ err: deleteError, listingId }, 'Failed to delete cache on forceRefresh');
+          }
+        }
+
         if (!forceRefresh) {
           const cached = await prisma.listingAIAnalysis.findFirst({
             where: {
@@ -282,34 +323,70 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
 
           if (cached && cached.result_json) {
-            cachedResult = cached.result_json as unknown as CachedAnalysisResult;
-            
-            // Se cache não tiver analysisV21, considerar como cache miss e regenerar
-            if (!cachedResult.analysisV21) {
+            // Verificar se o cache tem prompt_version correto
+            const cachePromptVersion = cached.prompt_version;
+            if (cachePromptVersion !== PROMPT_VERSION) {
               request.log.warn(
                 {
                   requestId,
                   userId,
                   tenantId,
                   listingId,
+                  cachePromptVersion,
+                  expectedPromptVersion: PROMPT_VERSION,
                   fingerprint: fingerprint.substring(0, 16) + '...',
                 },
-                'Cache hit but missing analysisV21, will regenerate'
+                'Cache hit but prompt_version mismatch, will regenerate'
               );
               cachedResult = null; // Forçar regeneração
             } else {
-              request.log.info(
-                {
-                  requestId,
-                  userId,
-                  tenantId,
-                  listingId,
-                  fingerprint: fingerprint.substring(0, 16) + '...',
-                  cacheHit: true,
-                  hasV21: true,
-                },
-                'AI analysis cache hit with V2.1'
-              );
+              cachedResult = cached.result_json as unknown as CachedAnalysisResult;
+              
+              // Se cache não tiver analysisV21, considerar como cache miss e regenerar
+              if (!cachedResult.analysisV21) {
+                request.log.warn(
+                  {
+                    requestId,
+                    userId,
+                    tenantId,
+                    listingId,
+                    fingerprint: fingerprint.substring(0, 16) + '...',
+                  },
+                  'Cache hit but missing analysisV21, will regenerate'
+                );
+                cachedResult = null; // Forçar regeneração
+              } else {
+                // Verificar se analysisV21 tem prompt_version correto
+                const analysisV21PromptVersion = (cachedResult.analysisV21 as any)?.meta?.prompt_version;
+                if (analysisV21PromptVersion && analysisV21PromptVersion !== PROMPT_VERSION) {
+                  request.log.warn(
+                    {
+                      requestId,
+                      userId,
+                      tenantId,
+                      listingId,
+                      analysisV21PromptVersion,
+                      expectedPromptVersion: PROMPT_VERSION,
+                    },
+                    'Cache hit but analysisV21 has wrong prompt_version, will regenerate'
+                  );
+                  cachedResult = null; // Forçar regeneração
+                } else {
+                  request.log.info(
+                    {
+                      requestId,
+                      userId,
+                      tenantId,
+                      listingId,
+                      fingerprint: fingerprint.substring(0, 16) + '...',
+                      cacheHit: true,
+                      hasV21: true,
+                      promptVersion: PROMPT_VERSION,
+                    },
+                    'AI analysis cache hit with Expert (ml-expert-v1)'
+                  );
+                }
+              }
             }
           }
         }
@@ -515,9 +592,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             'AI analysis complete (cache miss)'
           );
 
-          // Preparar resposta com V1 + V2.1 (se disponível)
+          // Preparar resposta com Expert (ml-expert-v1)
           const responseData: any = {
-            listingId,
+            listingId, // GARANTIR que usa o listingId do request, não de outro lugar
             score: result.score.score.final,
             scoreBreakdown: result.score.score.breakdown,
             potentialGain: result.score.score.potential_gain,
@@ -537,7 +614,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             mediaVerdict,
           };
 
-          // SEMPRE incluir V2.1 se disponível (obrigatório para V2.1)
+          // SEMPRE incluir Expert se disponível (obrigatório)
           if (analysisV21) {
             responseData.analysisV21 = analysisV21;
             request.log.info(
@@ -545,19 +622,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 requestId,
                 listingId,
                 tenantId,
-                hasV21: true,
+                listingIdExt: listing.listing_id_ext,
+                promptVersion: analysisV21.meta.prompt_version,
+                analyzedAt: analysisV21.meta.analyzed_at,
+                verdict: analysisV21.verdict?.substring(0, 50),
               },
-              'Including analysisV21 in response'
+              'Including Expert analysis in response'
             );
           } else {
-            request.log.warn(
+            request.log.error(
               {
                 requestId,
                 listingId,
                 tenantId,
                 hasV21: false,
               },
-              'Response does not include analysisV21 (V2.1 failed or not generated)'
+              'Response does not include Expert analysis - CRITICAL ERROR'
             );
           }
 
@@ -630,9 +710,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           '[MEDIA-VERDICT-DEBUG] MediaVerdict gerado (cache)'
         );
 
-        // Preparar resposta do cache incluindo V2.1 se disponível
+        // Preparar resposta do cache incluindo Expert se disponível
         const cacheResponseData: any = {
-          listingId,
+          listingId, // GARANTIR que usa o listingId do request, não do cache
           score: scoreResult.score.final,
           scoreBreakdown: scoreResult.score.breakdown,
           potentialGain: scoreResult.score.potential_gain,
@@ -652,9 +732,23 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           mediaVerdict,
         };
 
-        // Incluir V2.1 se disponível no cache
+        // Incluir Expert se disponível no cache
         if (cachedResult.analysisV21) {
           cacheResponseData.analysisV21 = cachedResult.analysisV21;
+          
+          // Log para debug
+          request.log.info({
+            requestId,
+            listingId,
+            cacheListingId: (cachedResult.analysisV21 as any)?.meta?.listingId,
+            promptVersion: (cachedResult.analysisV21 as any)?.meta?.prompt_version,
+            analyzedAt: (cachedResult.analysisV21 as any)?.meta?.analyzed_at,
+          }, 'Returning cached Expert analysis');
+        } else {
+          request.log.warn({
+            requestId,
+            listingId,
+          }, 'Cache hit but no analysisV21 found');
         }
 
         return reply.status(200).send({
