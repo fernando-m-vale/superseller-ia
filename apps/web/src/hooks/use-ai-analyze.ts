@@ -312,25 +312,14 @@ export function useAIAnalyze(listingId: string | null) {
 
       const result = await response.json()
       
-      // DEBUG: Log do response completo
-      console.log('[use-ai-analyze] Response completo:', JSON.stringify(result, null, 2))
-      console.log('[use-ai-analyze] result.data:', result.data)
-      console.log('[use-ai-analyze] result.data?.analysisV21:', result.data?.analysisV21)
-      
       // Adaptar resposta da API para o formato esperado pelo frontend
       const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
       
       // Ler analysisV21 do schema real: response.data.analysisV21 (não response.data.data.analysisV21)
       const analysisV21 = result.data?.analysisV21 ?? null
       
-      // DEBUG: Log do analysisV21 extraído
-      console.log('[use-ai-analyze] analysisV21 extraído:', analysisV21 ? JSON.stringify(analysisV21, null, 2) : 'null')
-      
       if (analysisV21) {
         adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
-        console.log('[use-ai-analyze] adaptedData.analysisV21 definido:', !!adaptedData.analysisV21)
-      } else {
-        console.warn('[use-ai-analyze] analysisV21 é null ou undefined!')
       }
       
       // Extrair metadados para UX de cache
