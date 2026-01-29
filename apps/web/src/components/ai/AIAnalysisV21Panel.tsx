@@ -96,10 +96,16 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Saúde geral:</span>
-            {getHealthBadge(analysisV21.diagnostic?.overall_health || 'needs_attention')}
-          </div>
+          {analysisV21.diagnostic?.overall_health ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Saúde geral:</span>
+              {getHealthBadge(analysisV21.diagnostic.overall_health)}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Saúde geral não disponível na análise atual.
+            </div>
+          )}
           
           {analysisV21.diagnostic?.main_bottleneck && (
             <div>
@@ -153,7 +159,10 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
         <CardContent>
           <div className="space-y-4">
             {sortedActions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma ação disponível.</p>
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p>Nenhuma ação recomendada foi gerada para este anúncio.</p>
+                <p className="text-xs">Isso pode ocorrer quando o anúncio já está bem otimizado ou quando há limitações nos dados disponíveis.</p>
+              </div>
             ) : (
               sortedActions.map((action, index) => (
                 <div key={action.id || index} className="border rounded-lg p-4 space-y-3">
@@ -300,7 +309,10 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
               )}
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">Título sugerido não disponível.</p>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>Nenhuma sugestão de título foi gerada para este anúncio.</p>
+              <p className="text-xs">Isso pode ocorrer quando o título atual já está otimizado ou quando há limitações nos dados disponíveis.</p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -340,7 +352,10 @@ export function AIAnalysisV21Panel({ analysisV21 }: AIAnalysisV21PanelProps) {
               </p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Descrição sugerida não disponível.</p>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>Nenhuma descrição sugerida foi gerada para este anúncio.</p>
+              <p className="text-xs">Isso pode ocorrer quando a descrição atual já está otimizada ou quando há limitações nos dados disponíveis.</p>
+            </div>
           )}
 
           {analysisV21.description_analysis && (
