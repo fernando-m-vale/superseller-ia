@@ -838,6 +838,8 @@ export function ListingsTable() {
               <AIAnalysisV21Panel 
                 analysisV21={aiAnalysis.analysisV21} 
                 listingIdExt={_selectedListing?.listingIdExt}
+                actionPlan={aiAnalysis.actionPlan}
+                seoSuggestions={aiAnalysis.seoSuggestions}
               />
             ) : (
               <Card>

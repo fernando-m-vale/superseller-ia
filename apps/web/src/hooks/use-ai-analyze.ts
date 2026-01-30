@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
+import type { NormalizedAIAnalysisResponse } from '@/lib/ai/normalizeAiAnalyze'
 
 // Interface da resposta da API (formato bruto)
 interface AIAnalysisApiResponse {
@@ -188,11 +189,11 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
 }
 
 export interface AIAnalysisState {
-  data: AIAnalysisResponse | null
+  data: NormalizedAIAnalysisResponse | null
   isLoading: boolean
   error: string | null
   // Metadados para UX de cache
-  analyzedAt?: string // analysisV21?.meta?.analyzed_at
+  analyzedAt?: string // analysisV21?.meta?.analyzedAt
   cacheHit?: boolean // response.data?.cacheHit ou message includes "(cache)"
   message?: string // response.data?.message
 }
@@ -352,6 +353,10 @@ export function useAIAnalyze(listingId: string | null) {
         console.warn('[AI-ANALYZE] No analysisV21 in response', { listingId })
       }
       
+      // Normalizar resposta (snake_case → camelCase)
+      const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
+      const normalizedData = normalizeAiAnalyzeResponse(adaptedData)
+      
       // Extrair metadados para UX de cache
       // cacheHit pode estar em result.data.cacheHit ou result.cacheHit
       // Também verificar se message contém "(cache)"
@@ -360,11 +365,11 @@ export function useAIAnalyze(listingId: string | null) {
         ?? (result.message && result.message.includes('(cache)'))
         ?? false
       
-      const analyzedAt = analysisV21?.meta?.analyzed_at
+      const analyzedAt = normalizedData.analysisV21?.meta?.analyzedAt || analysisV21?.meta?.analyzed_at
       const message = result.message ?? result.data?.message
       
       setState({
-        data: adaptedData,
+        data: normalizedData,
         isLoading: false,
         error: null,
         analyzedAt,
