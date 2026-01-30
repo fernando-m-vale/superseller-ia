@@ -135,9 +135,11 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 1) ✅ **Confirmar endpoint real e payload de VISITS** — CONCLUÍDO
 2) ✅ **Ajustar integração/parse** — CONCLUÍDO
 3) ✅ **Reprocessar visits e validar no DB** — CONCLUÍDO
-4) Validar comportamento de orders quando connection active muda de sellerId
-5) Estabilizar testes quebrados (ai-recommendations, metrics.test)
-6) Validar botão "Atualizar dados" no UI
+4) ✅ **Análise IA Expert integrada (backend + frontend)** — TECNICAMENTE FUNCIONAL
+5) ⏳ **Encerrar Dia 2:** Corrigir profundidade de descrição, promoção, vídeo e editUrl
+6) Validar comportamento de orders quando connection active muda de sellerId
+7) Estabilizar testes quebrados (ai-recommendations, metrics.test)
+8) Validar botão "Atualizar dados" no UI
 
 ## 🔍 Pendências / Pontos de atenção
 

@@ -9,10 +9,10 @@
 
 # DAILY EXECUTION LOG — 2026-01-27 (Dia 2)
 
-## ✅ STATUS: EM FINALIZAÇÃO
+## ⚠️ STATUS: TECNICAMENTE FUNCIONAL, PRODUTO AINDA NÃO FECHADO
 
 ## 🎯 Foco do dia
-**Consolidação da Análise IA V2.1 (backend + frontend) + Descontinuação da V1 + Garantia de cache e controle de custo + Estabilização de arquitetura para evolução futura**
+**Consolidação da Análise IA Expert (ml-expert-v1) + Descontinuação da V1 + Garantia de cache e controle de custo + Estabilização de arquitetura para evolução futura**
 
 ## ✅ Planejado / Feito
 - [x] Instrumentar `syncVisitsByRange` com logs detalhados (visitsMap sum, intersectionCount, read-back)
@@ -28,6 +28,13 @@
 - [x] **Reconciliação de status paused vs active via batch API autenticada**
 - [x] **Observabilidade via `/refresh` (reconcile.details com actionTaken)**
 - [x] **Filtros de sync: excluir listings com `access_status != accessible`**
+- [x] **Ativar Prompt Especialista (ml-expert-v1) em produção**
+- [x] **Remover completamente V1 (sem fallback)**
+- [x] **Implementar validação robusta de JSON (response_format, regex extraction, retry)**
+- [x] **Corrigir bug crítico de listing incorreto (cache invalidation, prompt_version validation)**
+- [x] **Implementar normalização snake_case → camelCase no frontend**
+- [x] **Atualizar modal para renderizar dados reais do Expert (verdict, titleFix, descriptionFix, imagePlan, priceFix, algorithmHacks, finalActionPlan)**
+- [x] **Remover dependência de savedRecommendations**
 
 ## 🧠 Descobertas
 - **Formato real da API ML:** `response.data.results[]` com campos `date`, `total` e `visits_detail[]` (quantity)
@@ -37,11 +44,20 @@
 - Sistema usa sempre a conexão `active` mais recente; divergências de `sellerId` podem explicar diferenças em orders
 - **403 PolicyAgent:** Alguns listings retornam `PA_UNAUTHORIZED_RESULT_FROM_POLICIES` mesmo com token válido (listings "órfãos" de conexões antigas)
 - **Batch API `/items?ids=...`:** Retorna array na mesma ordem dos IDs enviados; cada item tem `{code, body}` onde `code=200` → item completo, `code!=200` → erro
+- **OpenAI retorna JSON não-estrito:** Precisa `response_format: { type: 'json_object' }` + regex extraction + retry com prompt reforçado
+- **Cache pode ter prompt_version antigo:** Validação obrigatória de `prompt_version` antes de usar cache
+- **Frontend esperava camelCase mas API retorna snake_case:** Normalização necessária para compatibilidade
+- **Análises misturavam dados entre anúncios:** Bug crítico resolvido com reset de state quando `listingId` muda
 
 ## ⚠️ Bloqueios / riscos
 - **Erro 400 orders limit:** ocorreu em produção; corrigido com clamp `limit <= 51`
 - **Orders com connection active vs revoked:** investigar se orders=0 quando connection mudou de sellerId é comportamento esperado
 - **Listings bloqueados por PolicyAgent:** Não são processados em visits/metrics (comportamento correto)
+- **🔴 Descrição rasa:** IA entregando descrições curtas que não atendem proposta de valor — **BLOQUEADOR DO DIA 2**
+- **🔴 Promoção chutada:** IA afirma "não há promoção" sem dados explícitos — **BLOQUEADOR DO DIA 2**
+- **🔴 Vídeo com lógica incorreta:** Sugere "Adicionar vídeo" mesmo com `hasClipDetected = null` — **BLOQUEADOR DO DIA 2**
+- **🟡 EditUrl ausente:** Botão "Abrir no Mercado Livre" abre página pública, não edição — **MELHORIA**
+- **🟡 UX do modal confusa:** Layout funciona mas precisa hierarquia melhor — **MELHORIA**
 
 ## 📌 Decisões tomadas
 
@@ -66,72 +82,147 @@
 - **`/refresh` response:** Inclui `reconcile.details` com `actionTaken` ('marked_blocked_by_policy', 'updated_status', 'skipped', etc.)
 - **Logs limitados:** Apenas primeiros 10 listings para não poluir logs
 
+### Análise IA Expert (ml-expert-v1)
+- **V1 oficialmente aposentado:** Sem fallback; sistema usa exclusivamente Prompt Especialista
+- **Validação robusta de JSON:** `response_format: { type: 'json_object' }` + regex extraction + retry com prompt reforçado
+- **Cache com validação de prompt_version:** Regenera automaticamente se `prompt_version` não corresponder
+- **Normalização snake_case → camelCase:** Frontend recebe dados normalizados para facilitar uso
+- **Bug crítico de listing incorreto resolvido:** Reset de state quando `listingId` muda; validação de `listingId` na resposta
+
 ### Decisões conscientes (backlog)
 - **Backfill manual:** Por enquanto, backfill de visits é manual via endpoint; automação futura
 - **Multi-conexões:** Não resolver suporte a múltiplas conexões ativas simultaneamente agora (usa sempre a mais recente `active`)
 - **Inserção manual de anúncios:** Não implementado; sistema depende de sync do ML
 
+### Decisões de produto (registradas)
+- **IA NÃO DEVE CHUTAR DADOS:** Promoção e vídeo só podem ser afirmados com dados explícitos; caso contrário → resposta condicional
+- **Descrição é feature central:** Descrição curta = BUG de produto; densidade mínima obrigatória definida no prompt
+- **Prompt especialista é o padrão:** V1 oficialmente aposentado; todo output deve ser "pronto para aplicar"
+
 ## ➡️ Próximo passo claro
-**Dia 2: Foco em Orders + estrutura multi-contas**
-1) Validar comportamento de orders quando connection active mudou de sellerId
-2) Investigar estrutura para suportar múltiplas contas/conexões (UX e backend)
-3) Corrigir testes quebrados (ai-recommendations, metrics.test)
-4) Validar botão "Atualizar dados" no UI
+**Encerrar Dia 2: Corrigir bloqueadores de qualidade do output da IA**
+
+1. **Ajustar prompt do Expert para descrição profunda obrigatória**
+   - Densidade mínima definida no prompt
+   - Estrutura obrigatória (benefícios, tamanhos, confiança, CTA)
+   - SEO forte
+
+2. **Corrigir promoção (dados + regra)**
+   - Backend deve enviar `has_promotion`, `promotion_price`, `original_price`
+   - IA deve dizer "não foi possível confirmar" se dado não existir
+   - Não pode afirmar ausência sem certeza
+
+3. **Corrigir lógica de vídeo condicional**
+   - `true` → não sugerir
+   - `false` → sugerir
+   - `null` → sugestão condicional ("se não houver vídeo…")
+
+4. **Implementar editUrl do Mercado Livre**
+   - Backend fornece `editUrl`
+   - Front prioriza `editUrl` sobre `publicUrl`
+
+5. **Validar novamente output vs expectativa de especialista**
+   - Descrição estruturada e profunda
+   - Promoção determinística
+   - Vídeo com lógica correta
+   - Links de edição funcionando
+
+**Só então encerrar Dia 2 oficialmente.**
 
 ---
 
-## ✅ Planejado / Feito (Dia 2)
-- [x] Finalizar prompt e schema da IA V2.1
-- [x] Integrar V2.1 ao backend (`POST /api/v1/ai/analyze/:listingId`)
-- [x] Implementar conversão V2.1 → V1 compatível (`convertV21ToV1`)
-- [x] Ativar V2.1 na rota com fallback para V1
+## ✅ Planejado / Feito (Dia 2 — Detalhado)
+- [x] Finalizar prompt e schema da IA Expert (ml-expert-v1)
+- [x] Integrar Expert ao backend (`POST /api/v1/ai/analyze/:listingId`)
+- [x] Remover completamente V1 (sem fallback)
+- [x] Implementar validação robusta de JSON (response_format, regex extraction, retry)
 - [x] Garantir cache funcional (regeneração quando `analysisV21` ausente)
-- [x] Integrar V2.1 ao frontend (types, hook, componente)
+- [x] Corrigir bug crítico de listing incorreto (cache invalidation, prompt_version validation)
+- [x] Integrar Expert ao frontend (types, hook, componente)
+- [x] Implementar normalização snake_case → camelCase
 - [x] Remover UI V1 completamente
 - [x] Implementar UX de cache (banner quando cacheHit, botão "Regerar análise")
 - [x] Corrigir binding completo do `analysisV21` no frontend
-- [x] Renderizar diagnóstico, ações, título sugerido, descrição sugerida, análise de preço, análise de mídia
+- [x] Renderizar diagnóstico, ações, título sugerido, descrição sugerida, análise de preço, plano de imagens, hacks algorítmicos
 - [x] Corrigir erros de build TypeScript (tipos, variáveis não declaradas)
 - [x] Validar fluxo completo de análise por anúncio
+- [x] Remover dependência de savedRecommendations
 
-## 🧠 Descobertas (Dia 2)
-- **V2.1 gera JSON rico e confiável:** Schema estruturado com `diagnostic`, `actions`, `title_analysis`, `description_analysis`, `price_analysis`, `media_analysis`
+## 🧠 Descobertas (Dia 2 — Detalhado)
+- **Expert gera JSON rico e confiável:** Schema estruturado com `verdict`, `title_fix`, `description_fix`, `image_plan`, `price_fix`, `algorithm_hacks`, `final_action_plan`
+- **OpenAI retorna JSON não-estrito:** Precisa `response_format: { type: 'json_object' }` + regex extraction + retry com prompt reforçado
 - **Binding cuidadoso no frontend:** Schema real da API é `response.data.analysisV21` (não `response.data.data.analysisV21`)
 - **Cache é essencial para controle de custos:** OpenAI GPT-4o é caro; cache por listing evita chamadas redundantes
+- **Normalização necessária:** API retorna snake_case mas frontend espera camelCase
+- **Análises misturavam dados entre anúncios:** Bug crítico resolvido com reset de state quando `listingId` muda
 - **Limitações da API do Mercado Livre:** Exigem decisões de produto (ex: backfill manual por enquanto)
-- **Problemas atuais são de integração, não de lógica ou IA:** V2.1 funciona bem; desafio foi mapear corretamente no frontend
+- **Problemas atuais são de qualidade do output, não de integração:** Expert funciona bem; desafio é garantir profundidade e precisão
 
-## ⚠️ Bloqueios / Riscos (Dia 2)
-- **Mapping incompleto do analysisV21 no frontend:** Inicialmente tentou acessar campos inexistentes (`verdict`, `title.suggested`, `description.fullText`, `images.plan`) — **RESOLVIDO**
-- **Preço promocional ainda não refletido corretamente:** `price_base` vs `price_final` precisa validação visual
-- **UX com termos técnicos:** "V2.1", "indisponível" não orientados ao usuário final — precisa refinamento de copy
+## ⚠️ Bloqueios / Riscos (Dia 2 — Detalhado)
+- **Mapping incompleto do analysisV21 no frontend:** Inicialmente tentou acessar campos inexistentes — **RESOLVIDO**
+- **🔴 Descrição rasa:** IA entregando descrições curtas que não atendem proposta de valor — **BLOQUEADOR DO DIA 2**
+- **🔴 Promoção chutada:** IA afirma "não há promoção" sem dados explícitos — **BLOQUEADOR DO DIA 2**
+- **🔴 Vídeo com lógica incorreta:** Sugere "Adicionar vídeo" mesmo com `hasClipDetected = null` — **BLOQUEADOR DO DIA 2**
+- **🟡 EditUrl ausente:** Botão "Abrir no Mercado Livre" abre página pública, não edição — **MELHORIA**
+- **🟡 UX do modal confusa:** Layout funciona mas precisa hierarquia melhor — **MELHORIA**
 - **CI rodando em commit antigo:** Commit `d7d90e9` ainda tinha código antigo; commit `0ad1bf2` corrigiu — **RESOLVIDO**
 
-## 📌 Decisões tomadas (Dia 2)
+## 📌 Decisões tomadas (Dia 2 — Detalhado)
 
-### Análise IA V2.1
-- **V1 da análise de IA foi oficialmente descontinuada:** Apenas V2.1 será exibida ao usuário
-- **Cache reaproveitado da V1 para V2.1:** Cache existente é regenerado automaticamente quando `analysisV21` ausente
-- **Fallback para V1:** Se V2.1 falhar, sistema ainda pode gerar V1 (mas não exibe ao usuário)
-- **Versionamento de prompt:** `PROMPT_VERSION = 'ai-v2.1'` para invalidação de cache
+### Análise IA Expert (ml-expert-v1)
+- **V1 da análise de IA foi oficialmente descontinuada:** Apenas Expert será exibida ao usuário
+- **Cache reaproveitado da V1 para Expert:** Cache existente é regenerado automaticamente quando `analysisV21` ausente
+- **Sem fallback para V1:** Se Expert falhar, sistema retorna erro 502 com mensagem clara
+- **Versionamento de prompt:** `PROMPT_VERSION = 'ml-expert-v1'` para invalidação de cache
+- **Validação robusta de JSON:** `response_format: { type: 'json_object' }` + regex extraction + retry com prompt reforçado
+- **Normalização snake_case → camelCase:** Frontend recebe dados normalizados para facilitar uso
 
 ### Backfill e Automação
 - **Backfill automático ficará para fase futura:** Decisão consciente de manter manual por enquanto
 - **Preparar fundação para análise de imagens:** Armazenar `pictures_json`, `pictures_count` sem ativar IA visual agora
 
 ### Frontend
-- **Remoção completa da UI V1:** Modal exibe apenas V2.1
+- **Remoção completa da UI V1:** Modal exibe apenas Expert
 - **UX de cache:** Banner discreto quando `cacheHit=true` ou `message.includes('(cache)')`
 - **Botão "Regerar análise":** Sempre disponível quando `analysisV21` existe; chama endpoint com `forceRefresh=true`
+- **Normalização de dados:** Frontend recebe dados em camelCase via `normalizeAiAnalyzeResponse`
 
 ### Integração
 - **Schema real da API:** `response.data.analysisV21` (não `response.data.data.analysisV21`)
 - **Metadados para UX:** `analyzedAt`, `cacheHit`, `message` expostos no hook para feedback ao usuário
+- **Bug crítico de listing incorreto resolvido:** Reset de state quando `listingId` muda; validação de `listingId` na resposta
+
+### Decisões de produto (registradas)
+- **IA NÃO DEVE CHUTAR DADOS:** Promoção e vídeo só podem ser afirmados com dados explícitos; caso contrário → resposta condicional
+- **Descrição é feature central:** Descrição curta = BUG de produto; densidade mínima obrigatória definida no prompt
+- **Prompt especialista é o padrão:** V1 oficialmente aposentado; todo output deve ser "pronto para aplicar"
 
 ## ➡️ Próximo passo claro (Dia 2 → Dia 3)
-**Encerrar pendências do Dia 2 e estabilizar completamente a Análise IA V2.1:**
-1) Validar renderização completa de todos os campos do `analysisV21`
-2) Corrigir exibição de preço base vs preço promocional
-3) Ajustar copy do modal para linguagem de usuário final (remover termos técnicos)
-4) Validar cache (não gerar nova análise sem necessidade)
-5) Confirmar que não há chamadas redundantes à OpenAI
+**Encerrar pendências do Dia 2 e estabilizar completamente a Análise IA Expert:**
+
+1. **Ajustar prompt do Expert para descrição profunda obrigatória**
+   - Densidade mínima definida no prompt
+   - Estrutura obrigatória (benefícios, tamanhos, confiança, CTA)
+   - SEO forte
+
+2. **Corrigir promoção (dados + regra)**
+   - Backend deve enviar `has_promotion`, `promotion_price`, `original_price`
+   - IA deve dizer "não foi possível confirmar" se dado não existir
+   - Não pode afirmar ausência sem certeza
+
+3. **Corrigir lógica de vídeo condicional**
+   - `true` → não sugerir
+   - `false` → sugerir
+   - `null` → sugestão condicional ("se não houver vídeo…")
+
+4. **Implementar editUrl do Mercado Livre**
+   - Backend fornece `editUrl`
+   - Front prioriza `editUrl` sobre `publicUrl`
+
+5. **Validar novamente output vs expectativa de especialista**
+   - Descrição estruturada e profunda
+   - Promoção determinística
+   - Vídeo com lógica correta
+   - Links de edição funcionando
+
+**Só então encerrar Dia 2 oficialmente.**

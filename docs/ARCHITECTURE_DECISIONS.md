@@ -207,6 +207,110 @@ Sistema pode ter múltiplas conexões Mercado Livre (ativas, revogadas, expirada
 
 ---
 
+## ADR-007: IA NÃO DEVE CHUTAR DADOS
+
+**Data:** 2026-01-27  
+**Status:** Decisão registrada, implementação em progresso
+
+### Contexto
+A IA estava afirmando ausência de promoção ou sugerindo ações sem dados explícitos, gerando informações incorretas.
+
+### Decisão
+**IA NÃO DEVE CHUTAR DADOS. Promoção e vídeo só podem ser afirmados com dados explícitos. Caso contrário → resposta condicional.**
+
+### Justificativa
+- Informações incorretas prejudicam confiança do usuário
+- Afirmar ausência sem certeza é enganoso
+- Resposta condicional é mais honesta e útil
+- Dados explícitos garantem precisão
+
+### Implementação
+- **Promoção:** Se `has_promotion` não for fornecido ou for `null`, IA deve dizer "não foi possível confirmar se há promoção"
+- **Vídeo:** Lógica condicional:
+  - `hasClipDetected = true` → não sugerir adicionar vídeo
+  - `hasClipDetected = false` → sugerir adicionar vídeo
+  - `hasClipDetected = null` → sugestão condicional ("se não houver vídeo, considere adicionar…")
+- **Backend:** Deve enviar `has_promotion`, `promotion_price`, `original_price` no input da IA
+
+### Impacto
+- **Precisão:** Informações mais confiáveis
+- **Confiança:** Usuário sabe quando dados são incertos
+- **Qualidade:** Output mais honesto e útil
+
+### Alternativas consideradas
+- Chutar dados: Gera informações incorretas
+- Omitir completamente: Perde oportunidade de ajudar
+
+---
+
+## ADR-008: Descrição é Feature Central
+
+**Data:** 2026-01-27  
+**Status:** Decisão registrada, implementação em progresso
+
+### Contexto
+A IA estava entregando descrições rasas que não atendiam a proposta de valor do SuperSeller IA.
+
+### Decisão
+**Descrição é feature central. Descrição curta = BUG de produto. Densidade mínima obrigatória definida no prompt.**
+
+### Justificativa
+- Descrição é uma das principais entregas do SuperSeller IA
+- Descrições rasas não atendem proposta de valor
+- Copy pronta para colar é essencial
+- Estrutura e SEO são críticos para conversão
+
+### Implementação
+- **Prompt:** Regra de densidade mínima obrigatória
+- **Estrutura obrigatória:** Benefícios, tamanhos, confiança, CTA
+- **SEO forte:** Palavras-chave relevantes
+- **Copy pronta:** Texto completo pronto para colar no Mercado Livre
+
+### Impacto
+- **Valor:** Entrega principal do produto
+- **Conversão:** Descrições profundas aumentam conversão
+- **UX:** Copy pronta para usar
+
+### Alternativas consideradas
+- Descrições rasas: Não atende proposta de valor
+- Estrutura opcional: Perde consistência
+
+---
+
+## ADR-009: Prompt Especialista é o Padrão
+
+**Data:** 2026-01-27  
+**Status:** Implementado
+
+### Contexto
+V1 da análise IA era genérica e não atendia necessidades específicas do Mercado Livre.
+
+### Decisão
+**Prompt especialista (ml-expert-v1) é o padrão. V1 oficialmente aposentado. Todo output deve ser "pronto para aplicar".**
+
+### Justificativa
+- Prompt especialista oferece análises mais profundas e acionáveis
+- V1 era genérica e não atendia necessidades específicas
+- Output "pronto para aplicar" é essencial para proposta de valor
+- Foco único permite melhorias contínuas
+
+### Implementação
+- **Prompt ml-expert-v1:** Consultor sênior especialista em Mercado Livre
+- **Sem fallback para V1:** Se Expert falhar, sistema retorna erro 502
+- **Output estruturado:** `verdict`, `title_fix`, `description_fix`, `image_plan`, `price_fix`, `algorithm_hacks`, `final_action_plan`
+- **Versionamento:** `PROMPT_VERSION = 'ml-expert-v1'` para invalidação de cache
+
+### Impacto
+- **Qualidade:** Análises mais profundas e acionáveis
+- **Foco:** Melhorias contínuas em um único prompt
+- **Valor:** Output "pronto para aplicar" atende proposta de valor
+
+### Alternativas consideradas
+- Manter V1 como fallback: Complexidade desnecessária
+- Migração gradual: Atraso desnecessário, Expert já está pronto
+
+---
+
 ## Registro de Decisões Futuras
 
 ### Pendentes de ADR formal
@@ -215,5 +319,6 @@ Sistema pode ter múltiplas conexões Mercado Livre (ativas, revogadas, expirada
 - Limpeza de dados históricos (soft delete / reprocess)
 - Inserção manual de anúncio (MLB…)
 - Diferenciação clara de status (`paused`, `blocked_by_policy`, `unauthorized`) na UX
+- UX do modal de análise (layout e hierarquia)
 
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.

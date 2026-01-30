@@ -1,9 +1,9 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-01-27
+Atualizado em: 2026-01-27 (Fim do Dia 2)
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
-O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escaláveis.
+O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis.
 
 ## 🏗️ Arquitetura Consolidada
 - Frontend: Next.js (app.superselleria.com.br)
@@ -28,6 +28,10 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - IA apenas explica, reescreve e contextualiza
 - Clip/vídeo tratado como conceito único
 - Nenhuma feature nova antes de confiabilidade total dos dados
+- **IA NÃO DEVE CHUTAR DADOS:** Promoção e vídeo só podem ser afirmados com dados explícitos
+- **Descrição é feature central:** Descrição curta = BUG de produto
+- **Prompt especialista é o padrão:** V1 oficialmente aposentado
+- **Todo output deve ser "pronto para aplicar"**
 
 ### Decisões técnicas (visits)
 - **Visitas:** `0` apenas quando fetch ok e dia ausente no mapa; erro → `NULL`
@@ -46,31 +50,106 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - **Não alterar `status` quando bloqueado:** Se PolicyAgent bloqueia, `status` permanece desconhecido (não alterar)
 - **Limpeza automática:** Quando listing volta a ser acessível, limpa `access_blocked_*` e marca `access_status='accessible'`
 
-### Decisões arquiteturais (Análise IA V2.1)
+### Decisões arquiteturais (Análise IA Expert)
+- **Prompt ml-expert-v1 é o padrão:** V1 oficialmente aposentado, sem fallback
 - **Cache de análise por listing:** Evita custos desnecessários com OpenAI; regeneração automática quando `analysisV21` ausente
 - **Regeração manual sob demanda:** Botão "Regerar análise" permite forçar nova análise quando necessário
 - **Controle de custo OpenAI:** Cache é crítico; sistema respeita cache existente e só regenera quando necessário
-- **Integração orientada a versionamento de prompt:** `PROMPT_VERSION = 'ai-v2.1'` para invalidação de cache
+- **Integração orientada a versionamento de prompt:** `PROMPT_VERSION = 'ml-expert-v1'` para invalidação de cache
+- **Normalização snake_case → camelCase:** Frontend usa dados normalizados para facilitar uso
 - **Preparação para IA visual futura:** Armazenar `pictures_json`, `pictures_count` sem análise visual por IA neste momento (decisão consciente para evitar complexidade prematura)
 
 ## 🧭 Roadmap (alto nível)
 - ONDA 1/2: Score V2 + UX (concluído)
 - ONDA 3: IA como amplificador (em progresso)
-  - ✅ Análise IA V2.1 (backend + frontend) — **CONCLUÍDO**
-  - ⏳ Estabilização e refinamento UX — **EM PROGRESSO**
+  - ✅ Análise IA Expert (ml-expert-v1) — **TECNICAMENTE FUNCIONAL**
+  - ⏳ Estabilização e refinamento de qualidade — **PENDENTE (Dia 2 não encerrado)**
 - Operação: jobs internos + scheduler (fase atual, crítico para clientes reais)
 - Próxima épica: Benchmark/Ads/Automações (após dados e operação sólidos)
 
-
-
-## 🧠 Estado atual do produto (2026-01-27)
-- **SuperSeller IA opera com Análise IA V2.1 como padrão:** V1 foi oficialmente descontinuada
+## 🧠 Estado atual do produto (2026-01-27 — Fim do Dia 2)
+- **SuperSeller IA opera com Prompt Especialista (ml-expert-v1) como padrão:** V1 foi oficialmente aposentado
+- **Pipeline de análise IA está operacional:** Prompt ml-expert-v1 ativo em produção
+- **Cache com forceRefresh funcionando:** Problema de listing incorreto resolvido
+- **Normalização snake_case → camelCase implementada:** Modal renderiza dados reais do Expert
+- **Front não depende mais de savedRecommendations:** Análises agora diferem por anúncio (bug crítico resolvido)
 - **Sistema está preparado para escalar IA, dados e UX:** Fundação sólida para evolução futura
-- **Cache de análise por listing:** Evita custos desnecessários com OpenAI
 - **Backfill manual por decisão consciente:** Automação futura planejada
 - **Preparação para IA visual futura:** Dados de imagens armazenados (`pictures_json`, `pictures_count`) sem análise visual ativa
 
-## ✅ Estado atual (2026-01-22)
+## ⚠️ PROBLEMAS ABERTOS (NÃO RESOLVIDOS — BLOQUEADORES DE FECHAMENTO DO DIA 2)
+
+### 1️⃣ Profundidade da descrição (CORE DO PRODUTO)
+**Status:** 🔴 BLOQUEADOR
+
+A IA ainda está entregando descrições rasas.
+
+**Exemplo atual em tela:**
+> "Meias 3D Infantis Crazy Socks - Perfeitas para crianças…"
+
+Isso não atende a proposta de valor do SuperSeller IA.
+
+**🔴 EXPECTATIVA CORRETA:**
+- Descrição estruturada
+- SEO forte
+- Blocos claros (benefícios, tamanhos, confiança, CTA)
+- Copy pronta para colar
+
+**Causa raiz:**
+- Problema de prompt + regras de densidade mínima
+- Precisa virar decisão explícita de produto
+
+### 2️⃣ Promoção (DADO INCOMPLETO)
+**Status:** 🔴 BLOQUEADOR
+
+A IA afirma "não há promoção" mesmo quando existe.
+
+**Causa raiz:**
+- Backend não envia `has_promotion`, `promotion_price`, `original_price`
+- A IA está chutando
+
+**Decisão necessária:**
+- Promoção deve ser determinística
+- Se dado não existir → IA deve dizer "não foi possível confirmar"
+- Não pode afirmar ausência sem certeza
+
+### 3️⃣ Vídeo / Clip (REGRESSÃO LÓGICA)
+**Status:** 🔴 BLOQUEADOR
+
+Mesmo com `hasClipDetected = null`, IA sugere "Adicionar vídeo".
+
+**Correto seria:**
+- `true` → não sugerir
+- `false` → sugerir
+- `null` → sugestão condicional ("se não houver vídeo…")
+
+### 4️⃣ Deeplink do Mercado Livre (edição)
+**Status:** 🟡 MELHORIA
+
+Botão "Abrir no Mercado Livre" abre página pública.
+
+**Antes funcionava no modo edição.**
+
+**Link correto de edição identificado como padrão:**
+```
+https://www.mercadolivre.com.br/anuncios/{ITEM_ID}/modificar/bomni?callback_url=...
+```
+
+**Ação necessária:**
+- Backend deve fornecer `editUrl`
+- Front deve priorizar `editUrl` sobre `publicUrl`
+
+### 5️⃣ UX / UI do Modal (NÃO BLOQUEANTE, MAS REGISTRAR)
+**Status:** 🟡 MELHORIA
+
+Layout atual funciona, mas está visualmente confuso.
+
+**Precisa de hierarquia melhor:**
+- Diagnóstico compacto
+- Ações claras
+- Detalhes colapsáveis (descrição, imagens, hacks)
+
+## ✅ Estado atual (2026-01-27)
 ### Produção
 - Deploy está verde.
 - Dashboard Overview está funcionando para:
@@ -91,6 +170,13 @@ O foco não é “IA bonita”, mas decisões confiáveis, acionáveis e escalá
 - **Access Control:** Listings bloqueados por PolicyAgent marcados corretamente (`access_status='blocked_by_policy'`)
 - **Reconciliação:** Status de listings (`active`/`paused`) sincronizado com ML via batch API autenticada
 
+### Análise IA
+- **Prompt ml-expert-v1 ativo:** Sistema usa exclusivamente prompt especialista
+- **Cache funcional:** Regeneração automática quando `analysisV21` ausente
+- **Normalização implementada:** Frontend recebe dados em camelCase
+- **Modal renderiza dados reais:** verdict, titleFix, descriptionFix, imagePlan, priceFix, algorithmHacks, finalActionPlan
+- **Análises diferem por anúncio:** Bug crítico de listing incorreto resolvido
+
 ## 🔥 Prioridade Zero (base do produto)
 **ML Data Audit (confiabilidade dos dados) — CONCLUÍDO** ✅
 
@@ -98,8 +184,9 @@ Status:
 - ✅ **Visits funcionando** — dados confiáveis, 0 NULL quando fetch ok
 - ✅ **Sistema resiliente a bloqueios da API ML** — PolicyAgent tratado corretamente
 - ✅ **Reconciliação de status** — paused vs active sincronizado
+- ✅ **Análise IA operacional** — Prompt Expert ativo, cache funcional, normalização implementada
 
-Próximo foco: estabilizar orders quando connection active muda de sellerId + estrutura multi-contas.
+Próximo foco: **Encerrar Dia 2** — corrigir profundidade de descrição, promoção, vídeo e editUrl.
 
 ## 📌 Decisões importantes já tomadas
 - Score e ações determinísticas (regras) vêm antes de LLM.
@@ -107,6 +194,9 @@ Próximo foco: estabilizar orders quando connection active muda de sellerId + es
 - **Não ingerir dados quando `access_status != accessible`:** Garante que apenas dados acessíveis são processados
 - **Backfill manual por enquanto:** Automação de backfill de visits/metrics será implementada futuramente
 - **Multi-conexões:** Sistema usa sempre a conexão `active` mais recente; suporte a múltiplas conexões simultâneas será implementado no futuro
+- **IA NÃO DEVE CHUTAR DADOS:** Promoção e vídeo só podem ser afirmados com dados explícitos; caso contrário → resposta condicional
+- **Descrição é feature central:** Descrição curta = BUG de produto; densidade mínima obrigatória definida no prompt
+- **Prompt especialista é o padrão:** V1 oficialmente aposentado; todo output deve ser "pronto para aplicar"
 
 ## 🆔 Padronização de tenant_id
 - **Situação atual:** Inconsistência (TEXT x UUID)
@@ -119,12 +209,12 @@ Próximo foco: estabilizar orders quando connection active muda de sellerId + es
 - **Inserção manual de anúncios:** Não implementado; sistema depende de sync do Mercado Livre
 - **Backfill automático:** Por enquanto, backfill de visits/metrics é manual; automação futura
 - **UX com termos técnicos:** "V2.1", "indisponível" precisam refinamento para linguagem de usuário final
+- **Qualidade do output da IA:** Descrições rasas, promoção chutada, vídeo com lógica incorreta — **BLOQUEADORES DO DIA 2**
 
 ## 🧭 Próxima entrega crítica
 ✅ **VISITS reais no banco (valores > 0) e exibidos no overview** — CONCLUÍDO
-✅ **Análise IA V2.1 integrada (backend + frontend)** — CONCLUÍDO
-
-Próximo: Estabilizar completamente V2.1 (finalizar pendências do Dia 2).
+✅ **Análise IA Expert integrada (backend + frontend)** — TECNICAMENTE FUNCIONAL
+⏳ **Encerrar Dia 2:** Corrigir profundidade de descrição, promoção, vídeo e editUrl
 
 ## 🚀 Plano épico aprovado (próxima fase)
 ### ONDA 1 — IA SCORE V2 (AÇÃO + EXPLICABILIDADE)
