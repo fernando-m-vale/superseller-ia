@@ -1154,22 +1154,6 @@ IMPORTANTE:
       }
 
       if (!parseResult.success || qualityIssues.length > 0) {
-        // Log detalhado do erro de validação
-        const validationErrors = !parseResult.success 
-          ? parseResult.error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message,
-          code: e.code,
-        }));
-        
-        console.error('[OPENAI-SERVICE-EXPERT] Zod validation failed', {
-          requestId,
-          listingId: input.meta.listingId,
-          errors: validationErrors,
-          rawResponseKeys: Object.keys(rawResponse as Record<string, unknown> || {}),
-          rawResponsePreview: JSON.stringify(rawResponse).substring(0, 500),
-        });
-
         // Retry automático: tentar novamente com prompt reforçado
         const validationErrors = !parseResult.success 
           ? parseResult.error.errors.map(e => ({
@@ -1178,6 +1162,25 @@ IMPORTANTE:
               code: e.code,
             }))
           : [];
+        
+        // Log detalhado do erro de validação
+        if (!parseResult.success) {
+          console.error('[OPENAI-SERVICE-EXPERT] Zod validation failed', {
+            requestId,
+            listingId: input.meta.listingId,
+            errors: validationErrors,
+            rawResponseKeys: Object.keys(rawResponse as Record<string, unknown> || {}),
+            rawResponsePreview: JSON.stringify(rawResponse).substring(0, 500),
+          });
+        }
+        
+        if (qualityIssues.length > 0) {
+          console.warn('[OPENAI-SERVICE-EXPERT] Quality issues detected', {
+            requestId,
+            listingId: input.meta.listingId,
+            issues: qualityIssues,
+          });
+        }
         
         const retryReason = !parseResult.success 
           ? `ERRO DE VALIDAÇÃO:\n${validationErrors.map(e => `- ${e.path}: ${e.message}`).join('\n')}`
@@ -1325,16 +1328,22 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
             }
             return result;
           } else {
+            const retryErrors = !retryParseResult.success
+              ? retryParseResult.error.errors.map((e) => ({
+                  path: e.path.map(String).join('.'),
+                  message: e.message,
+                }))
+              : [];
             console.error('[OPENAI-SERVICE-EXPERT] Retry also failed validation', {
               requestId,
               listingId: input.meta.listingId,
-              retryErrors: retryParseResult.error.errors.map(e => ({
-                path: e.path.join('.'),
-                message: e.message,
-              })),
+              retryErrors,
             });
             // Lançar erro para ser tratado no catch
-            throw new Error(`AI_OUTPUT_INVALID: Validation failed after retry. Missing fields: ${retryParseResult.error.errors.map(e => e.path.join('.')).join(', ')}`);
+            const errorFields = !retryParseResult.success
+              ? retryParseResult.error.errors.map((e) => e.path.map(String).join('.')).join(', ')
+              : 'Unknown';
+            throw new Error(`AI_OUTPUT_INVALID: Validation failed after retry. Missing fields: ${errorFields}`);
           }
         } catch (retryError) {
           console.error('[OPENAI-SERVICE-EXPERT] Retry failed', {

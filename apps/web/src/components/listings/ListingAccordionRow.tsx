@@ -41,9 +41,14 @@ function getAnalysisStatus(
     return {
       status: 'expired',
       badge: (
-        <Badge variant="default" className="text-xs bg-yellow-500">
-          🟡 Expirada
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge variant="default" className="text-xs bg-yellow-500">
+            🟡 Expirada
+          </Badge>
+          <span className="text-xs text-yellow-700 dark:text-yellow-400">
+            Análise com mais de 7 dias. Recomendado regerar.
+          </span>
+        </div>
       ),
       dateText: analyzedDate
         ? `Analisada em: ${analyzedDate.toLocaleDateString('pt-BR')} ${analyzedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
