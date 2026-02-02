@@ -44,6 +44,40 @@ interface MercadoLivreItem {
     start_date?: string;
     end_date?: string;
   }>;
+  // Campos de preços estruturados (API do ML)
+  prices?: {
+    prices?: Array<{
+      id?: string;
+      type?: string;
+      amount?: number;
+      currency_id?: string;
+      conditions?: {
+        context_restrictions?: string[];
+        start_time?: string;
+        end_time?: string;
+      };
+    }>;
+  };
+  reference_prices?: Array<{
+    id?: string;
+    type?: string;
+    conditions?: {
+      context_restrictions?: string[];
+      start_time?: string;
+      end_time?: string;
+    };
+    amount?: number;
+    currency_id?: string;
+  }>;
+  // Promoções ativas
+  promotions?: Array<{
+    id?: string;
+    type?: string;
+    discount_percent?: number;
+    start_date?: string;
+    end_date?: string;
+  }>;
+  deal_ids?: string[];
 }
 
 interface TokenRefreshResponse {
@@ -925,33 +959,64 @@ export class MercadoLivreSyncService {
         // Se é update e não veio pictures, NÃO atualizar (manter valor existente)
 
         // Processar campos de promoção
-        // FONTE DE VERDADE: original_price > price OU base_price > price indica promoção
+        // FONTE DE VERDADE: extrair de prices.prices[], reference_prices[], original_price, sale_price, base_price
         const now = new Date();
         const currentPrice = item.price;
-        const originalPriceFromAPI = item.original_price ?? null;
-        const basePriceFromAPI = item.base_price ?? null;
         
-        // Determinar preço original (prioridade: original_price > base_price > price)
-        const originalPrice = originalPriceFromAPI ?? basePriceFromAPI ?? null;
+        // 1. Extrair preços da estrutura prices.prices[]
+        let pricesFromStructure: number[] = [];
+        if (item.prices?.prices && Array.isArray(item.prices.prices)) {
+          pricesFromStructure = item.prices.prices
+            .map(p => p.amount)
+            .filter((amount): amount is number => typeof amount === 'number' && amount > 0);
+        }
         
-        let hasPromotion = false;
+        // 2. Extrair preços de referência (reference_prices[])
+        let referencePrices: number[] = [];
+        if (item.reference_prices && Array.isArray(item.reference_prices)) {
+          referencePrices = item.reference_prices
+            .map(rp => rp.amount)
+            .filter((amount): amount is number => typeof amount === 'number' && amount > 0);
+        }
+        
+        // 3. Determinar price_final (menor preço ativo encontrado)
+        // Prioridade: sale_price > menor de prices.prices[] > price
         let priceFinal: number = currentPrice;
-        let priceBase: number = currentPrice;
+        if (item.sale_price !== undefined && item.sale_price !== null && item.sale_price > 0) {
+          priceFinal = item.sale_price;
+        } else if (pricesFromStructure.length > 0) {
+          priceFinal = Math.min(...pricesFromStructure);
+        } else {
+          priceFinal = currentPrice;
+        }
+        
+        // 4. Determinar original_price (maior preço válido)
+        // Prioridade: original_price > maior de reference_prices[] > base_price > price
+        let originalPrice: number | null = null;
+        if (item.original_price !== undefined && item.original_price !== null && item.original_price > 0) {
+          originalPrice = item.original_price;
+        } else if (referencePrices.length > 0) {
+          originalPrice = Math.max(...referencePrices);
+        } else if (item.base_price !== undefined && item.base_price !== null && item.base_price > 0) {
+          originalPrice = item.base_price;
+        } else {
+          originalPrice = null;
+        }
+        
+        // 5. Detectar promoção: original_price > price_final
+        let hasPromotion = false;
         let discountPercent: number | null = null;
         let promotionType: string | null = null;
-
-        // REGRA PRINCIPAL: Se original_price > price OU base_price > price, tem promoção
-        if (originalPrice !== null && originalPrice > currentPrice) {
+        
+        if (originalPrice !== null && originalPrice > priceFinal) {
           hasPromotion = true;
-          priceFinal = currentPrice;
-          priceBase = originalPrice;
           
           // Calcular desconto percentual
           if (originalPrice > 0) {
-            discountPercent = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
+            discountPercent = Math.round(((originalPrice - priceFinal) / originalPrice) * 100);
           }
           
-          // Verificar se há deals para tipo de promoção
+          // Verificar se há deals/promotions para tipo de promoção
           if (item.deals && Array.isArray(item.deals) && item.deals.length > 0) {
             const activeDeal = item.deals[0];
             promotionType = activeDeal.type || 'discount';
@@ -959,36 +1024,45 @@ export class MercadoLivreSyncService {
             if (activeDeal.discount_percent !== undefined && activeDeal.discount_percent !== null) {
               discountPercent = activeDeal.discount_percent;
             }
+          } else if (item.promotions && Array.isArray(item.promotions) && item.promotions.length > 0) {
+            const activePromo = item.promotions[0];
+            promotionType = activePromo.type || 'discount';
+            if (activePromo.discount_percent !== undefined && activePromo.discount_percent !== null) {
+              discountPercent = activePromo.discount_percent;
+            }
           } else {
             promotionType = 'discount';
           }
         } else {
-          // Sem promoção: price_final = price, price_base = base_price ou price
+          // Sem promoção: price_final = price, original_price = null
           hasPromotion = false;
           priceFinal = currentPrice;
-          priceBase = basePriceFromAPI ?? currentPrice;
+          originalPrice = null;
           discountPercent = null;
           promotionType = null;
         }
 
-        // Atualizar campos de promoção
+        // Atualizar campos de promoção (sempre persistir, mesmo sem promoção)
         listingData.has_promotion = hasPromotion;
         listingData.price_final = priceFinal;
-        listingData.original_price = hasPromotion ? priceBase : null;
+        listingData.original_price = originalPrice;
         listingData.discount_percent = discountPercent;
         listingData.promotion_type = promotionType;
         listingData.promotion_checked_at = now;
         
-        // Log para debug (sem expor tokens)
-        console.log('[ML-SYNC] Promoção detectada', {
+        // Log estruturado para debug (sem expor tokens)
+        console.log('[ML-SYNC] Promoção processada', {
           listing_id_ext: item.id,
-          has_promotion: hasPromotion,
           price: currentPrice,
-          original_price: originalPriceFromAPI,
-          base_price: basePriceFromAPI,
+          original_price: originalPrice,
           price_final: priceFinal,
-          price_base: priceBase,
+          has_promotion: hasPromotion,
           discount_percent: discountPercent,
+          promotion_type: promotionType,
+          prices_from_structure: pricesFromStructure.length > 0 ? pricesFromStructure : undefined,
+          reference_prices: referencePrices.length > 0 ? referencePrices : undefined,
+          sale_price: item.sale_price,
+          base_price: item.base_price,
         });
 
         // Atualizar has_video (tri-state: true/false/null)
