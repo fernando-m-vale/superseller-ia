@@ -91,10 +91,9 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
   // Isso garante que o badge seja correto mesmo quando o accordion está fechado
   const analysisStatus = getAnalysisStatus(listing.analysisStatus, listing.latestAnalysisAt)
 
-  // Preço promocional (TODO: integrar quando backend fornecer)
-  // Por enquanto, usar mesmo valor do preço normal
-  const promotionalPrice = listing.price // TODO: usar listing.priceFinal quando disponível
-  const hasPromotion = false // TODO: usar listing.hasPromotion quando disponível
+  // Preço promocional (usando campos do backend)
+  const promotionalPrice = listing.priceFinal ?? listing.price
+  const hasPromotion = listing.hasPromotion ?? false
 
   const handleGenerateAnalysis = async () => {
     await triggerAIAnalysis(false)
@@ -188,8 +187,10 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   listingIdExt={listing.listingIdExt}
                   listingTitle={listing.title}
                   listingPrice={listing.price}
+                  listingPriceBase={listing.priceBase}
                   listingPriceFinal={promotionalPrice}
                   listingHasPromotion={hasPromotion}
+                  listingDiscountPercent={listing.discountPercent}
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
                 />

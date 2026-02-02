@@ -16,8 +16,10 @@ interface ListingAIAnalysisPanelProps {
   listingIdExt?: string | null
   listingTitle?: string
   listingPrice?: number
+  listingPriceBase?: number | null
   listingPriceFinal?: number | null
   listingHasPromotion?: boolean | null
+  listingDiscountPercent?: number | null
   onRegenerate?: () => Promise<void>
   isRegenerating?: boolean
 }
@@ -27,8 +29,10 @@ export function ListingAIAnalysisPanel({
   listingIdExt,
   listingTitle,
   listingPrice,
+  listingPriceBase,
   listingPriceFinal,
   listingHasPromotion,
+  listingDiscountPercent,
   onRegenerate,
   isRegenerating = false,
 }: ListingAIAnalysisPanelProps) {
@@ -150,11 +154,20 @@ export function ListingAIAnalysisPanel({
         <div className="space-y-1">
           <h3 className="text-xl font-bold">{listingTitle || 'Anúncio'}</h3>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>Preço: R$ {Number(listingPrice ?? 0).toFixed(2)}</span>
-            {listingHasPromotion && listingPriceFinal && (
-              <span className="text-primary font-semibold">
-                Promo: R$ {Number(listingPriceFinal).toFixed(2)}
-              </span>
+            {listingHasPromotion && listingPriceBase && listingPriceFinal ? (
+              <>
+                <span className="line-through">R$ {Number(listingPriceBase).toFixed(2)}</span>
+                <span className="text-primary font-semibold">
+                  R$ {Number(listingPriceFinal).toFixed(2)}
+                </span>
+                {listingDiscountPercent && (
+                  <Badge variant="secondary" className="text-xs">
+                    -{listingDiscountPercent}%
+                  </Badge>
+                )}
+              </>
+            ) : (
+              <span>Preço: R$ {Number(listingPrice ?? 0).toFixed(2)}</span>
             )}
           </div>
         </div>

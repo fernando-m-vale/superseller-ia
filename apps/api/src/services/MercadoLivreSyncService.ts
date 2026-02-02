@@ -925,59 +925,71 @@ export class MercadoLivreSyncService {
         // Se é update e não veio pictures, NÃO atualizar (manter valor existente)
 
         // Processar campos de promoção
+        // FONTE DE VERDADE: original_price > price OU base_price > price indica promoção
         const now = new Date();
+        const currentPrice = item.price;
+        const originalPriceFromAPI = item.original_price ?? null;
+        const basePriceFromAPI = item.base_price ?? null;
+        
+        // Determinar preço original (prioridade: original_price > base_price > price)
+        const originalPrice = originalPriceFromAPI ?? basePriceFromAPI ?? null;
+        
         let hasPromotion = false;
-        let priceFinal: number | null = null;
-        let originalPrice: number | null = null;
+        let priceFinal: number = currentPrice;
+        let priceBase: number = currentPrice;
         let discountPercent: number | null = null;
         let promotionType: string | null = null;
 
-        // Verificar se há promoção via deals
-        if (item.deals && Array.isArray(item.deals) && item.deals.length > 0) {
-          // Pegar o primeiro deal ativo (assumindo que deals já vem filtrado por data)
-          const activeDeal = item.deals[0];
+        // REGRA PRINCIPAL: Se original_price > price OU base_price > price, tem promoção
+        if (originalPrice !== null && originalPrice > currentPrice) {
           hasPromotion = true;
-          promotionType = activeDeal.type || 'discount';
-          discountPercent = activeDeal.discount_percent || null;
-        }
-
-        // Verificar promoção via sale_price vs original_price/base_price
-        if (item.sale_price !== undefined && item.sale_price !== null) {
-          const salePrice = item.sale_price;
-          const basePrice = item.base_price ?? item.original_price ?? item.price;
+          priceFinal = currentPrice;
+          priceBase = originalPrice;
           
-          if (salePrice < basePrice) {
-            hasPromotion = true;
-            priceFinal = salePrice;
-            originalPrice = basePrice;
-            
-            // Calcular desconto percentual se não veio nos deals
-            if (discountPercent === null && originalPrice > 0) {
-              discountPercent = Math.round(((originalPrice - salePrice) / originalPrice) * 100);
-            }
-            
-            // Se não tem tipo de promoção, inferir
-            if (!promotionType) {
-              promotionType = 'discount';
-            }
+          // Calcular desconto percentual
+          if (originalPrice > 0) {
+            discountPercent = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
           }
-        }
-
-        // Se não encontrou promoção, usar price como price_final
-        if (!hasPromotion) {
-          priceFinal = item.price;
-          originalPrice = null;
+          
+          // Verificar se há deals para tipo de promoção
+          if (item.deals && Array.isArray(item.deals) && item.deals.length > 0) {
+            const activeDeal = item.deals[0];
+            promotionType = activeDeal.type || 'discount';
+            // Se deal já tem discount_percent, usar ele (mais preciso)
+            if (activeDeal.discount_percent !== undefined && activeDeal.discount_percent !== null) {
+              discountPercent = activeDeal.discount_percent;
+            }
+          } else {
+            promotionType = 'discount';
+          }
+        } else {
+          // Sem promoção: price_final = price, price_base = base_price ou price
+          hasPromotion = false;
+          priceFinal = currentPrice;
+          priceBase = basePriceFromAPI ?? currentPrice;
           discountPercent = null;
           promotionType = null;
         }
 
         // Atualizar campos de promoção
         listingData.has_promotion = hasPromotion;
-        listingData.price_final = priceFinal !== null ? priceFinal : item.price;
-        listingData.original_price = originalPrice;
+        listingData.price_final = priceFinal;
+        listingData.original_price = hasPromotion ? priceBase : null;
         listingData.discount_percent = discountPercent;
         listingData.promotion_type = promotionType;
         listingData.promotion_checked_at = now;
+        
+        // Log para debug (sem expor tokens)
+        console.log('[ML-SYNC] Promoção detectada', {
+          listing_id_ext: item.id,
+          has_promotion: hasPromotion,
+          price: currentPrice,
+          original_price: originalPriceFromAPI,
+          base_price: basePriceFromAPI,
+          price_final: priceFinal,
+          price_base: priceBase,
+          discount_percent: discountPercent,
+        });
 
         // Atualizar has_video (tri-state: true/false/null)
         // - true: tem vídeo confirmado via API

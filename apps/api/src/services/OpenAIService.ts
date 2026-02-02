@@ -270,12 +270,14 @@ Você NÃO deve:
 - suavizar problemas
 - dar sugestões vagas
 - usar linguagem genérica
+- entregar conteúdo raso ou genérico
 
 Você DEVE:
 - ser direto
 - ser crítico
 - ser orientado à execução
 - entregar ações prontas para aplicar
+- entregar conteúdo PROFUNDO e ESPECIALISTA (nível consultor pago)
 
 Sempre considere que o vendedor quer saber exatamente:
 "O que eu faço agora para vender mais?"
@@ -283,6 +285,48 @@ Sempre considere que o vendedor quer saber exatamente:
 Se algum dado não puder ser analisado por limitação de API ou dados ausentes, diga isso claramente.
 Nunca invente informações.
 Nunca assuma dados não fornecidos.
+
+REGRAS OBRIGATÓRIAS DE QUALIDADE (HARD CONSTRAINTS):
+
+1. description_fix.optimized_copy:
+   - DEVE ser um texto completo pronto para colar no Mercado Livre
+   - Estrutura MÍNIMA obrigatória:
+     * Linha inicial SEO (1-2 linhas com keyword principal)
+     * Seção "⭐ Destaques" (3-6 bullets)
+     * Seção "📏 Tamanhos / Medidas" ou "📌 Especificações" (conforme categoria)
+     * Seção "📦 O que você recebe"
+     * Seção "🧼 Cuidados" (quando fizer sentido)
+     * Seção "🚀 Dica de compra" (1 dica prática)
+     * CTA final ("👉 Garanta já..." ou similar)
+   - Tamanho mínimo: >= 600 caracteres (ou >= 8 linhas com bullets)
+   - NÃO pode ser 1 parágrafo genérico
+
+2. title_fix.after:
+   - DEVE começar com o termo de busca principal
+   - DEVE incluir 2-4 atributos relevantes (ex: "USB", "Infantil", "Recarregável", "3D", "Unissex", "Kit")
+   - PROIBIDO ser genérico ("Produto incrível...", "Melhor produto...")
+   - Tamanho mínimo: >= 45 caracteres
+   - DEVE conter keyword principal derivada do título atual
+
+3. image_plan:
+   - Se pictures_count >= 4, retornar 4 itens (imagem 1..4)
+   - Se pictures_count >= 6, retornar 5 ou 6 itens
+   - Cada item deve ser específico e acionável
+
+4. final_action_plan:
+   - Mínimo 5 ações
+   - Ordenadas por impacto (do mais rápido e forte para o mais trabalhoso)
+   - Cada ação deve ser concreta e executável
+
+5. Promoção:
+   - Se has_promotion=true, OBRIGATÓRIO citar "promoção ativa" e usar price_base e price_final no texto
+   - Se has_promotion=false, usar linguagem condicional ("Se você não tiver promoção ativa...")
+   - NUNCA inventar valores de promoção
+
+6. Clip (vídeo):
+   - Se hasClips for null / "não detectável", NÃO afirmar que não tem
+   - DEVE dizer: "Não foi possível confirmar via API"
+   - NÃO sugerir adicionar clip se canSuggestClip=false
 
 IMPORTANTE: Você DEVE retornar APENAS JSON válido, sem markdown, sem texto antes ou depois.
 O JSON deve começar com { e terminar com }.
@@ -893,11 +937,16 @@ export class OpenAIService {
     // Build user prompt with Expert template
     const userPrompt = `Analise o anúncio do Mercado Livre com base nos dados fornecidos.
 
-Regras obrigatórias:
+REGRAS OBRIGATÓRIAS (HARD CONSTRAINTS):
 - Considere sempre o PREÇO FINAL (price_final), não apenas o preço base.
-- Se houver promoção ativa, NÃO sugira criar promoção.
+- Se houver promoção ativa, NÃO sugira criar promoção. Mencione a promoção existente e valores corretos.
 - Seja específico para Mercado Livre.
 - Sempre entregue ações aplicáveis imediatamente.
+- description_fix.optimized_copy DEVE ter >= 600 caracteres com estrutura completa (Destaques, Especificações, O que você recebe, Cuidados, Dica, CTA).
+- title_fix.after DEVE ter >= 45 caracteres, começar com keyword principal e incluir 2-4 atributos.
+- final_action_plan DEVE ter mínimo 5 ações ordenadas por impacto.
+- image_plan DEVE ter min(4, pictures_count) itens quando pictures_count >= 4.
+- Se hasClips é null, diga "Não foi possível confirmar via API" (não afirme que não tem).
 
 Siga OBRIGATORIAMENTE o formato de resposta definido.
 Não adicione seções extras.
@@ -978,7 +1027,7 @@ IMPORTANTE:
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.7,
+        temperature: 0.4, // Reduzido para maior consistência e menos criatividade genérica
         max_tokens: 4000,
       });
 
@@ -1064,7 +1113,47 @@ IMPORTANTE:
         }
       );
 
-      if (!parseResult.success) {
+      // Validar qualidade do conteúdo (hard constraints)
+      let qualityIssues: string[] = [];
+      if (parseResult.success) {
+        const data = parseResult.data;
+        
+        // Validar description_fix.optimized_copy
+        if (data.description_fix?.optimized_copy) {
+          const descLength = data.description_fix.optimized_copy.length;
+          if (descLength < 600) {
+            qualityIssues.push(`description_fix.optimized_copy muito curto (${descLength} chars, mínimo 600)`);
+          }
+        }
+        
+        // Validar title_fix.after
+        if (data.title_fix?.after) {
+          const titleLength = data.title_fix.after.length;
+          if (titleLength < 45) {
+            qualityIssues.push(`title_fix.after muito curto (${titleLength} chars, mínimo 45)`);
+          }
+          // Verificar se contém keyword principal (primeiras 2 palavras do título original)
+          const titleWords = input.listing.title.split(/\s+/).slice(0, 2).join(' ').toLowerCase();
+          if (!data.title_fix.after.toLowerCase().includes(titleWords.toLowerCase())) {
+            qualityIssues.push(`title_fix.after não contém keyword principal do título original`);
+          }
+        }
+        
+        // Validar final_action_plan
+        if (data.final_action_plan && data.final_action_plan.length < 5) {
+          qualityIssues.push(`final_action_plan tem apenas ${data.final_action_plan.length} ações (mínimo 5)`);
+        }
+        
+        // Validar image_plan
+        if (data.image_plan && input.media.imageCount >= 4) {
+          const expectedCount = Math.min(4, input.media.imageCount);
+          if (data.image_plan.length < expectedCount) {
+            qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
+          }
+        }
+      }
+
+      if (!parseResult.success || qualityIssues.length > 0) {
         // Log detalhado do erro de validação
         const validationErrors = parseResult.error.errors.map(e => ({
           path: e.path.join('.'),
@@ -1081,18 +1170,31 @@ IMPORTANTE:
         });
 
         // Retry automático: tentar novamente com prompt reforçado
+        const retryReason = !parseResult.success 
+          ? `ERRO DE VALIDAÇÃO:\n${validationErrors.map(e => `- ${e.path}: ${e.message}`).join('\n')}`
+          : `PROBLEMAS DE QUALIDADE:\n${qualityIssues.map(q => `- ${q}`).join('\n')}`;
+        
         console.log('[OPENAI-SERVICE-EXPERT] Attempting retry with reinforced prompt', {
           requestId,
           listingId: input.meta.listingId,
+          reason: !parseResult.success ? 'validation_error' : 'quality_issues',
+          issues: !parseResult.success ? validationErrors : qualityIssues,
         });
 
         try {
-          const retryPrompt = `Você retornou uma resposta fora do formato esperado.
+          const retryPrompt = `Sua resposta anterior veio ${!parseResult.success ? 'fora do formato esperado' : 'rasa/insuficiente'}.
 
-ERRO DE VALIDAÇÃO:
-${validationErrors.map(e => `- ${e.path}: ${e.message}`).join('\n')}
+${retryReason}
 
-Você DEVE retornar APENAS JSON válido no formato abaixo, sem markdown, sem texto extra:
+Você DEVE retornar APENAS JSON válido no formato abaixo, sem markdown, sem texto extra.
+
+REGRAS OBRIGATÓRIAS DE QUALIDADE:
+- description_fix.optimized_copy: >= 600 caracteres com estrutura completa (Destaques, Especificações, O que você recebe, Cuidados, Dica, CTA)
+- title_fix.after: >= 45 caracteres, começar com keyword principal e incluir 2-4 atributos
+- final_action_plan: mínimo 5 ações ordenadas por impacto
+- image_plan: min(4, pictures_count) itens quando pictures_count >= 4
+
+FORMATO:
 
 {
   "verdict": "Frase curta, direta e incômoda sobre o anúncio",

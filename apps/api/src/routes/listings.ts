@@ -114,6 +114,11 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           accessBlockedReason: listing.access_blocked_reason ?? undefined, // Mensagem sanitizada do erro
           createdAt: listing.created_at,
           updatedAt: listing.updated_at,
+          // Campos de promoção
+          priceBase: listing.original_price ? Number(listing.original_price) : Number(listing.price),
+          priceFinal: listing.price_final ? Number(listing.price_final) : Number(listing.price),
+          hasPromotion: listing.has_promotion ?? false,
+          discountPercent: listing.discount_percent ?? null,
           // Campos de análise
           latestAnalysisAt: latestAnalysisAt?.toISOString() || null,
           latestPromptVersion: latestAnalysis?.prompt_version || null,
