@@ -1155,7 +1155,8 @@ IMPORTANTE:
 
       if (!parseResult.success || qualityIssues.length > 0) {
         // Log detalhado do erro de validação
-        const validationErrors = parseResult.error.errors.map(e => ({
+        const validationErrors = !parseResult.success 
+          ? parseResult.error.errors.map(e => ({
           path: e.path.join('.'),
           message: e.message,
           code: e.code,
@@ -1170,6 +1171,14 @@ IMPORTANTE:
         });
 
         // Retry automático: tentar novamente com prompt reforçado
+        const validationErrors = !parseResult.success 
+          ? parseResult.error.errors.map(e => ({
+              path: e.path.join('.'),
+              message: e.message,
+              code: e.code,
+            }))
+          : [];
+        
         const retryReason = !parseResult.success 
           ? `ERRO DE VALIDAÇÃO:\n${validationErrors.map(e => `- ${e.path}: ${e.message}`).join('\n')}`
           : `PROBLEMAS DE QUALIDADE:\n${qualityIssues.map(q => `- ${q}`).join('\n')}`;
@@ -1277,10 +1286,38 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
             }
           );
 
+          // Validar qualidade do retry também
+          let retryQualityIssues: string[] = [];
           if (retryParseResult.success) {
+            const retryData = retryParseResult.data;
+            
+            if (retryData.description_fix?.optimized_copy && retryData.description_fix.optimized_copy.length < 600) {
+              retryQualityIssues.push(`description_fix.optimized_copy ainda muito curto (${retryData.description_fix.optimized_copy.length} chars)`);
+            }
+            if (retryData.title_fix?.after && retryData.title_fix.after.length < 45) {
+              retryQualityIssues.push(`title_fix.after ainda muito curto (${retryData.title_fix.after.length} chars)`);
+            }
+            if (retryData.final_action_plan && retryData.final_action_plan.length < 5) {
+              retryQualityIssues.push(`final_action_plan ainda tem apenas ${retryData.final_action_plan.length} ações`);
+            }
+          }
+
+          if (retryParseResult.success && retryQualityIssues.length === 0) {
             console.log('[OPENAI-SERVICE-EXPERT] Retry successful', {
               requestId,
               listingId: input.meta.listingId,
+            });
+            const result = retryParseResult.data;
+            if (!result.meta.processing_time_ms) {
+              result.meta.processing_time_ms = Date.now() - startTime;
+            }
+            return result;
+          } else if (retryParseResult.success && retryQualityIssues.length > 0) {
+            // Se retry ainda tem problemas de qualidade, logar mas aceitar (melhor que nada)
+            console.warn('[OPENAI-SERVICE-EXPERT] Retry ainda tem problemas de qualidade, mas aceitando', {
+              requestId,
+              listingId: input.meta.listingId,
+              issues: retryQualityIssues,
             });
             const result = retryParseResult.data;
             if (!result.meta.processing_time_ms) {
