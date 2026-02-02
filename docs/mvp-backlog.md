@@ -272,3 +272,35 @@ Satisfação | NPS > 40 no MVP |
 - Wireframes UI/UX
 - Pipeline de IA & feedback loop
 
+---
+
+## 🛠️ Tech Debts / Backlog Técnico (UX Frontend)
+
+### Refatoração UX Tela de Anúncios (2026-01-27)
+**Status:** ✅ Implementado (accordion inline substituindo modal lateral)
+
+**Itens pendentes / melhorias futuras:**
+
+- [ ] **Melhorar distribuição visual/spacing do painel de análise (UX polish)**
+  - Ajustar espaçamentos entre seções
+  - Melhorar hierarquia visual dos cards
+  - Otimizar responsividade mobile
+
+- [ ] **Promoção ainda não detectada corretamente (preço promo)**
+  - Backend ainda não fornece `priceFinal` e `hasPromotion` no endpoint de listings
+  - Preparar integração quando campos estiverem disponíveis
+  - Atualmente usando fallback: mesmo valor do preço normal
+
+- [ ] **Clip/vídeo: parar de diferenciar "video" vs "clip" e ajustar linguagem para "clip"**
+  - Unificar terminologia em toda a aplicação
+  - Atualizar textos e labels para usar apenas "clip"
+
+- [ ] **Abrir anúncio editável no ML (garantir link correto em todos casos)**
+  - Validar construção de URL de edição em todos os cenários
+  - Adicionar fallback quando `listingIdExt` não estiver disponível
+  - Melhorar tratamento de erros ao abrir link
+
+- [ ] **Preparar fundação para análise de imagens**
+  - Salvar `pictures_urls[]` e `pictures_count` no sync
+  - Preparar estrutura de dados para análise visual futura
+  - (Sem análise visual ainda, apenas preparação de dados)

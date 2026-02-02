@@ -16,14 +16,16 @@ interface ListingAccordionRowProps {
   onToggle: () => void
 }
 
-const ANALYSIS_EXPIRY_DAYS = 7 // X dias para considerar análise expirada
-
-function getAnalysisStatus(analyzedAt?: string): {
+function getAnalysisStatus(
+  analysisStatus?: 'NOT_ANALYZED' | 'ANALYZED' | 'EXPIRED',
+  latestAnalysisAt?: string | null
+): {
   status: 'analyzed' | 'expired' | 'not_analyzed'
   badge: JSX.Element
   dateText?: string
 } {
-  if (!analyzedAt) {
+  // Usar status do backend (fonte única de verdade)
+  if (!analysisStatus || analysisStatus === 'NOT_ANALYZED') {
     return {
       status: 'not_analyzed',
       badge: (
@@ -34,11 +36,8 @@ function getAnalysisStatus(analyzedAt?: string): {
     }
   }
 
-  const analyzedDate = new Date(analyzedAt)
-  const now = new Date()
-  const daysDiff = (now.getTime() - analyzedDate.getTime()) / (1000 * 60 * 60 * 24)
-
-  if (daysDiff >= ANALYSIS_EXPIRY_DAYS) {
+  if (analysisStatus === 'EXPIRED') {
+    const analyzedDate = latestAnalysisAt ? new Date(latestAnalysisAt) : null
     return {
       status: 'expired',
       badge: (
@@ -46,10 +45,14 @@ function getAnalysisStatus(analyzedAt?: string): {
           🟡 Expirada
         </Badge>
       ),
-      dateText: `Analisada em: ${analyzedDate.toLocaleDateString('pt-BR')} ${analyzedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+      dateText: analyzedDate
+        ? `Analisada em: ${analyzedDate.toLocaleDateString('pt-BR')} ${analyzedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+        : undefined,
     }
   }
 
+  // analysisStatus === 'ANALYZED'
+  const analyzedDate = latestAnalysisAt ? new Date(latestAnalysisAt) : null
   return {
     status: 'analyzed',
     badge: (
@@ -57,7 +60,9 @@ function getAnalysisStatus(analyzedAt?: string): {
         🟢 Analisado
       </Badge>
     ),
-    dateText: `Analisada em: ${analyzedDate.toLocaleDateString('pt-BR')} ${analyzedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+    dateText: analyzedDate
+      ? `Analisada em: ${analyzedDate.toLocaleDateString('pt-BR')} ${analyzedDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+      : undefined,
   }
 }
 
@@ -71,7 +76,6 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
     data: aiAnalysis,
     isLoading: aiLoading,
     error: aiError,
-    analyzedAt,
     triggerAIAnalysis,
     fetchExisting,
   } = useAIAnalyze(isExpanded ? listing.id : null)
@@ -83,7 +87,9 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
     }
   }, [isExpanded, aiAnalysis, aiLoading, fetchExisting])
 
-  const analysisStatus = getAnalysisStatus(analyzedAt)
+  // Usar status do listing (backend) ao invés de estado local
+  // Isso garante que o badge seja correto mesmo quando o accordion está fechado
+  const analysisStatus = getAnalysisStatus(listing.analysisStatus, listing.latestAnalysisAt)
 
   // Preço promocional (TODO: integrar quando backend fornecer)
   // Por enquanto, usar mesmo valor do preço normal

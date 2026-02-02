@@ -5,6 +5,9 @@ import { authGuard } from '../plugins/auth';
 
 const prisma = new PrismaClient();
 
+// TTL para considerar análise expirada (em dias)
+const ANALYSIS_TTL_DAYS = Number(process.env.ANALYSIS_TTL_DAYS) || 7;
+
 // Schema de validação para query params
 const ListingsQuerySchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -58,29 +61,66 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         orderBy: { updated_at: 'desc' },
         skip,
         take: pageSize,
+        include: {
+          listing_ai_analysis: {
+            orderBy: { created_at: 'desc' },
+            take: 1, // Pegar apenas a análise mais recente
+            select: {
+              created_at: true,
+              prompt_version: true,
+              model: true,
+            },
+          },
+        },
       });
 
+      // Calcular data de expiração (7 dias atrás)
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() - ANALYSIS_TTL_DAYS);
+
       // Mapear para formato esperado pelo frontend (camelCase)
-      const items = listings.map((listing) => ({
-        id: listing.id,
-        title: listing.title,
-        marketplace: listing.marketplace,
-        price: Number(listing.price),
-        stock: listing.stock,
-        status: listing.status,
-        category: listing.category,
-        healthScore: listing.health_score ?? undefined, // Score legado da API do ML
-        superSellerScore: listing.super_seller_score ?? undefined, // Super Seller Score proprietário
-        scoreBreakdown: listing.score_breakdown ?? undefined, // Detalhamento do score
-        hasVideo: listing.has_video, // null quando não sabemos (tri-state: true/false/null)
-        hasClips: listing.has_clips ?? null, // null = desconhecido/não detectável via API
-        listingIdExt: listing.listing_id_ext, // ID externo do marketplace (ex: MLB3923303743)
-        accessStatus: listing.access_status, // Status de acesso pela conexão atual
-        accessBlockedCode: listing.access_blocked_code ?? undefined, // Código do erro que bloqueou acesso
-        accessBlockedReason: listing.access_blocked_reason ?? undefined, // Mensagem sanitizada do erro
-        createdAt: listing.created_at,
-        updatedAt: listing.updated_at,
-      }));
+      const items = listings.map((listing) => {
+        // Pegar análise mais recente (se existir)
+        const latestAnalysis = listing.listing_ai_analysis[0] || null;
+        const latestAnalysisAt = latestAnalysis?.created_at || null;
+
+        // Calcular status da análise
+        let analysisStatus: 'NOT_ANALYZED' | 'ANALYZED' | 'EXPIRED' = 'NOT_ANALYZED';
+        if (latestAnalysisAt) {
+          const analysisDate = new Date(latestAnalysisAt);
+          if (analysisDate >= expiryDate) {
+            analysisStatus = 'ANALYZED';
+          } else {
+            analysisStatus = 'EXPIRED';
+          }
+        }
+
+        return {
+          id: listing.id,
+          title: listing.title,
+          marketplace: listing.marketplace,
+          price: Number(listing.price),
+          stock: listing.stock,
+          status: listing.status,
+          category: listing.category,
+          healthScore: listing.health_score ?? undefined, // Score legado da API do ML
+          superSellerScore: listing.super_seller_score ?? undefined, // Super Seller Score proprietário
+          scoreBreakdown: listing.score_breakdown ?? undefined, // Detalhamento do score
+          hasVideo: listing.has_video, // null quando não sabemos (tri-state: true/false/null)
+          hasClips: listing.has_clips ?? null, // null = desconhecido/não detectável via API
+          listingIdExt: listing.listing_id_ext, // ID externo do marketplace (ex: MLB3923303743)
+          accessStatus: listing.access_status, // Status de acesso pela conexão atual
+          accessBlockedCode: listing.access_blocked_code ?? undefined, // Código do erro que bloqueou acesso
+          accessBlockedReason: listing.access_blocked_reason ?? undefined, // Mensagem sanitizada do erro
+          createdAt: listing.created_at,
+          updatedAt: listing.updated_at,
+          // Campos de análise
+          latestAnalysisAt: latestAnalysisAt?.toISOString() || null,
+          latestPromptVersion: latestAnalysis?.prompt_version || null,
+          latestModel: latestAnalysis?.model || null,
+          analysisStatus,
+        };
+      });
 
       return reply.send({
         items,

@@ -43,6 +43,11 @@ export interface Listing {
   accessStatus?: 'accessible' | 'unauthorized' | 'blocked_by_policy' // Status de acesso pela conexão atual
   accessBlockedCode?: string // Código do erro que bloqueou acesso
   accessBlockedReason?: string // Mensagem sanitizada do erro
+  // Campos de análise (metadados da última análise)
+  latestAnalysisAt?: string | null // ISO string da data da última análise
+  latestPromptVersion?: string | null // Versão do prompt usado (ex: "ml-expert-v1")
+  latestModel?: string | null // Modelo usado (ex: "gpt-4o")
+  analysisStatus?: 'NOT_ANALYZED' | 'ANALYZED' | 'EXPIRED' // Status calculado baseado em TTL
 }
 
 export interface ListingsResponse {
