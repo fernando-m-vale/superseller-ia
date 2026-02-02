@@ -425,10 +425,98 @@ export function useAIAnalyze(listingId: string | null) {
     await analyze(force || false)
   }
 
+  /**
+   * Busca análise existente sem regenerar (para exibição ao expandir accordion)
+   */
+  const fetchExisting = async (): Promise<void> => {
+    if (!listingId) return
+    if (state.isLoading) return
+
+    // Se já temos dados em memória, não buscar novamente
+    if (state.data?.analysisV21) {
+      console.log('[AI-ANALYZE] Using cached data in memory', { listingId })
+      return
+    }
+
+    console.log('[AI-ANALYZE] Fetching existing analysis', { listingId })
+    setState(prev => ({ ...prev, isLoading: true, error: null }))
+
+    try {
+      const apiUrl = getApiBaseUrl()
+      const token = getAccessToken()
+
+      if (!token) {
+        throw new Error('Usuário não autenticado')
+      }
+
+      // Usar POST sem forceRefresh (que retorna cache se existir)
+      const response = await fetch(`${apiUrl}/ai/analyze/${listingId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      })
+
+      if (!response.ok) {
+        // Se não existir análise, não é erro - apenas não temos dados
+        if (response.status === 404) {
+          setState(prev => ({ ...prev, isLoading: false, data: null }))
+          return
+        }
+        throw new Error(`Erro ao buscar análise: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      // Adaptar resposta da API
+      const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
+      
+      // Ler analysisV21
+      const analysisV21 = result.data?.analysisV21 ?? null
+      
+      if (analysisV21) {
+        adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
+      }
+      
+      // Normalizar resposta
+      const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
+      const normalizedData = normalizeAiAnalyzeResponse(adaptedData)
+      
+      // Extrair metadados
+      const cacheHit = result.data?.cacheHit 
+        ?? result.cacheHit 
+        ?? (result.message && result.message.includes('(cache)'))
+        ?? false
+      
+      const analyzedAt = normalizedData.analysisV21?.meta?.analyzedAt || analysisV21?.meta?.analyzed_at
+      const message = result.message ?? result.data?.message
+      
+      setState({
+        data: normalizedData,
+        isLoading: false,
+        error: null,
+        analyzedAt,
+        cacheHit: Boolean(cacheHit),
+        message,
+      })
+    } catch (error) {
+      console.error('[AI-ANALYZE] Error fetching existing analysis', { listingId, error })
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Erro ao buscar análise',
+        data: null,
+      }))
+    }
+  }
+
   return {
     ...state,
     analyze,
     triggerAIAnalysis,
+    fetchExisting,
   }
 }
 
