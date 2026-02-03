@@ -131,6 +131,66 @@
 
 ---
 
+# DAILY EXECUTION LOG — 2026-02-02 (Dia 2 — Especialização da IA Mercado Livre)
+
+## ✅ STATUS: ENCERRADO COM SUCESSO
+
+## 🎯 Foco do dia
+**Especialização da IA Mercado Livre: Prompts versionados, validações de qualidade, debug payload e testes com fixture**
+
+## ✅ Planejado / Feito
+- [x] **UX V2.1 implementada:** Accordion inline substituindo modal lateral, cards consultor sênior
+- [x] **Prompts versionados criados:**
+  - `mlExpertV21.ts` — Consultor Sênior com guardrails de qualidade (900 chars, 7 ações, estrutura obrigatória)
+  - `mlSalesV22.ts` — Foco em vendas e execução (Plano 7 dias, hypothesis, how_to_execute_today)
+  - Registry centralizado (`packages/ai/src/prompts/registry.ts`)
+- [x] **Validações de qualidade implementadas:**
+  - Description >= 900 caracteres
+  - Title >= 45 caracteres (55-60 preferido)
+  - Final action plan >= 7 itens
+  - Image plan conforme pictures_count
+  - **Validação de promoção:** Se `hasPromotion=true`, DEVE mencionar `originalPrice` e `priceFinal`
+  - **Validação de clip:** Se `hasClips=null`, NÃO pode afirmar ausência; deve usar frase padrão
+- [x] **Retry automático:** Se validação falhar, 1 retry com prompt reforçado
+- [x] **Debug payload endpoint:** `GET /api/v1/ai/debug-payload/:listingIdExt` (sanitizado, sem tokens/PII)
+- [x] **Fixture e testes:**
+  - `item-MLB4217107417.json` criado
+  - Testes do registry de prompts (`packages/ai/__tests__/prompts-registry.test.ts`)
+  - Testes do validador de qualidade (`apps/api/src/__tests__/ai-quality-validator.test.ts`)
+- [x] **Endpoints de promoção:**
+  - `POST /api/v1/sync/mercadolivre/listings/:listingIdExt/force-refresh`
+  - `POST /api/v1/sync/mercadolivre/listings/backfill-promotions?limit=200`
+- [x] **Endpoint de meta:** `GET /api/v1/meta` (gitSha, buildTime, env)
+- [x] **Correção de build:** Desabilitado `composite: true` no tsconfig do package ai para gerar `.d.ts` corretamente
+
+## 🧠 Descobertas
+- **Prompts versionados:** Estrutura modular permite evolução sem quebrar código existente
+- **Validação client-side:** Validação de qualidade antes de retornar ao usuário garante output consistente
+- **Retry automático:** 1 retry com prompt reforçado resolve maioria dos casos de validação falha
+- **Workaround temporário:** Imports diretos de `@superseller/ai/dist/prompts/*` necessário devido a problema de resolução de módulos TypeScript (registrado como tech debt)
+- **Build do package ai:** `composite: true` estava impedindo geração correta de arquivos `.d.ts`
+
+## ⚠️ Bloqueios / Riscos
+- **🔴 `/api/v1/meta` retornando 404 em produção:** Suspeita de problema de deploy/gateway/envoy/cache
+- **🟡 Workaround de imports diretos:** Registrado como tech debt; precisa corrigir exports do package `@superseller/ai`
+- **🟡 Rotas em produção:** Endpoints `force-refresh` e `debug-payload` podem estar retornando 404 (problema de infra/deploy, não conceitual)
+
+## 📌 Decisões tomadas
+- **Debug payload é endpoint oficial de transparência da IA:** Permite comparar "o que enviamos" vs "o que volta"
+- **Validação de qualidade é gate obrigatório:** Antes de responder usuário, validação garante output consistente
+- **Prompts versionados via env:** `AI_PROMPT_VERSION` permite alternar entre V2.1 Expert e V2.2 Sales
+- **Registry centralizado:** Facilita acesso e evolução de prompts
+- **Fixture para testes:** `item-MLB4217107417.json` permite testes anti-regressão
+
+## ➡️ Próximo passo claro
+**Dia 3: Análise Profunda de Anúncio**
+1. Validar qual serviço está rodando atrás de `api.superselleria.com.br`
+2. Usar `/sync/status` vs `/meta` para identificar mismatch
+3. Validar promo e debug-payload com ambiente correto
+4. Comparar output da IA com análise humana (MLB4217107417)
+
+---
+
 ## ✅ Planejado / Feito (Dia 2 — Detalhado)
 - [x] Finalizar prompt e schema da IA Expert (ml-expert-v1)
 - [x] Integrar Expert ao backend (`POST /api/v1/ai/analyze/:listingId`)
