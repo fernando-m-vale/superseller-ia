@@ -276,6 +276,32 @@ Satisfação | NPS > 40 no MVP |
 
 ## 🛠️ Tech Debts / Backlog Técnico
 
+### Resolver inconsistência de rotas em produção (envoy/gateway/cache) (2026-02-02)
+**Status:** 🔴 Pendente
+
+**Problema:**
+- Endpoints novos retornam 404 em produção:
+  - `POST /api/v1/sync/mercadolivre/listings/:listingIdExt/force-refresh`
+  - `GET /api/v1/ai/debug-payload/:listingIdExt`
+  - `GET /api/v1/meta`
+- Endpoint antigo `/api/v1/sync/mercadolivre/refresh` funciona
+- Indica problema de deploy/gateway/envoy/cache, não de autenticação
+
+**DoD (Definition of Done):**
+- [ ] Validar qual serviço está rodando atrás de `api.superselleria.com.br`
+- [ ] Usar `/sync/status` vs `/meta` para identificar mismatch
+- [ ] Confirmar que build incluiu novos arquivos de rotas
+- [ ] Verificar logs de inicialização da API em produção
+- [ ] Todos os endpoints novos respondem corretamente (não 404)
+- [ ] Gateway/envoy roteando corretamente
+
+**Referência:**
+- `apps/api/src/routes/meta.routes.ts`
+- `apps/api/src/routes/ai-debug.routes.ts`
+- `apps/api/src/routes/sync.routes.ts` (force-refresh)
+
+---
+
 ### Remover workaround de imports diretos dos prompts (2026-02-02)
 **Status:** 🔴 Pendente
 

@@ -1,6 +1,6 @@
-# NEXT SESSION PLAN — Dia 3 (Encerramento do Dia 2)
+# NEXT SESSION PLAN — Dia 3 (Análise Profunda de Anúncio)
 
-## ⚠️ Status atual (Dia 2 — Tecnicamente funcional, produto ainda não fechado)
+## ⚠️ Status atual (Dia 2 — Encerrado com sucesso, Dia 3 iniciado)
 - **Análise IA Expert (ml-expert-v1):** Backend e frontend integrados
 - **V1 descontinuada:** UI V1 removida completamente
 - **Cache funcional:** Regeneração automática quando `analysisV21` ausente
@@ -15,11 +15,35 @@
   - EditUrl ausente (abre página pública, não edição)
 
 ## 🎯 Objetivo da próxima sessão
-**Encerrar pendências do Dia 2 e estabilizar completamente a Análise IA Expert.**
+**Validar ambiente de produção e comparar output da IA com análise humana.**
 
 ## 🔧 Tarefas prioritárias (ORDEM OBRIGATÓRIA)
 
-### PRIORIDADE 1: Corrigir profundidade da descrição (CORE DO PRODUTO)
+### PRIORIDADE 1: Validar qual serviço está rodando atrás de api.superselleria.com.br
+**Status:** 🔴 BLOQUEADOR DE VALIDAÇÃO
+
+**Problema:**
+- Endpoints novos retornam 404 em produção
+- `/api/v1/meta` não responde
+- Suspeita de problema de deploy/gateway/envoy/cache
+
+**Ações:**
+1. **Verificar logs de inicialização da API em produção:**
+   - Confirmar que rotas foram registradas
+   - Verificar se `metaRoutes`, `aiDebugRoutes` foram carregados
+   - Checar logs de "Routes registered"
+
+2. **Usar endpoints existentes para diagnóstico:**
+   - `GET /api/v1/sync/status` (deve funcionar)
+   - Comparar com `GET /api/v1/meta` (deve funcionar mas retorna 404)
+   - Identificar mismatch
+
+3. **Validar build e deploy:**
+   - Confirmar que build incluiu `meta.routes.ts` e `ai-debug.routes.ts`
+   - Verificar se arquivos estão no container/imagem
+   - Checar se gateway/envoy está roteando corretamente
+
+### PRIORIDADE 2: Validar promo e debug-payload com ambiente correto
 **Status:** 🔴 BLOQUEADOR
 
 **Problema:**
@@ -44,7 +68,7 @@
    - Confirmar que descrições são estruturadas e profundas
    - Verificar que copy está pronta para colar
 
-### PRIORIDADE 2: Corrigir promoção (DADO INCOMPLETO)
+### PRIORIDADE 3: Comparar output da IA com análise humana (MLB4217107417)
 **Status:** 🔴 BLOQUEADOR
 
 **Problema:**
@@ -67,7 +91,7 @@
    - Testar com anúncio sem promoção
    - Confirmar que IA não chuta ausência
 
-### PRIORIDADE 3: Corrigir lógica de vídeo (REGRESSÃO LÓGICA)
+### PRIORIDADE 4: (Reservado para próximas tarefas conforme necessário)
 **Status:** 🔴 BLOQUEADOR
 
 **Problema:**
@@ -87,7 +111,7 @@
    - Testar com `hasClipDetected = null`
    - Confirmar que lógica está correta
 
-### PRIORIDADE 4: Implementar editUrl do Mercado Livre
+### PRIORIDADE 5: (Reservado para próximas tarefas conforme necessário)
 **Status:** 🟡 MELHORIA
 
 **Problema:**
@@ -112,7 +136,7 @@ https://www.mercadolivre.com.br/anuncios/{ITEM_ID}/modificar/bomni?callback_url=
    - Testar que botão abre página de edição
    - Confirmar que URL está correta
 
-### PRIORIDADE 5: Validar output vs expectativa de especialista
+### PRIORIDADE 6: Validar output vs expectativa de especialista
 **Status:** ✅ VALIDAÇÃO FINAL
 
 **Ações:**

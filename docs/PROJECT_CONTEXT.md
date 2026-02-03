@@ -1,5 +1,5 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-01-27 (Fim do Dia 2)
+Atualizado em: 2026-02-02 (Início do Dia 3)
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
@@ -67,87 +67,43 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - Operação: jobs internos + scheduler (fase atual, crítico para clientes reais)
 - Próxima épica: Benchmark/Ads/Automações (após dados e operação sólidos)
 
-## 🧠 Estado atual do produto (2026-01-27 — Fim do Dia 2)
-- **SuperSeller IA opera com Prompt Especialista (ml-expert-v1) como padrão:** V1 foi oficialmente aposentado
-- **Pipeline de análise IA está operacional:** Prompt ml-expert-v1 ativo em produção
-- **Cache com forceRefresh funcionando:** Problema de listing incorreto resolvido
-- **Normalização snake_case → camelCase implementada:** Modal renderiza dados reais do Expert
-- **Front não depende mais de savedRecommendations:** Análises agora diferem por anúncio (bug crítico resolvido)
+## 🧠 Estado atual do produto (2026-02-02 — Início do Dia 3)
+
+**Dia atual do projeto:** Início do Dia 3  
+**Fase ativa:** Análise Profunda de Anúncio  
+**Status:** Problemas atuais são infra/deploy, não conceituais
+
+- **SuperSeller IA opera com Prompts Versionados (V2.1 Expert e V2.2 Sales):** Sistema permite alternar via `AI_PROMPT_VERSION`
+- **UX V2.1 implementada:** Accordion inline substituindo modal lateral, cards consultor sênior
+- **Validações de qualidade implementadas:** Gate obrigatório antes de responder usuário (900 chars, 7 ações, promo/clip rules)
+- **Debug payload endpoint criado:** `GET /api/v1/ai/debug-payload/:listingIdExt` permite transparência da IA
+- **Endpoints de promoção funcionais:** Force refresh e backfill implementados
+- **Testes com fixture:** `item-MLB4217107417.json` permite testes anti-regressão
+- **Pipeline de análise IA está operacional:** Prompts versionados ativos, validação de qualidade, retry automático
 - **Sistema está preparado para escalar IA, dados e UX:** Fundação sólida para evolução futura
-- **Backfill manual por decisão consciente:** Automação futura planejada
-- **Preparação para IA visual futura:** Dados de imagens armazenados (`pictures_json`, `pictures_count`) sem análise visual ativa
 
-## ⚠️ PROBLEMAS ABERTOS (NÃO RESOLVIDOS — BLOQUEADORES DE FECHAMENTO DO DIA 2)
+## ⚠️ PROBLEMAS ABERTOS (INFRA/DEPLOY — NÃO CONCEITUAIS)
 
-### 1️⃣ Profundidade da descrição (CORE DO PRODUTO)
-**Status:** 🔴 BLOQUEADOR
+### 1️⃣ Inconsistência de rotas em produção (INFRA/DEPLOY)
+**Status:** 🔴 BLOQUEADOR DE VALIDAÇÃO
 
-A IA ainda está entregando descrições rasas.
+Endpoints novos retornam 404 em produção:
+- `POST /api/v1/sync/mercadolivre/listings/:listingIdExt/force-refresh`
+- `GET /api/v1/ai/debug-payload/:listingIdExt`
+- `GET /api/v1/meta`
 
-**Exemplo atual em tela:**
-> "Meias 3D Infantis Crazy Socks - Perfeitas para crianças…"
+**Endpoint antigo funciona:** `/api/v1/sync/mercadolivre/refresh`
 
-Isso não atende a proposta de valor do SuperSeller IA.
-
-**🔴 EXPECTATIVA CORRETA:**
-- Descrição estruturada
-- SEO forte
-- Blocos claros (benefícios, tamanhos, confiança, CTA)
-- Copy pronta para colar
-
-**Causa raiz:**
-- Problema de prompt + regras de densidade mínima
-- Precisa virar decisão explícita de produto
-
-### 2️⃣ Promoção (DADO INCOMPLETO)
-**Status:** 🔴 BLOQUEADOR
-
-A IA afirma "não há promoção" mesmo quando existe.
-
-**Causa raiz:**
-- Backend não envia `has_promotion`, `promotion_price`, `original_price`
-- A IA está chutando
-
-**Decisão necessária:**
-- Promoção deve ser determinística
-- Se dado não existir → IA deve dizer "não foi possível confirmar"
-- Não pode afirmar ausência sem certeza
-
-### 3️⃣ Vídeo / Clip (REGRESSÃO LÓGICA)
-**Status:** 🔴 BLOQUEADOR
-
-Mesmo com `hasClipDetected = null`, IA sugere "Adicionar vídeo".
-
-**Correto seria:**
-- `true` → não sugerir
-- `false` → sugerir
-- `null` → sugestão condicional ("se não houver vídeo…")
-
-### 4️⃣ Deeplink do Mercado Livre (edição)
-**Status:** 🟡 MELHORIA
-
-Botão "Abrir no Mercado Livre" abre página pública.
-
-**Antes funcionava no modo edição.**
-
-**Link correto de edição identificado como padrão:**
-```
-https://www.mercadolivre.com.br/anuncios/{ITEM_ID}/modificar/bomni?callback_url=...
-```
+**Causa raiz (suspeita):**
+- Problema de deploy/gateway/envoy/cache
+- Rotas podem não estar sendo registradas corretamente em produção
+- Mismatch entre código deployado e código em execução
 
 **Ação necessária:**
-- Backend deve fornecer `editUrl`
-- Front deve priorizar `editUrl` sobre `publicUrl`
-
-### 5️⃣ UX / UI do Modal (NÃO BLOQUEANTE, MAS REGISTRAR)
-**Status:** 🟡 MELHORIA
-
-Layout atual funciona, mas está visualmente confuso.
-
-**Precisa de hierarquia melhor:**
-- Diagnóstico compacto
-- Ações claras
-- Detalhes colapsáveis (descrição, imagens, hacks)
+- Validar qual serviço está rodando atrás de `api.superselleria.com.br`
+- Usar `/sync/status` vs `/meta` para identificar mismatch
+- Verificar logs de inicialização da API em produção
+- Confirmar que build incluiu novos arquivos de rotas
 
 ## ✅ Estado atual (2026-01-27)
 ### Produção

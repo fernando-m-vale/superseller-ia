@@ -311,6 +311,86 @@ V1 da análise IA era genérica e não atendia necessidades específicas do Merc
 
 ---
 
+## ADR-010: Debug Payload é Endpoint Oficial de Transparência da IA
+
+**Data:** 2026-02-02  
+**Status:** Implementado
+
+### Contexto
+Necessidade de transparência sobre o que a IA recebe vs o que retorna, para debug e validação de qualidade.
+
+### Decisão
+**Debug payload (`GET /api/v1/ai/debug-payload/:listingIdExt`) é endpoint oficial de transparência da IA.**
+
+### Justificativa
+- Permite comparar "o que enviamos" vs "o que volta"
+- Facilita debug de problemas de qualidade
+- Sanitizado (sem tokens/PII) garante segurança
+- Essencial para validação de payloads em produção
+
+### Implementação
+- Endpoint: `GET /api/v1/ai/debug-payload/:listingIdExt`
+- Auth obrigatório (mesmo guard de rotas existentes)
+- Retorna snapshot sanitizado:
+  - `listingIdExt`, `listingId`, `tenantId`, `fetchedAt`
+  - `prompt` (version, model, temperature)
+  - `listing` (title, status, picturesCount, hasClips)
+  - `pricing` (price, priceFinal, originalPrice, hasPromotion, discountPercent, source)
+  - `metrics30d` (visits, orders, revenue, conversionRate, ctr)
+  - `dataQuality` (missing, warnings)
+  - `aiInputSummary` (hasTitle, hasDescription, hasPictures, hasPromotionFlag, hasMetrics)
+- **NÃO retorna:** tokens, headers, prompt raw completo, urls sensíveis, PII
+
+### Impacto
+- **Transparência:** Desenvolvedores podem validar payloads
+- **Debug:** Facilita identificação de problemas
+- **Qualidade:** Permite validação de dados enviados à IA
+
+### Alternativas consideradas
+- Logs apenas: Menos acessível, não sanitizado
+- Endpoint sem auth: Risco de segurança
+
+---
+
+## ADR-011: Validação de Qualidade é Gate Obrigatório
+
+**Data:** 2026-02-02  
+**Status:** Implementado
+
+### Contexto
+Output da IA precisa atender padrões mínimos de qualidade antes de ser exibido ao usuário.
+
+### Decisão
+**Validação de qualidade é gate obrigatório antes de responder usuário.**
+
+### Justificativa
+- Garante output consistente e de alta qualidade
+- Evita exibir análises rasas ou incompletas
+- Retry automático resolve maioria dos casos
+- Melhora experiência do usuário
+
+### Implementação
+- **Validações hard constraints:**
+  - `description_fix.optimized_copy` >= 900 caracteres
+  - `title_fix.after` >= 45 caracteres (55-60 preferido)
+  - `final_action_plan` >= 7 itens
+  - `image_plan` conforme `pictures_count`
+  - **Promoção:** Se `hasPromotion=true`, DEVE mencionar `originalPrice` e `priceFinal`
+  - **Clip:** Se `hasClips=null`, NÃO pode afirmar ausência; deve usar frase padrão
+- **Retry automático:** Se validação falhar, 1 retry com prompt reforçado
+- **Log estruturado:** Issues de qualidade são logados para análise
+
+### Impacto
+- **Qualidade:** Output sempre atende padrões mínimos
+- **Consistência:** Análises sempre profundas e estruturadas
+- **Confiança:** Usuário recebe sempre análises de alta qualidade
+
+### Alternativas consideradas
+- Sem validação: Output inconsistente, qualidade variável
+- Validação apenas no frontend: Problemas só aparecem depois de gerar análise
+
+---
+
 ## Registro de Decisões Futuras
 
 ### Pendentes de ADR formal
