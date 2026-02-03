@@ -31,7 +31,7 @@ jobs:
         run: pnpm --filter web build
 
       - name: Build api
-        run: pnpm --filter @superseller/api build || true
+        run: pnpm --filter @superseller/api... build
 
       - name: Smoke test - API server startup
         if: success()
