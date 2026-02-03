@@ -1445,6 +1445,294 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
   );
 
   /**
+   * POST /api/v1/sync/mercadolivre/listings/:listingIdExt/force-refresh
+   * 
+   * Força refresh de um anúncio específico, atualizando todos os campos incluindo promoção.
+   * Útil para corrigir anúncios que não foram processados corretamente.
+   */
+  app.post(
+    '/mercadolivre/listings/:listingIdExt/force-refresh',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        const listingIdExt = (request.params as { listingIdExt: string }).listingIdExt;
+        if (!listingIdExt) {
+          return reply.status(400).send({
+            error: 'Bad Request',
+            message: 'listingIdExt é obrigatório',
+          });
+        }
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          listingIdExt,
+        }, 'Requisição de force refresh de listing recebida');
+
+        // Verificar se o listing existe e pertence ao tenant
+        const existing = await prisma.listing.findFirst({
+          where: {
+            tenant_id: tenantId,
+            listing_id_ext: listingIdExt,
+            marketplace: 'mercadolivre',
+          },
+        });
+
+        if (!existing) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: `Listing ${listingIdExt} não encontrado para este tenant`,
+          });
+        }
+
+        // Instanciar service e buscar item do ML
+        const syncService = new MercadoLivreSyncService(tenantId);
+        const items = await syncService.fetchItemsDetails([listingIdExt]);
+
+        if (items.length === 0) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: `Item ${listingIdExt} não encontrado no Mercado Livre`,
+          });
+        }
+
+        // Aplicar mesma lógica de persistência do sync
+        const { updated } = await syncService.upsertListings(items, 'force_refresh', false);
+
+        // Buscar listing atualizado
+        const updatedListing = await prisma.listing.findFirst({
+          where: {
+            tenant_id: tenantId,
+            listing_id_ext: listingIdExt,
+          },
+          select: {
+            id: true,
+            listing_id_ext: true,
+            title: true,
+            price: true,
+            original_price: true,
+            price_final: true,
+            has_promotion: true,
+            discount_percent: true,
+            updated_at: true,
+          },
+        });
+
+        app.log.info({
+          requestId,
+          userId,
+          tenantId,
+          listingIdExt,
+          updated,
+          has_promotion: updatedListing?.has_promotion,
+          price_final: updatedListing?.price_final,
+          original_price: updatedListing?.original_price,
+          discount_percent: updatedListing?.discount_percent,
+        }, 'Force refresh concluído');
+
+        return reply.status(200).send({
+          message: 'Force refresh concluído com sucesso',
+          data: {
+            listingIdExt,
+            updated: updated > 0,
+            listing: updatedListing,
+          },
+        });
+      } catch (error: any) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro no force refresh');
+        return reply.status(500).send({
+          error: 'Falha no force refresh',
+          message: error instanceof Error ? error.message : 'Erro interno',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/v1/sync/mercadolivre/listings/backfill-promotions?limit=200
+   * 
+   * Reprocessa os últimos limit listings do tenant e persiste promoção/price_final/original_price.
+   * Útil para corrigir anúncios que foram gravados antes da correção do parser de promoção.
+   */
+  app.post(
+    '/mercadolivre/listings/backfill-promotions',
+    { preHandler: authGuard },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({ 
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado' 
+          });
+        }
+
+        // Validar query params
+        const limit = request.query && typeof request.query === 'object' && 'limit' in request.query
+          ? Math.min(Number(request.query.limit) || 200, 500)
+          : 200;
+
+        app.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          limit,
+        }, 'Requisição de backfill de promoções recebida');
+
+        // Buscar últimos listings do tenant (ordenar por updated_at desc)
+        const listings = await prisma.listing.findMany({
+          where: {
+            tenant_id: tenantId,
+            marketplace: 'mercadolivre',
+          },
+          take: limit,
+          orderBy: {
+            updated_at: 'desc',
+          },
+          select: {
+            id: true,
+            listing_id_ext: true,
+          },
+        });
+
+        app.log.info({
+          requestId,
+          tenantId,
+          listingsFound: listings.length,
+        }, 'Listings encontrados para backfill');
+
+        if (listings.length === 0) {
+          return reply.status(200).send({
+            message: 'Nenhum listing encontrado para backfill',
+            data: {
+              listingsProcessed: 0,
+              listingsUpdated: 0,
+            },
+          });
+        }
+
+        // Instanciar service
+        const syncService = new MercadoLivreSyncService(tenantId);
+        
+        // Processar em lotes de 20 (limite da API do ML)
+        const chunks = [];
+        for (let i = 0; i < listings.length; i += 20) {
+          chunks.push(listings.slice(i, i + 20));
+        }
+
+        let totalProcessed = 0;
+        let totalUpdated = 0;
+        const errors: string[] = [];
+
+        for (const chunk of chunks) {
+          try {
+            const itemIds = chunk.map(l => l.listing_id_ext);
+            const items = await syncService.fetchItemsDetails(itemIds);
+            
+            // Aplicar lógica de persistência
+            const { updated } = await syncService.upsertListings(items, 'backfill_promotions', false);
+            
+            totalProcessed += items.length;
+            totalUpdated += updated;
+
+            // Log para cada listing
+            for (const item of items) {
+              const listing = await prisma.listing.findFirst({
+                where: {
+                  tenant_id: tenantId,
+                  listing_id_ext: item.id,
+                },
+                select: {
+                  price: true,
+                  price_final: true,
+                  original_price: true,
+                  has_promotion: true,
+                  discount_percent: true,
+                },
+              });
+
+              app.log.info({
+                listing_id_ext: item.id,
+                price: listing?.price,
+                price_final: listing?.price_final,
+                original_price: listing?.original_price,
+                has_promotion: listing?.has_promotion,
+                discount_percent: listing?.discount_percent,
+              }, '[BACKFILL-PROMOTIONS] Listing processado');
+            }
+          } catch (chunkError) {
+            const errorMsg = chunkError instanceof Error ? chunkError.message : 'Erro desconhecido';
+            errors.push(`Lote com ${chunk.length} itens: ${errorMsg}`);
+            app.log.error({ 
+              requestId,
+              tenantId,
+              chunkSize: chunk.length,
+              error: errorMsg,
+            }, '[BACKFILL-PROMOTIONS] Erro no lote');
+          }
+        }
+
+        app.log.info({
+          requestId,
+          userId,
+          tenantId,
+          totalProcessed,
+          totalUpdated,
+          errorsCount: errors.length,
+        }, 'Backfill de promoções concluído');
+
+        return reply.status(errors.length > 0 ? 207 : 200).send({
+          message: errors.length > 0 
+            ? 'Backfill concluído com alguns erros' 
+            : 'Backfill concluído com sucesso',
+          data: {
+            listingsProcessed: totalProcessed,
+            listingsUpdated: totalUpdated,
+            errors: errors.length > 0 ? errors : undefined,
+          },
+        });
+      } catch (error: any) {
+        const { tenantId, userId, requestId } = (request as RequestWithAuth & { requestId?: string }) || {};
+        
+        if (error.code === 'AUTH_REVOKED' || error.message?.includes('Conexão expirada')) {
+          return reply.status(401).send({
+            error: 'AUTH_REVOKED',
+            message: 'Conexão expirada. Reconecte sua conta.',
+            code: 'AUTH_REVOKED',
+          });
+        }
+
+        app.log.error({ requestId, userId, tenantId, err: error }, 'Erro no backfill de promoções');
+        return reply.status(500).send({
+          error: 'Falha no backfill de promoções',
+          message: error instanceof Error ? error.message : 'Erro interno',
+        });
+      }
+    }
+  );
+
+  /**
    * GET /api/v1/sync/status
    * 
    * Endpoint auxiliar para verificar se o serviço de sync está disponível
@@ -1462,6 +1750,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         'POST /mercadolivre/visits/backfill - Backfill granular de visitas por dia',
         'POST /mercadolivre/full - Sync completo',
         'POST /mercadolivre/listings/from-orders - Sync de listings via orders (fallback)',
+        'POST /mercadolivre/listings/:listingIdExt/force-refresh - Force refresh de um listing',
+        'POST /mercadolivre/listings/backfill-promotions - Backfill de promoções',
         'POST /recalculate-scores - Recalcular Super Seller Score',
       ],
       timestamp: new Date().toISOString(),

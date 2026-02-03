@@ -677,7 +677,7 @@ export class MercadoLivreSyncService {
    * Usa retry automático em caso de 401
    * Também busca descrições completas via endpoint específico
    */
-  private async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
+  async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
     if (itemIds.length === 0) return [];
     if (itemIds.length > 20) {
       throw new Error('Máximo de 20 itens por requisição');
@@ -764,7 +764,7 @@ export class MercadoLivreSyncService {
     }
   }
 
-  private async upsertListings(
+  async upsertListings(
     items: MercadoLivreItem[],
     source?: string | null,
     discoveryBlocked: boolean = false

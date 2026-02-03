@@ -9,6 +9,7 @@ import { listingsRoutes } from './routes/listings';
 import { syncRoutes } from './routes/sync.routes';
 import { recommendationsRoutes } from './routes/recommendations.routes';
 import { aiAnalyzeRoutes } from './routes/ai-analyze.routes';
+import { aiDebugRoutes } from './routes/ai-debug.routes';
 import { debugRoutes } from './routes/debug.routes';
 import { internalJobsRoutes } from './routes/internal-jobs.routes';
 import { internalDebugRoutes } from './routes/internal-debug.routes';
@@ -66,6 +67,7 @@ async function main() {
     await app.register(syncRoutes, { prefix: '/api/v1/sync' });
     await app.register(recommendationsRoutes, { prefix: '/api/v1/recommendations' });
     await app.register(aiAnalyzeRoutes, { prefix: '/api/v1/ai' });
+    await app.register(aiDebugRoutes, { prefix: '/api/v1/ai' });
     await app.register(debugRoutes, { prefix: '/api/v1/debug' });
     await app.register(internalJobsRoutes, { prefix: '/api/v1/jobs' });
     await app.register(internalDebugRoutes, { prefix: '/api/v1/internal/debug' });

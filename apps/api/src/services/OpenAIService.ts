@@ -25,8 +25,24 @@ import {
 } from '../types/ai-analysis-expert';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
 import { getMediaVerdict } from '../utils/media-verdict';
+// TODO: Remover imports diretos após consertar build do @superseller/ai
+// Issue: TypeScript não está resolvendo exports do package corretamente
+// Workaround temporário: imports diretos dos arquivos de prompt
+import {
+  promptVersion as mlExpertV21Version,
+  systemPrompt as mlExpertV21SystemPrompt,
+  buildMLExpertV21UserPrompt,
+} from '@superseller/ai/dist/prompts/mlExpertV21';
+import {
+  promptVersion as mlSalesV22Version,
+  systemPrompt as mlSalesV22SystemPrompt,
+  buildMLSalesV22UserPrompt,
+} from '@superseller/ai/dist/prompts/mlSalesV22';
 
 const prisma = new PrismaClient();
+
+// Prompt version configurável via env (default: ml-expert-v21)
+const AI_PROMPT_VERSION = process.env.AI_PROMPT_VERSION || 'ml-expert-v21';
 
 export interface ListingAnalysisInput {
   id: string;
@@ -934,96 +950,24 @@ export class OpenAIService {
     const startTime = Date.now();
     const requestId = input.meta.requestId || 'unknown';
 
-    // Build user prompt with Expert template
-    const userPrompt = `Analise o anúncio do Mercado Livre com base nos dados fornecidos.
+    // Selecionar prompt baseado em AI_PROMPT_VERSION
+    const useSalesV22 = AI_PROMPT_VERSION === 'ml-sales-v22';
+    const promptVersion = useSalesV22 ? mlSalesV22Version : mlExpertV21Version;
+    const systemPrompt = useSalesV22 ? mlSalesV22SystemPrompt : mlExpertV21SystemPrompt;
+    const buildUserPrompt = useSalesV22 ? buildMLSalesV22UserPrompt : buildMLExpertV21UserPrompt;
 
-REGRAS OBRIGATÓRIAS (HARD CONSTRAINTS):
-- Considere sempre o PREÇO FINAL (price_final), não apenas o preço base.
-- Se houver promoção ativa, NÃO sugira criar promoção. Mencione a promoção existente e valores corretos.
-- Seja específico para Mercado Livre.
-- Sempre entregue ações aplicáveis imediatamente.
-- description_fix.optimized_copy DEVE ter >= 600 caracteres com estrutura completa (Destaques, Especificações, O que você recebe, Cuidados, Dica, CTA).
-- title_fix.after DEVE ter >= 45 caracteres, começar com keyword principal e incluir 2-4 atributos.
-- final_action_plan DEVE ter mínimo 5 ações ordenadas por impacto.
-- image_plan DEVE ter min(4, pictures_count) itens quando pictures_count >= 4.
-- Se hasClips é null, diga "Não foi possível confirmar via API" (não afirme que não tem).
-
-Siga OBRIGATORIAMENTE o formato de resposta definido.
-Não adicione seções extras.
-
-DADOS DO ANÚNCIO:
-${JSON.stringify(input, null, 2)}
-
-MÉTRICAS DE ${input.meta.periodDays} DIAS:
-- Visitas: ${input.dataQuality.visits_status === 'unavailable' ? 'INDISPONÍVEL' : scoreResult.metrics_30d.visits}
-- Pedidos: ${scoreResult.metrics_30d.orders}
-- Conversão: ${scoreResult.metrics_30d.conversionRate ? (scoreResult.metrics_30d.conversionRate * 100).toFixed(2) + '%' : 'N/A'}
-${scoreResult.metrics_30d.ctr !== null ? `- CTR: ${(scoreResult.metrics_30d.ctr * 100).toFixed(2)}%` : ''}
-${scoreResult.metrics_30d.revenue !== null ? `- Receita: R$ ${scoreResult.metrics_30d.revenue.toFixed(2)}` : ''}
-
-PREÇO:
-- Preço Base: R$ ${input.listing.price_base.toFixed(2)}
-- Preço Final: R$ ${input.listing.price_final.toFixed(2)}
-- Promoção Ativa: ${input.listing.has_promotion ? 'SIM' : 'NÃO'}
-${input.listing.discount_percent ? `- Desconto: ${input.listing.discount_percent}%` : ''}
-
-MÍDIA:
-- Fotos: ${input.media.imageCount}
-- Vídeo/Clips: ${input.media.hasClips === true ? 'SIM' : input.media.hasClips === false ? 'NÃO' : 'Não detectável'}
-
-QUALIDADE DOS DADOS:
-- Status de Visitas: ${input.dataQuality.visits_status}
-- Performance Disponível: ${input.dataQuality.performanceAvailable ? 'SIM' : 'NÃO'}
-${input.dataQuality.warnings.length > 0 ? `- Avisos: ${input.dataQuality.warnings.join('; ')}` : ''}
-
-FORMATO DE RESPOSTA (JSON OBRIGATÓRIO - SEM TEXTO EXTRA):
-{
-  "verdict": "Frase curta, direta e incômoda sobre o anúncio",
-  "title_fix": {
-    "problem": "Onde o título atual falha para o algoritmo do Mercado Livre",
-    "impact": "Qual sinal algorítmico está sendo perdido",
-    "before": "Título atual exatamente como está no anúncio",
-    "after": "Título otimizado pronto para copiar e colar"
-  },
-  "image_plan": [
-    { "image": 1, "action": "O que essa imagem deve mostrar para converter melhor" },
-    { "image": 2, "action": "O que essa imagem deve mostrar" },
-    { "image": 3, "action": "O que essa imagem deve mostrar" }
-  ],
-  "description_fix": {
-    "diagnostic": "Problema real da descrição atual",
-    "optimized_copy": "Descrição completa pronta para colar no Mercado Livre"
-  },
-  "price_fix": {
-    "diagnostic": "Avaliação do preço considerando preço final e promoções",
-    "action": "O que fazer com preço/promoção"
-  },
-  "algorithm_hacks": [
-    {
-      "hack": "Nome curto do hack",
-      "how_to_apply": "Como executar no Mercado Livre",
-      "signal_impacted": "Sinal algorítmico impactado"
-    }
-  ],
-  "final_action_plan": [
-    "Ação concreta 1",
-    "Ação concreta 2",
-    "Ação concreta 3"
-  ]
-}
-
-IMPORTANTE:
-- Retorne APENAS o JSON acima, sem markdown, sem texto antes ou depois
-- NÃO use \`\`\`json ou qualquer formatação markdown
-- NÃO adicione explicações ou comentários
-- O JSON deve começar com { e terminar com }
-- Todos os campos são OBRIGATÓRIOS`;
+    // Build user prompt usando função do prompt versionado
+    const userPrompt = buildUserPrompt({
+      input,
+      scoreResult,
+      meta: input.meta,
+    });
 
     try {
       const response = await this.client.chat.completions.create({
         model: 'gpt-4o',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT_EXPERT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         response_format: { type: 'json_object' },
@@ -1118,15 +1062,16 @@ IMPORTANTE:
       if (parseResult.success) {
         const data = parseResult.data;
         
-        // Validar description_fix.optimized_copy
+        // Validar description_fix.optimized_copy (>= 900 chars para V2.1)
         if (data.description_fix?.optimized_copy) {
           const descLength = data.description_fix.optimized_copy.length;
-          if (descLength < 600) {
-            qualityIssues.push(`description_fix.optimized_copy muito curto (${descLength} chars, mínimo 600)`);
+          const minLength = useSalesV22 ? 900 : 900; // Ambos requerem 900
+          if (descLength < minLength) {
+            qualityIssues.push(`description_fix.optimized_copy muito curto (${descLength} chars, mínimo ${minLength})`);
           }
         }
         
-        // Validar title_fix.after
+        // Validar title_fix.after (55-60 chars para V2.1)
         if (data.title_fix?.after) {
           const titleLength = data.title_fix.after.length;
           if (titleLength < 45) {
@@ -1139,16 +1084,84 @@ IMPORTANTE:
           }
         }
         
-        // Validar final_action_plan
-        if (data.final_action_plan && data.final_action_plan.length < 5) {
-          qualityIssues.push(`final_action_plan tem apenas ${data.final_action_plan.length} ações (mínimo 5)`);
+        // Validar final_action_plan (mínimo 7 para V2.1, exatamente 7 para V2.2)
+        if (data.final_action_plan) {
+          if (useSalesV22) {
+            if (data.final_action_plan.length !== 7) {
+              qualityIssues.push(`final_action_plan deve ter exatamente 7 itens (D0-D6), mas tem ${data.final_action_plan.length}`);
+            }
+          } else {
+            if (data.final_action_plan.length < 7) {
+              qualityIssues.push(`final_action_plan tem apenas ${data.final_action_plan.length} ações (mínimo 7)`);
+            }
+          }
         }
         
-        // Validar image_plan
-        if (data.image_plan && input.media.imageCount >= 4) {
+        // Validar image_plan (min(6, pictures_count) quando pictures_count >= 6)
+        if (data.image_plan && input.media.imageCount >= 6) {
+          const expectedCount = Math.min(6, input.media.imageCount);
+          if (data.image_plan.length < expectedCount) {
+            qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
+          }
+        } else if (data.image_plan && input.media.imageCount >= 4) {
           const expectedCount = Math.min(4, input.media.imageCount);
           if (data.image_plan.length < expectedCount) {
             qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
+          }
+        }
+
+        // Validar promoção: se hasPromotion=true, DEVE citar originalPrice e priceFinal
+        if (input.listing.has_promotion && input.listing.price_base && input.listing.price_final) {
+          const priceFixText = (data.price_fix?.action || data.price_fix?.diagnostic || '').toLowerCase();
+          const originalPriceStr = input.listing.price_base.toFixed(2);
+          const priceFinalStr = input.listing.price_final.toFixed(2);
+          const discountPercent = input.listing.discount_percent;
+          
+          // Verificar se menciona valores (pode ser "60" ou "R$ 60" ou "60.00")
+          const originalPriceNum = input.listing.price_base;
+          const priceFinalNum = input.listing.price_final;
+          
+          const mentionsOriginalPrice = priceFixText.includes(originalPriceStr) || 
+                                       priceFixText.includes(originalPriceNum.toString()) ||
+                                       priceFixText.includes(originalPriceNum.toFixed(0)) ||
+                                       (priceFixText.includes('original') && priceFixText.includes(originalPriceStr.split('.')[0]));
+          const mentionsPriceFinal = priceFixText.includes(priceFinalStr) || 
+                                    priceFixText.includes(priceFinalNum.toString()) ||
+                                    priceFixText.includes(priceFinalNum.toFixed(0)) ||
+                                    (priceFixText.includes('promo') && priceFixText.includes(priceFinalStr.split('.')[0]));
+          
+          if (!mentionsOriginalPrice || !mentionsPriceFinal) {
+            qualityIssues.push(`price_fix não menciona valores de promoção (originalPrice=${originalPriceStr}, priceFinal=${priceFinalStr})`);
+          }
+          
+          if (discountPercent && !priceFixText.includes(discountPercent.toString()) && !priceFixText.includes('%')) {
+            qualityIssues.push(`price_fix não menciona desconto percentual (${discountPercent}%)`);
+          }
+        }
+
+        // Validar clip: se hasClips === null, NÃO pode afirmar "não tem"
+        if (input.media.hasClips === null) {
+          const allText = JSON.stringify(data).toLowerCase();
+          const invalidPhrases = [
+            'não tem vídeo',
+            'não tem clip',
+            'sem vídeo',
+            'sem clip',
+            'não possui vídeo',
+            'não possui clip',
+            'ausência de vídeo',
+            'ausência de clip',
+          ];
+          
+          const hasInvalidPhrase = invalidPhrases.some(phrase => allText.includes(phrase));
+          if (hasInvalidPhrase) {
+            qualityIssues.push('Resposta afirma que não tem vídeo/clip quando hasClips=null (deve dizer "Não foi possível confirmar via API")');
+          }
+          
+          // Verificar se contém frase padrão obrigatória
+          const requiredPhrase = 'não foi possível confirmar';
+          if (!allText.includes(requiredPhrase)) {
+            qualityIssues.push('Resposta não contém frase padrão "Não foi possível confirmar via API" quando hasClips=null');
           }
         }
       }

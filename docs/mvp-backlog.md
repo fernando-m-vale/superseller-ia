@@ -274,7 +274,26 @@ Satisfação | NPS > 40 no MVP |
 
 ---
 
-## 🛠️ Tech Debts / Backlog Técnico (UX Frontend)
+## 🛠️ Tech Debts / Backlog Técnico
+
+### Remover workaround de imports diretos dos prompts (2026-02-02)
+**Status:** 🔴 Pendente
+
+**Problema:**
+- `apps/api/src/services/OpenAIService.ts` usa imports diretos de `@superseller/ai/dist/prompts/*` devido a problema de resolução de módulos TypeScript
+- Workaround temporário implementado com TODO no código
+
+**DoD (Definition of Done):**
+- [ ] `@superseller/ai` exporta registry via `dist/` + `exports` corretamente
+- [ ] API importa apenas de `@superseller/ai` (sem paths internos como `dist/prompts/*`)
+- [ ] Build `@superseller/ai` e `@superseller/api` passam sem erros
+- [ ] Deploy ok
+- [ ] Remover TODO do código: `// TODO(2026-02-02): remove after exports fix`
+
+**Referência no código:**
+- `apps/api/src/services/OpenAIService.ts` linhas 30-40
+
+---
 
 ### Refatoração UX Tela de Anúncios (2026-01-27)
 **Status:** ✅ Implementado (accordion inline substituindo modal lateral)

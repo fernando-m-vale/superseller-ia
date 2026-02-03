@@ -72,10 +72,10 @@ export const AIAnalysisResultExpertSchema = z.object({
   algorithm_hacks: z.array(AlgorithmHackExpertSchema).describe('Hacks algorítmicos do Mercado Livre'),
   final_action_plan: z.array(z.string()).describe('Ações concretas ordenadas por prioridade'),
   meta: z.object({
-    version: z.literal('ml-expert-v1'),
+    version: z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22']),
     model: z.string(),
     analyzed_at: z.string(),
-    prompt_version: z.literal('ml-expert-v1'),
+    prompt_version: z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22']),
     processing_time_ms: z.number().optional(),
   }),
 });
@@ -164,10 +164,10 @@ export function createFallbackAnalysisExpert(
     algorithm_hacks: [],
     final_action_plan: ['Verificar dados do anúncio', 'Tentar novamente a análise'],
     meta: {
-      version: 'ml-expert-v1',
+      version: 'ml-expert-v21',
       model: 'gpt-4o',
       analyzed_at: new Date().toISOString(),
-      prompt_version: 'ml-expert-v1',
+      prompt_version: 'ml-expert-v21',
     },
   };
 }

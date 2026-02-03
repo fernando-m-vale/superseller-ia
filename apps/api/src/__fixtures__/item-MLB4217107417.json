@@ -1,0 +1,90 @@
+{
+  "id": "MLB4217107417",
+  "site_id": "MLB",
+  "title": "Meias 3d Crazy Socks  Diversão E Conforto Em Cada Passo!",
+  "category_id": "MLB278137",
+  "price": 60,
+  "base_price": 60,
+  "original_price": 60,
+  "sale_price": 32,
+  "currency_id": "BRL",
+  "available_quantity": 121,
+  "pictures": [
+    {
+      "id": "844787-MLB92697873624_092025",
+      "url": "http://http2.mlstatic.com/D_844787-MLB92697873624_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_844787-MLB92697873624_092025-O.jpg",
+      "size": "500x405"
+    },
+    {
+      "id": "754229-MLB92698618344_092025",
+      "url": "http://http2.mlstatic.com/D_754229-MLB92698618344_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_754229-MLB92698618344_092025-O.jpg",
+      "size": "275x500"
+    },
+    {
+      "id": "793967-MLB93109634331_092025",
+      "url": "http://http2.mlstatic.com/D_793967-MLB93109634331_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_793967-MLB93109634331_092025-O.jpg",
+      "size": "347x500"
+    },
+    {
+      "id": "943472-MLB93110088529_092025",
+      "url": "http://http2.mlstatic.com/D_943472-MLB93110088529_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_943472-MLB93110088529_092025-O.jpg",
+      "size": "500x497"
+    },
+    {
+      "id": "711444-MLB93110000219_092025",
+      "url": "http://http2.mlstatic.com/D_711444-MLB93110000219_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_711444-MLB93110000219_092025-O.jpg",
+      "size": "474x500"
+    },
+    {
+      "id": "883283-MLB93109940775_092025",
+      "url": "http://http2.mlstatic.com/D_883283-MLB93109940775_092025-O.jpg",
+      "secure_url": "https://http2.mlstatic.com/D_883283-MLB93109940775_092025-O.jpg",
+      "size": "308x500"
+    }
+  ],
+  "prices": {
+    "prices": [
+      {
+        "id": "1",
+        "type": "standard",
+        "amount": 32,
+        "currency_id": "BRL"
+      },
+      {
+        "id": "2",
+        "type": "promotion",
+        "amount": 32,
+        "currency_id": "BRL",
+        "conditions": {
+          "context_restrictions": [],
+          "start_time": "2025-01-01T00:00:00Z",
+          "end_time": "2025-12-31T23:59:59Z"
+        }
+      }
+    ]
+  },
+  "reference_prices": [
+    {
+      "id": "1",
+      "type": "min",
+      "amount": 60,
+      "currency_id": "BRL"
+    },
+    {
+      "id": "2",
+      "type": "max",
+      "amount": 60,
+      "currency_id": "BRL"
+    }
+  ],
+  "video_id": null,
+  "deal_ids": [],
+  "promotions": [],
+  "status": "active",
+  "condition": "new"
+}
