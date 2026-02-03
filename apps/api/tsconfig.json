@@ -8,7 +8,10 @@
 "outDir": "dist",
 "rootDir": "src",
 "strict": true,
-"skipLibCheck": true
+"skipLibCheck": true,
+"paths": {
+"@superseller/ai/prompts/*": ["../../packages/ai/dist/prompts/*"]
+}
 },
 "include": ["src"]
 }

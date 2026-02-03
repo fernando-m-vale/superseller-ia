@@ -32,3 +32,17 @@ jobs:
 
       - name: Build api
         run: pnpm --filter @superseller/api build || true
+
+      - name: Smoke test - API server startup
+        if: success()
+        run: |
+          echo "Testing API server startup..."
+          timeout 5 node apps/api/dist/server.js || exit_code=$?
+          if [ ${exit_code:-0} -eq 124 ]; then
+            echo "✅ Server started successfully (timeout after 5s is expected)"
+          elif [ ${exit_code:-0} -eq 0 ]; then
+            echo "✅ Server started successfully"
+          else
+            echo "❌ Server failed to start or crashed immediately"
+            exit 1
+          fi

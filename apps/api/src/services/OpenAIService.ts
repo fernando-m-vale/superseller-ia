@@ -25,19 +25,16 @@ import {
 } from '../types/ai-analysis-expert';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
 import { getMediaVerdict } from '../utils/media-verdict';
-// TODO: Remover imports diretos após consertar build do @superseller/ai
-// Issue: TypeScript não está resolvendo exports do package corretamente
-// Workaround temporário: imports diretos dos arquivos de prompt
 import {
   promptVersion as mlExpertV21Version,
   systemPrompt as mlExpertV21SystemPrompt,
   buildMLExpertV21UserPrompt,
-} from '@superseller/ai/dist/prompts/mlExpertV21';
+} from '@superseller/ai/prompts/mlExpertV21';
 import {
   promptVersion as mlSalesV22Version,
   systemPrompt as mlSalesV22SystemPrompt,
   buildMLSalesV22UserPrompt,
-} from '@superseller/ai/dist/prompts/mlSalesV22';
+} from '@superseller/ai/prompts/mlSalesV22';
 
 const prisma = new PrismaClient();
 
