@@ -37,11 +37,13 @@ jobs:
         if: success()
         run: |
           echo "Testing API server startup..."
-          timeout 5 node apps/api/dist/server.js || exit_code=$?
-          if [ ${exit_code:-0} -eq 124 ]; then
-            echo "✅ Server started successfully (timeout after 5s is expected)"
-          elif [ ${exit_code:-0} -eq 0 ]; then
-            echo "✅ Server started successfully"
+          # Start server in background and kill after 5 seconds
+          node apps/api/dist/server.js &
+          SERVER_PID=$!
+          sleep 5
+          if kill -0 $SERVER_PID 2>/dev/null; then
+            echo "✅ Server started successfully (no crash detected)"
+            kill $SERVER_PID 2>/dev/null || true
           else
             echo "❌ Server failed to start or crashed immediately"
             exit 1
