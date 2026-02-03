@@ -13,6 +13,7 @@ import { aiDebugRoutes } from './routes/ai-debug.routes';
 import { debugRoutes } from './routes/debug.routes';
 import { internalJobsRoutes } from './routes/internal-jobs.routes';
 import { internalDebugRoutes } from './routes/internal-debug.routes';
+import { metaRoutes } from './routes/meta.routes';
 import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
@@ -66,17 +67,30 @@ async function main() {
     await app.register(listingsRoutes, { prefix: '/api/v1/ads' });
     await app.register(syncRoutes, { prefix: '/api/v1/sync' });
     await app.register(recommendationsRoutes, { prefix: '/api/v1/recommendations' });
-    await app.register(aiAnalyzeRoutes, { prefix: '/api/v1/ai' });
+    // Registrar meta primeiro (sem conflito)
+    await app.register(metaRoutes, { prefix: '/api/v1' });
+    
+    // Registrar rotas de AI - ordem importante: debug antes de analyze para evitar conflitos
     await app.register(aiDebugRoutes, { prefix: '/api/v1/ai' });
+    await app.register(aiAnalyzeRoutes, { prefix: '/api/v1/ai' });
     await app.register(debugRoutes, { prefix: '/api/v1/debug' });
     await app.register(internalJobsRoutes, { prefix: '/api/v1/jobs' });
     await app.register(internalDebugRoutes, { prefix: '/api/v1/internal/debug' });
 
     await app.ready();
     
-    // Log de rotas apenas em desenvolvimento
+    // Log de rotas registradas (sempre logar em produção para debug)
+    const routes = app.printRoutes();
+    app.log.info({ 
+      totalRoutes: routes.split('\n').filter(line => line.trim().length > 0).length,
+      hasForceRefresh: routes.includes('force-refresh'),
+      hasDebugPayload: routes.includes('debug-payload'),
+      hasMeta: routes.includes('/meta'),
+    }, 'Routes registered');
+    
+    // Log detalhado apenas em desenvolvimento
     if (process.env.NODE_ENV !== 'production') {
-      app.log.debug({ routes: app.printRoutes() }, 'Routes registered');
+      app.log.debug({ routes }, 'Routes registered (detailed)');
     }
 
     // DB Fingerprint: identificar qual DB a API está usando
