@@ -41,10 +41,18 @@ jobs:
           node apps/api/dist/server.js &
           SERVER_PID=$!
           sleep 5
-          if kill -0 $SERVER_PID 2>/dev/null; then
-            echo "✅ Server started successfully (no crash detected)"
-            kill $SERVER_PID 2>/dev/null || true
-          else
+          if ! ps -p $SERVER_PID > /dev/null; then
             echo "❌ Server failed to start or crashed immediately"
             exit 1
           fi
+          echo "✅ Server started successfully (smoke test)"
+          kill $SERVER_PID
+        env:
+          NODE_ENV: test
+          PORT: "3999"
+          DATABASE_URL: "postgresql://user:pass@127.0.0.1:5432/superseller_ci?schema=public"
+          JWT_SECRET: "ci_dummy_secret_please_change"
+          ML_APP_ID: "123456"
+          ML_APP_SECRET: "ci_dummy_secret"
+          ML_REDIRECT_URI: "https://localhost/callback"
+          
