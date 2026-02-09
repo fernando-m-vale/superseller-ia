@@ -539,9 +539,74 @@ export class MercadoLivreSyncService {
   }
 
   /**
+   * Enriquece dados de preço/promoção de um item via endpoint adicional se necessário
+   * Tenta GET /items/:id para obter dados completos de preço/promoção
+   */
+  private async enrichItemPricing(item: MercadoLivreItem): Promise<MercadoLivreItem> {
+    // Se já temos dados suficientes de promoção, não precisa enriquecer
+    const hasPromoData = 
+      (item.original_price !== undefined && item.original_price !== null) ||
+      (item.sale_price !== undefined && item.sale_price !== null) ||
+      (item.prices?.prices && Array.isArray(item.prices.prices) && item.prices.prices.length > 0) ||
+      (item.reference_prices && Array.isArray(item.reference_prices) && item.reference_prices.length > 0) ||
+      (item.deals && Array.isArray(item.deals) && item.deals.length > 0) ||
+      (item.promotions && Array.isArray(item.promotions) && item.promotions.length > 0);
+
+    if (hasPromoData) {
+      console.log(`[ML-SYNC] Item ${item.id} já tem dados de promoção suficientes, pulando enriquecimento`);
+      return item;
+    }
+
+    try {
+      console.log(`[ML-SYNC] Enriquecendo preços/promoção para item ${item.id} via GET /items/:id`);
+      const response = await axios.get(`${ML_API_BASE}/items/${item.id}`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+
+      const enrichedItem = response.data as MercadoLivreItem;
+      
+      // Mesclar dados de preço/promoção do item enriquecido
+      if (enrichedItem.original_price !== undefined && enrichedItem.original_price !== null) {
+        item.original_price = enrichedItem.original_price;
+      }
+      if (enrichedItem.sale_price !== undefined && enrichedItem.sale_price !== null) {
+        item.sale_price = enrichedItem.sale_price;
+      }
+      if (enrichedItem.base_price !== undefined && enrichedItem.base_price !== null) {
+        item.base_price = enrichedItem.base_price;
+      }
+      if (enrichedItem.prices && !item.prices) {
+        item.prices = enrichedItem.prices;
+      }
+      if (enrichedItem.reference_prices && !item.reference_prices) {
+        item.reference_prices = enrichedItem.reference_prices;
+      }
+      if (enrichedItem.deals && !item.deals) {
+        item.deals = enrichedItem.deals;
+      }
+      if (enrichedItem.promotions && !item.promotions) {
+        item.promotions = enrichedItem.promotions;
+      }
+
+      console.log(`[ML-SYNC] Item ${item.id} enriquecido com dados de preço/promoção`);
+      return item;
+    } catch (error) {
+      // Se enriquecimento falhar, seguir com dados originais e logar warning
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id} (${status}): ${error.message}`);
+      } else {
+        console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
+      return item; // Retornar item original se enriquecimento falhar
+    }
+  }
+
+  /**
    * Busca detalhes de múltiplos itens (até 20 por vez)
    * Usa retry automático em caso de 401
    * Também busca descrições completas via endpoint específico
+   * Enriquece dados de preço/promoção se necessário
    * 
    * Garante inicialização automática quando chamado externamente (ex: rotas)
    */
@@ -566,10 +631,23 @@ export class MercadoLivreSyncService {
           .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
           .map((item: { code: number; body: MercadoLivreItem }) => item.body);
 
+        // Enriquecer dados de preço/promoção se necessário (com limite de concorrência)
+        console.log(`[ML-SYNC] Verificando necessidade de enriquecimento de preços para ${items.length} itens...`);
+        const CONCURRENCY_LIMIT = 5;
+        const enrichedItems: MercadoLivreItem[] = [];
+        
+        for (let i = 0; i < items.length; i += CONCURRENCY_LIMIT) {
+          const chunk = items.slice(i, i + CONCURRENCY_LIMIT);
+          const enrichedChunk = await Promise.all(
+            chunk.map(item => this.enrichItemPricing(item))
+          );
+          enrichedItems.push(...enrichedChunk);
+        }
+
         // Buscar descrições completas para cada item (em paralelo, mas com limite)
-        console.log(`[ML-SYNC] Buscando descrições completas para ${items.length} itens...`);
+        console.log(`[ML-SYNC] Buscando descrições completas para ${enrichedItems.length} itens...`);
         const itemsWithDescriptions = await Promise.all(
-          items.map(async (item) => {
+          enrichedItems.map(async (item) => {
             const fullDescription = await this.fetchItemDescription(item.id);
             if (fullDescription) {
               // Sobrescrever a descrição se encontramos uma completa
@@ -834,6 +912,29 @@ export class MercadoLivreSyncService {
         const now = new Date();
         const currentPrice = item.price;
         
+        // Logs instrumentados para diagnóstico (sem tokens/PII)
+        const hasPricesField = !!item.prices;
+        const pricesCount = item.prices?.prices ? (Array.isArray(item.prices.prices) ? item.prices.prices.length : 0) : 0;
+        const hasReferencePrices = !!(item.reference_prices && Array.isArray(item.reference_prices) && item.reference_prices.length > 0);
+        const hasSalePrice = item.sale_price !== undefined && item.sale_price !== null;
+        const hasBasePrice = item.base_price !== undefined && item.base_price !== null;
+        const hasOriginalPrice = item.original_price !== undefined && item.original_price !== null;
+        
+        console.log(`[ML-SYNC] Promoção - diagnóstico itemId=${item.id}`, {
+          hasPricesField,
+          pricesCount,
+          hasReferencePrices,
+          hasSalePrice,
+          sale_price: item.sale_price,
+          hasBasePrice,
+          base_price: item.base_price,
+          hasOriginalPrice,
+          original_price: item.original_price,
+          current_price: currentPrice,
+          hasDeals: !!(item.deals && Array.isArray(item.deals) && item.deals.length > 0),
+          hasPromotions: !!(item.promotions && Array.isArray(item.promotions) && item.promotions.length > 0),
+        });
+        
         // 1. Extrair preços da estrutura prices.prices[]
         let pricesFromStructure: number[] = [];
         if (item.prices?.prices && Array.isArray(item.prices.prices)) {
@@ -853,56 +954,77 @@ export class MercadoLivreSyncService {
         // 3. Determinar price_final (menor preço ativo encontrado)
         // Prioridade: sale_price > menor de prices.prices[] > price
         let priceFinal: number = currentPrice;
+        let candidateFinalPrice: number | null = null;
+        
         if (item.sale_price !== undefined && item.sale_price !== null && item.sale_price > 0) {
           priceFinal = item.sale_price;
+          candidateFinalPrice = item.sale_price;
         } else if (pricesFromStructure.length > 0) {
-          priceFinal = Math.min(...pricesFromStructure);
+          const minPrice = Math.min(...pricesFromStructure);
+          if (minPrice < currentPrice) {
+            priceFinal = minPrice;
+            candidateFinalPrice = minPrice;
+          } else {
+            priceFinal = currentPrice;
+          }
         } else {
           priceFinal = currentPrice;
         }
         
         // 4. Determinar original_price (maior preço válido)
-        // Prioridade: original_price > maior de reference_prices[] > base_price > price
+        // Prioridade: original_price > maior de reference_prices[] > base_price > price (se price > price_final)
         let originalPrice: number | null = null;
+        
         if (item.original_price !== undefined && item.original_price !== null && item.original_price > 0) {
           originalPrice = item.original_price;
         } else if (referencePrices.length > 0) {
           originalPrice = Math.max(...referencePrices);
         } else if (item.base_price !== undefined && item.base_price !== null && item.base_price > 0) {
           originalPrice = item.base_price;
+        } else if (currentPrice > priceFinal) {
+          // Se price atual é maior que price_final, usar price como original_price
+          originalPrice = currentPrice;
         } else {
           originalPrice = null;
         }
         
-        // 5. Detectar promoção: original_price > price_final
+        // 5. Detectar promoção: original_price > price_final E diferença significativa (> 1%)
         let hasPromotion = false;
         let discountPercent: number | null = null;
         let promotionType: string | null = null;
         
-        if (originalPrice !== null && originalPrice > priceFinal) {
-          hasPromotion = true;
+        if (originalPrice !== null && originalPrice > priceFinal && originalPrice > 0) {
+          const discount = ((originalPrice - priceFinal) / originalPrice) * 100;
           
-          // Calcular desconto percentual
-          if (originalPrice > 0) {
-            discountPercent = Math.round(((originalPrice - priceFinal) / originalPrice) * 100);
-          }
-          
-          // Verificar se há deals/promotions para tipo de promoção
-          if (item.deals && Array.isArray(item.deals) && item.deals.length > 0) {
-            const activeDeal = item.deals[0];
-            promotionType = activeDeal.type || 'discount';
-            // Se deal já tem discount_percent, usar ele (mais preciso)
-            if (activeDeal.discount_percent !== undefined && activeDeal.discount_percent !== null) {
-              discountPercent = activeDeal.discount_percent;
-            }
-          } else if (item.promotions && Array.isArray(item.promotions) && item.promotions.length > 0) {
-            const activePromo = item.promotions[0];
-            promotionType = activePromo.type || 'discount';
-            if (activePromo.discount_percent !== undefined && activePromo.discount_percent !== null) {
-              discountPercent = activePromo.discount_percent;
+          // Considerar promoção apenas se desconto > 1% (evitar falsos positivos por arredondamento)
+          if (discount > 1) {
+            hasPromotion = true;
+            discountPercent = Math.round(discount);
+            
+            // Verificar se há deals/promotions para tipo de promoção
+            if (item.deals && Array.isArray(item.deals) && item.deals.length > 0) {
+              const activeDeal = item.deals[0];
+              promotionType = activeDeal.type || 'PERCENTAGE';
+              // Se deal já tem discount_percent, usar ele (mais preciso)
+              if (activeDeal.discount_percent !== undefined && activeDeal.discount_percent !== null) {
+                discountPercent = activeDeal.discount_percent;
+              }
+            } else if (item.promotions && Array.isArray(item.promotions) && item.promotions.length > 0) {
+              const activePromo = item.promotions[0];
+              promotionType = activePromo.type || 'PERCENTAGE';
+              if (activePromo.discount_percent !== undefined && activePromo.discount_percent !== null) {
+                discountPercent = activePromo.discount_percent;
+              }
+            } else {
+              promotionType = 'PERCENTAGE';
             }
           } else {
-            promotionType = 'discount';
+            // Desconto muito pequeno, não considerar promoção
+            hasPromotion = false;
+            priceFinal = currentPrice;
+            originalPrice = null;
+            discountPercent = null;
+            promotionType = null;
           }
         } else {
           // Sem promoção: price_final = price, original_price = null
@@ -912,6 +1034,16 @@ export class MercadoLivreSyncService {
           discountPercent = null;
           promotionType = null;
         }
+        
+        // Log estruturado com candidateFinalPrice para diagnóstico
+        console.log(`[ML-SYNC] Promoção - resultado final itemId=${item.id}`, {
+          candidateFinalPrice,
+          priceFinal,
+          originalPrice,
+          hasPromotion,
+          discountPercent,
+          promotionType,
+        });
 
         // Atualizar campos de promoção (sempre persistir, mesmo sem promoção)
         listingData.has_promotion = hasPromotion;
@@ -921,20 +1053,7 @@ export class MercadoLivreSyncService {
         listingData.promotion_type = promotionType;
         listingData.promotion_checked_at = now;
         
-        // Log estruturado para debug (sem expor tokens)
-        console.log('[ML-SYNC] Promoção processada', {
-          listing_id_ext: item.id,
-          price: currentPrice,
-          original_price: originalPrice,
-          price_final: priceFinal,
-          has_promotion: hasPromotion,
-          discount_percent: discountPercent,
-          promotion_type: promotionType,
-          prices_from_structure: pricesFromStructure.length > 0 ? pricesFromStructure : undefined,
-          reference_prices: referencePrices.length > 0 ? referencePrices : undefined,
-          sale_price: item.sale_price,
-          base_price: item.base_price,
-        });
+        // Log estruturado para debug (sem expor tokens) - já logado acima no resultado final
 
         // Atualizar has_video (tri-state: true/false/null)
         // - true: tem vídeo confirmado via API
