@@ -16,7 +16,13 @@ import {
   buildMLSalesV22UserPrompt,
 } from './mlSalesV22';
 
-export type PromptVersion = 'ml-expert-v21' | 'ml-sales-v22';
+import {
+  promptVersion as mlExpertV22Version,
+  systemPrompt as mlExpertV22SystemPrompt,
+  buildMLExpertV22UserPrompt,
+} from './mlExpertV22';
+
+export type PromptVersion = 'ml-expert-v21' | 'ml-sales-v22' | 'ml-expert-v22';
 
 export interface PromptRegistryEntry {
   version: PromptVersion;
@@ -34,6 +40,11 @@ export const PROMPT_REGISTRY: Record<PromptVersion, PromptRegistryEntry> = {
     version: mlSalesV22Version as PromptVersion,
     systemPrompt: mlSalesV22SystemPrompt,
     buildUserPrompt: buildMLSalesV22UserPrompt,
+  },
+  'ml-expert-v22': {
+    version: mlExpertV22Version as PromptVersion,
+    systemPrompt: mlExpertV22SystemPrompt,
+    buildUserPrompt: buildMLExpertV22UserPrompt,
   },
 } as const;
 

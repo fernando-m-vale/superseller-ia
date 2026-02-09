@@ -35,6 +35,11 @@ import {
   systemPrompt as mlSalesV22SystemPrompt,
   buildMLSalesV22UserPrompt,
 } from '@superseller/ai/prompts/mlSalesV22';
+import {
+  promptVersion as mlExpertV22Version,
+  systemPrompt as mlExpertV22SystemPrompt,
+  buildMLExpertV22UserPrompt,
+} from '@superseller/ai/prompts/mlExpertV22';
 
 const prisma = new PrismaClient();
 
@@ -948,10 +953,23 @@ export class OpenAIService {
     const requestId = input.meta.requestId || 'unknown';
 
     // Selecionar prompt baseado em AI_PROMPT_VERSION
-    const useSalesV22 = AI_PROMPT_VERSION === 'ml-sales-v22';
-    const promptVersion = useSalesV22 ? mlSalesV22Version : mlExpertV21Version;
-    const systemPrompt = useSalesV22 ? mlSalesV22SystemPrompt : mlExpertV21SystemPrompt;
-    const buildUserPrompt = useSalesV22 ? buildMLSalesV22UserPrompt : buildMLExpertV21UserPrompt;
+    let promptVersion: string;
+    let systemPrompt: string;
+    let buildUserPrompt: typeof buildMLExpertV21UserPrompt;
+
+    if (AI_PROMPT_VERSION === 'ml-sales-v22') {
+      promptVersion = mlSalesV22Version;
+      systemPrompt = mlSalesV22SystemPrompt;
+      buildUserPrompt = buildMLSalesV22UserPrompt;
+    } else if (AI_PROMPT_VERSION === 'ml-expert-v22') {
+      promptVersion = mlExpertV22Version;
+      systemPrompt = mlExpertV22SystemPrompt;
+      buildUserPrompt = buildMLExpertV22UserPrompt;
+    } else {
+      promptVersion = mlExpertV21Version;
+      systemPrompt = mlExpertV21SystemPrompt;
+      buildUserPrompt = buildMLExpertV21UserPrompt;
+    }
 
     // Build user prompt usando função do prompt versionado
     const userPrompt = buildUserPrompt({
