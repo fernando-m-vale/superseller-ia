@@ -105,7 +105,7 @@ describe('BenchmarkService', () => {
       );
 
       expect(result.youLoseHere.length).toBeGreaterThan(0);
-      expect(result.youLoseHere.some(item => item.includes('imagens'))).toBe(true);
+      expect(result.youLoseHere.some((item: string) => item.includes('imagens'))).toBe(true);
       expect(result.recommendations.length).toBeGreaterThan(0);
     });
 
@@ -148,7 +148,7 @@ describe('BenchmarkService', () => {
       );
 
       expect(result.youWinHere.length).toBeGreaterThan(0);
-      expect(result.youWinHere.some(item => item.includes('imagens'))).toBe(true);
+      expect(result.youWinHere.some((item: string) => item.includes('imagens'))).toBe(true);
     });
 
     it('should apply promo agressiva + low CR rule (Dia 03)', () => {
@@ -189,8 +189,8 @@ describe('BenchmarkService', () => {
         metrics30d
       );
 
-      expect(result.youLoseHere.some(item => item.includes('Promoção forte'))).toBe(true);
-      expect(result.recommendations.some(item => item.includes('título') || item.includes('imagens'))).toBe(true);
+      expect(result.youLoseHere.some((item: string) => item.includes('Promoção forte'))).toBe(true);
+      expect(result.recommendations.some((item: string) => item.includes('título') || item.includes('imagens'))).toBe(true);
     });
   });
 

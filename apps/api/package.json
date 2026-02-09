@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "tsx -r dotenv/config src/server.ts",
     "prebuild": "prisma generate",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc --noEmit",
