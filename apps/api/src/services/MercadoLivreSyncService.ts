@@ -539,8 +539,58 @@ export class MercadoLivreSyncService {
   }
 
   /**
+   * Busca dados de preços/promoção via API de Preços do ML
+   * GET /items/{itemId}/prices - endpoint recomendado pelo ML para preços/promoções
+   */
+  private async fetchItemPrices(itemId: string): Promise<{
+    prices?: { prices?: Array<{ amount?: number; type?: string; conditions?: any }> };
+    sale_price?: number;
+    reference_prices?: Array<{ amount?: number; type?: string }>;
+    promotions?: Array<{ id?: string; type?: string; discount_percent?: number }>;
+    deals?: Array<{ id?: string; type?: string; discount_percent?: number }>;
+  } | null> {
+    try {
+      console.log(`[ML-SYNC] Buscando preços/promoção via API de Preços para item ${itemId}`);
+      const response = await axios.get(`${ML_API_BASE}/items/${itemId}/prices`, {
+        headers: { Authorization: `Bearer ${this.accessToken}` },
+      });
+
+      const pricesData = response.data;
+      
+      // Log estruturado (sem tokens/PII)
+      const hasSalePrice = pricesData.sale_price !== undefined && pricesData.sale_price !== null;
+      const pricesCount = pricesData.prices?.prices ? (Array.isArray(pricesData.prices.prices) ? pricesData.prices.prices.length : 0) : 0;
+      const referencePricesCount = pricesData.reference_prices ? (Array.isArray(pricesData.reference_prices) ? pricesData.reference_prices.length : 0) : 0;
+      
+      console.log(`[ML-SYNC] API de Preços retornou para item ${itemId}`, {
+        hasSalePrice,
+        sale_price: pricesData.sale_price,
+        pricesCount,
+        referencePricesCount,
+        hasPromotions: !!(pricesData.promotions && Array.isArray(pricesData.promotions) && pricesData.promotions.length > 0),
+        hasDeals: !!(pricesData.deals && Array.isArray(pricesData.deals) && pricesData.deals.length > 0),
+      });
+
+      return pricesData;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        // 403/404 podem indicar que endpoint não está disponível ou item não tem promoção
+        if (status === 403 || status === 404) {
+          console.log(`[ML-SYNC] API de Preços não disponível para item ${itemId} (${status}), usando fallback`);
+        } else {
+          console.warn(`[ML-SYNC] Erro ao buscar preços via API de Preços para item ${itemId} (${status}): ${error.message}`);
+        }
+      } else {
+        console.warn(`[ML-SYNC] Erro ao buscar preços via API de Preços para item ${itemId}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      }
+      return null; // Retornar null para indicar que deve usar fallback
+    }
+  }
+
+  /**
    * Enriquece dados de preço/promoção de um item via endpoint adicional se necessário
-   * Tenta GET /items/:id para obter dados completos de preço/promoção
+   * Prioridade: GET /items/{itemId}/prices (API de Preços) > GET /items/{id} (fallback)
    */
   private async enrichItemPricing(item: MercadoLivreItem): Promise<MercadoLivreItem> {
     // Se já temos dados suficientes de promoção, não precisa enriquecer
@@ -557,49 +607,89 @@ export class MercadoLivreSyncService {
       return item;
     }
 
-    try {
-      console.log(`[ML-SYNC] Enriquecendo preços/promoção para item ${item.id} via GET /items/:id`);
-      const response = await axios.get(`${ML_API_BASE}/items/${item.id}`, {
-        headers: { Authorization: `Bearer ${this.accessToken}` },
-      });
+    let endpointUsed: 'prices' | 'items' | 'none' = 'none';
 
-      const enrichedItem = response.data as MercadoLivreItem;
+    // Tentar primeiro API de Preços (recomendado pelo ML)
+    const pricesData = await this.fetchItemPrices(item.id);
+    
+    if (pricesData) {
+      endpointUsed = 'prices';
       
-      // Mesclar dados de preço/promoção do item enriquecido
-      if (enrichedItem.original_price !== undefined && enrichedItem.original_price !== null) {
-        item.original_price = enrichedItem.original_price;
+      // Mesclar dados de preço/promoção da API de Preços
+      if (pricesData.sale_price !== undefined && pricesData.sale_price !== null) {
+        item.sale_price = pricesData.sale_price;
       }
-      if (enrichedItem.sale_price !== undefined && enrichedItem.sale_price !== null) {
-        item.sale_price = enrichedItem.sale_price;
+      if (pricesData.prices && !item.prices) {
+        item.prices = pricesData.prices;
       }
-      if (enrichedItem.base_price !== undefined && enrichedItem.base_price !== null) {
-        item.base_price = enrichedItem.base_price;
+      if (pricesData.reference_prices && !item.reference_prices) {
+        item.reference_prices = pricesData.reference_prices;
       }
-      if (enrichedItem.prices && !item.prices) {
-        item.prices = enrichedItem.prices;
+      if (pricesData.promotions && !item.promotions) {
+        item.promotions = pricesData.promotions;
       }
-      if (enrichedItem.reference_prices && !item.reference_prices) {
-        item.reference_prices = enrichedItem.reference_prices;
-      }
-      if (enrichedItem.deals && !item.deals) {
-        item.deals = enrichedItem.deals;
-      }
-      if (enrichedItem.promotions && !item.promotions) {
-        item.promotions = enrichedItem.promotions;
+      if (pricesData.deals && !item.deals) {
+        item.deals = pricesData.deals;
       }
 
-      console.log(`[ML-SYNC] Item ${item.id} enriquecido com dados de preço/promoção`);
-      return item;
-    } catch (error) {
-      // Se enriquecimento falhar, seguir com dados originais e logar warning
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id} (${status}): ${error.message}`);
-      } else {
-        console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      console.log(`[ML-SYNC] Item ${item.id} enriquecido via API de Preços`);
+    } else {
+      // Fallback: tentar GET /items/:id
+      try {
+        console.log(`[ML-SYNC] Enriquecendo preços/promoção para item ${item.id} via GET /items/:id (fallback)`);
+        endpointUsed = 'items';
+        
+        const response = await axios.get(`${ML_API_BASE}/items/${item.id}`, {
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+        });
+
+        const enrichedItem = response.data as MercadoLivreItem;
+        
+        // Mesclar dados de preço/promoção do item enriquecido
+        if (enrichedItem.original_price !== undefined && enrichedItem.original_price !== null) {
+          item.original_price = enrichedItem.original_price;
+        }
+        if (enrichedItem.sale_price !== undefined && enrichedItem.sale_price !== null) {
+          item.sale_price = enrichedItem.sale_price;
+        }
+        if (enrichedItem.base_price !== undefined && enrichedItem.base_price !== null) {
+          item.base_price = enrichedItem.base_price;
+        }
+        if (enrichedItem.prices && !item.prices) {
+          item.prices = enrichedItem.prices;
+        }
+        if (enrichedItem.reference_prices && !item.reference_prices) {
+          item.reference_prices = enrichedItem.reference_prices;
+        }
+        if (enrichedItem.deals && !item.deals) {
+          item.deals = enrichedItem.deals;
+        }
+        if (enrichedItem.promotions && !item.promotions) {
+          item.promotions = enrichedItem.promotions;
+        }
+
+        console.log(`[ML-SYNC] Item ${item.id} enriquecido via GET /items/:id (fallback)`);
+      } catch (error) {
+        // Se enriquecimento falhar, seguir com dados originais e logar warning
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id} (${status}): ${error.message}`);
+        } else {
+          console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+        }
+        endpointUsed = 'none';
       }
-      return item; // Retornar item original se enriquecimento falhar
     }
+
+    // Log estruturado final
+    console.log(`[ML-SYNC] Enriquecimento concluído para item ${item.id}`, {
+      endpointUsed,
+      hasSalePrice: item.sale_price !== undefined && item.sale_price !== null,
+      pricesCount: item.prices?.prices ? (Array.isArray(item.prices.prices) ? item.prices.prices.length : 0) : 0,
+      referencePricesCount: item.reference_prices ? (Array.isArray(item.reference_prices) ? item.reference_prices.length : 0) : 0,
+    });
+
+    return item;
   }
 
   /**
