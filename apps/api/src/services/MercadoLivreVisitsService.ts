@@ -43,7 +43,6 @@ export class MercadoLivreVisitsService {
   private accessToken: string = '';
   private providerAccountId: string = '';
   private connectionId: string = '';
-  private refreshToken: string = '';
 
   constructor(tenantId: string) {
     this.tenantId = tenantId;
@@ -60,7 +59,6 @@ export class MercadoLivreVisitsService {
     
     this.connectionId = resolved.connection.id;
     this.providerAccountId = resolved.connection.provider_account_id;
-    this.refreshToken = ''; // Será obtido via getValidAccessToken se necessário
 
     console.log(`[ML-VISITS] Conexão carregada: Provider ${this.providerAccountId}, ConnectionId=${this.connectionId}, Reason=${resolved.reason}`);
   }
@@ -91,14 +89,10 @@ export class MercadoLivreVisitsService {
       return await fn();
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        console.log('[ML-VISITS] Recebido 401. Tentando renovar token e retry...');
+        console.log('[ML-VISITS] Recebido 401. Tentando obter token válido (refresh se necessário) e retry...');
         
-        if (!this.refreshToken) {
-          throw new Error('Refresh token não disponível. Reconecte a conta.');
-        }
-
-        await this.refreshAccessToken(this.refreshToken);
-        console.log('[ML-VISITS] Token renovado. Executando retry...');
+        await this.ensureValidToken();
+        console.log('[ML-VISITS] Token atualizado. Executando retry...');
         return await fn();
       }
       throw error;
