@@ -13,7 +13,8 @@ import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
 import { authGuard } from '../plugins/auth';
 import { sanitizeOpenAIError } from '../utils/sanitize-error';
-import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION } from '../utils/ai-fingerprint';
+import { generateFingerprint, buildFingerprintInput, PROMPT_VERSION, getEffectivePromptVersion } from '../utils/ai-fingerprint';
+import { sanitizeExpertAnalysis } from '@superseller/core';
 import { PrismaClient, Prisma, ListingStatus, RecommendationType, RecommendationStatus } from '@prisma/client';
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
@@ -655,9 +656,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             mediaVerdict,
           };
 
-          // SEMPRE incluir Expert se disponível (obrigatório)
-          if (analysisV21) {
-            responseData.analysisV21 = analysisV21;
+            // SEMPRE incluir Expert se disponível (obrigatório) — sanitizar antes de enviar
+            if (analysisV21) {
+              responseData.analysisV21 = sanitizeExpertAnalysis(analysisV21);
             request.log.info(
               {
                 requestId,
@@ -773,9 +774,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           mediaVerdict,
         };
 
-        // Incluir Expert se disponível no cache
+        // Incluir Expert se disponível no cache — sanitizar antes de enviar
         if (cachedResult.analysisV21) {
-          cacheResponseData.analysisV21 = cachedResult.analysisV21;
+          cacheResponseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
           
           // Log para debug
           request.log.info({

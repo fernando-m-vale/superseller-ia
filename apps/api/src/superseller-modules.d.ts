@@ -4,6 +4,7 @@
 declare module '@superseller/core' {
   export function healthScore(...args: any[]): any;
   export function sanitizeMlText(text: string): string;
+  export function sanitizeExpertAnalysis<T>(analysis: T): T;
   export function buildPromotionPlacementSuggestions(pricing: any): any[];
   export interface PromotionPlacementSuggestion {
     id: string;

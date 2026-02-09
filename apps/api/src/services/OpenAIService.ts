@@ -40,7 +40,7 @@ import {
   systemPrompt as mlExpertV22SystemPrompt,
   buildMLExpertV22UserPrompt,
 } from '@superseller/ai/prompts/mlExpertV22';
-import { sanitizeMlText } from '@superseller/core';
+import { sanitizeExpertAnalysis } from '@superseller/core';
 
 const prisma = new PrismaClient();
 
@@ -1343,7 +1343,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
             if (!result.meta.processing_time_ms) {
               result.meta.processing_time_ms = Date.now() - startTime;
             }
-            return result;
+            return sanitizeExpertAnalysis(result);
           } else if (retryParseResult.success && retryQualityIssues.length > 0) {
             // Se retry ainda tem problemas de qualidade, logar mas aceitar (melhor que nada)
             console.warn('[OPENAI-SERVICE-EXPERT] Retry ainda tem problemas de qualidade, mas aceitando', {
@@ -1355,7 +1355,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
             if (!result.meta.processing_time_ms) {
               result.meta.processing_time_ms = Date.now() - startTime;
             }
-            return result;
+            return sanitizeExpertAnalysis(result);
           } else {
             const retryErrors = !retryParseResult.success
               ? retryParseResult.error.errors.map((e) => ({
@@ -1391,18 +1391,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
         result.meta.processing_time_ms = processingTimeMs;
       }
 
-      // ML Safe Mode: sanitize AI-generated text before returning
-      if (result.description_fix?.optimized_copy) {
-        result.description_fix.optimized_copy = sanitizeMlText(result.description_fix.optimized_copy);
-      }
-      if (result.title_fix?.after) {
-        result.title_fix.after = sanitizeMlText(result.title_fix.after);
-      }
-      if (result.price_fix?.action) {
-        result.price_fix.action = sanitizeMlText(result.price_fix.action);
-      }
-
-      return result;
+      return sanitizeExpertAnalysis(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[OPENAI-SERVICE-EXPERT] Error analyzing listing', {
