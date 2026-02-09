@@ -59,6 +59,10 @@ export interface BenchmarkResult {
   youLoseHere: string[];
   tradeoffs: string;
   recommendations: string[];
+  _debug?: {
+    stage: string;
+    error: string;
+  };
 }
 
 export class BenchmarkService {
@@ -467,7 +471,44 @@ export class BenchmarkService {
       };
     } catch (error) {
       console.error(`[BENCHMARK] Erro ao calcular benchmark para listingId=${listing.id}:`, error);
-      return null; // Retornar null em caso de erro (dados indisponíveis)
+      
+      // NUNCA retornar null - sempre retornar objeto com confidence="unavailable"
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      const errorStage = errorMessage.includes('search') ? 'ml-search' 
+        : errorMessage.includes('aggregate') ? 'aggregate'
+        : errorMessage.includes('baseline') ? 'baseline'
+        : 'unknown';
+
+      return {
+        benchmarkSummary: {
+          categoryId: listing.categoryId,
+          sampleSize: 0,
+          computedAt: new Date().toISOString(),
+          confidence: 'unavailable',
+          notes: `Benchmark indisponível: ${errorMessage}`,
+          stats: {
+            medianPicturesCount: 0,
+            percentageWithVideo: 0,
+            medianPrice: 0,
+            medianTitleLength: 0,
+            sampleSize: 0,
+          },
+          baselineConversion: {
+            conversionRate: null,
+            sampleSize: 0,
+            totalVisits: 0,
+            confidence: 'unavailable',
+          },
+        },
+        youWinHere: [],
+        youLoseHere: [],
+        tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+        recommendations: [],
+        _debug: process.env.NODE_ENV === 'development' ? {
+          stage: errorStage,
+          error: errorMessage,
+        } : undefined,
+      };
     }
   }
 }

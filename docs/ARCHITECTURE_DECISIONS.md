@@ -430,6 +430,180 @@ Sistema pode ter múltiplas conexões Mercado Livre por tenant (ativas, expirada
 
 ---
 
+## ADR-013: Prices API como Fonte de Promoção
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Promoções não eram capturadas corretamente via `/items?ids=...` (multiget). Mercado Livre recomenda usar `/items/{id}/prices` para dados de preços/promoções.
+
+### Decisão
+**Usar `/items/{id}/prices` (Prices API) como fonte de verdade para promoções. Fallback para `/items/{id}` se `/prices` falhar (403/404).**
+
+### Justificativa
+- Prices API é endpoint recomendado pelo ML para preços/promoções
+- Retorna dados estruturados de `sale_price`, `prices`, `reference_prices`, `promotions`, `deals`
+- Fallback garante robustez mesmo se endpoint não estiver disponível
+- Enriquecimento automático quando multiget não traz dados suficientes
+
+### Implementação
+- **Método `fetchItemPrices()`:** Busca dados via `/items/{id}/prices`
+- **Método `enrichItemPricing()`:** Prioriza Prices API, fallback para `/items/{id}`
+- **Concorrência limitada:** 5 itens simultâneos para evitar rate limits
+- **Logs estruturados:** `endpointUsed`, `hasSalePrice`, `pricesCount`, `referencePricesCount`
+- **Campos garantidos:** `original_price`, `price_final`, `has_promotion`, `discount_percent`, `promotion_type`
+
+### Impacto
+- **Precisão:** Promoções capturadas corretamente
+- **Robustez:** Fallback garante funcionamento mesmo com falhas
+- **Observabilidade:** Logs permitem diagnóstico de problemas
+
+### Alternativas consideradas
+- Apenas multiget: Não captura promoções ativas
+- Sem fallback: Quebra quando endpoint não disponível
+- Enriquecimento síncrono: Muito lento para lotes grandes
+
+---
+
+## ADR-014: AI Prompt Versioning + Cache Invalidation
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Cache de análise IA não invalidava quando prompt mudava, causando uso de análises geradas com prompt antigo.
+
+### Decisão
+**Fingerprint dinâmico deve incluir `AI_PROMPT_VERSION` para invalidar cache automaticamente quando prompt muda.**
+
+### Justificativa
+- Prompts evoluem e análises antigas podem não refletir melhorias
+- Cache deve ser invalidado quando prompt muda
+- Fingerprint dinâmico garante invalidação automática
+- Evita análises inconsistentes com prompt atual
+
+### Implementação
+- **Fingerprint inclui `AI_PROMPT_VERSION`:** Hash SHA256 de listing + metrics + `AI_PROMPT_VERSION`
+- **Validação de prompt_version:** Cache é considerado inválido se `prompt_version` não corresponder
+- **Regeneração automática:** Se cache existe mas `prompt_version` não corresponde, regenera automaticamente
+- **Variável de ambiente:** `AI_PROMPT_VERSION` permite alternar entre versões sem deploy
+
+### Impacto
+- **Consistência:** Análises sempre refletem prompt atual
+- **Flexibilidade:** Mudança de prompt não requer limpeza manual de cache
+- **Qualidade:** Evita uso de análises geradas com prompt antigo
+
+### Alternativas consideradas
+- TTL fixo: Menos flexível, pode regenerar desnecessariamente
+- Limpeza manual: Complexidade operacional
+- Sem versionamento: Análises inconsistentes
+
+---
+
+## ADR-015: Sanitização de Conteúdo Gerado Antes de Exibir e Quando Cacheado
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Output da IA continha emojis e markdown que quebravam UI. Análises em cache não passavam por sanitização.
+
+### Decisão
+**Sanitização (`sanitizeExpertAnalysis()`) deve ocorrer tanto em retorno fresh quanto cached. Aplicar antes de exibir ao usuário.**
+
+### Justificativa
+- Emojis e markdown quebram UI (especialmente em componentes React)
+- Análises em cache também precisam ser sanitizadas
+- Sanitização única garante consistência
+- ML Safe Mode: output limpo, sem emojis/markdown decorativo
+
+### Implementação
+- **Função `sanitizeExpertAnalysis()`:** Remove emojis, normaliza markdown, limpa caracteres especiais
+- **Aplicado em:** Retorno fresh (após geração) e retorno cached (ao recuperar do cache)
+- **ML Safe Mode:** Prompt instrui IA a não usar emojis/markdown
+- **Validação:** Gate de qualidade verifica output sanitizado
+
+### Impacto
+- **UX:** UI não quebra com caracteres especiais
+- **Consistência:** Análises sempre sanitizadas, independente de origem
+- **Qualidade:** Output limpo e profissional
+
+### Alternativas consideradas
+- Sanitização apenas no frontend: Problemas aparecem depois de gerar
+- Sem sanitização: UI quebra com emojis/markdown
+- Sanitização apenas em fresh: Cache pode conter conteúdo não sanitizado
+
+---
+
+## ADR-016: Benchmark Nunca Retorna Null
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+BenchmarkService retornava `null` quando falhava, causando erro na UI que esperava objeto. Benchmark não renderizava em produção.
+
+### Decisão
+**BenchmarkService sempre retorna objeto, mesmo em caso de erro. Objeto inclui `benchmarkSummary.confidence = "unavailable"` quando dados indisponíveis.**
+
+### Justificativa
+- UI espera objeto, não null
+- Melhor UX: mostrar "Comparação indisponível" do que erro
+- Consistência: sempre retornar mesmo formato
+- Observabilidade: logs estruturados mesmo em erro
+
+### Implementação
+- **BenchmarkService.calculateBenchmark():** Sempre retorna `BenchmarkResult`, nunca `null`
+- **Em caso de erro:** Retorna objeto com `confidence: "unavailable"`, `youWinHere: []`, `youLoseHere: []`, `recommendations: []`
+- **Logs estruturados:** Incluir `requestId`, `tenantId`, `listingId`, `categoryId`, `connectionId`, `marketplaceAccountId`, `stage`, `errorCode`, `errorMessage`
+- **Header x-debug opcional:** Se `x-debug: 1`, incluir `benchmarkDebug` no payload com `{ stage, error }`
+
+### Impacto
+- **UX:** UI sempre renderiza benchmark (mesmo que "indisponível")
+- **Observabilidade:** Logs estruturados facilitam debug
+- **Consistência:** Sempre retornar mesmo formato
+
+### Alternativas consideradas
+- Retornar null: Quebra UI
+- Retornar erro HTTP: Não é erro crítico, análise deve continuar
+- Retornar objeto vazio: Melhor UX que null
+
+---
+
+## ADR-017: Regenerate Faz Refresh de Listing
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Quando `forceRefresh=true`, análise usava dados stale (preço/promo antigos). Listing não era atualizado antes de analisar.
+
+### Decisão
+**Quando `forceRefresh=true`, atualizar listing via `fetchItemsDetails` antes de analisar. Garantir preço/promo atualizados.**
+
+### Justificativa
+- Análise deve usar dados mais recentes quando usuário solicita refresh
+- Preço/promo stale gera insights incorretos
+- Consistência: dados sempre atualizados quando solicitado
+
+### Implementação
+- **No endpoint `/api/v1/ai/analyze/:listingId`:** Se `forceRefresh=true` e `listing.marketplace === 'mercadolivre'`, chamar `syncService.fetchItemsDetails()` e `upsertListings()` antes de analisar
+- **Atualizar objeto listing local:** Após refresh, buscar listing atualizado do DB e atualizar objeto local
+- **Logs estruturados:** Incluir `requestId`, `listingId`, `price`, `price_final`, `original_price`, `has_promotion`, `discount_percent`
+
+### Impacto
+- **Qualidade:** Análise sempre usa dados atualizados quando solicitado
+- **UX:** Usuário vê resultados baseados em dados frescos
+- **Performance:** Refresh adiciona latência, mas necessário para qualidade
+
+### Alternativas consideradas
+- Não fazer refresh: Dados stale
+- Refresh apenas no frontend: Não garante consistência
+- Refresh sempre: Performance impactada desnecessariamente
+
+---
+
 ## Registro de Decisões Futuras
 
 ### Pendentes de ADR formal
@@ -439,5 +613,6 @@ Sistema pode ter múltiplas conexões Mercado Livre por tenant (ativas, expirada
 - Inserção manual de anúncio (MLB…)
 - Diferenciação clara de status (`paused`, `blocked_by_policy`, `unauthorized`) na UX
 - UX do modal de análise (layout e hierarquia)
+- Benchmark por categoria (agregação interna vs endpoints públicos)
 
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.

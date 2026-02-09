@@ -1,14 +1,21 @@
-# DAILY EXECUTION LOG — 2026-02-03 (Dia 3)
+# DAILY EXECUTION LOG — 2026-02-09 (Dia 3)
 
-## ⚠️ STATUS: EM PROGRESSO — BLOQUEADOR TÉCNICO IDENTIFICADO E CORRIGIDO
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
 
 ## 🎯 Foco do dia
-**Início da execução do Dia 3 (Análise Profunda de Anúncio) — Validação de dados reais (pricing, promoções, métricas) — Desbloqueio do force-refresh e backfill de promoções**
+**Análise Profunda de Anúncio — Validação de dados reais (pricing, promoções, métricas) — Desbloqueio do force-refresh e backfill de promoções — Calibração do ScoreActionEngine**
 
 ## ✅ Planejado
 - [x] Validar rotas novas (meta, debug-payload, force-refresh)
 - [x] Sincronizar dados atualizados do anúncio MLB4217107417
-- [ ] Iniciar escrita da análise perfeita do anúncio (bloqueado por correções técnicas)
+- [x] Fix conexão Mercado Livre e token helper (resolver determinístico e refresh só quando necessário)
+- [x] Robustez: force-refresh/backfill funcionando; auto-init de conexão/tokens
+- [x] Promoção corrigida end-to-end com Prices API (original_price, price_final, has_promotion, discount_percent)
+- [x] IA Prompt v22 (ml-expert-v22) com ML Safe Mode (sem emojis/markdown), e promoção com "onde + como"
+- [x] Sanitização em todos os caminhos (inclusive cache): sanitizeExpertAnalysis + fingerprint dinâmico por AI_PROMPT_VERSION
+- [x] UI Promoção didática (PromotionHighlightPanel com passos e copiar texto)
+- [x] ScoreActionEngine calibrado: "promo agressiva + baixa conversão" vira prioridade #1 (title/images/description) com thresholds configuráveis e testes
+- [x] Testes e CI verdes; validação manual em listing MLB4217107417
 
 ## 🧠 Descobertas
 - **App Runner estava rodando versão antiga devido a runtime crash:** Imports inválidos em `@superseller/ai/dist/...` causavam crash na inicialização, fazendo App Runner reverter para versão anterior
@@ -18,20 +25,27 @@
 - **force-refresh exigia refresh_token mesmo com access_token válido:** Lógica incorreta forçava refresh desnecessário, causando falhas quando refresh_token não estava disponível
 - **hasClips=false estava sendo usado quando o correto é null:** API do ML não expõe clips de forma confiável via items API; usar `false` afirmava ausência sem certeza
 - **Debug-payload confirmou dados corretos de métricas e listing:** Mas pricing vinha de fallback (promoção não sincronizada)
+- **Prices API payload structure:** `/items/{id}/prices` retorna estrutura diferente de `/items?ids=...`; necessário enriquecimento específico para capturar promoções ativas
+- **Cache fingerprint issue:** Cache não invalidava quando `AI_PROMPT_VERSION` mudava; necessário incluir prompt version no fingerprint
+- **Sanitização no caminho cacheado:** Análises em cache não passavam por sanitização; necessário sanitizar tanto retorno fresh quanto cached
+- **Necessidade ML safe mode (sem emojis):** Output da IA continha emojis e markdown que quebravam UI; necessário sanitização antes de exibir
 
 ## ⚠️ Bloqueios / riscos
-- **Sync e backfill falhando por seleção incorreta de conexão:** Código selecionava conexão errada (findFirst sem order/critério), causando 403 forbidden e "Refresh token não disponível"
-- **Risco de análises inconsistentes enquanto isso não for corrigido:** Análises baseadas em dados de conexão incorreta gerariam insights incorretos
-- **Dependência da correção em andamento pelo Cursor:** Fixes implementados mas ainda não validados em produção
+- **Sync e backfill falhando por seleção incorreta de conexão:** Código selecionava conexão errada (findFirst sem order/critério), causando 403 forbidden e "Refresh token não disponível" — **RESOLVIDO**
+- **Risco de análises inconsistentes enquanto isso não for corrigido:** Análises baseadas em dados de conexão incorreta gerariam insights incorretos — **RESOLVIDO**
+- **Promoção não capturada via multiget:** `/items?ids=...` não retorna dados suficientes de promoção; necessário enriquecimento via `/items/{id}/prices` — **RESOLVIDO**
 
 ## 📌 Decisões tomadas
 - **Criar resolver determinístico de conexão Mercado Livre:** `resolveMercadoLivreConnection()` com critérios explícitos (access_token válido → refresh_token disponível → mais recente)
 - **Não exigir refresh_token se access_token ainda válido:** Helper `getValidAccessToken()` usa refresh apenas quando necessário
 - **Tratar clips como null quando não detectável:** `hasClips = null` quando API não permite confirmar; `dataQuality.warnings` inclui `clips_not_detectable_via_items_api`
-- **Corrigir isso antes de escrever a análise perfeita:** Garantir dados 100% confiáveis antes de gerar análise final
+- **Promo detect via /items/{id}/prices:** Prices API é fonte de verdade para promoções; fallback para `/items/{id}` se `/prices` falhar (403/404)
+- **Cache invalidation must include prompt version:** Fingerprint dinâmico inclui `AI_PROMPT_VERSION` para invalidar cache quando prompt muda
+- **Sanitização deve ocorrer no retorno fresh e cached:** `sanitizeExpertAnalysis()` aplicado tanto em análise nova quanto em cache
+- **Regra determinística no engine para promo agressiva + low CR:** ScoreActionEngine aplica boost/penalty baseado em thresholds configuráveis (PROMO_AGGRESSIVE_DISCOUNT_PCT=30, LOW_CR_THRESHOLD=0.006, MIN_VISITS_FOR_CR_CONFIDENCE=150)
 
 ## ➡️ Próximo passo claro
-**Validar o fix do Cursor (resolver + token handling + clips) → Rodar force-refresh com dados corretos → Só então escrever a análise final do anúncio**
+**Dia 04 — Benchmark & Comparação com Concorrentes: baseline por categoria, "você perde/ganha", expected vs actual usando média categoria, thresholds derivados do benchmark. UI/resultado mostrando comparação e ações concretas baseadas em gaps.**
 
 ---
 

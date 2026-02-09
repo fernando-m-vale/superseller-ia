@@ -158,10 +158,24 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - **Risco mitigado:** Seleção determinística evita uso de conexão incorreta
 
 ### Pricing / Promotions
-**Status:** 🟡 PONTO DE ATENÇÃO
-- **Pricing pode vir de fallback quando promo não sincronizada:** Não gerar insights de preço enquanto `hasPromotion` não for confirmado via sync correto
-- **Transparência para a IA e para o usuário:** Debug-payload mostra `source` do pricing (sync normal vs fallback)
-- **Ação:** Validar que force-refresh e backfill-promotions estão sincronizando promoções corretamente
+**Status:** ✅ RESOLVIDO
+- **Fonte de verdade:** `/items/{id}/prices` (Prices API) é endpoint recomendado pelo ML para preços/promoções
+- **Fallback:** Se `/prices` falhar (403/404), usa `/items/{id}` como fallback
+- **Campos garantidos:** `original_price`, `price_final`, `has_promotion`, `discount_percent`, `promotion_type` preenchidos quando promoção existe
+- **Enriquecimento:** `enrichItemPricing()` busca dados completos via Prices API se multiget não trouxer dados suficientes
+- **Logs estruturados:** `endpointUsed` (prices/items/none), `hasSalePrice`, `pricesCount`, `referencePricesCount` para diagnóstico
+- **Validação:** Listing MLB4217107417 validado com promoção ativa (47% OFF, R$32 final, R$60 cheio)
+
+### Video / Clips
+**Status:** ✅ RESOLVIDO
+- **Regra:** Não gerar falso negativo; se não detectável via API → `hasClips = null` (não `false`)
+- **Fonte:** API do ML não expõe clips de forma confiável via `/items?ids=...` (multiget)
+- **Tratamento:** `hasClips = null` quando API não permite confirmar; `dataQuality.warnings` inclui `clips_not_detectable_via_items_api`
+- **Lógica condicional na IA:** 
+  - `hasClips = true` → não sugerir adicionar vídeo
+  - `hasClips = false` → sugerir adicionar vídeo
+  - `hasClips = null` → sugestão condicional ("se não houver vídeo, considere adicionar…")
+- **Estado atual:** Campo `has_clips` no schema Prisma permite `null`; normalização via `extractHasVideoFromMlItem()` retorna `null` quando não detectável
 
 ## 🧪 Queries padrão de auditoria
 ### Range geral (orders/gmv/visits)

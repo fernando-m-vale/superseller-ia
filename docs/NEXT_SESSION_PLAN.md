@@ -1,50 +1,106 @@
-# NEXT SESSION PLAN — Dia 3 (Análise Profunda de Anúncio)
+# NEXT SESSION PLAN — Dia 5 (Após Fix Pack Dia 04)
 
-## 🗓️ Próxima Sessão — Continuação do Dia 3
+## 🗓️ Próxima Sessão — Dia 05
 
 ### Objetivo principal
-**Finalizar o Dia 3 com análise profunda de anúncio baseada em dados 100% confiáveis.**
+**Continuar com benchmark e comparação com concorrentes (se necessário) ou avançar para próxima feature prioritária.**
 
-### Checklist de retomada
+### Status do Dia 04
+- ✅ Benchmark nunca retorna null (sempre objeto com confidence="unavailable" se falhar)
+- ✅ Logs estruturados quando benchmark falhar
+- ✅ Refresh de listing quando forceRefresh=true
+- ✅ Cache funcionando corretamente
+- ✅ Suporte opcional para header x-debug: 1
 
-#### 1. Validar deploy em produção
-- [ ] `GET /api/v1/meta` — deve retornar 200 com gitSha, buildTime, env
-- [ ] `GET /api/v1/ai/debug-payload/:listingId` — deve retornar payload sanitizado
-
-#### 2. Validar resolver de conexão ML
-- [ ] Conexão mais recente e válida sendo usada
-- [ ] Logs estruturados mostram `connectionId`, `providerAccountId`, `reason`
-- [ ] Não há mais erros "Refresh token não disponível" quando access_token é válido
-
-#### 3. Testar endpoints críticos
-- [ ] `POST /api/v1/sync/mercadolivre/listings/:listingIdExt/force-refresh` — deve funcionar sem exigir refresh_token se access_token válido
-- [ ] `POST /api/v1/sync/mercadolivre/listings/backfill-promotions?limit=200` — deve processar promoções corretamente
-
-#### 4. Confirmar pricing
-- [ ] `priceFinal`, `originalPrice`, `discountPercent` corretos no debug-payload
-- [ ] `hasPromotion=true` quando promoção existe
-- [ ] Pricing não vem de fallback quando promoção foi sincronizada
-
-#### 5. Confirmar hasClips
-- [ ] `hasClips = null` quando não detectável via API
-- [ ] `dataQuality.warnings` inclui `clips_not_detectable_via_items_api` quando `hasClips === null`
-- [ ] Debug-payload reflete `hasClips: null` corretamente
-
-#### 6. Escrever Análise Profunda do Anúncio (Dia 3)
-- [ ] Análise baseada em dados 100% confiáveis
-- [ ] Usuário entende claramente onde o anúncio perde vendas
-- [ ] Usuário entende por quê
-- [ ] Usuário sabe o que mudar primeiro
-
-### Critério de Dia 3 entregue
-**Usuário entende claramente:**
-- ✅ Onde o anúncio perde vendas
-- ✅ Por quê
-- ✅ O que mudar primeiro
+### Próximos passos (se necessário)
+- [ ] Validar benchmark em produção (verificar se UI renderiza corretamente)
+- [ ] Validar refresh de listing (verificar se preço/promo estão atualizados)
+- [ ] Validar cache (verificar se cacheHit funciona corretamente)
+- [ ] Continuar com benchmark e comparação com concorrentes (se necessário)
 
 ---
 
-## ⚠️ Status atual (Dia 2 — Encerrado com sucesso, Dia 3 iniciado)
+# NEXT SESSION PLAN — Dia 4 (Benchmark & Comparação com Concorrentes) — HISTÓRICO
+
+## 🗓️ Próxima Sessão — Dia 04
+
+### Objetivo principal
+**Implementar benchmark mínimo viável: sensação de "meu anúncio está atrás" sem inventar números. Comparação com concorrentes e baseline por categoria.**
+
+### Entregáveis do Dia 04 (MVP Benchmark)
+
+#### 1. Baseline por categoria
+- [ ] Agregar métricas médias por `category_id` (visits, orders, conversionRate, ctr, revenue)
+- [ ] Fonte de dados: agregação interna de `listing_metrics_daily` OU endpoints públicos do ML (se disponíveis)
+- [ ] Armazenar baseline em tabela dedicada ou calcular on-the-fly com cache
+
+#### 2. Comparação "você perde/ganha"
+- [ ] Comparar listing atual vs baseline da categoria
+- [ ] Calcular gaps: `visits_gap`, `conversion_gap`, `ctr_gap`, `revenue_gap`
+- [ ] Identificar métricas onde listing está abaixo da média da categoria
+
+#### 3. Expected vs Actual
+- [ ] Calcular "expected" usando média da categoria
+- [ ] Comparar "actual" (dados reais do listing) vs "expected"
+- [ ] Mostrar percentual de diferença (ex: "você está 30% abaixo da média em conversão")
+
+#### 4. Thresholds derivados do benchmark
+- [ ] Usar baseline para calibrar thresholds do ScoreActionEngine
+- [ ] Ajustar priorização de ações baseado em gaps identificados
+- [ ] Integrar com regra de "promo agressiva + baixa conversão" existente
+
+#### 5. UI/resultado mostrando comparação
+- [ ] Componente visual comparando listing vs categoria
+- [ ] Gráficos/indicadores mostrando gaps
+- [ ] Ações concretas baseadas em gaps identificados
+- [ ] Mensagens claras: "você está X% abaixo da média em Y"
+
+### Dependências
+
+#### Acesso a dados
+- **Opção 1:** Agregação interna por `category_id` de `listing_metrics_daily`
+  - Prós: dados reais do sistema, sem dependência externa
+  - Contras: precisa de volume mínimo de listings por categoria
+- **Opção 2:** Endpoints públicos do ML (se disponíveis)
+  - Prós: dados mais representativos
+  - Contras: pode não estar disponível, rate limits
+
+#### Normalização por categoria
+- [ ] Mapear `category_id` do ML para categorias normalizadas
+- [ ] Agrupar categorias similares se volume for baixo
+- [ ] Tratar edge cases (categorias sem dados suficientes)
+
+### Critério de Dia 04 entregue (DoD)
+- [ ] Baseline por categoria calculado e armazenado
+- [ ] Comparação "você perde/ganha" funcionando
+- [ ] Expected vs Actual calculado e exibido
+- [ ] Thresholds derivados do benchmark integrados ao engine
+- [ ] UI/resultado mostrando comparação e ações concretas baseadas em gaps
+- [ ] Testes unitários cobrindo cálculo de baseline e comparação
+- [ ] Validação manual em listing MLB4217107417
+
+---
+
+## 📌 Backlog gerado (Dia 04)
+
+### Dados / Engenharia
+- **Benchmark endpoints:** Agregação interna por `category_id` OU endpoints públicos do ML (se disponíveis)
+- **Normalização por categoria:** Mapear `category_id` do ML para categorias normalizadas; agrupar categorias similares se volume baixo
+- **Cache de baseline:** Armazenar baseline calculado ou calcular on-the-fly com cache
+- **Edge cases:** Tratar categorias sem dados suficientes (fallback para categoria pai ou média geral)
+
+### UI / UX
+- **Componente de comparação:** Visual comparando listing vs categoria (gráficos/indicadores)
+- **Mensagens claras:** "você está X% abaixo da média em Y"
+- **Ações baseadas em gaps:** Integrar gaps identificados com ScoreActionEngine para priorização
+
+### Testes
+- **Testes unitários:** Cálculo de baseline, comparação listing vs categoria, expected vs actual
+- **Validação manual:** Listing MLB4217107417 com benchmark da categoria
+
+---
+
+## ⚠️ Status atual (Dia 3 — Concluído com sucesso, Dia 4 iniciado)
 - **Análise IA Expert (ml-expert-v1):** Backend e frontend integrados
 - **V1 descontinuada:** UI V1 removida completamente
 - **Cache funcional:** Regeneração automática quando `analysisV21` ausente

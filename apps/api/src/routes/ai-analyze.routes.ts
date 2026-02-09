@@ -202,7 +202,54 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           marketplace: listing.marketplace,
         }, 'Listing fetched for analysis');
 
-        // Step 1.5: Reconciliar status do listing se for Mercado Livre (opcional, melhor UX)
+        // Step 1.5: Se forceRefresh=true, atualizar listing antes de analisar (garantir preço/promo atual)
+        if (forceRefresh && listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
+          try {
+            request.log.info({
+              requestId,
+              listingId,
+              listingIdExt: listing.listing_id_ext,
+            }, 'forceRefresh=true: atualizando listing antes de analisar');
+            
+            const syncService = new MercadoLivreSyncService(tenantId);
+            const items = await syncService.fetchItemsDetails([listing.listing_id_ext]);
+            
+            if (items.length > 0) {
+              await syncService.upsertListings(items, 'force_refresh', false);
+              
+              // Buscar listing atualizado do DB
+              const refreshedListing = await prisma.listing.findFirst({
+                where: {
+                  id: listingId,
+                  tenant_id: tenantId,
+                },
+              });
+              
+              if (refreshedListing) {
+                // Atualizar objeto listing local com dados frescos
+                Object.assign(listing, refreshedListing);
+                request.log.info({
+                  requestId,
+                  listingId,
+                  price: listing.price,
+                  price_final: listing.price_final,
+                  original_price: listing.original_price,
+                  has_promotion: listing.has_promotion,
+                  discount_percent: listing.discount_percent,
+                }, 'Listing atualizado via force-refresh');
+              }
+            }
+          } catch (refreshError) {
+            // Não falhar análise se refresh falhar, apenas logar
+            request.log.warn({
+              requestId,
+              listingId,
+              error: refreshError instanceof Error ? refreshError.message : 'Erro desconhecido',
+            }, 'Erro ao atualizar listing via force-refresh (continuando com dados existentes)');
+          }
+        }
+
+        // Step 1.6: Reconciliar status do listing se for Mercado Livre (opcional, melhor UX)
         if (listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
           try {
             const syncService = new MercadoLivreSyncService(tenantId);
@@ -645,8 +692,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             'AI analysis complete (cache miss)'
           );
 
-          // Calcular benchmark (Dia 04)
-          let benchmarkResult = null;
+          // Calcular benchmark (Dia 04) - NUNCA retornar null
+          let benchmarkResult: any = null;
           if (listing.category) {
             try {
               const benchmarkService = new BenchmarkService(tenantId);
@@ -670,24 +717,111 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             );
             request.log.info(
               {
+                requestId,
                 listingId,
                 tenantId,
-                hasBenchmark: benchmarkResult !== null,
                 categoryId: listing.category,
+                confidence: benchmarkResult?.benchmarkSummary?.confidence,
+                sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize,
               },
               'Benchmark calculado (fresh)'
             );
             } catch (benchmarkError) {
-              // Não falhar análise se benchmark falhar; apenas logar
+              // BenchmarkService agora sempre retorna objeto, mas logar erro estruturado
+              const errorMessage = benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido';
+              const errorStage = errorMessage.includes('search') ? 'ml-search' 
+                : errorMessage.includes('aggregate') ? 'aggregate'
+                : errorMessage.includes('baseline') ? 'baseline'
+                : 'unknown';
+              
+              // Obter connectionId/marketplaceAccountId se disponível
+              let connectionId: string | undefined;
+              let marketplaceAccountId: string | undefined;
+              if (listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
+                try {
+                  const syncService = new MercadoLivreSyncService(tenantId);
+                  await syncService.loadConnection();
+                  connectionId = (syncService as any).connectionId;
+                  marketplaceAccountId = (syncService as any).providerAccountId;
+                } catch {
+                  // Ignorar erro ao obter connectionId
+                }
+              }
+
               request.log.warn(
                 {
-                  listingId,
+                  requestId,
                   tenantId,
-                  error: benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido',
+                  listingId,
+                  categoryId: listing.category,
+                  connectionId,
+                  marketplaceAccountId,
+                  stage: errorStage,
+                  errorCode: benchmarkError instanceof Error ? benchmarkError.name : 'UNKNOWN',
+                  errorMessage,
                 },
-                'Erro ao calcular benchmark (não crítico)'
+                'Erro ao calcular benchmark (retornando unavailable)'
               );
+
+              // Garantir que benchmarkResult não seja null - BenchmarkService já retorna objeto
+              // Mas se ainda for null, criar objeto fallback
+              if (!benchmarkResult) {
+                benchmarkResult = {
+                  benchmarkSummary: {
+                    categoryId: listing.category,
+                    sampleSize: 0,
+                    computedAt: new Date().toISOString(),
+                    confidence: 'unavailable',
+                    notes: `Benchmark indisponível: ${errorMessage}`,
+                    stats: {
+                      medianPicturesCount: 0,
+                      percentageWithVideo: 0,
+                      medianPrice: 0,
+                      medianTitleLength: 0,
+                      sampleSize: 0,
+                    },
+                    baselineConversion: {
+                      conversionRate: null,
+                      sampleSize: 0,
+                      totalVisits: 0,
+                      confidence: 'unavailable',
+                    },
+                  },
+                  youWinHere: [],
+                  youLoseHere: [],
+                  tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+                  recommendations: [],
+                };
+              }
             }
+          } else {
+            // Sem categoryId - retornar benchmark unavailable
+            benchmarkResult = {
+              benchmarkSummary: {
+                categoryId: null,
+                sampleSize: 0,
+                computedAt: new Date().toISOString(),
+                confidence: 'unavailable',
+                notes: 'Categoria não disponível para este anúncio.',
+                stats: {
+                  medianPicturesCount: 0,
+                  percentageWithVideo: 0,
+                  medianPrice: 0,
+                  medianTitleLength: 0,
+                  sampleSize: 0,
+                },
+                baselineConversion: {
+                  conversionRate: null,
+                  sampleSize: 0,
+                  totalVisits: 0,
+                  confidence: 'unavailable',
+                },
+              },
+              youWinHere: [],
+              youLoseHere: [],
+              tradeoffs: 'Comparação com concorrentes indisponível (categoria não disponível).',
+              recommendations: [],
+            };
           }
 
           // Preparar resposta com Expert (ml-expert-v1)
@@ -713,6 +847,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // Benchmark (Dia 04)
             benchmark: benchmarkResult,
           };
+
+          // Se header x-debug: 1, incluir benchmarkDebug no payload
+          const debugHeader = request.headers['x-debug'];
+          if (debugHeader === '1' && benchmarkResult?._debug) {
+            responseData.benchmarkDebug = benchmarkResult._debug;
+          }
 
             // SEMPRE incluir Expert se disponível (obrigatório) — sanitizar antes de enviar
             if (analysisV21) {
@@ -820,8 +960,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           '[MEDIA-VERDICT-DEBUG] MediaVerdict gerado (cache)'
         );
 
-        // Calcular benchmark (Dia 04) - também para cache
-        let cacheBenchmarkResult = null;
+        // Calcular benchmark (Dia 04) - também para cache - NUNCA retornar null
+        let cacheBenchmarkResult: any = null;
         if (listing.category) {
           try {
             const benchmarkService = new BenchmarkService(tenantId);
@@ -845,24 +985,94 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             );
             request.log.info(
               {
+                requestId,
                 listingId,
                 tenantId,
-                hasBenchmark: cacheBenchmarkResult !== null,
                 categoryId: listing.category,
+                confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence,
+                sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize,
               },
               'Benchmark calculado (cache)'
             );
           } catch (benchmarkError) {
-            // Não falhar análise se benchmark falhar; apenas logar
+            // BenchmarkService agora sempre retorna objeto, mas logar erro estruturado
+            const errorMessage = benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido';
+            const errorStage = errorMessage.includes('search') ? 'ml-search' 
+              : errorMessage.includes('aggregate') ? 'aggregate'
+              : errorMessage.includes('baseline') ? 'baseline'
+              : 'unknown';
+            
             request.log.warn(
               {
-                listingId,
+                requestId,
                 tenantId,
-                error: benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido',
+                listingId,
+                categoryId: listing.category,
+                stage: errorStage,
+                errorCode: benchmarkError instanceof Error ? benchmarkError.name : 'UNKNOWN',
+                errorMessage,
               },
-              'Erro ao calcular benchmark (não crítico)'
+              'Erro ao calcular benchmark (retornando unavailable)'
             );
+
+            // Garantir que cacheBenchmarkResult não seja null
+            if (!cacheBenchmarkResult) {
+              cacheBenchmarkResult = {
+                benchmarkSummary: {
+                  categoryId: listing.category,
+                  sampleSize: 0,
+                  computedAt: new Date().toISOString(),
+                  confidence: 'unavailable',
+                  notes: `Benchmark indisponível: ${errorMessage}`,
+                  stats: {
+                    medianPicturesCount: 0,
+                    percentageWithVideo: 0,
+                    medianPrice: 0,
+                    medianTitleLength: 0,
+                    sampleSize: 0,
+                  },
+                  baselineConversion: {
+                    conversionRate: null,
+                    sampleSize: 0,
+                    totalVisits: 0,
+                    confidence: 'unavailable',
+                  },
+                },
+                youWinHere: [],
+                youLoseHere: [],
+                tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+                recommendations: [],
+              };
+            }
           }
+        } else {
+          // Sem categoryId - retornar benchmark unavailable
+          cacheBenchmarkResult = {
+            benchmarkSummary: {
+              categoryId: null,
+              sampleSize: 0,
+              computedAt: new Date().toISOString(),
+              confidence: 'unavailable',
+              notes: 'Categoria não disponível para este anúncio.',
+              stats: {
+                medianPicturesCount: 0,
+                percentageWithVideo: 0,
+                medianPrice: 0,
+                medianTitleLength: 0,
+                sampleSize: 0,
+              },
+              baselineConversion: {
+                conversionRate: null,
+                sampleSize: 0,
+                totalVisits: 0,
+                confidence: 'unavailable',
+              },
+            },
+            youWinHere: [],
+            youLoseHere: [],
+            tradeoffs: 'Comparação com concorrentes indisponível (categoria não disponível).',
+            recommendations: [],
+          };
         }
 
         // Preparar resposta do cache incluindo Expert se disponível
@@ -888,6 +1098,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Benchmark (Dia 04) - também calculado para cache
           benchmark: cacheBenchmarkResult,
         };
+
+        // Se header x-debug: 1, incluir benchmarkDebug no payload
+        const debugHeader = request.headers['x-debug'];
+        if (debugHeader === '1' && cacheBenchmarkResult?._debug) {
+          cacheResponseData.benchmarkDebug = cacheBenchmarkResult._debug;
+        }
 
         // Incluir Expert se disponível no cache — sanitizar antes de enviar
         if (cachedResult.analysisV21) {
