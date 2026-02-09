@@ -330,6 +330,21 @@ export class MercadoLivreSyncService {
   }
 
   /**
+   * Obtém informações da conexão (método público para uso externo)
+   * Carrega a conexão se ainda não foi carregada
+   * @returns Objeto com connectionId e providerAccountId
+   */
+  public async getConnectionInfo(): Promise<{ connectionId: string; providerAccountId: string }> {
+    if (!this.connectionId) {
+      await this.loadConnection();
+    }
+    return {
+      connectionId: this.connectionId,
+      providerAccountId: this.providerAccountId,
+    };
+  }
+
+  /**
    * Obtém access_token válido usando helper centralizado
    * Não exige refresh_token se access_token ainda é válido
    * @throws Error com código 'AUTH_REVOKED' se o refresh falhar por revogação

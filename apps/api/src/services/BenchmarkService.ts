@@ -47,7 +47,7 @@ export interface BenchmarkSummary {
   categoryId: string;
   sampleSize: number;
   computedAt: string;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: 'high' | 'medium' | 'low' | 'unavailable';
   notes?: string;
   stats: BenchmarkStats;
   baselineConversion: BaselineConversion;
@@ -211,7 +211,7 @@ export class BenchmarkService {
       const conversionRate = totalVisits > 0 ? totalOrders / totalVisits : 0;
 
       // Determinar confiança
-      let confidence: 'high' | 'medium' | 'low' = 'low';
+      let confidence: 'high' | 'medium' | 'low' | 'unavailable' = 'low';
       if (listings.length >= 50 && totalVisits >= 5000) {
         confidence = 'high';
       } else if (listings.length >= MIN_BASELINE_SAMPLE_SIZE && totalVisits >= MIN_BASELINE_VISITS) {
@@ -427,11 +427,13 @@ export class BenchmarkService {
       const baselineConversion = await this.calculateBaselineConversion(listing.categoryId);
 
       // 4. Determinar confiança geral
-      let confidence: 'high' | 'medium' | 'low' = 'low';
+      let confidence: 'high' | 'medium' | 'low' | 'unavailable' = 'low';
       if (stats.sampleSize >= 15 && baselineConversion.confidence === 'high') {
         confidence = 'high';
       } else if (stats.sampleSize >= 10 && baselineConversion.confidence !== 'unavailable') {
         confidence = 'medium';
+      } else if (baselineConversion.confidence === 'unavailable') {
+        confidence = 'unavailable';
       }
 
       // 5. Gerar win/lose

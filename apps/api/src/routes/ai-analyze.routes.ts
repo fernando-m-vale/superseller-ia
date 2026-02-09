@@ -740,9 +740,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               if (listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
                 try {
                   const syncService = new MercadoLivreSyncService(tenantId);
-                  await syncService.loadConnection();
-                  connectionId = (syncService as any).connectionId;
-                  marketplaceAccountId = (syncService as any).providerAccountId;
+                  const connectionInfo = await syncService.getConnectionInfo();
+                  connectionId = connectionInfo.connectionId;
+                  marketplaceAccountId = connectionInfo.providerAccountId;
                 } catch {
                   // Ignorar erro ao obter connectionId
                 }
