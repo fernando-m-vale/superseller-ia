@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import type { NormalizedAIAnalysisV21 } from '@/lib/ai/normalizeAiAnalyze'
 import { useToast } from '@/hooks/use-toast'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
+import { PromotionHighlightPanel, type PromotionPlacementItem } from '@/components/ai/PromotionHighlightPanel'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -82,6 +83,53 @@ export function ListingAIAnalysisPanel({
       })
     }
   }
+
+  // Build promotion placement suggestions when promo is active
+  const promoPlacements: PromotionPlacementItem[] = (() => {
+    if (!listingHasPromotion) return []
+    const origPrice = listingPriceBase ?? listingPrice ?? 0
+    const finPrice = listingPriceFinal ?? origPrice
+    const pct = listingDiscountPercent
+      ? `${Math.round(listingDiscountPercent)}%`
+      : origPrice > 0
+        ? `${Math.round((1 - finPrice / origPrice) * 100)}%`
+        : '0%'
+    const label = `De R$ ${origPrice.toFixed(2)} por R$ ${finPrice.toFixed(2)}`
+    return [
+      {
+        id: 'promo_cover',
+        title: 'Selo de desconto na imagem de capa',
+        where: 'Imagem de capa do anuncio',
+        how: `Adicionar selo visual simples com '${pct} OFF' ou '${label}'.`,
+        constraints: ['Texto curto', 'Alta legibilidade', 'Nao poluir a imagem'],
+        exampleText: `${pct} OFF - ${label}`,
+      },
+      {
+        id: 'promo_secondary_image',
+        title: 'Banner de promocao na imagem 2 ou 3',
+        where: 'Imagem 2 ou 3 do anuncio',
+        how: `Criar imagem informativa com o preco promocional (${label}) e destaque visual do desconto.`,
+        constraints: ['Nao repetir a capa', 'Fundo limpo', 'Foco no preco e beneficio'],
+        exampleText: `Aproveite: ${label} - ${pct} de desconto`,
+      },
+      {
+        id: 'promo_description',
+        title: 'Destaque nas primeiras linhas da descricao',
+        where: 'Primeiras linhas da descricao do anuncio',
+        how: 'Incluir frase sobre a promocao ativa logo no inicio da descricao, antes dos detalhes do produto.',
+        constraints: ['Sem emojis', 'Sem markdown', 'Texto simples e direto'],
+        exampleText: `Promocao ativa: de R$ ${origPrice.toFixed(2)} por R$ ${finPrice.toFixed(2)} enquanto durar a oferta.`,
+      },
+      {
+        id: 'promo_seo_rule',
+        title: 'Regra de SEO - nao usar preco no titulo',
+        where: 'Titulo do anuncio',
+        how: 'Nao incluir valores monetarios no titulo. O algoritmo do Mercado Livre penaliza titulos com preco. Deixe o destaque de preco para imagens e descricao.',
+        constraints: ['Titulo sem cifrao ou valores', 'Manter keywords relevantes', 'Maximo 60 caracteres'],
+        exampleText: '',
+      },
+    ]
+  })()
 
   // Template padronizado para seções
   const SectionTemplate = ({
@@ -390,23 +438,27 @@ export function ListingAIAnalysisPanel({
         />
       )}
 
-      {/* 4️⃣ PREÇO / PROMOÇÃO — DIAGNÓSTICO + AÇÃO */}
+      {/* 4 PRECO / PROMOCAO — BLOCO ACIONAVEL */}
+      <PromotionHighlightPanel
+        hasPromotion={!!listingHasPromotion}
+        originalPrice={listingPriceBase ?? listingPrice}
+        finalPrice={listingPriceFinal ?? undefined}
+        discountPercent={listingDiscountPercent}
+        placements={promoPlacements}
+      />
+
+      {/* Diagnostico de preco da IA (complementar) */}
       {analysisV21.priceFix && (
         <SectionTemplate
           icon={Tag}
-          title="4️⃣ Preço / Promoção — Diagnóstico + Ação"
+          title="Preco — Diagnostico + Acao"
           diagnostic={<p>{analysisV21.priceFix.diagnostic}</p>}
-          impact={<p>Preço e promo afetam conversão e competitividade.</p>}
+          impact={<p>Preco e promo afetam conversao e competitividade.</p>}
           actions={
             <div className="space-y-3">
               <div className="p-4 bg-muted/30 rounded-lg">
                 <p className="text-sm text-foreground">{analysisV21.priceFix.action}</p>
               </div>
-              {listingHasPromotion && listingPriceFinal && (
-                <Badge variant="secondary" className="text-sm py-1.5 px-3">
-                  ✅ Promo ativa detectada
-                </Badge>
-              )}
               {editUrl && (
                 <Button
                   variant="outline"
@@ -415,7 +467,7 @@ export function ListingAIAnalysisPanel({
                   className="w-full"
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir anúncio para editar preço
+                  Abrir anuncio para editar preco
                 </Button>
               )}
             </div>

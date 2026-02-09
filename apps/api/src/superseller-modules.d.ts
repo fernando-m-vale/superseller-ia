@@ -2,8 +2,23 @@
 // Só para o TypeScript parar de reclamar no build da API.
 
 declare module '@superseller/core' {
-  // A API só precisa chamar essa função. Tipagem frouxa por enquanto.
   export function healthScore(...args: any[]): any;
+  export function sanitizeMlText(text: string): string;
+  export function buildPromotionPlacementSuggestions(pricing: any): any[];
+  export interface PromotionPlacementSuggestion {
+    id: string;
+    title: string;
+    where: string;
+    how: string;
+    constraints: string[];
+    exampleText: string;
+  }
+  export interface PricingInput {
+    hasPromotion: boolean;
+    originalPrice: number;
+    finalPrice: number;
+    discountPercent: number | null;
+  }
 }
 
 declare module '@superseller/ai' {

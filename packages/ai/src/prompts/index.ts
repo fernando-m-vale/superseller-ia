@@ -17,6 +17,13 @@ export {
 } from './mlSalesV22';
 
 export {
+  promptVersion as mlExpertV22Version,
+  systemPrompt as mlExpertV22SystemPrompt,
+  buildMLExpertV22UserPrompt,
+  type MLExpertV22BuildUserPromptInput,
+} from './mlExpertV22';
+
+export {
   PROMPT_REGISTRY,
   getPrompt,
   getAvailableVersions,
