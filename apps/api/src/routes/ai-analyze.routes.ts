@@ -576,6 +576,16 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             {
               hasClips: listing.has_clips ?? null, // Usar apenas has_clips (no ML, clip = vídeo)
               picturesCount: listing.pictures_count,
+            },
+            {
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent,
+            },
+            {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+              revenue: result.score.metrics_30d.revenue,
             }
           );
           const scoreExplanation = explainScore(
@@ -712,6 +722,16 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           {
             hasClips: listing.has_clips ?? null, // Usar apenas has_clips (no ML, clip = vídeo)
             picturesCount: listing.pictures_count,
+          },
+          {
+            hasPromotion: listing.has_promotion ?? false,
+            discountPercent: listing.discount_percent,
+          },
+          {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+            revenue: scoreResult.metrics_30d.revenue,
           }
         );
         const scoreExplanation = explainScore(

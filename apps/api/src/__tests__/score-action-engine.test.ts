@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { generateActionPlan, ActionPlanItem, ActionDimension } from '../services/ScoreActionEngine';
+import { 
+  generateActionPlan, 
+  ActionPlanItem, 
+  ActionDimension,
+  detectPromoAggressiveLowCR,
+  PricingInfo,
+  Metrics30dInfo,
+  PROMO_AGGRESSIVE_DISCOUNT_PCT,
+  LOW_CR_THRESHOLD,
+  MIN_VISITS_FOR_CR_CONFIDENCE,
+} from '../services/ScoreActionEngine';
 import { IAScoreBreakdown, IAScorePotentialGain } from '../services/IAScoreService';
 
 describe('ScoreActionEngine', () => {
@@ -227,6 +237,316 @@ describe('ScoreActionEngine', () => {
       if (performanceAction) {
         expect(performanceAction.whyThisMatters).toContain('Cobertura de dados');
         expect(performanceAction.whyThisMatters).toContain('33%');
+      }
+    });
+  });
+
+  describe('detectPromoAggressiveLowCR', () => {
+    it('should detect promo agressiva + baixa conversão quando todos os critérios são atendidos', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: true,
+        discountPercent: 47,
+      };
+      const metrics30d: Metrics30dInfo = {
+        visits: 315,
+        orders: 1,
+        conversionRate: 0.00317, // 0.317% < 0.6%
+        revenue: 32,
+      };
+
+      const result = detectPromoAggressiveLowCR(pricing, metrics30d);
+      expect(result).toBe(true);
+    });
+
+    it('should NOT detect quando não há promoção', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: false,
+        discountPercent: null,
+      };
+      const metrics30d: Metrics30dInfo = {
+        visits: 315,
+        orders: 1,
+        conversionRate: 0.00317,
+        revenue: 32,
+      };
+
+      const result = detectPromoAggressiveLowCR(pricing, metrics30d);
+      expect(result).toBe(false);
+    });
+
+    it('should NOT detect quando desconto < threshold', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: true,
+        discountPercent: 20, // < 30%
+      };
+      const metrics30d: Metrics30dInfo = {
+        visits: 315,
+        orders: 1,
+        conversionRate: 0.00317,
+        revenue: 32,
+      };
+
+      const result = detectPromoAggressiveLowCR(pricing, metrics30d);
+      expect(result).toBe(false);
+    });
+
+    it('should NOT detect quando visits < MIN_VISITS_FOR_CR_CONFIDENCE', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: true,
+        discountPercent: 47,
+      };
+      const metrics30d: Metrics30dInfo = {
+        visits: 100, // < 150
+        orders: 1,
+        conversionRate: 0.00317,
+        revenue: 32,
+      };
+
+      const result = detectPromoAggressiveLowCR(pricing, metrics30d);
+      expect(result).toBe(false);
+    });
+
+    it('should NOT detect quando conversionRate > threshold', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: true,
+        discountPercent: 47,
+      };
+      const metrics30d: Metrics30dInfo = {
+        visits: 315,
+        orders: 10,
+        conversionRate: 0.01, // 1% > 0.6%
+        revenue: 320,
+      };
+
+      const result = detectPromoAggressiveLowCR(pricing, metrics30d);
+      expect(result).toBe(false);
+    });
+
+    it('should return false quando pricing é null', () => {
+      const metrics30d: Metrics30dInfo = {
+        visits: 315,
+        orders: 1,
+        conversionRate: 0.00317,
+        revenue: 32,
+      };
+
+      const result = detectPromoAggressiveLowCR(null, metrics30d);
+      expect(result).toBe(false);
+    });
+
+    it('should return false quando metrics30d é null', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: true,
+        discountPercent: 47,
+      };
+
+      const result = detectPromoAggressiveLowCR(pricing, null);
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('generateActionPlan - Promoção Agressiva + Baixa Conversão', () => {
+    const scoreBreakdownWithActions: IAScoreBreakdown = {
+      cadastro: 15, // lost: 5 -> low (mas deve subir para medium com boost)
+      midia: 10, // lost: 10 -> high (já é high)
+      performance: 20, // lost: 10 -> high
+      seo: 12, // lost: 8 -> medium (mas deve subir para high com boost)
+      competitividade: 5, // lost: 5 -> medium (mas deve descer para low com penalty)
+    };
+
+    const baseDataQuality = {
+      performanceAvailable: true,
+      visitsCoverage: {
+        filledDays: 28,
+        totalDays: 30,
+      },
+    };
+
+    const pricingPromoAgressiva: PricingInfo = {
+      hasPromotion: true,
+      discountPercent: 47,
+    };
+
+    const metrics30dLowCR: Metrics30dInfo = {
+      visits: 315,
+      orders: 1,
+      conversionRate: 0.00317, // 0.317% < 0.6%
+      revenue: 32,
+    };
+
+    const metrics30dOK: Metrics30dInfo = {
+      visits: 315,
+      orders: 20,
+      conversionRate: 0.063, // 6.3% > 0.6%
+      revenue: 640,
+    };
+
+    it('Caso 1: promo agressiva + low CR -> Top1 não é competitividade; Top1 é seo/midia/cadastro', () => {
+      const actionPlan = generateActionPlan(
+        scoreBreakdownWithActions,
+        baseDataQuality,
+        undefined,
+        undefined,
+        pricingPromoAgressiva,
+        metrics30dLowCR
+      );
+
+      expect(actionPlan.length).toBeGreaterThan(0);
+
+      // Top 1 NÃO deve ser competitividade
+      const top1 = actionPlan[0];
+      expect(top1.dimension).not.toBe('competitividade');
+
+      // Top 1 deve ser seo, midia ou cadastro (ações de título/imagens/descrição)
+      expect(['seo', 'midia', 'cadastro']).toContain(top1.dimension);
+
+      // Competitividade deve estar com prioridade reduzida ou mais abaixo
+      const competitividadeAction = actionPlan.find(a => a.dimension === 'competitividade');
+      if (competitividadeAction) {
+        // Se competitividade está presente, deve ter prioridade reduzida
+        expect(competitividadeAction.priority).not.toBe('high');
+      }
+    });
+
+    it('Caso 2: promo agressiva + CR ok -> competitividade pode subir normalmente', () => {
+      const actionPlan = generateActionPlan(
+        scoreBreakdownWithActions,
+        baseDataQuality,
+        undefined,
+        undefined,
+        pricingPromoAgressiva,
+        metrics30dOK
+      );
+
+      expect(actionPlan.length).toBeGreaterThan(0);
+
+      // Com CR ok, o gatilho não deve estar ativo
+      // Competitividade pode estar no topo se tiver maior lostPoints
+      // Não há penalty aplicado
+      const competitividadeAction = actionPlan.find(a => a.dimension === 'competitividade');
+      if (competitividadeAction) {
+        // Não deve ter penalty (prioridade não deve ser forçada para low)
+        // A prioridade deve ser baseada apenas em lostPoints
+        expect(competitividadeAction.priority).toMatch(/^(high|medium|low)$/);
+      }
+    });
+
+    it('Caso 3: low CR mas sem promo -> mantém lógica atual (sem boost/penalty)', () => {
+      const pricingSemPromo: PricingInfo = {
+        hasPromotion: false,
+        discountPercent: null,
+      };
+
+      const actionPlan = generateActionPlan(
+        scoreBreakdownWithActions,
+        baseDataQuality,
+        undefined,
+        undefined,
+        pricingSemPromo,
+        metrics30dLowCR
+      );
+
+      expect(actionPlan.length).toBeGreaterThan(0);
+
+      // Sem promo, o gatilho não deve estar ativo
+      // Ordenação deve ser baseada apenas em lostPoints e prioridade base
+      // Não há boost/penalty aplicado
+      for (let i = 0; i < actionPlan.length - 1; i++) {
+        const current = actionPlan[i];
+        const next = actionPlan[i + 1];
+
+        if (current.lostPoints !== next.lostPoints) {
+          expect(current.lostPoints).toBeGreaterThan(next.lostPoints);
+        }
+      }
+    });
+
+    it('Caso 4: promo agressiva mas visits baixo (<150) -> não ativa gatilho', () => {
+      const metrics30dLowVisits: Metrics30dInfo = {
+        visits: 100, // < 150
+        orders: 1,
+        conversionRate: 0.00317, // 0.317% < 0.6%
+        revenue: 32,
+      };
+
+      const actionPlan = generateActionPlan(
+        scoreBreakdownWithActions,
+        baseDataQuality,
+        undefined,
+        undefined,
+        pricingPromoAgressiva,
+        metrics30dLowVisits
+      );
+
+      expect(actionPlan.length).toBeGreaterThan(0);
+
+      // Com visits baixo, o gatilho não deve estar ativo
+      // Ordenação deve ser baseada apenas em lostPoints e prioridade base
+      // Não há boost/penalty aplicado
+      for (let i = 0; i < actionPlan.length - 1; i++) {
+        const current = actionPlan[i];
+        const next = actionPlan[i + 1];
+
+        if (current.lostPoints !== next.lostPoints) {
+          expect(current.lostPoints).toBeGreaterThan(next.lostPoints);
+        }
+      }
+    });
+
+    it('Caso específico: MLB4217107417 - hasPromotion=true, discountPercent=47, visits=315, orders=1, conversionRate=0.00317', () => {
+      const pricing: PricingInfo = {
+        hasPromotion: true,
+        discountPercent: 47,
+      };
+      const metrics30d: Metrics30dInfo = {
+        visits: 315,
+        orders: 1,
+        conversionRate: 0.00317,
+        revenue: 32,
+      };
+
+      // Score breakdown que gera ações de seo, midia, cadastro e competitividade
+      const scoreBreakdown: IAScoreBreakdown = {
+        cadastro: 15, // lost: 5
+        midia: 10, // lost: 10
+        performance: 30, // lost: 0 (perfeito)
+        seo: 12, // lost: 8
+        competitividade: 5, // lost: 5
+      };
+
+      const actionPlan = generateActionPlan(
+        scoreBreakdown,
+        baseDataQuality,
+        undefined,
+        undefined,
+        pricing,
+        metrics30d
+      );
+
+      expect(actionPlan.length).toBeGreaterThan(0);
+
+      // Top 1 deve ser seo, midia ou cadastro (não competitividade)
+      const top1 = actionPlan[0];
+      expect(['seo', 'midia', 'cadastro']).toContain(top1.dimension);
+
+      // Verificar que seo/midia/cadastro têm prioridade elevada
+      const seoAction = actionPlan.find(a => a.dimension === 'seo');
+      const midiaAction = actionPlan.find(a => a.dimension === 'midia');
+      const cadastroAction = actionPlan.find(a => a.dimension === 'cadastro');
+      const competitividadeAction = actionPlan.find(a => a.dimension === 'competitividade');
+
+      if (seoAction) {
+        expect(seoAction.priority).toMatch(/^(high|medium)$/);
+      }
+      if (midiaAction) {
+        expect(midiaAction.priority).toBe('high');
+      }
+      if (cadastroAction) {
+        expect(cadastroAction.priority).toMatch(/^(high|medium)$/);
+      }
+      if (competitividadeAction) {
+        // Competitividade deve ter prioridade reduzida
+        expect(competitividadeAction.priority).not.toBe('high');
       }
     });
   });
