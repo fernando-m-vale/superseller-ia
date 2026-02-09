@@ -11,9 +11,15 @@
 
 import { createHash } from 'crypto';
 
-// Current prompt version - increment when prompt changes significantly
-// ml-expert-v1: Prompt especialista focado em ações diretas e implementáveis para Mercado Livre
-export const PROMPT_VERSION = 'ml-expert-v1';
+/**
+ * Returns the effective prompt version.
+ * Priority: process.env.AI_PROMPT_VERSION > fallback 'ml-expert-v22'
+ */
+export function getEffectivePromptVersion(): string {
+  return process.env.AI_PROMPT_VERSION || 'ml-expert-v22';
+}
+
+export const PROMPT_VERSION = getEffectivePromptVersion();
 
 /**
  * Data structure for fingerprint generation
@@ -204,6 +210,6 @@ export function buildFingerprintInput(
       visitsCoverage: metrics.visitsCoverage,
     },
     periodDays,
-    promptVersion: PROMPT_VERSION,
+    promptVersion: getEffectivePromptVersion(),
   };
 }
