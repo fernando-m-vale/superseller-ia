@@ -1,3 +1,40 @@
+# DAILY EXECUTION LOG — 2026-02-03 (Dia 3)
+
+## ⚠️ STATUS: EM PROGRESSO — BLOQUEADOR TÉCNICO IDENTIFICADO E CORRIGIDO
+
+## 🎯 Foco do dia
+**Início da execução do Dia 3 (Análise Profunda de Anúncio) — Validação de dados reais (pricing, promoções, métricas) — Desbloqueio do force-refresh e backfill de promoções**
+
+## ✅ Planejado
+- [x] Validar rotas novas (meta, debug-payload, force-refresh)
+- [x] Sincronizar dados atualizados do anúncio MLB4217107417
+- [ ] Iniciar escrita da análise perfeita do anúncio (bloqueado por correções técnicas)
+
+## 🧠 Descobertas
+- **App Runner estava rodando versão antiga devido a runtime crash:** Imports inválidos em `@superseller/ai/dist/...` causavam crash na inicialização, fazendo App Runner reverter para versão anterior
+- **Deploys estavam sendo revertidos automaticamente:** Runtime crash impedia deploy bem-sucedido
+- **Existiam múltiplas conexões Mercado Livre por tenant:** Banco de dados continha 2+ conexões ML com `type='mercadolivre'` e mesmo `tenant_id`
+- **Código usava `findFirst` sem ordenação:** Seleção de conexão era não-determinística, podendo escolher conexão antiga/inválida
+- **force-refresh exigia refresh_token mesmo com access_token válido:** Lógica incorreta forçava refresh desnecessário, causando falhas quando refresh_token não estava disponível
+- **hasClips=false estava sendo usado quando o correto é null:** API do ML não expõe clips de forma confiável via items API; usar `false` afirmava ausência sem certeza
+- **Debug-payload confirmou dados corretos de métricas e listing:** Mas pricing vinha de fallback (promoção não sincronizada)
+
+## ⚠️ Bloqueios / riscos
+- **Sync e backfill falhando por seleção incorreta de conexão:** Código selecionava conexão errada (findFirst sem order/critério), causando 403 forbidden e "Refresh token não disponível"
+- **Risco de análises inconsistentes enquanto isso não for corrigido:** Análises baseadas em dados de conexão incorreta gerariam insights incorretos
+- **Dependência da correção em andamento pelo Cursor:** Fixes implementados mas ainda não validados em produção
+
+## 📌 Decisões tomadas
+- **Criar resolver determinístico de conexão Mercado Livre:** `resolveMercadoLivreConnection()` com critérios explícitos (access_token válido → refresh_token disponível → mais recente)
+- **Não exigir refresh_token se access_token ainda válido:** Helper `getValidAccessToken()` usa refresh apenas quando necessário
+- **Tratar clips como null quando não detectável:** `hasClips = null` quando API não permite confirmar; `dataQuality.warnings` inclui `clips_not_detectable_via_items_api`
+- **Corrigir isso antes de escrever a análise perfeita:** Garantir dados 100% confiáveis antes de gerar análise final
+
+## ➡️ Próximo passo claro
+**Validar o fix do Cursor (resolver + token handling + clips) → Rodar force-refresh com dados corretos → Só então escrever a análise final do anúncio**
+
+---
+
 # DAILY EXECUTION LOG — 2026-01-22
 
 ## ✅ STATUS: CONCLUÍDO

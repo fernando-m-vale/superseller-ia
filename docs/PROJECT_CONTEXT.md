@@ -33,6 +33,14 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - **Prompt especialista é o padrão:** V1 oficialmente aposentado
 - **Todo output deve ser "pronto para aplicar"**
 
+## 🔐 Aprendizado Crítico — Integrações Mercado Livre
+- **Pode haver múltiplas conexões ML por tenant:** Banco de dados pode conter 2+ conexões com `type='mercadolivre'` e mesmo `tenant_id`
+- **Toda lógica deve usar resolver determinístico:** `resolveMercadoLivreConnection()` com critérios explícitos (access_token válido → refresh_token disponível → mais recente)
+- **Nunca assumir que findFirst retorna a conexão correta:** Sem ordenação explícita, seleção é não-determinística
+- **Token válido ≠ refresh_token obrigatório:** Helper `getValidAccessToken()` usa refresh apenas quando necessário (access_token expirado)
+- **Dados "não detectáveis" devem ser tratados como null, nunca como false:** `hasClips = null` quando API não permite confirmar; usar `false` afirma ausência sem certeza
+- **Esse aprendizado vira regra de arquitetura para futuras integrações (Shopee, etc):** Padrão aplicável a qualquer marketplace
+
 ### Decisões técnicas (visits)
 - **Visitas:** `0` apenas quando fetch ok e dia ausente no mapa; erro → `NULL`
 - **Parser:** extrai na ordem: `entry.visits` → `entry.total` → soma de `visits_detail[].quantity`

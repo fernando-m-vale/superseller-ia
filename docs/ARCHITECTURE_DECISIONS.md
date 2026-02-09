@@ -391,6 +391,45 @@ Output da IA precisa atender padrões mínimos de qualidade antes de ser exibido
 
 ---
 
+## ADR-012: Seleção de Conexão de Marketplace
+
+**Data:** 2026-02-03  
+**Status:** Implementado
+
+### Contexto
+Sistema pode ter múltiplas conexões Mercado Livre por tenant (ativas, expiradas, revogadas). Código usava `findFirst` sem ordenação, causando seleção não-determinística e uso de conexão incorreta.
+
+### Decisão
+**Implementar `resolveMercadoLivreConnection()` com critérios explícitos:**
+1. **Prioridade 1:** `access_token` presente E `expires_at` no futuro → prioridade máxima
+2. **Prioridade 2:** `refresh_token` presente → prioridade
+3. **Prioridade 3:** Fallback por `updated_at DESC` → mais recente
+
+### Justificativa
+- Evita uso de conexões antigas/inválidas
+- Garante consistência em sync, backfill e análises
+- Previne bugs silenciosos em produção
+- Seleção determinística facilita debug e observabilidade
+
+### Implementação
+- **Resolver centralizado:** `apps/api/src/utils/ml-connection-resolver.ts`
+- **Helper de token:** `apps/api/src/utils/ml-token-helper.ts` — não exige refresh_token se access_token válido
+- **Logs estruturados:** `connectionId`, `providerAccountId`, `reason`, `expiresAt`, `updatedAt` (sem tokens/PII)
+- **Aplicado em:** `MercadoLivreSyncService`, `MercadoLivreVisitsService`, `MercadoLivreOrdersService`
+
+### Consequência
+- **Código mais explícito:** Critérios de seleção claros e documentados
+- **Menos "mágica":** Seleção determinística, não aleatória
+- **Mais previsibilidade operacional:** Logs mostram qual conexão foi usada e por quê
+- **Padrão aplicável:** Regra de arquitetura para futuras integrações (Shopee, etc)
+
+### Alternativas consideradas
+- Manter `findFirst` sem ordenação: Seleção não-determinística, bugs silenciosos
+- Sempre usar primeira conexão: Pode usar conexão antiga/revogada
+- Ordenar apenas por `updated_at`: Ignora validade do token
+
+---
+
 ## Registro de Decisões Futuras
 
 ### Pendentes de ADR formal

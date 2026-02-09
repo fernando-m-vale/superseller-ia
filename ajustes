@@ -1,0 +1,28 @@
+[1mdiff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml[m
+[1mindex d58ed01..33cc279 100644[m
+[1m--- a/.github/workflows/ci.yml[m
+[1m+++ b/.github/workflows/ci.yml[m
+[36m@@ -41,10 +41,18 @@[m [mjobs:[m
+           node apps/api/dist/server.js &[m
+           SERVER_PID=$![m
+           sleep 5[m
+[31m-          if kill -0 $SERVER_PID 2>/dev/null; then[m
+[31m-            echo "✅ Server started successfully (no crash detected)"[m
+[31m-            kill $SERVER_PID 2>/dev/null || true[m
+[31m-          else[m
+[32m+[m[32m          if ! ps -p $SERVER_PID > /dev/null; then[m
+             echo "❌ Server failed to start or crashed immediately"[m
+             exit 1[m
+           fi[m
+[32m+[m[32m          echo "✅ Server started successfully (smoke test)"[m
+[32m+[m[32m          kill $SERVER_PID[m
+[32m+[m[32m        env:[m
+[32m+[m[32m          NODE_ENV: test[m
+[32m+[m[32m          PORT: "3999"[m
+[32m+[m[32m          DATABASE_URL: "postgresql://user:pass@127.0.0.1:5432/superseller_ci?schema=public"[m
+[32m+[m[32m          JWT_SECRET: "ci_dummy_secret_please_change"[m
+[32m+[m[32m          ML_APP_ID: "123456"[m
+[32m+[m[32m          ML_APP_SECRET: "ci_dummy_secret"[m
+[32m+[m[32m          ML_REDIRECT_URI: "https://localhost/callback"[m
+[41m+          [m
+\ No newline at end of file[m

@@ -9,8 +9,9 @@
  * Resultado da extração de vídeo
  */
 export interface VideoExtractionResult {
-  hasVideo: boolean;
+  hasVideo: boolean | null; // true = tem vídeo, false = confirmado que não tem, null = não detectável
   evidence: string[];
+  isDetectable: boolean; // true se foi possível determinar via API
 }
 
 /**
@@ -25,10 +26,11 @@ export interface VideoExtractionResult {
  */
 export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult {
   const evidence: string[] = [];
-  let hasVideo = false;
+  let hasVideo: boolean | null = null; // Inicia como null (não detectável)
+  let isDetectable = false;
 
   if (!item || typeof item !== 'object') {
-    return { hasVideo: false, evidence: ['item is not an object'] };
+    return { hasVideo: null, evidence: ['item is not an object'], isDetectable: false };
   }
 
   const itemObj = item as Record<string, unknown>;
@@ -38,8 +40,12 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
     const videoId = itemObj.video_id;
     if (typeof videoId === 'string' && videoId.trim().length > 0) {
       hasVideo = true;
+      isDetectable = true;
       evidence.push(`video_id present: "${videoId.substring(0, 20)}${videoId.length > 20 ? '...' : ''}"`);
     } else if (videoId === null) {
+      // video_id null explicitamente = confirmado que não tem vídeo
+      hasVideo = false;
+      isDetectable = true;
       evidence.push('video_id is null (explicitly no video)');
     } else {
       evidence.push('video_id is empty or invalid');
@@ -51,6 +57,7 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
     const videos = itemObj.videos;
     if (Array.isArray(videos) && videos.length > 0) {
       hasVideo = true;
+      isDetectable = true;
       evidence.push(`videos array present with ${videos.length} item(s)`);
       
       // Verificar se tem IDs válidos
@@ -65,8 +72,14 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
         evidence.push(`videos array has ${validVideos.length} valid video ID(s)`);
       }
     } else if (Array.isArray(videos) && videos.length === 0) {
+      // Array vazio = confirmado que não tem vídeos
+      hasVideo = false;
+      isDetectable = true;
       evidence.push('videos array is empty');
     } else if (videos === null) {
+      // videos null explicitamente = confirmado que não tem vídeos
+      hasVideo = false;
+      isDetectable = true;
       evidence.push('videos is null (explicitly no videos)');
     }
   }
@@ -135,6 +148,11 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
     evidence.push('no video-related fields found');
   }
 
-  return { hasVideo, evidence };
+  // Se não foi detectável (null), garantir que retorna null
+  if (!isDetectable) {
+    hasVideo = null;
+  }
+
+  return { hasVideo, evidence, isDetectable };
 }
 

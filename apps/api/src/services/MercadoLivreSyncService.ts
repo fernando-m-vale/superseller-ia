@@ -3,6 +3,8 @@ import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus, OrderStatus
 import { ScoreCalculator } from './ScoreCalculator';
 import { RecommendationService } from './RecommendationService';
 import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
+import { resolveMercadoLivreConnection } from '../utils/ml-connection-resolver';
+import { getValidAccessToken } from '../utils/ml-token-helper';
 
 const prisma = new PrismaClient();
 
@@ -80,11 +82,6 @@ interface MercadoLivreItem {
   deal_ids?: string[];
 }
 
-interface TokenRefreshResponse {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
 
 interface SyncResult {
   success: boolean;
@@ -313,211 +310,64 @@ export class MercadoLivreSyncService {
   }
 
   /**
-   * Busca a conexão do Mercado Livre para o tenant
-   * Flexibilizado para tentar renovar tokens de conexões expiradas
+   * Busca a conexão do Mercado Livre para o tenant usando resolver centralizado
    */
   private async loadConnection(): Promise<void> {
     console.log(`[ML-SYNC] ========== BUSCANDO CONEXÃO ==========`);
     console.log(`[ML-SYNC] Tenant ID: ${this.tenantId}`);
 
-    // Primeiro, buscar conexão ativa
-    let connection = await prisma.marketplaceConnection.findFirst({
-      where: {
-        tenant_id: this.tenantId,
-        type: Marketplace.mercadolivre,
-        status: ConnectionStatus.active,
-      },
-    });
+    // Usar resolver centralizado para seleção determinística
+    const resolved = await resolveMercadoLivreConnection(this.tenantId);
+    
+    this.connectionId = resolved.connection.id;
+    this.providerAccountId = resolved.connection.provider_account_id;
+    this.refreshToken = ''; // Será obtido via getValidAccessToken se necessário
 
-    // Se não encontrou ativa, buscar qualquer conexão do ML para debug/renovação
-    if (!connection) {
-      console.log(`[ML-SYNC] ❌ Nenhuma conexão ATIVA encontrada. Buscando qualquer conexão...`);
-      
-      const allConnections = await prisma.marketplaceConnection.findMany({
-        where: {
-          tenant_id: this.tenantId,
-          type: Marketplace.mercadolivre,
-        },
-      });
-
-      console.log(`[ML-SYNC] Conexões ML encontradas: ${allConnections.length}`);
-      
-      if (allConnections.length > 0) {
-        for (const conn of allConnections) {
-          console.log(`[ML-SYNC] - ID: ${conn.id}, Status: ${conn.status}, Provider: ${conn.provider_account_id}`);
-        }
-
-        // Tentar usar uma conexão expirada e renovar o token
-        const expiredConnection = allConnections.find(c => c.status === ConnectionStatus.expired);
-        if (expiredConnection && expiredConnection.refresh_token) {
-          console.log(`[ML-SYNC] 🔄 Tentando renovar token da conexão expirada...`);
-          
-          this.connectionId = expiredConnection.id;
-          this.refreshToken = expiredConnection.refresh_token;
-          this.providerAccountId = expiredConnection.provider_account_id;
-          
-          try {
-            await this.refreshAccessToken(expiredConnection.refresh_token);
-            console.log(`[ML-SYNC] ✅ Token renovado! Conexão reativada.`);
-            
-            connection = await prisma.marketplaceConnection.findUnique({
-              where: { id: this.connectionId },
-            });
-          } catch (refreshError) {
-            console.error(`[ML-SYNC] ❌ Falha ao renovar token:`, refreshError);
-            throw new Error('Conexão expirada e falha ao renovar token. Reconecte a conta.');
-          }
-        }
-      }
-
-      if (!connection) {
-        throw new Error('Conexão com Mercado Livre não encontrada ou inativa');
-      }
-    }
-
-    this.connectionId = connection.id;
-    this.accessToken = connection.access_token;
-    this.providerAccountId = connection.provider_account_id;
-    this.refreshToken = connection.refresh_token || '';
-
-    console.log(`[ML-SYNC] ✅ Conexão carregada: Provider ${this.providerAccountId}, Status: ${connection.status}`);
+    console.log(`[ML-SYNC] ✅ Conexão carregada: Provider ${this.providerAccountId}, ConnectionId=${this.connectionId}, Reason=${resolved.reason}`);
   }
 
   /**
-   * Verifica se o token está válido e renova se necessário
+   * Obtém access_token válido usando helper centralizado
+   * Não exige refresh_token se access_token ainda é válido
    * @throws Error com código 'AUTH_REVOKED' se o refresh falhar por revogação
    */
   private async ensureValidToken(): Promise<void> {
-    const connection = await prisma.marketplaceConnection.findUnique({
-      where: { id: this.connectionId },
-    });
-
-    if (!connection) {
-      throw new Error('Conexão não encontrada');
-    }
-
-    // Verificar se o token expirou (com margem de 5 minutos)
-    const now = new Date();
-    const expiresAt = connection.expires_at;
-    const bufferMs = 5 * 60 * 1000; // 5 minutos
-
-    // Se expirou ou está prestes a expirar, renovar
-    if (!expiresAt || expiresAt.getTime() - bufferMs < now.getTime()) {
-      console.log('[ML-SYNC] Token expirado ou prestes a expirar. Renovando...');
+    const tokenResult = await getValidAccessToken(this.connectionId);
+    
+    this.accessToken = tokenResult.token;
+    
+    if (tokenResult.usedRefresh) {
+      console.log(`[ML-SYNC] Token renovado connectionId=${this.connectionId} expiresAt=${tokenResult.expiresAt.toISOString()}`);
       
-      if (!connection.refresh_token) {
-        const error = new Error('Refresh token não disponível. Reconecte a conta.');
-        (error as any).code = 'AUTH_REVOKED';
-        throw error;
-      }
-
-      try {
-        await this.refreshAccessToken(connection.refresh_token);
-      } catch (refreshError: any) {
-        // Re-throw erros AUTH_REVOKED
-        if (refreshError.code === 'AUTH_REVOKED') {
-          throw refreshError;
-        }
-        throw refreshError;
-      }
-    } else {
-      console.log('[ML-SYNC] Token válido');
-    }
-  }
-
-  /**
-   * Renova o access token usando o refresh token
-   * @throws Error com código 'AUTH_REVOKED' se o refresh token foi revogado
-   */
-  private async refreshAccessToken(refreshToken: string): Promise<void> {
-    try {
-      const credentials = await import('../lib/secrets').then(m => m.getMercadoLivreCredentials());
-      
-      const response = await axios.post<TokenRefreshResponse>(
-        `${ML_API_BASE}/oauth/token`,
-        null,
-        {
-          params: {
-            grant_type: 'refresh_token',
-            client_id: credentials.clientId,
-            client_secret: credentials.clientSecret,
-            refresh_token: refreshToken,
-          },
-        }
-      );
-
-      const { access_token, refresh_token, expires_in } = response.data;
-
-      // Atualizar no banco
-      await prisma.marketplaceConnection.update({
-        where: { id: this.connectionId },
-        data: {
-          access_token,
-          refresh_token: refresh_token || refreshToken,
-          expires_at: new Date(Date.now() + expires_in * 1000),
-          status: ConnectionStatus.active,
-        },
-      });
-
-      this.accessToken = access_token;
-      this.refreshToken = refresh_token || this.refreshToken;
-      console.log('[ML-SYNC] Token renovado com sucesso');
-
       // Disparar sync completo após renovação bem-sucedida (apenas se não estiver já em sync)
-      // Isso garante que dados sejam atualizados quando token é renovado proativamente
       if (!this.isSyncing) {
         this.triggerFullSyncAfterRefresh().catch((err: unknown) => {
           console.error('[ML-SYNC] Erro ao disparar sync após refresh:', err);
         });
       }
-    } catch (error) {
-      if (error instanceof AxiosError) {
-        const status = error.response?.status;
-        const errorData = error.response?.data;
-        console.error('[ML-SYNC] Erro ao renovar token:', { status, data: errorData });
-        
-        // Se o refresh token foi revogado (400 ou 401), marcar como revogado
-        if (status === 400 || status === 401) {
-          await prisma.marketplaceConnection.update({
-            where: { id: this.connectionId },
-            data: { status: ConnectionStatus.revoked },
-          });
-          
-          const authError = new Error('Conexão expirada. Reconecte sua conta.');
-          (authError as any).code = 'AUTH_REVOKED';
-          throw authError;
-        }
-        
-        // Outros erros: marcar como expirado
-        await prisma.marketplaceConnection.update({
-          where: { id: this.connectionId },
-          data: { status: ConnectionStatus.expired },
-        });
-      }
-      throw new Error('Falha ao renovar token. Reconecte a conta do Mercado Livre.');
+    } else {
+      console.log(`[ML-SYNC] Token válido (não renovado) connectionId=${this.connectionId} expiresAt=${tokenResult.expiresAt.toISOString()}`);
     }
   }
 
+
   /**
    * Executa uma função com retry automático em caso de 401 (Unauthorized)
-   * Pattern: Tenta executar -> Se 401, renova token -> Tenta novamente (1x)
+   * Pattern: Tenta executar -> Se 401, renova token via helper -> Tenta novamente (1x)
    */
   private async executeWithRetryOn401<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        console.log('[ML-SYNC] Recebido 401. Tentando renovar token e retry...');
+        console.log(`[ML-SYNC] Recebido 401. Tentando renovar token e retry connectionId=${this.connectionId}...`);
         
-        if (!this.refreshToken) {
-          throw new Error('Refresh token não disponível. Reconecte a conta.');
-        }
-
-        // Renovar token
-        await this.refreshAccessToken(this.refreshToken);
+        // Renovar token via helper (que já trata refresh_token)
+        const tokenResult = await getValidAccessToken(this.connectionId);
+        this.accessToken = tokenResult.token;
         
         // Retry da operação original
-        console.log('[ML-SYNC] Token renovado. Executando retry...');
+        console.log(`[ML-SYNC] Token renovado. Executando retry connectionId=${this.connectionId}...`);
         return await fn();
       }
       throw error;
@@ -1068,14 +918,19 @@ export class MercadoLivreSyncService {
         // Atualizar has_video (tri-state: true/false/null)
         // - true: tem vídeo confirmado via API
         // - false: confirmado que não tem vídeo (ex: video_id is null explicitamente)
-        // - null: indisponível via API (fallback orders_fallback ou quando não conseguimos determinar)
+        // - null: não detectável via API (items API não expõe clips de forma confiável)
         // No fallback via Orders, não temos certeza, então setar null
         if (source === 'orders_fallback') {
           listingData.has_video = null; // Não sabemos se tem vídeo via fallback
         } else {
-          // Fluxo normal: usar valor da API (true/false)
+          // Fluxo normal: usar valor da API (true/false/null)
+          // null significa "não detectável via API", não "não tem vídeo"
           listingData.has_video = hasVideoFromAPI;
         }
+        
+        // has_clips é um alias de has_video no ML (clip = vídeo)
+        // Garantir que ambos estejam sincronizados
+        listingData.has_clips = listingData.has_video;
 
         // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos
         // Isso evita sobrescrever com 0 quando não há dados

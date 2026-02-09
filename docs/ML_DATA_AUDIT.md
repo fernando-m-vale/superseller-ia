@@ -150,11 +150,18 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - **Decisão:** Erro 400 de orders não interrompe refresh de metrics/visits; apenas 401/403 interrompem
 
 ### Orders — Connection active vs revoked
-**Status:** 🟡 PONTO DE ATENÇÃO
+**Status:** ✅ RESOLVIDO
 - Existem múltiplas conexões ML no banco (active vs revoked)
-- Sistema usa sempre a conexão `active` mais recente
-- **Risco:** Se connection active mudou de `sellerId`, orders podem não refletir seller atual
-- **Ação:** Investigar se orders=0 quando connection mudou de sellerId é comportamento esperado
+- **Fix:** Sistema usa resolver determinístico (`resolveMercadoLivreConnection()`) com critérios explícitos
+- **Prioridade:** access_token válido → refresh_token disponível → mais recente (updated_at DESC)
+- **Logs estruturados:** Mostram qual conexão foi usada e por quê (connectionId, providerAccountId, reason)
+- **Risco mitigado:** Seleção determinística evita uso de conexão incorreta
+
+### Pricing / Promotions
+**Status:** 🟡 PONTO DE ATENÇÃO
+- **Pricing pode vir de fallback quando promo não sincronizada:** Não gerar insights de preço enquanto `hasPromotion` não for confirmado via sync correto
+- **Transparência para a IA e para o usuário:** Debug-payload mostra `source` do pricing (sync normal vs fallback)
+- **Ação:** Validar que force-refresh e backfill-promotions estão sincronizando promoções corretamente
 
 ## 🧪 Queries padrão de auditoria
 ### Range geral (orders/gmv/visits)

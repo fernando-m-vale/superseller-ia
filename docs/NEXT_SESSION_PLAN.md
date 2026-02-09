@@ -1,5 +1,49 @@
 # NEXT SESSION PLAN — Dia 3 (Análise Profunda de Anúncio)
 
+## 🗓️ Próxima Sessão — Continuação do Dia 3
+
+### Objetivo principal
+**Finalizar o Dia 3 com análise profunda de anúncio baseada em dados 100% confiáveis.**
+
+### Checklist de retomada
+
+#### 1. Validar deploy em produção
+- [ ] `GET /api/v1/meta` — deve retornar 200 com gitSha, buildTime, env
+- [ ] `GET /api/v1/ai/debug-payload/:listingId` — deve retornar payload sanitizado
+
+#### 2. Validar resolver de conexão ML
+- [ ] Conexão mais recente e válida sendo usada
+- [ ] Logs estruturados mostram `connectionId`, `providerAccountId`, `reason`
+- [ ] Não há mais erros "Refresh token não disponível" quando access_token é válido
+
+#### 3. Testar endpoints críticos
+- [ ] `POST /api/v1/sync/mercadolivre/listings/:listingIdExt/force-refresh` — deve funcionar sem exigir refresh_token se access_token válido
+- [ ] `POST /api/v1/sync/mercadolivre/listings/backfill-promotions?limit=200` — deve processar promoções corretamente
+
+#### 4. Confirmar pricing
+- [ ] `priceFinal`, `originalPrice`, `discountPercent` corretos no debug-payload
+- [ ] `hasPromotion=true` quando promoção existe
+- [ ] Pricing não vem de fallback quando promoção foi sincronizada
+
+#### 5. Confirmar hasClips
+- [ ] `hasClips = null` quando não detectável via API
+- [ ] `dataQuality.warnings` inclui `clips_not_detectable_via_items_api` quando `hasClips === null`
+- [ ] Debug-payload reflete `hasClips: null` corretamente
+
+#### 6. Escrever Análise Profunda do Anúncio (Dia 3)
+- [ ] Análise baseada em dados 100% confiáveis
+- [ ] Usuário entende claramente onde o anúncio perde vendas
+- [ ] Usuário entende por quê
+- [ ] Usuário sabe o que mudar primeiro
+
+### Critério de Dia 3 entregue
+**Usuário entende claramente:**
+- ✅ Onde o anúncio perde vendas
+- ✅ Por quê
+- ✅ O que mudar primeiro
+
+---
+
 ## ⚠️ Status atual (Dia 2 — Encerrado com sucesso, Dia 3 iniciado)
 - **Análise IA Expert (ml-expert-v1):** Backend e frontend integrados
 - **V1 descontinuada:** UI V1 removida completamente
