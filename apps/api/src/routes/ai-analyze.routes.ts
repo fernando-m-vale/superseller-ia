@@ -19,6 +19,7 @@ import { PrismaClient, Prisma, ListingStatus, RecommendationType, Recommendation
 import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreActionEngine';
 import { explainScore } from '../services/ScoreExplanationService';
 import { getMediaVerdict } from '../utils/media-verdict';
+import { BenchmarkService } from '../services/BenchmarkService';
 import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
 import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 
@@ -644,6 +645,51 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             'AI analysis complete (cache miss)'
           );
 
+          // Calcular benchmark (Dia 04)
+          let benchmarkResult = null;
+          if (listing.category) {
+            try {
+              const benchmarkService = new BenchmarkService(tenantId);
+              benchmarkResult = await benchmarkService.calculateBenchmark(
+                {
+                  id: listingId,
+                  listingIdExt: listing.listing_id_ext || '',
+                  categoryId: listing.category,
+                  picturesCount: listing.pictures_count || 0,
+                  hasClips: listing.has_clips ?? null,
+                  title: listing.title,
+                  price: Number(listing.price), // Converter Decimal para number
+                  hasPromotion: listing.has_promotion ?? false,
+                  discountPercent: listing.discount_percent,
+                },
+              {
+                visits: result.score.metrics_30d.visits,
+                orders: result.score.metrics_30d.orders,
+                conversionRate: result.score.metrics_30d.conversionRate,
+              }
+            );
+            request.log.info(
+              {
+                listingId,
+                tenantId,
+                hasBenchmark: benchmarkResult !== null,
+                categoryId: listing.category,
+              },
+              'Benchmark calculado (fresh)'
+            );
+            } catch (benchmarkError) {
+              // Não falhar análise se benchmark falhar; apenas logar
+              request.log.warn(
+                {
+                  listingId,
+                  tenantId,
+                  error: benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido',
+                },
+                'Erro ao calcular benchmark (não crítico)'
+              );
+            }
+          }
+
           // Preparar resposta com Expert (ml-expert-v1)
           const responseData: any = {
             listingId, // GARANTIR que usa o listingId do request, não de outro lugar
@@ -664,6 +710,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             scoreExplanation,
             // MediaVerdict - Fonte única de verdade para mídia
             mediaVerdict,
+            // Benchmark (Dia 04)
+            benchmark: benchmarkResult,
           };
 
             // SEMPRE incluir Expert se disponível (obrigatório) — sanitizar antes de enviar
@@ -772,6 +820,51 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           '[MEDIA-VERDICT-DEBUG] MediaVerdict gerado (cache)'
         );
 
+        // Calcular benchmark (Dia 04) - também para cache
+        let cacheBenchmarkResult = null;
+        if (listing.category) {
+          try {
+            const benchmarkService = new BenchmarkService(tenantId);
+            cacheBenchmarkResult = await benchmarkService.calculateBenchmark(
+              {
+                id: listingId,
+                listingIdExt: listing.listing_id_ext || '',
+                categoryId: listing.category,
+                picturesCount: listing.pictures_count || 0,
+                hasClips: listing.has_clips ?? null,
+                title: listing.title,
+                price: Number(listing.price), // Converter Decimal para number
+                hasPromotion: listing.has_promotion ?? false,
+                discountPercent: listing.discount_percent ? Number(listing.discount_percent) : null,
+              },
+              {
+                visits: scoreResult.metrics_30d.visits,
+                orders: scoreResult.metrics_30d.orders,
+                conversionRate: scoreResult.metrics_30d.conversionRate,
+              }
+            );
+            request.log.info(
+              {
+                listingId,
+                tenantId,
+                hasBenchmark: cacheBenchmarkResult !== null,
+                categoryId: listing.category,
+              },
+              'Benchmark calculado (cache)'
+            );
+          } catch (benchmarkError) {
+            // Não falhar análise se benchmark falhar; apenas logar
+            request.log.warn(
+              {
+                listingId,
+                tenantId,
+                error: benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido',
+              },
+              'Erro ao calcular benchmark (não crítico)'
+            );
+          }
+        }
+
         // Preparar resposta do cache incluindo Expert se disponível
         const cacheResponseData: any = {
           listingId, // GARANTIR que usa o listingId do request, não do cache
@@ -792,6 +885,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           scoreExplanation,
           // MediaVerdict - Fonte única de verdade para mídia
           mediaVerdict,
+          // Benchmark (Dia 04) - também calculado para cache
+          benchmark: cacheBenchmarkResult,
         };
 
         // Incluir Expert se disponível no cache — sanitizar antes de enviar
