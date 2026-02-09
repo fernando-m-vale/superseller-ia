@@ -1506,6 +1506,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
+        const enrichmentMeta = items[0]._enrichmentMeta ?? { endpointUsed: 'none' as const, statusCode: 0, payloadSize: 0 };
+
         // Aplicar mesma lógica de persistência do sync
         const { updated } = await syncService.upsertListings(items, 'force_refresh', false);
 
@@ -1524,6 +1526,7 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             price_final: true,
             has_promotion: true,
             discount_percent: true,
+            promotion_type: true,
             updated_at: true,
           },
         });
@@ -1534,6 +1537,9 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           tenantId,
           listingIdExt,
           updated,
+          endpointUsed: enrichmentMeta.endpointUsed,
+          statusCode: enrichmentMeta.statusCode,
+          payloadSize: enrichmentMeta.payloadSize,
           has_promotion: updatedListing?.has_promotion,
           price_final: updatedListing?.price_final,
           original_price: updatedListing?.original_price,
@@ -1546,6 +1552,11 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             listingIdExt,
             updated: updated > 0,
             listing: updatedListing,
+            enrichment: {
+              endpointUsed: enrichmentMeta.endpointUsed,
+              statusCode: enrichmentMeta.statusCode,
+              payloadSize: enrichmentMeta.payloadSize,
+            },
           },
         });
       } catch (error: any) {

@@ -80,6 +80,11 @@ interface MercadoLivreItem {
     end_date?: string;
   }>;
   deal_ids?: string[];
+  _enrichmentMeta?: {
+    endpointUsed: 'prices' | 'items' | 'none';
+    statusCode: number;
+    payloadSize: number;
+  };
 }
 
 
@@ -543,11 +548,11 @@ export class MercadoLivreSyncService {
    * GET /items/{itemId}/prices - endpoint recomendado pelo ML para preços/promoções
    */
   private async fetchItemPrices(itemId: string): Promise<{
-    prices?: { prices?: Array<{ amount?: number; type?: string; conditions?: any }> };
-    sale_price?: number;
-    reference_prices?: Array<{ amount?: number; type?: string }>;
-    promotions?: Array<{ id?: string; type?: string; discount_percent?: number }>;
-    deals?: Array<{ id?: string; type?: string; discount_percent?: number }>;
+    statusCode: number;
+    payloadSize: number;
+    prices?: Array<{ id?: string; amount?: number; type?: string; regular_amount?: number; currency_id?: string; conditions?: any }>;
+    reference_prices?: Array<{ id?: string; amount?: number; type?: string; currency_id?: string }>;
+    purchase_discounts?: Array<{ type?: string; amount?: number; discount_percentage?: number }>;
   } | null> {
     try {
       console.log(`[ML-SYNC] Buscando preços/promoção via API de Preços para item ${itemId}`);
@@ -555,36 +560,53 @@ export class MercadoLivreSyncService {
         headers: { Authorization: `Bearer ${this.accessToken}` },
       });
 
-      const pricesData = response.data;
-      
-      // Log estruturado (sem tokens/PII)
-      const hasSalePrice = pricesData.sale_price !== undefined && pricesData.sale_price !== null;
-      const pricesCount = pricesData.prices?.prices ? (Array.isArray(pricesData.prices.prices) ? pricesData.prices.prices.length : 0) : 0;
-      const referencePricesCount = pricesData.reference_prices ? (Array.isArray(pricesData.reference_prices) ? pricesData.reference_prices.length : 0) : 0;
-      
-      console.log(`[ML-SYNC] API de Preços retornou para item ${itemId}`, {
-        hasSalePrice,
-        sale_price: pricesData.sale_price,
-        pricesCount,
-        referencePricesCount,
-        hasPromotions: !!(pricesData.promotions && Array.isArray(pricesData.promotions) && pricesData.promotions.length > 0),
-        hasDeals: !!(pricesData.deals && Array.isArray(pricesData.deals) && pricesData.deals.length > 0),
+      const raw = response.data;
+      const statusCode = response.status;
+      const payloadSize = JSON.stringify(raw).length;
+
+      const rawPrices: unknown = raw.prices;
+      const pricesArray: Array<{ id?: string; amount?: number; type?: string; regular_amount?: number; currency_id?: string; conditions?: any }> =
+        Array.isArray(rawPrices) ? rawPrices : [];
+
+      const refPrices: Array<{ id?: string; amount?: number; type?: string; currency_id?: string }> =
+        Array.isArray(raw.reference_prices) ? raw.reference_prices : [];
+
+      const purchaseDiscounts: Array<{ type?: string; amount?: number; discount_percentage?: number }> =
+        Array.isArray(raw.purchase_discounts) ? raw.purchase_discounts : [];
+
+      const promoEntry = pricesArray.find(p => p.type === 'promotion');
+      const standardEntry = pricesArray.find(p => p.type === 'standard');
+
+      console.log(`[ML-SYNC] /items/${itemId}/prices`, {
+        statusCode,
+        payloadSize,
+        pricesCount: pricesArray.length,
+        referencePricesCount: refPrices.length,
+        purchaseDiscountsCount: purchaseDiscounts.length,
+        hasPromoEntry: !!promoEntry,
+        promoAmount: promoEntry?.amount ?? null,
+        standardAmount: standardEntry?.amount ?? null,
+        regularAmount: promoEntry?.regular_amount ?? standardEntry?.regular_amount ?? null,
       });
 
-      return pricesData;
+      return {
+        statusCode,
+        payloadSize,
+        prices: pricesArray,
+        reference_prices: refPrices,
+        purchase_discounts: purchaseDiscounts,
+      };
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const status = error.response?.status;
-        // 403/404 podem indicar que endpoint não está disponível ou item não tem promoção
-        if (status === 403 || status === 404) {
-          console.log(`[ML-SYNC] API de Preços não disponível para item ${itemId} (${status}), usando fallback`);
-        } else {
-          console.warn(`[ML-SYNC] Erro ao buscar preços via API de Preços para item ${itemId} (${status}): ${error.message}`);
-        }
+        console.log(`[ML-SYNC] /items/${itemId}/prices FAILED`, {
+          statusCode: status ?? 0,
+          errorMessage: error.message,
+        });
       } else {
-        console.warn(`[ML-SYNC] Erro ao buscar preços via API de Preços para item ${itemId}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+        console.warn(`[ML-SYNC] /items/${itemId}/prices FAILED (non-axios):`, error instanceof Error ? error.message : 'Erro desconhecido');
       }
-      return null; // Retornar null para indicar que deve usar fallback
+      return null;
     }
   }
 
@@ -593,59 +615,82 @@ export class MercadoLivreSyncService {
    * Prioridade: GET /items/{itemId}/prices (API de Preços) > GET /items/{id} (fallback)
    */
   private async enrichItemPricing(item: MercadoLivreItem): Promise<MercadoLivreItem> {
-    // Se já temos dados suficientes de promoção, não precisa enriquecer
-    const hasPromoData = 
-      (item.original_price !== undefined && item.original_price !== null) ||
-      (item.sale_price !== undefined && item.sale_price !== null) ||
-      (item.prices?.prices && Array.isArray(item.prices.prices) && item.prices.prices.length > 0) ||
-      (item.reference_prices && Array.isArray(item.reference_prices) && item.reference_prices.length > 0) ||
-      (item.deals && Array.isArray(item.deals) && item.deals.length > 0) ||
-      (item.promotions && Array.isArray(item.promotions) && item.promotions.length > 0);
+    const hasConfirmedPromo =
+      (item.original_price !== undefined && item.original_price !== null && item.original_price > 0 && item.original_price !== item.price) ||
+      (item.sale_price !== undefined && item.sale_price !== null && item.sale_price > 0 && item.sale_price !== item.price);
 
-    if (hasPromoData) {
-      console.log(`[ML-SYNC] Item ${item.id} já tem dados de promoção suficientes, pulando enriquecimento`);
+    if (hasConfirmedPromo) {
+      console.log(`[ML-SYNC] Item ${item.id} já tem promoção confirmada (original_price=${item.original_price}, sale_price=${item.sale_price}), pulando enriquecimento`);
       return item;
     }
 
     let endpointUsed: 'prices' | 'items' | 'none' = 'none';
+    let enrichStatusCode = 0;
+    let enrichPayloadSize = 0;
 
-    // Tentar primeiro API de Preços (recomendado pelo ML)
     const pricesData = await this.fetchItemPrices(item.id);
-    
+
     if (pricesData) {
       endpointUsed = 'prices';
-      
-      // Mesclar dados de preço/promoção da API de Preços
-      if (pricesData.sale_price !== undefined && pricesData.sale_price !== null) {
-        item.sale_price = pricesData.sale_price;
-      }
-      if (pricesData.prices && !item.prices) {
-        item.prices = pricesData.prices;
-      }
-      if (pricesData.reference_prices && !item.reference_prices) {
-        item.reference_prices = pricesData.reference_prices;
-      }
-      if (pricesData.promotions && !item.promotions) {
-        item.promotions = pricesData.promotions;
-      }
-      if (pricesData.deals && !item.deals) {
-        item.deals = pricesData.deals;
+      enrichStatusCode = pricesData.statusCode;
+      enrichPayloadSize = pricesData.payloadSize;
+
+      const pricesArr = pricesData.prices ?? [];
+      const promoEntry = pricesArr.find(p => p.type === 'promotion');
+      const standardEntry = pricesArr.find(p => p.type === 'standard');
+
+      if (promoEntry?.amount && promoEntry.amount > 0) {
+        item.sale_price = promoEntry.amount;
       }
 
-      console.log(`[ML-SYNC] Item ${item.id} enriquecido via API de Preços`);
+      const candidateOriginal =
+        promoEntry?.regular_amount ??
+        standardEntry?.amount ??
+        null;
+      if (candidateOriginal && candidateOriginal > 0 && candidateOriginal !== item.sale_price) {
+        item.original_price = candidateOriginal;
+      }
+
+      if (!item.original_price && pricesData.reference_prices && pricesData.reference_prices.length > 0) {
+        const refAmounts = pricesData.reference_prices
+          .map(rp => rp.amount)
+          .filter((a): a is number => typeof a === 'number' && a > 0);
+        if (refAmounts.length > 0) {
+          const maxRef = Math.max(...refAmounts);
+          if (maxRef > (item.sale_price ?? item.price)) {
+            item.original_price = maxRef;
+          }
+        }
+      }
+
+      item.prices = { prices: pricesArr };
+      if (pricesData.reference_prices && pricesData.reference_prices.length > 0) {
+        item.reference_prices = pricesData.reference_prices;
+      }
+
+      console.log(`[ML-SYNC] Item ${item.id} enriquecido via Prices API`, {
+        endpointUsed,
+        statusCode: enrichStatusCode,
+        payloadSize: enrichPayloadSize,
+        sale_price: item.sale_price,
+        original_price: item.original_price,
+        pricesCount: pricesArr.length,
+        hasPromoEntry: !!promoEntry,
+      });
     } else {
-      // Fallback: tentar GET /items/:id
       try {
-        console.log(`[ML-SYNC] Enriquecendo preços/promoção para item ${item.id} via GET /items/:id (fallback)`);
+        console.log(`[ML-SYNC] Tentando fallback GET /items/${item.id}`);
         endpointUsed = 'items';
-        
+
         const response = await axios.get(`${ML_API_BASE}/items/${item.id}`, {
           headers: { Authorization: `Bearer ${this.accessToken}` },
         });
 
+        enrichStatusCode = response.status;
+        enrichPayloadSize = JSON.stringify(response.data).length;
+
         const enrichedItem = response.data as MercadoLivreItem;
-        
-        // Mesclar dados de preço/promoção do item enriquecido
+
         if (enrichedItem.original_price !== undefined && enrichedItem.original_price !== null) {
           item.original_price = enrichedItem.original_price;
         }
@@ -668,23 +713,36 @@ export class MercadoLivreSyncService {
           item.promotions = enrichedItem.promotions;
         }
 
-        console.log(`[ML-SYNC] Item ${item.id} enriquecido via GET /items/:id (fallback)`);
-      } catch (error) {
-        // Se enriquecimento falhar, seguir com dados originais e logar warning
+        console.log(`[ML-SYNC] Item ${item.id} enriquecido via GET /items (fallback)`, {
+          endpointUsed,
+          statusCode: enrichStatusCode,
+          payloadSize: enrichPayloadSize,
+          sale_price: item.sale_price,
+          original_price: item.original_price,
+        });
+      } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
-          const status = error.response?.status;
-          console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id} (${status}): ${error.message}`);
+          enrichStatusCode = error.response?.status ?? 0;
+          console.warn(`[ML-SYNC] Fallback /items/${item.id} falhou`, {
+            statusCode: enrichStatusCode,
+            errorMessage: error.message,
+          });
         } else {
-          console.warn(`[ML-SYNC] Falha ao enriquecer preços para item ${item.id}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+          console.warn(`[ML-SYNC] Fallback /items/${item.id} falhou (non-axios):`, error instanceof Error ? error.message : 'Erro desconhecido');
         }
         endpointUsed = 'none';
       }
     }
 
-    // Log estruturado final
-    console.log(`[ML-SYNC] Enriquecimento concluído para item ${item.id}`, {
+    item._enrichmentMeta = { endpointUsed, statusCode: enrichStatusCode, payloadSize: enrichPayloadSize };
+
+    console.log(`[ML-SYNC] enrichItemPricing resultado item=${item.id}`, {
       endpointUsed,
-      hasSalePrice: item.sale_price !== undefined && item.sale_price !== null,
+      statusCode: enrichStatusCode,
+      payloadSize: enrichPayloadSize,
+      sale_price: item.sale_price ?? null,
+      original_price: item.original_price ?? null,
+      base_price: item.base_price ?? null,
       pricesCount: item.prices?.prices ? (Array.isArray(item.prices.prices) ? item.prices.prices.length : 0) : 0,
       referencePricesCount: item.reference_prices ? (Array.isArray(item.reference_prices) ? item.reference_prices.length : 0) : 0,
     });
