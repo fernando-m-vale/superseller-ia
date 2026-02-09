@@ -40,6 +40,7 @@ import {
   systemPrompt as mlExpertV22SystemPrompt,
   buildMLExpertV22UserPrompt,
 } from '@superseller/ai/prompts/mlExpertV22';
+import { sanitizeMlText } from '@superseller/core';
 
 const prisma = new PrismaClient();
 
@@ -1080,7 +1081,7 @@ export class OpenAIService {
         // Validar description_fix.optimized_copy (>= 900 chars para V2.1)
         if (data.description_fix?.optimized_copy) {
           const descLength = data.description_fix.optimized_copy.length;
-          const minLength = useSalesV22 ? 900 : 900; // Ambos requerem 900
+          const minLength = 900;
           if (descLength < minLength) {
             qualityIssues.push(`description_fix.optimized_copy muito curto (${descLength} chars, mínimo ${minLength})`);
           }
@@ -1101,7 +1102,7 @@ export class OpenAIService {
         
         // Validar final_action_plan (mínimo 7 para V2.1, exatamente 7 para V2.2)
         if (data.final_action_plan) {
-          if (useSalesV22) {
+          if (AI_PROMPT_VERSION === 'ml-sales-v22') {
             if (data.final_action_plan.length !== 7) {
               qualityIssues.push(`final_action_plan deve ter exatamente 7 itens (D0-D6), mas tem ${data.final_action_plan.length}`);
             }
@@ -1388,6 +1389,17 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
       const result = parseResult.data;
       if (!result.meta.processing_time_ms) {
         result.meta.processing_time_ms = processingTimeMs;
+      }
+
+      // ML Safe Mode: sanitize AI-generated text before returning
+      if (result.description_fix?.optimized_copy) {
+        result.description_fix.optimized_copy = sanitizeMlText(result.description_fix.optimized_copy);
+      }
+      if (result.title_fix?.after) {
+        result.title_fix.after = sanitizeMlText(result.title_fix.after);
+      }
+      if (result.price_fix?.action) {
+        result.price_fix.action = sanitizeMlText(result.price_fix.action);
       }
 
       return result;
