@@ -109,7 +109,6 @@ export class MercadoLivreSyncService {
   private accessToken: string = '';
   private providerAccountId: string = '';
   private connectionId: string = '';
-  private refreshToken: string = '';
   private isSyncing: boolean = false; // Flag para evitar loops
 
   constructor(tenantId: string) {
@@ -321,7 +320,6 @@ export class MercadoLivreSyncService {
     
     this.connectionId = resolved.connection.id;
     this.providerAccountId = resolved.connection.provider_account_id;
-    this.refreshToken = ''; // Será obtido via getValidAccessToken se necessário
 
     console.log(`[ML-SYNC] ✅ Conexão carregada: Provider ${this.providerAccountId}, ConnectionId=${this.connectionId}, Reason=${resolved.reason}`);
   }
@@ -350,17 +348,35 @@ export class MercadoLivreSyncService {
     }
   }
 
+  /**
+   * Garante que conexão e token estão inicializados antes de chamadas à API ML
+   * Útil quando métodos são chamados externamente (ex: rotas) sem passar por syncListings
+   */
+  private async ensureInitializedForMlCall(): Promise<void> {
+    if (!this.connectionId) {
+      console.log(`[ML-SYNC] Auto-inicializando conexão para chamada externa tenantId=${this.tenantId}`);
+      await this.loadConnection();
+    }
+    await this.ensureValidToken();
+  }
+
 
   /**
    * Executa uma função com retry automático em caso de 401 (Unauthorized)
-   * Pattern: Tenta executar -> Se 401, renova token via helper -> Tenta novamente (1x)
+   * Pattern: Tenta executar -> Se 401, garante inicialização e renova token via helper -> Tenta novamente (1x)
    */
   private async executeWithRetryOn401<T>(fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        console.log(`[ML-SYNC] Recebido 401. Tentando renovar token e retry connectionId=${this.connectionId}...`);
+        console.log(`[ML-SYNC] Recebido 401. Tentando renovar token e retry connectionId=${this.connectionId || 'não inicializado'}...`);
+        
+        // Se connectionId vazio, inicializar antes de renovar token
+        if (!this.connectionId) {
+          console.log(`[ML-SYNC] ConnectionId vazio detectado no retry 401. Inicializando conexão...`);
+          await this.loadConnection();
+        }
         
         // Renovar token via helper (que já trata refresh_token)
         const tokenResult = await getValidAccessToken(this.connectionId);
@@ -526,12 +542,17 @@ export class MercadoLivreSyncService {
    * Busca detalhes de múltiplos itens (até 20 por vez)
    * Usa retry automático em caso de 401
    * Também busca descrições completas via endpoint específico
+   * 
+   * Garante inicialização automática quando chamado externamente (ex: rotas)
    */
   async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
     if (itemIds.length === 0) return [];
     if (itemIds.length > 20) {
       throw new Error('Máximo de 20 itens por requisição');
     }
+
+    // Garantir que conexão e token estão inicializados antes de chamar API ML
+    await this.ensureInitializedForMlCall();
 
     return this.executeWithRetryOn401(async () => {
       try {
