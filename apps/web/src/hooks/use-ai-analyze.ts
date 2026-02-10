@@ -77,6 +77,33 @@ interface AIAnalysisApiResponse {
   }
   // V2.1 - Análise estruturada (opcional)
   analysisV21?: AIAnalysisResultV21
+  // Benchmark (Dia 04)
+  benchmark?: {
+    benchmarkSummary: {
+      categoryId: string | null
+      sampleSize: number
+      computedAt: string
+      confidence: 'high' | 'medium' | 'low' | 'unavailable'
+      notes?: string
+      stats?: {
+        medianPicturesCount: number
+        percentageWithVideo: number
+        medianPrice: number
+        medianTitleLength: number
+        sampleSize: number
+      }
+      baselineConversion?: {
+        conversionRate: number | null
+        sampleSize: number
+        totalVisits: number
+        confidence: 'high' | 'medium' | 'low' | 'unavailable'
+      }
+    }
+    youWinHere: string[]
+    youLoseHere: string[]
+    tradeoffs?: string
+    recommendations?: string[]
+  } | null
 }
 
 // Interface adaptada para o frontend
@@ -148,6 +175,33 @@ export interface AIAnalysisResponse {
   }
   // V2.1 - Análise estruturada (opcional)
   analysisV21?: AIAnalysisResultV21
+  // Benchmark (Dia 04)
+  benchmark?: {
+    benchmarkSummary: {
+      categoryId: string | null
+      sampleSize: number
+      computedAt: string
+      confidence: 'high' | 'medium' | 'low' | 'unavailable'
+      notes?: string
+      stats?: {
+        medianPicturesCount: number
+        percentageWithVideo: number
+        medianPrice: number
+        medianTitleLength: number
+        sampleSize: number
+      }
+      baselineConversion?: {
+        conversionRate: number | null
+        sampleSize: number
+        totalVisits: number
+        confidence: 'high' | 'medium' | 'low' | 'unavailable'
+      }
+    }
+    youWinHere: string[]
+    youLoseHere: string[]
+    tradeoffs?: string
+    recommendations?: string[]
+  } | null
 }
 
 /**
@@ -185,8 +239,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     // V2.1 - Análise estruturada (opcional, não processada pelo adaptador)
     // Será preenchido diretamente do response após adaptação
     analysisV21: undefined,
-    // Benchmark (Dia 04) - não processado pelo adaptador
-    benchmark: undefined,
+    // Benchmark (Dia 04) - não processado pelo adaptador, será preenchido diretamente do response
+    // Não incluir aqui pois é opcional e será lido de result.data.benchmark
   }
 }
 
