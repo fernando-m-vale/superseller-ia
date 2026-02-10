@@ -345,6 +345,127 @@ export class MercadoLivreSyncService {
   }
 
   /**
+   * Debug controlado: busca preços via /items/{id}/prices com diagnóstico detalhado
+   * Só deve ser chamado quando debugPrices=true e listingIdExt específico
+   */
+  public async debugFetchPrices(itemId: string): Promise<{
+    listingIdExt: string;
+    attemptedAt: string;
+    url: string;
+    statusCode: number;
+    blockedBy?: string;
+    code?: string;
+    message?: string;
+    headers?: {
+      retryAfter?: string;
+      rateLimit?: string;
+      contentType?: string;
+    };
+    body?: any; // Truncado ou subset relevante
+    error?: string;
+  }> {
+    await this.ensureInitializedForMlCall();
+    
+    const url = `${ML_API_BASE}/items/${itemId}/prices`;
+    const attemptedAt = new Date().toISOString();
+    
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${this.accessToken}`,
+          'Accept': 'application/json',
+          'User-Agent': 'SuperSellerIA/1.0',
+        },
+        timeout: 10000, // 10s timeout
+      });
+
+      const statusCode = response.status;
+      const responseHeaders = response.headers;
+      
+      // Extrair headers relevantes (whitelisted)
+      const relevantHeaders: any = {};
+      if (responseHeaders['retry-after']) relevantHeaders.retryAfter = responseHeaders['retry-after'];
+      if (responseHeaders['x-ratelimit-limit']) relevantHeaders.rateLimit = responseHeaders['x-ratelimit-limit'];
+      if (responseHeaders['content-type']) relevantHeaders.contentType = responseHeaders['content-type'];
+
+      // Truncar body para evitar payload muito grande
+      const rawBody = response.data;
+      let body: any = null;
+      
+      if (rawBody) {
+        // Incluir apenas campos-chave para debug
+        body = {
+          prices: Array.isArray(rawBody.prices) ? rawBody.prices.slice(0, 3).map((p: any) => ({
+            type: p.type,
+            amount: p.amount,
+            regular_amount: p.regular_amount,
+            currency_id: p.currency_id,
+          })) : null,
+          reference_prices: Array.isArray(rawBody.reference_prices) ? rawBody.reference_prices.slice(0, 2).map((p: any) => ({
+            type: p.type,
+            amount: p.amount,
+            currency_id: p.currency_id,
+          })) : null,
+          purchase_discounts: Array.isArray(rawBody.purchase_discounts) ? rawBody.purchase_discounts.slice(0, 2) : null,
+        };
+      }
+
+      return {
+        listingIdExt: itemId,
+        attemptedAt,
+        url,
+        statusCode,
+        headers: relevantHeaders,
+        body,
+      };
+    } catch (error: any) {
+      const statusCode = error.response?.status || 0;
+      const errorCode = error.response?.data?.code || error.code;
+      const errorMessage = error.response?.data?.message || error.message || 'Erro desconhecido';
+      
+      // Detectar PolicyAgent
+      let blockedBy: string | undefined;
+      if (errorCode === 'PA_UNAUTHORIZED_RESULT_FROM_POLICIES' || errorMessage.includes('PolicyAgent')) {
+        blockedBy = 'PolicyAgent';
+      } else if (statusCode === 403) {
+        blockedBy = '403_Forbidden';
+      } else if (statusCode === 429) {
+        blockedBy = 'RateLimit';
+      }
+
+      const responseHeaders = error.response?.headers || {};
+      const relevantHeaders: any = {};
+      if (responseHeaders['retry-after']) relevantHeaders.retryAfter = responseHeaders['retry-after'];
+      if (responseHeaders['x-ratelimit-limit']) relevantHeaders.rateLimit = responseHeaders['x-ratelimit-limit'];
+      if (responseHeaders['content-type']) relevantHeaders.contentType = responseHeaders['content-type'];
+
+      // Incluir body de erro (truncado)
+      let errorBody: any = null;
+      if (error.response?.data) {
+        const errorData = error.response.data;
+        errorBody = {
+          code: errorData.code,
+          message: errorData.message?.substring(0, 200), // Truncar mensagem
+          error: errorData.error?.substring(0, 100),
+        };
+      }
+
+      return {
+        listingIdExt: itemId,
+        attemptedAt,
+        url,
+        statusCode,
+        blockedBy,
+        code: errorCode,
+        message: errorMessage.substring(0, 200),
+        headers: relevantHeaders,
+        body: errorBody,
+        error: errorMessage.substring(0, 200),
+      };
+    }
+  }
+
+  /**
    * Obtém access_token válido usando helper centralizado
    * Não exige refresh_token se access_token ainda é válido
    * @throws Error com código 'AUTH_REVOKED' se o refresh falhar por revogação

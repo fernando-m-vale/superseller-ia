@@ -144,24 +144,28 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
           </span>
         </TableCell>
         <TableCell>
+          {/* Coluna "Preço de venda (comprador)": mostrar APENAS o preço atual */}
           {hasPromotionEffective ? (
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground line-through text-sm">
-                {formatPrice(originalPrice)}
-              </span>
-              <span className="text-primary font-medium">
-                {formatPrice(promotionalPrice)}
-              </span>
-            </div>
+            <span className="text-primary font-medium">
+              {formatPrice(promotionalPrice)}
+            </span>
           ) : (
             formatPrice(listing.price)
           )}
         </TableCell>
         <TableCell>
+          {/* Coluna "Preço Promocional": mostrar original riscado se houver promoção */}
           {hasPromotionEffective ? (
-            <span className="text-primary font-medium">
-              {formatPrice(promotionalPrice)}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground line-through text-sm">
+                {formatPrice(originalPrice)}
+              </span>
+              {listing.discountPercent && (
+                <Badge variant="secondary" className="text-xs">
+                  -{Math.round(listing.discountPercent)}%
+                </Badge>
+              )}
+            </div>
           ) : (
             <span className="text-muted-foreground">—</span>
           )}

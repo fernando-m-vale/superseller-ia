@@ -37,6 +37,7 @@ const AnalyzeParamsSchema = z.object({
 
 const AnalyzeQuerySchema = z.object({
   forceRefresh: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
+  debugPrices: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
 
 /**
@@ -173,6 +174,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const query = AnalyzeQuerySchema.parse(request.query);
         const { listingId } = params;
         const forceRefresh = query.forceRefresh ?? false;
+        const debugPrices = query.debugPrices ?? false;
 
         request.log.info({ 
           requestId,
@@ -1017,6 +1019,70 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               },
               'Response does not include Expert analysis - CRITICAL ERROR'
             );
+          }
+
+          // Debug controlado: capturar payload do ML /prices (só para listing específico)
+          if (debugPrices && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
+            try {
+              const syncService = new MercadoLivreSyncService(tenantId);
+              const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
+              
+              // Log estruturado
+              request.log.warn({
+                requestId,
+                tenantId,
+                listingId,
+                listingIdExt: listing.listing_id_ext,
+                statusCode: debugPricesResult.statusCode,
+                blockedBy: debugPricesResult.blockedBy,
+                code: debugPricesResult.code,
+                message: debugPricesResult.message,
+              }, 'Debug ML Prices API (debugPrices=true)');
+              
+              // Incluir no response
+              responseData._debugPrices = debugPricesResult;
+            } catch (debugError) {
+              request.log.error({
+                requestId,
+                tenantId,
+                listingId,
+                listingIdExt: listing.listing_id_ext,
+                error: debugError instanceof Error ? debugError.message : 'Erro desconhecido',
+              }, 'Erro ao executar debugPrices');
+              
+              responseData._debugPrices = {
+                listingIdExt: listing.listing_id_ext,
+                attemptedAt: new Date().toISOString(),
+                error: debugError instanceof Error ? debugError.message : 'Erro desconhecido',
+              };
+            }
+          } else if (process.env.DEBUG_ML_PRICES === 'true' && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
+            // Também permitir via env var
+            try {
+              const syncService = new MercadoLivreSyncService(tenantId);
+              const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
+              
+              request.log.warn({
+                requestId,
+                tenantId,
+                listingId,
+                listingIdExt: listing.listing_id_ext,
+                statusCode: debugPricesResult.statusCode,
+                blockedBy: debugPricesResult.blockedBy,
+                code: debugPricesResult.code,
+                message: debugPricesResult.message,
+              }, 'Debug ML Prices API (DEBUG_ML_PRICES env)');
+              
+              responseData._debugPrices = debugPricesResult;
+            } catch (debugError) {
+              request.log.error({
+                requestId,
+                tenantId,
+                listingId,
+                listingIdExt: listing.listing_id_ext,
+                error: debugError instanceof Error ? debugError.message : 'Erro desconhecido',
+              }, 'Erro ao executar debugPrices (env)');
+            }
           }
 
           // Adicionar header com commit SHA
