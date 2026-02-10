@@ -6,6 +6,7 @@ import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
 import { resolveMercadoLivreConnection } from '../utils/ml-connection-resolver';
 import { getValidAccessToken } from '../utils/ml-token-helper';
 import { extractBuyerPricesFromMlPrices } from '../utils/ml-prices-extractor';
+import { applyBuyerPricesOverrideFromMlPrices } from '../utils/ml-prices-extractor';
 
 const prisma = new PrismaClient();
 
@@ -53,6 +54,7 @@ interface MercadoLivreItem {
       id?: string;
       type?: string;
       amount?: number;
+      regular_amount?: number;
       currency_id?: string;
       conditions?: {
         context_restrictions?: string[];
@@ -82,7 +84,7 @@ interface MercadoLivreItem {
   }>;
   deal_ids?: string[];
   _enrichmentMeta?: {
-    endpointUsed: 'prices' | 'items' | 'none';
+    endpointUsed: 'prices' | 'prices-forced-hotfix' | 'items' | 'none';
     statusCode: number;
     payloadSize: number;
   };
@@ -757,18 +759,25 @@ export class MercadoLivreSyncService {
       (item.sale_price !== undefined && item.sale_price !== null && item.sale_price > 0 && item.sale_price !== item.price);
 
     if (hasConfirmedPromo) {
-      console.log(`[ML-SYNC] Item ${item.id} já tem promoção confirmada (original_price=${item.original_price}, sale_price=${item.sale_price}), pulando enriquecimento`);
-      return item;
+      const forcePricesHotfix = process.env.USE_ML_PRICES_FOR_PROMO === 'true' && item.id === 'MLB4167251409';
+      if (!forcePricesHotfix) {
+        console.log(`[ML-SYNC] Item ${item.id} já tem promoção confirmada (original_price=${item.original_price}, sale_price=${item.sale_price}), pulando enriquecimento`);
+        return item;
+      }
+
+      // Exceção: hotfix cirúrgico exige sempre tentar /prices para source of truth do comprador
+      console.log(`[ML-SYNC] Item ${item.id} tem promoção via /items, mas hotfix ativo: forçando fetch /prices`);
     }
 
-    let endpointUsed: 'prices' | 'items' | 'none' = 'none';
+    let endpointUsed: 'prices' | 'prices-forced-hotfix' | 'items' | 'none' = 'none';
     let enrichStatusCode = 0;
     let enrichPayloadSize = 0;
 
     const pricesData = await this.fetchItemPrices(item.id);
 
     if (pricesData) {
-      endpointUsed = 'prices';
+      const forcePricesHotfix = process.env.USE_ML_PRICES_FOR_PROMO === 'true' && item.id === 'MLB4167251409';
+      endpointUsed = forcePricesHotfix ? 'prices-forced-hotfix' : 'prices';
       enrichStatusCode = pricesData.statusCode;
       enrichPayloadSize = pricesData.payloadSize;
 
@@ -1328,20 +1337,56 @@ export class MercadoLivreSyncService {
         const isTargetListing = item.id === 'MLB4167251409';
         
         if (useMlPricesForPromo && isTargetListing) {
-          // Tentar extrair preços do payload /prices se disponível
-          if (item.prices?.prices && Array.isArray(item.prices.prices)) {
-            const buyerPrices = extractBuyerPricesFromMlPrices({ prices: item.prices.prices });
-            
-            if (buyerPrices.hasPromotionEffective && buyerPrices.originalPrice && buyerPrices.promotionalPrice) {
-              // Sobrescrever valores com preços do /prices
-              const oldPriceFinal = priceFinal;
-              const oldDiscount = discountPercent;
-              
-              priceFinal = buyerPrices.promotionalPrice;
-              originalPrice = buyerPrices.originalPrice;
-              hasPromotion = true;
-              discountPercent = buyerPrices.discountPercent ?? null;
-              
+          // Segurança extra: se item.prices não existe (ex: enrich retornou cedo), buscar /prices aqui mesmo
+          let pricesForHotfix: NonNullable<MercadoLivreItem['prices']>['prices'] | null =
+            (item.prices?.prices && Array.isArray(item.prices.prices)) ? item.prices.prices : null;
+          let usedPricesEndpoint = false;
+
+          if (!pricesForHotfix) {
+            const pricesData = await this.fetchItemPrices(item.id);
+            if (pricesData?.statusCode === 200 && pricesData.prices && pricesData.prices.length > 0) {
+              const fetchedPrices = pricesData.prices;
+              pricesForHotfix = fetchedPrices;
+              usedPricesEndpoint = true;
+
+              // Preencher evidências no item (sem persistir payload bruto)
+              item.prices = { prices: fetchedPrices };
+
+              const promoEntry = fetchedPrices.find(p => p.type === 'promotion');
+              const standardEntry = fetchedPrices.find(p => p.type === 'standard');
+              if (promoEntry?.amount && promoEntry.amount > 0) {
+                item.sale_price = promoEntry.amount;
+              }
+              const forcedOriginal =
+                promoEntry?.regular_amount ??
+                standardEntry?.amount ??
+                null;
+              if (forcedOriginal && forcedOriginal > 0) {
+                item.original_price = forcedOriginal;
+              }
+            }
+          }
+
+          if (pricesForHotfix) {
+            const oldPriceFinal = priceFinal;
+            const oldDiscount = discountPercent;
+
+            const override = applyBuyerPricesOverrideFromMlPrices(
+              {
+                priceFinal,
+                originalPrice,
+                discountPercent,
+                hasPromotion,
+              },
+              { prices: pricesForHotfix }
+            );
+
+            if (override.applied) {
+              priceFinal = override.next.priceFinal;
+              originalPrice = override.next.originalPrice;
+              discountPercent = override.next.discountPercent;
+              hasPromotion = override.next.hasPromotion;
+
               // Log estruturado (sem tokens)
               console.log(`[ML-SYNC] ml-prices-applied itemId=${item.id}`, {
                 stage: 'ml-prices-applied',
@@ -1350,6 +1395,7 @@ export class MercadoLivreSyncService {
                 newPriceFinal: priceFinal,
                 oldDiscount,
                 newDiscount: discountPercent,
+                usedPricesEndpoint,
                 tenantId: this.tenantId,
               });
             }

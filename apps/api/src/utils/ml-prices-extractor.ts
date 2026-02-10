@@ -12,6 +12,13 @@ export interface BuyerPricesResult {
   hasPromotionEffective: boolean;
 }
 
+export interface PromoOverrideFields {
+  priceFinal: number;
+  originalPrice: number | null;
+  discountPercent: number | null;
+  hasPromotion: boolean;
+}
+
 /**
  * Extrai preços do comprador do payload /items/{id}/prices
  * 
@@ -78,4 +85,40 @@ export function extractBuyerPricesFromMlPrices(payload: {
   }
 
   return result;
+}
+
+/**
+ * Aplica override (hotfix) dos campos de promoção usando o payload do /prices.
+ * Retorna `applied=true` apenas quando detecta promoção efetiva no /prices.
+ */
+export function applyBuyerPricesOverrideFromMlPrices(
+  current: PromoOverrideFields,
+  payload: {
+    prices?: Array<{
+      type?: string;
+      amount?: number;
+      regular_amount?: number;
+      currency_id?: string;
+    }>;
+  }
+): { applied: boolean; next: PromoOverrideFields } {
+  const buyerPrices = extractBuyerPricesFromMlPrices(payload);
+
+  if (
+    buyerPrices.hasPromotionEffective &&
+    typeof buyerPrices.originalPrice === 'number' &&
+    typeof buyerPrices.promotionalPrice === 'number'
+  ) {
+    return {
+      applied: true,
+      next: {
+        priceFinal: buyerPrices.promotionalPrice,
+        originalPrice: buyerPrices.originalPrice,
+        discountPercent: buyerPrices.discountPercent ?? null,
+        hasPromotion: true,
+      },
+    };
+  }
+
+  return { applied: false, next: current };
 }

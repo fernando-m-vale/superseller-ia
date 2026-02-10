@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractBuyerPricesFromMlPrices } from '../utils/ml-prices-extractor';
+import { applyBuyerPricesOverrideFromMlPrices, extractBuyerPricesFromMlPrices } from '../utils/ml-prices-extractor';
 
 describe('extractBuyerPricesFromMlPrices', () => {
   it('deve extrair preços quando há promoção válida', () => {
@@ -108,5 +108,50 @@ describe('extractBuyerPricesFromMlPrices', () => {
     const result = extractBuyerPricesFromMlPrices(payload);
 
     expect(result.hasPromotionEffective).toBe(false);
+  });
+});
+
+describe('applyBuyerPricesOverrideFromMlPrices', () => {
+  it('deve sobrescrever promoção do /items quando /prices indicar valor menor (regressão MLB4167251409)', () => {
+    // Simula cálculo atual vindo do /items: original 100, promo 70.23 (stale)
+    const current = {
+      priceFinal: 70.23,
+      originalPrice: 100,
+      discountPercent: 30,
+      hasPromotion: true,
+    };
+
+    // Source of truth do comprador (/prices): promo 66.93 com regular 100
+    const payload = {
+      prices: [
+        { type: 'standard', amount: 100, currency_id: 'BRL' },
+        { type: 'promotion', amount: 66.93, regular_amount: 100, currency_id: 'BRL' },
+      ],
+    };
+
+    const res = applyBuyerPricesOverrideFromMlPrices(current, payload);
+
+    expect(res.applied).toBe(true);
+    expect(res.next.hasPromotion).toBe(true);
+    expect(res.next.originalPrice).toBe(100);
+    expect(res.next.priceFinal).toBe(66.93);
+    expect(res.next.discountPercent).toBe(33);
+  });
+
+  it('não deve aplicar override quando não há promoção efetiva no /prices', () => {
+    const current = {
+      priceFinal: 70.23,
+      originalPrice: 100,
+      discountPercent: 30,
+      hasPromotion: true,
+    };
+
+    const payload = {
+      prices: [{ type: 'standard', amount: 100, currency_id: 'BRL' }],
+    };
+
+    const res = applyBuyerPricesOverrideFromMlPrices(current, payload);
+    expect(res.applied).toBe(false);
+    expect(res.next).toEqual(current);
   });
 });
