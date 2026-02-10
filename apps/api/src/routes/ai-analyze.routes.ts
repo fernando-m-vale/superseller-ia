@@ -205,11 +205,25 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Step 1.5: Se forceRefresh=true, atualizar listing antes de analisar (garantir preço/promo atual)
         if (forceRefresh && listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
           try {
+            // Log before
+            const beforePrice = listing.price;
+            const beforePriceFinal = listing.price_final;
+            const beforeOriginalPrice = listing.original_price;
+            const beforeHasPromotion = listing.has_promotion;
+            const beforeDiscountPercent = listing.discount_percent;
+            
             request.log.info({
               requestId,
               listingId,
               listingIdExt: listing.listing_id_ext,
-            }, 'forceRefresh=true: atualizando listing antes de analisar');
+              before: {
+                price: beforePrice,
+                price_final: beforePriceFinal,
+                original_price: beforeOriginalPrice,
+                has_promotion: beforeHasPromotion,
+                discount_percent: beforeDiscountPercent,
+              },
+            }, 'forceRefresh=true: atualizando listing antes de analisar (BEFORE)');
             
             const syncService = new MercadoLivreSyncService(tenantId);
             const items = await syncService.fetchItemsDetails([listing.listing_id_ext]);
@@ -226,17 +240,28 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               });
               
               if (refreshedListing) {
-                // Atualizar objeto listing local com dados frescos
-                Object.assign(listing, refreshedListing);
+                // Log after
                 request.log.info({
                   requestId,
                   listingId,
-                  price: listing.price,
-                  price_final: listing.price_final,
-                  original_price: listing.original_price,
-                  has_promotion: listing.has_promotion,
-                  discount_percent: listing.discount_percent,
-                }, 'Listing atualizado via force-refresh');
+                  before: {
+                    price: beforePrice,
+                    price_final: beforePriceFinal,
+                    original_price: beforeOriginalPrice,
+                    has_promotion: beforeHasPromotion,
+                    discount_percent: beforeDiscountPercent,
+                  },
+                  after: {
+                    price: refreshedListing.price,
+                    price_final: refreshedListing.price_final,
+                    original_price: refreshedListing.original_price,
+                    has_promotion: refreshedListing.has_promotion,
+                    discount_percent: refreshedListing.discount_percent,
+                  },
+                }, 'Listing atualizado via force-refresh (AFTER)');
+                
+                // Atualizar objeto listing local com dados frescos
+                Object.assign(listing, refreshedListing);
               }
             }
           } catch (refreshError) {
@@ -844,8 +869,33 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             scoreExplanation,
             // MediaVerdict - Fonte única de verdade para mídia
             mediaVerdict,
-            // Benchmark (Dia 04)
-            benchmark: benchmarkResult,
+            // Benchmark (Dia 04) - NUNCA null
+            benchmark: benchmarkResult || {
+              benchmarkSummary: {
+                categoryId: listing.category,
+                sampleSize: 0,
+                computedAt: new Date().toISOString(),
+                confidence: 'unavailable',
+                notes: 'Benchmark indisponível (cache antigo ou erro)',
+                stats: {
+                  medianPicturesCount: 0,
+                  percentageWithVideo: 0,
+                  medianPrice: 0,
+                  medianTitleLength: 0,
+                  sampleSize: 0,
+                },
+                baselineConversion: {
+                  conversionRate: null,
+                  sampleSize: 0,
+                  totalVisits: 0,
+                  confidence: 'unavailable',
+                },
+              },
+              youWinHere: [],
+              youLoseHere: [],
+              tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+              recommendations: [],
+            },
           };
 
           // Se header x-debug: 1, incluir benchmarkDebug no payload
@@ -1095,8 +1145,33 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           scoreExplanation,
           // MediaVerdict - Fonte única de verdade para mídia
           mediaVerdict,
-          // Benchmark (Dia 04) - também calculado para cache
-          benchmark: cacheBenchmarkResult,
+          // Benchmark (Dia 04) - também calculado para cache - NUNCA null
+          benchmark: cacheBenchmarkResult || {
+            benchmarkSummary: {
+              categoryId: listing.category,
+              sampleSize: 0,
+              computedAt: new Date().toISOString(),
+              confidence: 'unavailable',
+              notes: 'Benchmark indisponível (cache antigo ou erro)',
+              stats: {
+                medianPicturesCount: 0,
+                percentageWithVideo: 0,
+                medianPrice: 0,
+                medianTitleLength: 0,
+                sampleSize: 0,
+              },
+              baselineConversion: {
+                conversionRate: null,
+                sampleSize: 0,
+                totalVisits: 0,
+                confidence: 'unavailable',
+              },
+            },
+            youWinHere: [],
+            youLoseHere: [],
+            tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+            recommendations: [],
+          },
         };
 
         // Se header x-debug: 1, incluir benchmarkDebug no payload
@@ -1123,6 +1198,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             listingId,
           }, 'Cache hit but no analysisV21 found');
         }
+
+        // Adicionar header com commit SHA
+        setVersionHeader(reply);
 
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',

@@ -50,11 +50,18 @@ export const metaRoutes: FastifyPluginCallback = (app, _, done) => {
         buildTime = process.env.BUILD_TIME || new Date().toISOString();
       }
 
+      // Obter short SHA (7 caracteres)
+      const shortSha = gitSha !== 'unknown' && gitSha.length > 7 
+        ? gitSha.substring(0, 7) 
+        : gitSha;
+
       const response = {
         gitSha,
+        gitShaShort: shortSha,
         buildTime,
         env: process.env.NODE_ENV || 'development',
         version: process.env.APP_VERSION || '1.0.0',
+        promptVersion: process.env.AI_PROMPT_VERSION || 'ml-expert-v22',
         timestamp: new Date().toISOString(),
       };
 
