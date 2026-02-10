@@ -44,8 +44,9 @@ import { sanitizeExpertAnalysis } from '@superseller/core';
 
 const prisma = new PrismaClient();
 
-// Prompt version configurável via env (default: ml-expert-v21)
-const AI_PROMPT_VERSION = process.env.AI_PROMPT_VERSION || 'ml-expert-v21';
+// Prompt version - usar fonte única de verdade
+import { getPromptVersion } from '../utils/prompt-version';
+const AI_PROMPT_VERSION = getPromptVersion();
 
 export interface ListingAnalysisInput {
   id: string;

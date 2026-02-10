@@ -185,6 +185,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     // V2.1 - Análise estruturada (opcional, não processada pelo adaptador)
     // Será preenchido diretamente do response após adaptação
     analysisV21: undefined,
+    // Benchmark (Dia 04) - não processado pelo adaptador
+    benchmark: undefined,
   }
 }
 
@@ -351,6 +353,17 @@ export function useAIAnalyze(listingId: string | null) {
         })
       } else {
         console.warn('[AI-ANALYZE] No analysisV21 in response', { listingId })
+      }
+
+      // Ler benchmark do schema real: response.data.benchmark
+      const benchmark = result.data?.benchmark ?? null
+      if (benchmark) {
+        adaptedData.benchmark = benchmark
+        console.log('[AI-ANALYZE] Benchmark found', {
+          listingId,
+          confidence: benchmark?.benchmarkSummary?.confidence,
+          sampleSize: benchmark?.benchmarkSummary?.sampleSize,
+        })
       }
       
       // Normalizar resposta (snake_case → camelCase)

@@ -196,6 +196,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   listingPriceFinal={promotionalPrice}
                   listingHasPromotion={hasPromotion}
                   listingDiscountPercent={listing.discountPercent}
+                  benchmark={aiAnalysis.benchmark ?? null}
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
                 />

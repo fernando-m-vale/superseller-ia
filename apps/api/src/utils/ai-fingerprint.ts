@@ -10,16 +10,18 @@
  */
 
 import { createHash } from 'crypto';
+import { getPromptVersion, PROMPT_VERSION } from './prompt-version';
 
 /**
- * Returns the effective prompt version.
- * Priority: process.env.AI_PROMPT_VERSION > fallback 'ml-expert-v22'
+ * @deprecated Use getPromptVersion from './prompt-version' instead
+ * This is kept for backward compatibility
  */
 export function getEffectivePromptVersion(): string {
-  return process.env.AI_PROMPT_VERSION || 'ml-expert-v22';
+  return getPromptVersion();
 }
 
-export const PROMPT_VERSION = getEffectivePromptVersion();
+// Re-export from single source of truth
+export { getPromptVersion, PROMPT_VERSION };
 
 /**
  * Data structure for fingerprint generation
@@ -210,6 +212,6 @@ export function buildFingerprintInput(
       visitsCoverage: metrics.visitsCoverage,
     },
     periodDays,
-    promptVersion: getEffectivePromptVersion(),
+    promptVersion: getPromptVersion(),
   };
 }

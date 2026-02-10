@@ -11,6 +11,7 @@ import type { NormalizedAIAnalysisV21 } from '@/lib/ai/normalizeAiAnalyze'
 import { useToast } from '@/hooks/use-toast'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 import { PromotionHighlightPanel, type PromotionPlacementItem } from '@/components/ai/PromotionHighlightPanel'
+import { BenchmarkPanel } from '@/components/ai/BenchmarkPanel'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -21,6 +22,32 @@ interface ListingAIAnalysisPanelProps {
   listingPriceFinal?: number | null
   listingHasPromotion?: boolean | null
   listingDiscountPercent?: number | null
+  benchmark?: {
+    benchmarkSummary: {
+      categoryId: string | null
+      sampleSize: number
+      computedAt: string
+      confidence: 'high' | 'medium' | 'low' | 'unavailable'
+      notes?: string
+      stats?: {
+        medianPicturesCount: number
+        percentageWithVideo: number
+        medianPrice: number
+        medianTitleLength: number
+        sampleSize: number
+      }
+      baselineConversion?: {
+        conversionRate: number | null
+        sampleSize: number
+        totalVisits: number
+        confidence: 'high' | 'medium' | 'low' | 'unavailable'
+      }
+    }
+    youWinHere: string[]
+    youLoseHere: string[]
+    tradeoffs?: string
+    recommendations?: string[]
+  } | null
   onRegenerate?: () => Promise<void>
   isRegenerating?: boolean
 }

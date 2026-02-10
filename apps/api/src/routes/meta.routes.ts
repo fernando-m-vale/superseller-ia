@@ -9,6 +9,7 @@ import { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { execSync } from 'child_process';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { getPromptVersion } from '../utils/prompt-version';
 
 export const metaRoutes: FastifyPluginCallback = (app, _, done) => {
   /**
@@ -61,7 +62,7 @@ export const metaRoutes: FastifyPluginCallback = (app, _, done) => {
         buildTime,
         env: process.env.NODE_ENV || 'development',
         version: process.env.APP_VERSION || '1.0.0',
-        promptVersion: process.env.AI_PROMPT_VERSION || 'ml-expert-v22',
+        promptVersion: getPromptVersion(),
         timestamp: new Date().toISOString(),
       };
 

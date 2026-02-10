@@ -48,7 +48,7 @@ export interface NormalizedAIAnalysisV21 {
 /**
  * Tipo completo normalizado incluindo dados V1
  */
-export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan'> {
+export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark'> {
   analysisV21?: NormalizedAIAnalysisV21
   seoSuggestions?: {
     suggestedTitle?: string
@@ -69,6 +69,8 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
     howTo?: string[]
     mlDeeplink?: string
   }>
+  // Benchmark (Dia 04) - mantém formato original
+  benchmark?: AIAnalysisResponse['benchmark']
 }
 
 /**
