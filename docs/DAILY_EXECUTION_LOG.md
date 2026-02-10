@@ -1,3 +1,43 @@
+# DAILY EXECUTION LOG — 2026-02-09 (Dia 4)
+
+## ⚠️ STATUS: TECNICAMENTE CONCLUÍDO, CI/Deploy em correção final
+
+## 🎯 Foco do dia
+**Final Closure Dia 04 — Benchmark (backend + UI) — Unificação de versões de prompt — forceRefresh e cache consistency — Estabilização de CI/Deploy**
+
+## ✅ Planejado
+- [x] Integrar Benchmark no backend e frontend
+- [x] Garantir benchmark nunca null (sempre objeto com confidence='unavailable' se falhar)
+- [x] Unificar AI_PROMPT_VERSION em fonte única (apps/api/src/utils/prompt-version.ts)
+- [x] Expor promptVersion e schemaVersion no response
+- [x] Corrigir TS build (setVersionHeader definido antes do uso)
+- [x] Ajustar pipelines App Runner (aguardar estado RUNNING antes de start-deployment)
+- [x] Integrar BenchmarkPanel na UI (ListingAIAnalysisPanel)
+- [x] Adicionar benchmark aos tipos TypeScript (AIAnalysisResponse)
+
+## 🧠 Descobertas
+- **Pipeline WEB falhou por divergência entre payload real e tipos TypeScript:** API retornava `benchmark` corretamente, mas tipo `AIAnalysisResponse` não incluía o campo, causando erro TS em `adaptAIAnalysisResponse`
+- **ESLint e TS falhas foram em cadeia:** `BenchmarkPanel` importado mas não usado → erro ESLint → correção adicionou uso → erro TS por tipo ausente
+- **App Runner falhava em estados transitórios ≠ RUNNING:** Deploy tentava iniciar quando serviço estava em `OPERATION_IN_PROGRESS`, causando falha "Can't start a deployment ... because it isn't in RUNNING state"
+- **Secrets não estavam injetados originalmente no App Runner:** Smoke test inicial falhava por falta de env vars; corrigido com dummy vars no CI
+- **Cache não invalidava quando prompt version mudava:** Fingerprint não incluía `AI_PROMPT_VERSION`, causando cache stale após mudança de prompt
+- **forceRefresh não atualizava listing antes de analisar:** Análise usava dados stale (preço/promo antigos) mesmo com `forceRefresh=true`
+
+## ⚠️ Bloqueios / riscos
+- **CI WEB ainda vermelho no momento do encerramento (tipagem benchmark):** Erro TypeScript em `use-ai-analyze.ts` linha 189 — **RESOLVIDO em hotfix posterior**
+- **Dependência de hotfix final do Cursor para liberar pipeline:** Tipagem `benchmark` em `AIAnalysisResponse` necessária para build passar — **RESOLVIDO**
+
+## 📌 Decisões tomadas
+- **Manter benchmark como campo opcional e nunca null:** Sempre retornar objeto com `confidence='unavailable'` quando dados insuficientes; nunca retornar `null`
+- **Centralizar promptVersion em fonte única:** Criar `apps/api/src/utils/prompt-version.ts` como única fonte de verdade; remover divergências entre `ml-expert-v21` e `ml-expert-v22`
+- **Tornar deploy App Runner resiliente a estados transitórios:** Adicionar pre-check que aguarda estado `RUNNING` antes de `start-deployment`; polling com retry e timeout explícito
+- **Encerrar Dia 04 mesmo com pipeline pendente:** Registrar status real (tecnicamente concluído, aguardando validação final de pipeline)
+
+## ➡️ Próximo passo claro
+**Dia 05 — Validação & Consolidação: Finalizar hotfix de tipagem no WEB, validar pipeline verde, validar benchmark na UI, verificar cacheHit vs fresh, verificar promptVersion em produção, testes end-to-end**
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-09 (Dia 3)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

@@ -1,22 +1,74 @@
-# NEXT SESSION PLAN — Dia 5 (Após Fix Pack Dia 04)
+# NEXT SESSION PLAN — Dia 5 (Validação & Consolidação)
 
 ## 🗓️ Próxima Sessão — Dia 05
 
 ### Objetivo principal
-**Continuar com benchmark e comparação com concorrentes (se necessário) ou avançar para próxima feature prioritária.**
+**Pipeline CI/Deploy 100% verde — Validação funcional do benchmark na UI — Verificação de cacheHit vs fresh — Verificação de promptVersion em produção**
 
 ### Status do Dia 04
 - ✅ Benchmark nunca retorna null (sempre objeto com confidence="unavailable" se falhar)
 - ✅ Logs estruturados quando benchmark falhar
 - ✅ Refresh de listing quando forceRefresh=true
-- ✅ Cache funcionando corretamente
-- ✅ Suporte opcional para header x-debug: 1
+- ✅ Cache funcionando corretamente (fingerprint inclui promptVersion)
+- ✅ promptVersion e schemaVersion expostos no response
+- ✅ BenchmarkPanel integrado na UI (ListingAIAnalysisPanel)
+- ✅ Tipagem TypeScript corrigida (benchmark em AIAnalysisResponse)
+- ✅ Pipelines App Runner resilientes a estados transitórios
+- ⚠️ CI/Deploy em fase final de estabilização (hotfix de tipagem aplicado)
 
-### Próximos passos (se necessário)
-- [ ] Validar benchmark em produção (verificar se UI renderiza corretamente)
-- [ ] Validar refresh de listing (verificar se preço/promo estão atualizados)
-- [ ] Validar cache (verificar se cacheHit funciona corretamente)
-- [ ] Continuar com benchmark e comparação com concorrentes (se necessário)
+### Checklist inicial (Dia 05)
+
+#### 1. Conferir Actions (WEB + API)
+- [ ] Verificar se build WEB passa (TypeScript sem erros)
+- [ ] Verificar se build API passa
+- [ ] Verificar se lint passa em ambos
+- [ ] Confirmar que CI está verde
+
+#### 2. Conferir deploy App Runner
+- [ ] Verificar se deploy WEB App Runner completou com sucesso
+- [ ] Verificar se deploy API App Runner completou com sucesso
+- [ ] Confirmar que serviços estão em estado RUNNING
+- [ ] Validar que pre-check de estado RUNNING está funcionando
+
+#### 3. Validar /api/v1/meta
+- [ ] Verificar que endpoint retorna `gitShaShort` e `promptVersion`
+- [ ] Confirmar que `promptVersion` corresponde ao esperado (`ml-expert-v22`)
+- [ ] Validar que `gitShaShort` corresponde ao commit atual
+
+#### 4. Rodar fluxo completo de análise (fresh + cache)
+- [ ] Gerar análise fresh (sem cache)
+  - [ ] Verificar que `cacheHit: false`
+  - [ ] Verificar que `benchmark` está presente
+  - [ ] Verificar que `promptVersion` e `schemaVersion` estão presentes
+  - [ ] Verificar que `x-api-commit` header está presente
+- [ ] Gerar análise cached (com cache)
+  - [ ] Verificar que `cacheHit: true`
+  - [ ] Verificar que `benchmark` está presente (mesmo que confidence='unavailable')
+  - [ ] Verificar que payload é idêntico (exceto timestamps)
+
+#### 5. Validar benchmark na UI
+- [ ] Verificar que BenchmarkPanel renderiza quando `benchmark` existe
+- [ ] Verificar que mostra "Comparação indisponível" quando `confidence='unavailable'`
+- [ ] Verificar que mostra "Você ganha aqui" e "Você perde aqui" quando disponível
+- [ ] Verificar que não quebra quando `benchmark` é null ou undefined
+
+#### 6. Validar forceRefresh
+- [ ] Rodar análise com `forceRefresh=true`
+- [ ] Verificar que listing foi atualizado antes de analisar
+- [ ] Verificar logs de before/after (price_final, original_price, has_promotion, discount_percent)
+- [ ] Confirmar que análise usa dados atualizados
+
+#### 7. Registrar evidências
+- [ ] Screenshots de benchmark na UI (disponível e unavailable)
+- [ ] Logs de cacheHit (fresh e cached)
+- [ ] Payload de /api/v1/meta
+- [ ] Payload de análise (fresh e cached)
+- [ ] Evidências de forceRefresh atualizando dados
+
+### Próximos passos (após validação)
+- [ ] Continuar com melhorias de benchmark (se necessário)
+- [ ] Avançar para próxima feature prioritária
+- [ ] Documentar aprendizados e débitos técnicos
 
 ---
 

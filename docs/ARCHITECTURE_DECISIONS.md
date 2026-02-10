@@ -604,6 +604,76 @@ Quando `forceRefresh=true`, análise usava dados stale (preço/promo antigos). L
 
 ---
 
+## ADR-018: Prompt Version como Fonte Única
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Sistema tinha múltiplas definições de `AI_PROMPT_VERSION` em diferentes arquivos (`OpenAIService.ts`, `ai-fingerprint.ts`), causando divergências e inconsistências.
+
+### Decisão
+**Centralizar `promptVersion` em fonte única: `apps/api/src/utils/prompt-version.ts`. Todos os módulos devem importar de lá.**
+
+### Justificativa
+- Evita divergências entre módulos
+- Facilita mudança de versão (um único lugar)
+- Consistência garantida em todo o sistema
+- Facilita observabilidade (versão exposta em `/api/v1/meta`)
+
+### Implementação
+- **Criar `apps/api/src/utils/prompt-version.ts`:** Função `getPromptVersion()` retorna `process.env.AI_PROMPT_VERSION || 'ml-expert-v22'`
+- **Atualizar todos os módulos:** `OpenAIService`, `ai-fingerprint`, `meta.routes`, `ai-analyze.routes` importam de fonte única
+- **Expor em response:** `promptVersion` e `schemaVersion` incluídos no response de análise
+- **Header x-api-commit:** Adicionado para identificar commit em produção
+
+### Impacto
+- **Consistência:** Versão sempre sincronizada
+- **Observabilidade:** Versão exposta facilita debug
+- **Manutenibilidade:** Mudança de versão em um único lugar
+
+### Alternativas consideradas
+- Manter múltiplas definições: Risco de divergência
+- Usar apenas env var: Sem fallback padrão
+
+---
+
+## ADR-019: Deploy App Runner Resiliente a Estados Transitórios
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Deploy App Runner falhava intermitentemente com erro "Can't start a deployment ... because it isn't in RUNNING state" quando serviço estava em estado transitório (`OPERATION_IN_PROGRESS`).
+
+### Decisão
+**Aguardar estado `RUNNING` antes de iniciar deployment. Polling com retry e timeout explícito.**
+
+### Justificativa
+- App Runner pode estar em estado transitório após deploy anterior
+- Tentar iniciar deployment em estado não-RUNNING causa falha
+- Pipeline deve ser resiliente a condições transitórias
+- Melhor UX: pipeline não falha por condições temporárias
+
+### Implementação
+- **Pre-check antes de `start-deployment`:** Poll `aws apprunner describe-service` até `Status == RUNNING`
+- **Retry com backoff:** Intervalo de 15s, máximo 20 retries (5 minutos)
+- **Tratamento de erros:** Se AWS CLI falhar, retry com fallback
+- **Timeout explícito:** Se não chegar a RUNNING após timeout, falhar com mensagem clara
+- **Aplicado em:** `deploy-api.yml` e `deploy-web.yml`
+
+### Impacto
+- **Resiliência:** Pipeline não falha por estados transitórios
+- **Confiabilidade:** Deploy mais confiável em cenários de deploys seguidos
+- **Observabilidade:** Logs mostram status e retry count
+
+### Alternativas consideradas
+- Não aguardar: Falha frequente em estados transitórios
+- Aguardar fixo: Timeout desnecessário quando já está RUNNING
+- Retry sem timeout: Pode travar indefinidamente
+
+---
+
 ## Registro de Decisões Futuras
 
 ### Pendentes de ADR formal
