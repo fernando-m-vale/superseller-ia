@@ -1399,10 +1399,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Debug controlado: capturar payload do ML /prices (só para listing específico)
-        const query = AnalyzeQuerySchema.parse(request.query);
-        const debugPrices = query.debugPrices ?? false;
+        const cacheQuery = AnalyzeQuerySchema.parse(request.query);
+        const cacheDebugPrices = cacheQuery.debugPrices ?? false;
         
-        if ((debugPrices || process.env.DEBUG_ML_PRICES === 'true') && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
+        if ((cacheDebugPrices || process.env.DEBUG_ML_PRICES === 'true') && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
           try {
             const syncService = new MercadoLivreSyncService(tenantId);
             const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
