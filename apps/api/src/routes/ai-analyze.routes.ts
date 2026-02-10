@@ -813,6 +813,113 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             };
           }
 
+          // Step 6: Save to cache (incluindo V2.1 e benchmark) - DEPOIS do cálculo do benchmark
+          try {
+            const cachePayload: any = {
+              analysis: {
+                score: result.analysis.score,
+                critique: result.analysis.critique,
+                growthHacks: result.analysis.growthHacks,
+                seoSuggestions: result.analysis.seoSuggestions,
+                analyzedAt: result.analysis.analyzedAt,
+                model: result.analysis.model,
+              },
+              savedRecommendations: result.savedRecommendations,
+            };
+
+            // Sempre incluir Expert se disponível (obrigatório)
+            if (analysisV21) {
+              // Normalizar meta.prompt_version e meta.version antes de salvar no cache
+              const normalizedAnalysisV21 = { ...analysisV21 };
+              if (normalizedAnalysisV21.meta) {
+                normalizedAnalysisV21.meta.prompt_version = PROMPT_VERSION as any;
+                normalizedAnalysisV21.meta.version = PROMPT_VERSION as any;
+              } else {
+                // Se meta não existir, criar com campos mínimos necessários
+                normalizedAnalysisV21.meta = {
+                  ...(analysisV21.meta || {}),
+                  prompt_version: PROMPT_VERSION as any,
+                  version: PROMPT_VERSION as any,
+                  model: analysisV21.meta?.model || 'gpt-4o',
+                  analyzed_at: analysisV21.meta?.analyzed_at || new Date().toISOString(),
+                };
+              }
+              cachePayload.analysisV21 = normalizedAnalysisV21;
+            } else {
+              // Se não tiver analysisV21, logar warning mas continuar
+              request.log.warn(
+                {
+                  requestId,
+                  listingId,
+                  tenantId,
+                },
+                'V2.1 analysis not available, saving cache without analysisV21'
+              );
+            }
+
+            // Incluir benchmark no cachePayload (Dia 04) - benchmarkResult já foi calculado acima
+            if (benchmarkResult) {
+              cachePayload.benchmark = benchmarkResult;
+            } else {
+              // Incluir fallback padrão para garantir que nunca seja null
+              cachePayload.benchmark = {
+                benchmarkSummary: {
+                  categoryId: listing.category,
+                  sampleSize: 0,
+                  computedAt: new Date().toISOString(),
+                  confidence: 'unavailable',
+                  notes: 'Benchmark indisponível (cache antigo ou erro)',
+                  stats: {
+                    medianPicturesCount: 0,
+                    percentageWithVideo: 0,
+                    medianPrice: 0,
+                    medianTitleLength: 0,
+                    sampleSize: 0,
+                  },
+                  baselineConversion: {
+                    conversionRate: null,
+                    sampleSize: 0,
+                    totalVisits: 0,
+                    confidence: 'unavailable',
+                  },
+                },
+                youWinHere: [],
+                youLoseHere: [],
+                tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+                recommendations: [],
+              };
+            }
+
+            await prisma.listingAIAnalysis.upsert({
+              where: {
+                tenant_id_listing_id_period_days_fingerprint: {
+                  tenant_id: tenantId,
+                  listing_id: listingId,
+                  period_days: PERIOD_DAYS,
+                  fingerprint,
+                },
+              },
+              update: {
+                model: result.analysis.model || 'gpt-4o',
+                prompt_version: PROMPT_VERSION,
+                result_json: cachePayload as unknown as Prisma.InputJsonValue,
+                updated_at: new Date(),
+              },
+              create: {
+                tenant_id: tenantId,
+                listing_id: listingId,
+                period_days: PERIOD_DAYS,
+                fingerprint,
+                model: result.analysis.model || 'gpt-4o',
+                prompt_version: PROMPT_VERSION,
+                result_json: cachePayload as unknown as Prisma.InputJsonValue,
+              },
+            });
+          } catch (cacheError) {
+            // Log but don't fail if cache save fails
+            request.log.warn({ err: cacheError, listingId, fingerprint: fingerprint.substring(0, 16) + '...' }, 'Failed to save AI analysis to cache');
+          }
+
           // Preparar resposta com Expert (ml-expert-v1)
           const responseData: any = {
             listingId, // GARANTIR que usa o listingId do request, não de outro lugar
