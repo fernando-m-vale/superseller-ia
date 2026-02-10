@@ -11,6 +11,7 @@ locals {
     shopee_redirect_uri  = "prod/SHOPEE_REDIRECT_URI"
     next_public_api_url  = "prod/NEXT_PUBLIC_API_URL"
     openai_api_key       = "prod/OPENAI_API_KEY"
+    internal_jobs_key    = "prod/INTERNAL_JOBS_KEY"
   }
 }
 
