@@ -38,6 +38,27 @@ const AnalyzeQuerySchema = z.object({
   forceRefresh: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
 
+/**
+ * Helper para adicionar header x-api-commit nas respostas
+ */
+function setVersionHeader(reply: FastifyReply): void {
+  try {
+    const { execSync } = require('child_process');
+    const gitSha = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+    const shortSha = gitSha.length > 7 ? gitSha.substring(0, 7) : gitSha;
+    reply.header('x-api-commit', shortSha);
+  } catch {
+    // Se não conseguir, tentar via env
+    const gitSha = process.env.GIT_SHA || process.env.COMMIT_SHA;
+    if (gitSha) {
+      const shortSha = gitSha.length > 7 ? gitSha.substring(0, 7) : gitSha;
+      reply.header('x-api-commit', shortSha);
+    } else {
+      reply.header('x-api-commit', 'unknown');
+    }
+  }
+}
+
 export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
   /**
    * POST /api/v1/ai/analyze/:listingId
