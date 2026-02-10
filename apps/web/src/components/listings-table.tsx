@@ -13,8 +13,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Loader2, Search, AlertCircle } from 'lucide-react'
+import { Loader2, Search, AlertCircle, Info } from 'lucide-react'
 import { ListingAccordionRow } from '@/components/listings/ListingAccordionRow'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -120,7 +121,24 @@ export function ListingsTable() {
                 <TableRow>
                   <TableHead>Título</TableHead>
                   <TableHead>Marketplace</TableHead>
-                  <TableHead>Preço</TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      Preço de venda (comprador)
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="max-w-xs">
+                              No Mercado Livre, "você vende por" é o valor líquido que você recebe. 
+                              Aqui exibimos o preço para o comprador (valor exibido no anúncio).
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </TableHead>
                   <TableHead>Preço Promocional</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Análise SuperSeller IA</TableHead>
