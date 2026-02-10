@@ -1322,10 +1322,12 @@ export class MercadoLivreSyncService {
         
         // HOTFIX CONTROLADO: usar /items/{id}/prices como source of truth para preço promocional
         // Aplicar apenas quando flag ativa e listing específico
+        // Nota: Não verificamos item.marketplace porque MercadoLivreItem não tem essa propriedade
+        // e estamos dentro do MercadoLivreSyncService, então todos os itens são do Mercado Livre
         const useMlPricesForPromo = process.env.USE_ML_PRICES_FOR_PROMO === 'true';
         const isTargetListing = item.id === 'MLB4167251409';
         
-        if (useMlPricesForPromo && isTargetListing && item.marketplace === 'mercadolivre') {
+        if (useMlPricesForPromo && isTargetListing) {
           // Tentar extrair preços do payload /prices se disponível
           if (item.prices?.prices && Array.isArray(item.prices.prices)) {
             const buyerPrices = extractBuyerPricesFromMlPrices({ prices: item.prices.prices });
