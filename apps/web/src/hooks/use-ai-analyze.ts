@@ -492,6 +492,12 @@ export function useAIAnalyze(listingId: string | null) {
       if (analysisV21) {
         adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
       }
+
+      // Ler benchmark
+      const benchmark = result.data?.benchmark ?? null
+      if (benchmark) {
+        adaptedData.benchmark = benchmark
+      }
       
       // Normalizar resposta
       const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
