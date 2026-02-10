@@ -174,7 +174,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const query = AnalyzeQuerySchema.parse(request.query);
         const { listingId } = params;
         const forceRefresh = query.forceRefresh ?? false;
-        const debugPrices = query.debugPrices ?? false;
+        // Debug controlado: calcular uma única vez no topo do handler para evitar TS2451
+        // Considera tanto query param (?debugPrices=true) quanto env var (DEBUG_ML_PRICES=true)
+        const debugPricesEnabled = (query.debugPrices ?? false) || (process.env.DEBUG_ML_PRICES === 'true');
 
         request.log.info({ 
           requestId,
@@ -1022,7 +1024,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           }
 
           // Debug controlado: capturar payload do ML /prices (só para listing específico)
-          if (debugPrices && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
+          // Usa debugPricesEnabled calculado no topo do handler para evitar TS2451
+          // debugPricesEnabled já considera tanto query param (?debugPrices=true) quanto env var (DEBUG_ML_PRICES=true)
+          if (debugPricesEnabled && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
             try {
               const syncService = new MercadoLivreSyncService(tenantId);
               const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
@@ -1055,33 +1059,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 attemptedAt: new Date().toISOString(),
                 error: debugError instanceof Error ? debugError.message : 'Erro desconhecido',
               };
-            }
-          } else if (process.env.DEBUG_ML_PRICES === 'true' && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
-            // Também permitir via env var
-            try {
-              const syncService = new MercadoLivreSyncService(tenantId);
-              const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
-              
-              request.log.warn({
-                requestId,
-                tenantId,
-                listingId,
-                listingIdExt: listing.listing_id_ext,
-                statusCode: debugPricesResult.statusCode,
-                blockedBy: debugPricesResult.blockedBy,
-                code: debugPricesResult.code,
-                message: debugPricesResult.message,
-              }, 'Debug ML Prices API (DEBUG_ML_PRICES env)');
-              
-              responseData._debugPrices = debugPricesResult;
-            } catch (debugError) {
-              request.log.error({
-                requestId,
-                tenantId,
-                listingId,
-                listingIdExt: listing.listing_id_ext,
-                error: debugError instanceof Error ? debugError.message : 'Erro desconhecido',
-              }, 'Erro ao executar debugPrices (env)');
             }
           }
 
@@ -1399,10 +1376,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Debug controlado: capturar payload do ML /prices (só para listing específico)
-        const cacheQuery = AnalyzeQuerySchema.parse(request.query);
-        const cacheDebugPrices = cacheQuery.debugPrices ?? false;
-        
-        if ((cacheDebugPrices || process.env.DEBUG_ML_PRICES === 'true') && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
+        // Usa debugPricesEnabled calculado no topo do handler para evitar TS2451
+        if (debugPricesEnabled && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
           try {
             const syncService = new MercadoLivreSyncService(tenantId);
             const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
