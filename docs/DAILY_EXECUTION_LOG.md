@@ -68,6 +68,49 @@
 - **UI de preços sem duplicidade:** Coluna "Preço de venda (comprador)" mostra apenas preço atual (promo se houver); coluna "Preço Promocional" mostra original riscado se houver promoção
 - **Debug controlado de prices:** Só executa quando `debugPrices=true` (query param) OU `DEBUG_ML_PRICES=true` (env) E `listingIdExt='MLB4167251409'`; nunca retorna tokens completos; inclui `_debugPrices` no response
 
+## 🧪 Como testar debugPrices
+
+### Via curl:
+```bash
+# Substituir :uuid pelo UUID do listing que tem listingIdExt='MLB4167251409'
+curl -X POST 'https://api.superselleria.com.br/api/v1/ai/analyze/:uuid?forceRefresh=true&debugPrices=true' \
+  -H 'Authorization: Bearer $TOKEN' \
+  -H 'Content-Type: application/json'
+```
+
+### Resposta esperada:
+```json
+{
+  "message": "Análise concluída com sucesso",
+  "data": {
+    "listingId": "...",
+    "score": 75,
+    "analysisV21": {...},
+    "_debugPrices": {
+      "listingIdExt": "MLB4167251409",
+      "attemptedAt": "2026-02-09T...",
+      "url": "https://api.mercadolibre.com/items/MLB4167251409/prices",
+      "statusCode": 403,
+      "blockedBy": "PolicyAgent",
+      "code": "PA_UNAUTHORIZED_RESULT_FROM_POLICIES",
+      "message": "...",
+      "headers": {
+        "contentType": "application/json"
+      },
+      "body": {
+        "code": "PA_UNAUTHORIZED_RESULT_FROM_POLICIES",
+        "message": "..."
+      }
+    }
+  }
+}
+```
+
+### Observações:
+- `benchmark._debug` já mostra `stage='ml-search-forbidden'` e `statusCode=403` quando ML Search API retorna 403
+- `_debugPrices` é específico para debug do endpoint `/items/{id}/prices` (diferente do benchmark)
+- Sem `debugPrices=true`: comportamento idêntico ao atual (nenhum log extra, nenhum campo novo)
+
 ## ➡️ Próximo passo claro
 **Dia 05 — Validação & Consolidação: Validar pipeline verde, validar benchmark na UI, verificar cacheHit vs fresh, verificar promptVersion em produção, testes end-to-end**
 
