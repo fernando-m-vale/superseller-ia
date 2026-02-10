@@ -177,6 +177,27 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
   - `hasClips = null` → sugestão condicional ("se não houver vídeo, considere adicionar…")
 - **Estado atual:** Campo `has_clips` no schema Prisma permite `null`; normalização via `extractHasVideoFromMlItem()` retorna `null` quando não detectável
 
+### Benchmark / Comparação com Concorrentes
+**Status:** ✅ IMPLEMENTADO (Dia 04)
+- **Fonte de dados:** `/sites/MLB/search` (endpoint público do ML) com `category` e `sort=relevance`
+- **Sample size:** Até 20 concorrentes por categoria
+- **Timeout:** 7 segundos para evitar travamentos
+- **Headers:** User-Agent e Accept para melhor compatibilidade
+- **Estatísticas calculadas:**
+  - Mediana de `pictures_count`
+  - Percentual com vídeo detectável (exclui `null`)
+  - Mediana de preço
+  - Mediana de tamanho do título
+- **Baseline de conversão:** Agregação interna por categoria (últimos 30 dias, mínimo 30 listings ou 1000 visitas)
+- **Diagnóstico:** Quando `competitors.length === 0`, inclui `benchmark._debug` com:
+  - `stage`: Tipo de erro (ml-search-rate-limited, ml-search-timeout, ml-search-forbidden, etc)
+  - `error`: Mensagem detalhada
+  - `categoryId`: Categoria que falhou
+  - `statusCode`: HTTP status code quando disponível
+- **Notes específicos:** Baseados no tipo de erro (rate limit, timeout, forbidden, etc)
+- **Confiança:** `high` | `medium` | `low` | `unavailable` baseado em sample size e baseline
+- **Nunca retorna null:** Sempre retorna objeto com `confidence='unavailable'` quando dados insuficientes
+
 ## 🧪 Queries padrão de auditoria
 ### Range geral (orders/gmv/visits)
 SELECT

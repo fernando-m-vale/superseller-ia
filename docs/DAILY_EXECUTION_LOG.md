@@ -1,6 +1,6 @@
 # DAILY EXECUTION LOG — 2026-02-09 (Dia 4)
 
-## ⚠️ STATUS: TECNICAMENTE CONCLUÍDO, CI/Deploy em correção final
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
 
 ## 🎯 Foco do dia
 **Final Closure Dia 04 — Benchmark (backend + UI) — Unificação de versões de prompt — forceRefresh e cache consistency — Estabilização de CI/Deploy**
@@ -14,6 +14,8 @@
 - [x] Ajustar pipelines App Runner (aguardar estado RUNNING antes de start-deployment)
 - [x] Integrar BenchmarkPanel na UI (ListingAIAnalysisPanel)
 - [x] Adicionar benchmark aos tipos TypeScript (AIAnalysisResponse)
+- [x] Fix /api/v1/meta — gitShaShort não pode ser "unknown" em produção
+- [x] Diagnóstico Benchmark vazio (confidence=unavailable, sampleSize=0)
 
 ## 🧠 Descobertas
 - **Pipeline WEB falhou por divergência entre payload real e tipos TypeScript:** API retornava `benchmark` corretamente, mas tipo `AIAnalysisResponse` não incluía o campo, causando erro TS em `adaptAIAnalysisResponse`
@@ -24,14 +26,17 @@
 - **forceRefresh não atualizava listing antes de analisar:** Análise usava dados stale (preço/promo antigos) mesmo com `forceRefresh=true`
 
 ## ⚠️ Bloqueios / riscos
-- **CI WEB ainda vermelho no momento do encerramento (tipagem benchmark):** Erro TypeScript em `use-ai-analyze.ts` linha 189 — **RESOLVIDO em hotfix posterior**
+- **CI WEB ainda vermelho no momento do encerramento (tipagem benchmark):** Erro TypeScript em `use-ai-analyze.ts` linha 189 — **RESOLVIDO**
 - **Dependência de hotfix final do Cursor para liberar pipeline:** Tipagem `benchmark` em `AIAnalysisResponse` necessária para build passar — **RESOLVIDO**
+- **/api/v1/meta retornando gitSha="unknown" em produção:** ENV GIT_SHA não estava sendo propagado para runtime stage — **RESOLVIDO**
+- **Benchmark sempre sampleSize=0 sem diagnóstico:** Erros de fetch não eram capturados detalhadamente — **RESOLVIDO**
 
 ## 📌 Decisões tomadas
 - **Manter benchmark como campo opcional e nunca null:** Sempre retornar objeto com `confidence='unavailable'` quando dados insuficientes; nunca retornar `null`
 - **Centralizar promptVersion em fonte única:** Criar `apps/api/src/utils/prompt-version.ts` como única fonte de verdade; remover divergências entre `ml-expert-v21` e `ml-expert-v22`
 - **Tornar deploy App Runner resiliente a estados transitórios:** Adicionar pre-check que aguarda estado `RUNNING` antes de `start-deployment`; polling com retry e timeout explícito
-- **Encerrar Dia 04 mesmo com pipeline pendente:** Registrar status real (tecnicamente concluído, aguardando validação final de pipeline)
+- **Propagar GIT_SHA para runtime stage:** Adicionar ARG e ENV GIT_SHA no runtime stage do Dockerfile da API; adicionar ENV COMMIT_SHA para compatibilidade
+- **Diagnóstico detalhado de benchmark:** Incluir `_debug` no BenchmarkResult quando `competitors.length === 0`; capturar statusCode, stage e mensagem detalhada; adicionar timeout (7s) e headers (User-Agent, Accept) no fetchCompetitors
 
 ## ➡️ Próximo passo claro
 **Dia 05 — Validação & Consolidação: Finalizar hotfix de tipagem no WEB, validar pipeline verde, validar benchmark na UI, verificar cacheHit vs fresh, verificar promptVersion em produção, testes end-to-end**
