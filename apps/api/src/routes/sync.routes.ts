@@ -1546,15 +1546,29 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           discount_percent: updatedListing?.discount_percent,
         }, 'Force refresh concluído');
 
+        // Obter configuração de preços promocionais para observabilidade
+        const useMlPricesForPromo = process.env.USE_ML_PRICES_FOR_PROMO === 'true';
+        const promoPricesTtlHours = parseInt(process.env.PROMO_PRICES_TTL_HOURS || '12', 10) || 12;
+
         return reply.status(200).send({
           message: 'Force refresh concluído com sucesso',
           data: {
             listingIdExt,
             updated: updated > 0,
             listing: updatedListing,
+            config: {
+              useMlPricesForPromo,
+              promoPricesTtlHours,
+            },
             enrichment: {
               endpointUsed: enrichmentMeta.endpointUsed,
               statusCode: enrichmentMeta.statusCode,
+              applied: enrichmentMeta.endpointUsed === 'prices' || enrichmentMeta.endpointUsed === 'prices-forced-hotfix',
+              appliedValues: enrichmentMeta.endpointUsed === 'prices' || enrichmentMeta.endpointUsed === 'prices-forced-hotfix' ? {
+                original_price: updatedListing?.original_price ?? null,
+                price_final: updatedListing?.price_final ?? null,
+                discount_percent: updatedListing?.discount_percent ?? null,
+              } : undefined,
               payloadSize: enrichmentMeta.payloadSize,
             },
           },

@@ -464,7 +464,7 @@ export class BenchmarkService {
           } else if (fetchError.stage === 'ml-search-timeout') {
             notes = 'Timeout ao buscar concorrentes (7s). API do ML pode estar lenta.';
           } else if (fetchError.stage === 'ml-search-forbidden') {
-            notes = 'ML search retornou 403 (forbidden). Endpoint pode estar bloqueado.';
+            notes = 'Benchmark indisponível no momento (Mercado Livre retornou 403).';
           } else if (fetchError.statusCode) {
             notes = `ML search retornou ${fetchError.statusCode}: ${fetchError.message}`;
           } else {

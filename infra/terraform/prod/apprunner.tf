@@ -116,21 +116,23 @@ resource "aws_apprunner_service" "api" {
         port = tostring(var.api_container_port)
 
         runtime_environment_variables = {
-          NODE_ENV = "production"
-          PORT     = tostring(var.api_container_port)
+          NODE_ENV              = "production"
+          PORT                  = tostring(var.api_container_port)
+          PROMO_PRICES_TTL_HOURS = "12" # TTL padrão para cache de preços promocionais (12 horas)
         }
 
         runtime_environment_secrets = {
-          DATABASE_URL         = data.aws_secretsmanager_secret.prod["db_sselleria"].arn
-          JWT_SECRET           = data.aws_secretsmanager_secret.prod["jwt_secret"].arn
-          ML_APP_ID            = data.aws_secretsmanager_secret.prod["ml_app_id"].arn
-          ML_APP_SECRET        = data.aws_secretsmanager_secret.prod["ml_app_secret"].arn
-          ML_REDIRECT_URI      = data.aws_secretsmanager_secret.prod["ml_redirect_uri"].arn
-          SHOPEE_CLIENT_ID     = data.aws_secretsmanager_secret.prod["shopee_client_id"].arn
-          SHOPEE_CLIENT_SECRET = data.aws_secretsmanager_secret.prod["shopee_client_secret"].arn
-          SHOPEE_REDIRECT_URI  = data.aws_secretsmanager_secret.prod["shopee_redirect_uri"].arn
-          OPENAI_API_KEY       = data.aws_secretsmanager_secret.prod["openai_api_key"].arn
-          INTERNAL_JOBS_KEY    = data.aws_secretsmanager_secret.prod["internal_jobs_key"].arn
+          DATABASE_URL            = data.aws_secretsmanager_secret.prod["db_sselleria"].arn
+          JWT_SECRET              = data.aws_secretsmanager_secret.prod["jwt_secret"].arn
+          ML_APP_ID               = data.aws_secretsmanager_secret.prod["ml_app_id"].arn
+          ML_APP_SECRET           = data.aws_secretsmanager_secret.prod["ml_app_secret"].arn
+          ML_REDIRECT_URI         = data.aws_secretsmanager_secret.prod["ml_redirect_uri"].arn
+          SHOPEE_CLIENT_ID        = data.aws_secretsmanager_secret.prod["shopee_client_id"].arn
+          SHOPEE_CLIENT_SECRET    = data.aws_secretsmanager_secret.prod["shopee_client_secret"].arn
+          SHOPEE_REDIRECT_URI     = data.aws_secretsmanager_secret.prod["shopee_redirect_uri"].arn
+          OPENAI_API_KEY          = data.aws_secretsmanager_secret.prod["openai_api_key"].arn
+          INTERNAL_JOBS_KEY       = data.aws_secretsmanager_secret.prod["internal_jobs_key"].arn
+          USE_ML_PRICES_FOR_PROMO = data.aws_secretsmanager_secret.prod["use_ml_prices_for_promo"].arn
         }
       }
 

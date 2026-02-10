@@ -5,8 +5,8 @@ import { RecommendationService } from './RecommendationService';
 import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
 import { resolveMercadoLivreConnection } from '../utils/ml-connection-resolver';
 import { getValidAccessToken } from '../utils/ml-token-helper';
-import { extractBuyerPricesFromMlPrices } from '../utils/ml-prices-extractor';
-import { applyBuyerPricesOverrideFromMlPrices } from '../utils/ml-prices-extractor';
+import { extractBuyerPricesFromMlPrices, applyBuyerPricesOverrideFromMlPrices } from '../utils/ml-prices-extractor';
+import { shouldFetchMlPricesForPromo, getPromoPricesTtlHours } from '../utils/ml-prices-ttl';
 
 const prisma = new PrismaClient();
 
@@ -1088,6 +1088,18 @@ export class MercadoLivreSyncService {
               listing_id_ext: item.id,
             },
           },
+          select: {
+            id: true,
+            seller_id: true,
+            promotion_checked_at: true,
+            price_final: true,
+            original_price: true,
+            has_promotion: true,
+            discount_percent: true,
+            access_status: true,
+            access_blocked_code: true,
+            access_blocked_reason: true,
+          },
         });
 
         // Para listings novos, tentar obter seller_id via GET /items/:id
@@ -1329,45 +1341,63 @@ export class MercadoLivreSyncService {
           promotionType = null;
         }
         
-        // HOTFIX CONTROLADO: usar /items/{id}/prices como source of truth para preço promocional
-        // Aplicar apenas quando flag ativa e listing específico
-        // Nota: Não verificamos item.marketplace porque MercadoLivreItem não tem essa propriedade
-        // e estamos dentro do MercadoLivreSyncService, então todos os itens são do Mercado Livre
-        const useMlPricesForPromo = process.env.USE_ML_PRICES_FOR_PROMO === 'true';
-        const isTargetListing = item.id === 'MLB4167251409';
+        // APLICAÇÃO ESCALÁVEL: usar /items/{id}/prices como source of truth para preço promocional
+        // Baseado em TTL (Time To Live) para controlar rate limits e custos
+        // Verifica shouldFetchMlPricesForPromo (flag + TTL) antes de buscar /prices
+        const shouldFetch = shouldFetchMlPricesForPromo(existing || null);
         
-        if (useMlPricesForPromo && isTargetListing) {
+        if (shouldFetch) {
           // Segurança extra: se item.prices não existe (ex: enrich retornou cedo), buscar /prices aqui mesmo
-          let pricesForHotfix: NonNullable<MercadoLivreItem['prices']>['prices'] | null =
+          let pricesForPromo: NonNullable<MercadoLivreItem['prices']>['prices'] | null =
             (item.prices?.prices && Array.isArray(item.prices.prices)) ? item.prices.prices : null;
           let usedPricesEndpoint = false;
+          let fetchError: { statusCode?: number; reason?: string } | null = null;
 
-          if (!pricesForHotfix) {
-            const pricesData = await this.fetchItemPrices(item.id);
-            if (pricesData?.statusCode === 200 && pricesData.prices && pricesData.prices.length > 0) {
-              const fetchedPrices = pricesData.prices;
-              pricesForHotfix = fetchedPrices;
-              usedPricesEndpoint = true;
+          if (!pricesForPromo) {
+            try {
+              const pricesData = await this.fetchItemPrices(item.id);
+              if (pricesData?.statusCode === 200 && pricesData.prices && pricesData.prices.length > 0) {
+                const fetchedPrices = pricesData.prices;
+                pricesForPromo = fetchedPrices;
+                usedPricesEndpoint = true;
 
-              // Preencher evidências no item (sem persistir payload bruto)
-              item.prices = { prices: fetchedPrices };
+                // Preencher evidências no item (sem persistir payload bruto)
+                item.prices = { prices: fetchedPrices };
 
-              const promoEntry = fetchedPrices.find(p => p.type === 'promotion');
-              const standardEntry = fetchedPrices.find(p => p.type === 'standard');
-              if (promoEntry?.amount && promoEntry.amount > 0) {
-                item.sale_price = promoEntry.amount;
+                const promoEntry = fetchedPrices.find(p => p.type === 'promotion');
+                const standardEntry = fetchedPrices.find(p => p.type === 'standard');
+                if (promoEntry?.amount && promoEntry.amount > 0) {
+                  item.sale_price = promoEntry.amount;
+                }
+                const forcedOriginal =
+                  promoEntry?.regular_amount ??
+                  standardEntry?.amount ??
+                  null;
+                if (forcedOriginal && forcedOriginal > 0) {
+                  item.original_price = forcedOriginal;
+                }
+              } else if (pricesData) {
+                // /prices retornou mas sem dados válidos
+                fetchError = { statusCode: pricesData.statusCode, reason: 'no_valid_prices' };
               }
-              const forcedOriginal =
-                promoEntry?.regular_amount ??
-                standardEntry?.amount ??
-                null;
-              if (forcedOriginal && forcedOriginal > 0) {
-                item.original_price = forcedOriginal;
-              }
+            } catch (error: any) {
+              // Falha ao buscar /prices: não quebrar o sync, manter valores existentes
+              const statusCode = error.response?.status || 0;
+              fetchError = { 
+                statusCode, 
+                reason: statusCode === 429 ? 'rate_limit' : statusCode >= 500 ? 'server_error' : statusCode === 403 ? 'forbidden' : 'unknown' 
+              };
+              console.warn(`[ML-SYNC] ml-prices-skipped itemId=${item.id}`, {
+                stage: 'ml-prices-skipped',
+                listingIdExt: item.id,
+                reason: 'fetch_failed',
+                statusCode: fetchError.statusCode,
+                tenantId: this.tenantId,
+              });
             }
           }
 
-          if (pricesForHotfix) {
+          if (pricesForPromo) {
             const oldPriceFinal = priceFinal;
             const oldDiscount = discountPercent;
 
@@ -1378,7 +1408,7 @@ export class MercadoLivreSyncService {
                 discountPercent,
                 hasPromotion,
               },
-              { prices: pricesForHotfix }
+              { prices: pricesForPromo }
             );
 
             if (override.applied) {
@@ -1398,8 +1428,34 @@ export class MercadoLivreSyncService {
                 usedPricesEndpoint,
                 tenantId: this.tenantId,
               });
+            } else {
+              // /prices retornou mas não há promoção efetiva
+              console.log(`[ML-SYNC] ml-prices-skipped itemId=${item.id}`, {
+                stage: 'ml-prices-skipped',
+                listingIdExt: item.id,
+                reason: 'promo_not_effective',
+                tenantId: this.tenantId,
+              });
             }
+          } else if (!fetchError) {
+            // Não havia prices no item e não tentamos buscar (ou tentamos mas não retornou)
+            console.log(`[ML-SYNC] ml-prices-skipped itemId=${item.id}`, {
+              stage: 'ml-prices-skipped',
+              listingIdExt: item.id,
+              reason: 'no_prices_available',
+              tenantId: this.tenantId,
+            });
           }
+        } else {
+          // TTL ainda válido ou flag desativada
+          const reason = process.env.USE_ML_PRICES_FOR_PROMO !== 'true' ? 'flag_off' : 'ttl_not_expired';
+          console.log(`[ML-SYNC] ml-prices-skipped itemId=${item.id}`, {
+            stage: 'ml-prices-skipped',
+            listingIdExt: item.id,
+            reason,
+            promotionCheckedAt: existing?.promotion_checked_at?.toISOString() || null,
+            tenantId: this.tenantId,
+          });
         }
         
         // Log estruturado com candidateFinalPrice para diagnóstico
@@ -1413,12 +1469,19 @@ export class MercadoLivreSyncService {
         });
 
         // Atualizar campos de promoção (sempre persistir, mesmo sem promoção)
+        // IMPORTANTE: Se shouldFetch foi true, atualizar promotion_checked_at para registrar que verificamos
         listingData.has_promotion = hasPromotion;
         listingData.price_final = priceFinal;
         listingData.original_price = originalPrice;
         listingData.discount_percent = discountPercent;
         listingData.promotion_type = promotionType;
-        listingData.promotion_checked_at = now;
+        // Atualizar promotion_checked_at apenas se buscamos /prices (shouldFetch) ou se nunca foi verificado
+        if (shouldFetch || !existing?.promotion_checked_at) {
+          listingData.promotion_checked_at = now;
+        } else {
+          // Manter promotion_checked_at existente se não buscamos /prices (TTL ainda válido)
+          listingData.promotion_checked_at = existing.promotion_checked_at;
+        }
         
         // IMPORTANTE: price também deve refletir o preço atual do comprador (price_final se houver promoção)
         // Isso garante que a UI do grid mostre o preço correto
