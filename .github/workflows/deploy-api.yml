@@ -71,6 +71,37 @@ jobs:
         run: |
           echo "Starting App Runner deployment..."
           
+          # Wait for service to be in RUNNING state before starting deployment
+          echo "Checking service status before deployment..."
+          MAX_PRE_WAIT=300  # 5 minutes max to wait for RUNNING
+          PRE_WAIT_INTERVAL=10
+          PRE_ELAPSED=0
+          
+          while [ $PRE_ELAPSED -lt $MAX_PRE_WAIT ]; do
+            PRE_STATUS=$(aws apprunner describe-service \
+              --service-arn $APPRUNNER_SERVICE_ARN \
+              --query 'Service.Status' \
+              --output text)
+            
+            echo "Pre-deployment status: $PRE_STATUS (${PRE_ELAPSED}s elapsed)"
+            
+            if [ "$PRE_STATUS" = "RUNNING" ]; then
+              echo "✓ Service is RUNNING, proceeding with deployment"
+              break
+            elif [ "$PRE_STATUS" = "OPERATION_IN_PROGRESS" ] || [ "$PRE_STATUS" = "CREATE_FAILED" ] || [ "$PRE_STATUS" = "UPDATE_FAILED" ]; then
+              echo "Waiting for service to be RUNNING (current: $PRE_STATUS)..."
+              sleep $PRE_WAIT_INTERVAL
+              PRE_ELAPSED=$((PRE_ELAPSED + PRE_WAIT_INTERVAL))
+            else
+              echo "⚠️ Service status: $PRE_STATUS (proceeding anyway)"
+              break
+            fi
+          done
+          
+          if [ $PRE_ELAPSED -ge $MAX_PRE_WAIT ]; then
+            echo "⚠️ Timeout waiting for RUNNING state, proceeding with deployment anyway"
+          fi
+          
           # Trigger deployment
           OPERATION_ID=$(aws apprunner start-deployment \
             --service-arn $APPRUNNER_SERVICE_ARN \

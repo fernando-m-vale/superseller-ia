@@ -474,6 +474,9 @@ export function ListingAIAnalysisPanel({
         placements={promoPlacements}
       />
 
+      {/* 5️⃣ COMPARAÇÃO COM CONCORRENTES — BENCHMARK */}
+      {benchmark && <BenchmarkPanel benchmark={benchmark} />}
+
       {/* Diagnostico de preco da IA (complementar) */}
       {analysisV21.priceFix && (
         <SectionTemplate
