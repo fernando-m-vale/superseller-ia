@@ -96,9 +96,28 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
   // Isso garante que o badge seja correto mesmo quando o accordion está fechado
   const analysisStatus = getAnalysisStatus(listing.analysisStatus, listing.latestAnalysisAt)
 
-  // Preço promocional (usando campos do backend)
-  const promotionalPrice = listing.priceFinal ?? listing.price
+  // Preços com fallback robusto (usando campos disponíveis na interface Listing)
+  // originalPrice: preferir priceBase (preço original), depois price (preço atual)
+  const originalPrice = Number(
+    listing.priceBase ?? 
+    listing.price ?? 
+    0
+  )
+  
+  // promotionalPrice: preferir priceFinal (preço promocional), depois price (preço atual)
+  const promotionalPrice = Number(
+    listing.priceFinal ?? 
+    listing.price ?? 
+    0
+  )
+  
   const hasPromotion = listing.hasPromotion ?? false
+  
+  // Verificar se há promoção efetiva (preço promocional menor que original)
+  const hasPromotionEffective = Boolean(hasPromotion) && 
+    promotionalPrice != null && 
+    originalPrice != null && 
+    promotionalPrice < originalPrice
 
   const handleGenerateAnalysis = async () => {
     await triggerAIAnalysis(false)
@@ -125,7 +144,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
           </span>
         </TableCell>
         <TableCell>
-          {hasPromotion && promotionalPrice && promotionalPrice < originalPrice ? (
+          {hasPromotionEffective ? (
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground line-through text-sm">
                 {formatPrice(originalPrice)}
@@ -139,7 +158,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
           )}
         </TableCell>
         <TableCell>
-          {hasPromotion && promotionalPrice && promotionalPrice < originalPrice ? (
+          {hasPromotionEffective ? (
             <span className="text-primary font-medium">
               {formatPrice(promotionalPrice)}
             </span>
