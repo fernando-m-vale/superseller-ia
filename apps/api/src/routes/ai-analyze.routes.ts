@@ -931,6 +931,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             );
           }
 
+          // Adicionar header com commit SHA
+          setVersionHeader(reply);
+
           return reply.status(200).send({
             message: 'Análise concluída com sucesso',
             data: responseData,
