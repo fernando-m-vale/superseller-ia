@@ -52,8 +52,10 @@ jobs:
           FULL_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:$IMAGE_TAG
           LATEST_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/$ECR_REPOSITORY:latest
           
-          echo "Building Docker image..."
-          docker build -f apps/api/Dockerfile.prod -t $FULL_IMAGE_URI -t $LATEST_IMAGE_URI .
+          echo "Building Docker image with GIT_SHA=$GITHUB_SHA..."
+          docker build -f apps/api/Dockerfile.prod \
+            --build-arg GIT_SHA=$GITHUB_SHA \
+            -t $FULL_IMAGE_URI -t $LATEST_IMAGE_URI .
           
           echo "Pushing images to ECR..."
           docker push $FULL_IMAGE_URI

@@ -32,6 +32,9 @@ RUN pnpm --filter @superseller/core build
 RUN pnpm --filter @superseller/ai build
 
 # Build da API (roda também o "prebuild": "prisma generate")
+# Passar GIT_SHA como build arg para disponibilizar em runtime
+ARG GIT_SHA
+ENV GIT_SHA=${GIT_SHA}
 RUN pnpm --filter @superseller/api build
 
 # Remove devDependencies, deixando só deps de produção

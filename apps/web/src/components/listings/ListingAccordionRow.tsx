@@ -124,12 +124,11 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
             {listing.marketplace === 'shopee' ? 'Shopee' : 'Mercado Livre'}
           </span>
         </TableCell>
-        <TableCell>{formatPrice(listing.price)}</TableCell>
         <TableCell>
-          {hasPromotion && promotionalPrice ? (
+          {hasPromotion && promotionalPrice && promotionalPrice < originalPrice ? (
             <div className="flex items-center gap-2">
               <span className="text-muted-foreground line-through text-sm">
-                {formatPrice(listing.price)}
+                {formatPrice(originalPrice)}
               </span>
               <span className="text-primary font-medium">
                 {formatPrice(promotionalPrice)}
@@ -137,6 +136,15 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
             </div>
           ) : (
             formatPrice(listing.price)
+          )}
+        </TableCell>
+        <TableCell>
+          {hasPromotion && promotionalPrice && promotionalPrice < originalPrice ? (
+            <span className="text-primary font-medium">
+              {formatPrice(promotionalPrice)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
           )}
         </TableCell>
         <TableCell>

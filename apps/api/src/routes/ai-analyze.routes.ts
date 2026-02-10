@@ -369,6 +369,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         // Step 4: Check cache (unless forceRefresh)
         type CachedAnalysisResult = {
+          benchmark?: any; // Benchmark (Dia 04) - opcional para compatibilidade com cache antigo
           analysis: {
             score: number;
             critique: string;
@@ -597,65 +598,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               error: 'Internal Server Error',
               message: 'Análise não foi gerada corretamente',
             });
-          }
-
-          // Step 6: Save to cache (incluindo V2.1 se disponível)
-          try {
-            const cachePayload: any = {
-              analysis: {
-                score: result.analysis.score,
-                critique: result.analysis.critique,
-                growthHacks: result.analysis.growthHacks,
-                seoSuggestions: result.analysis.seoSuggestions,
-                analyzedAt: result.analysis.analyzedAt,
-                model: result.analysis.model,
-              },
-              savedRecommendations: result.savedRecommendations,
-            };
-
-            // Sempre incluir Expert se disponível (obrigatório)
-            if (analysisV21) {
-              cachePayload.analysisV21 = analysisV21;
-            } else {
-              // Se não tiver analysisV21, logar warning mas continuar
-              request.log.warn(
-                {
-                  requestId,
-                  listingId,
-                  tenantId,
-                },
-                'V2.1 analysis not available, saving cache without analysisV21'
-              );
-            }
-
-            await prisma.listingAIAnalysis.upsert({
-              where: {
-                tenant_id_listing_id_period_days_fingerprint: {
-                  tenant_id: tenantId,
-                  listing_id: listingId,
-                  period_days: PERIOD_DAYS,
-                  fingerprint,
-                },
-              },
-              update: {
-                model: result.analysis.model || 'gpt-4o',
-                prompt_version: PROMPT_VERSION,
-                result_json: cachePayload as unknown as Prisma.InputJsonValue,
-                updated_at: new Date(),
-              },
-              create: {
-                tenant_id: tenantId,
-                listing_id: listingId,
-                period_days: PERIOD_DAYS,
-                fingerprint,
-                model: result.analysis.model || 'gpt-4o',
-                prompt_version: PROMPT_VERSION,
-                result_json: cachePayload as unknown as Prisma.InputJsonValue,
-              },
-            });
-          } catch (cacheError) {
-            // Log but don't fail if cache save fails
-            request.log.warn({ err: cacheError, listingId, fingerprint: fingerprint.substring(0, 16) + '...' }, 'Failed to save AI analysis to cache');
           }
 
           // Generate action plan and score explanation (IA Score V2)
@@ -932,14 +874,28 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // SEMPRE incluir Expert se disponível (obrigatório) — sanitizar antes de enviar
             if (analysisV21) {
               responseData.analysisV21 = sanitizeExpertAnalysis(analysisV21);
+              
+              // Normalizar meta.prompt_version e meta.version para garantir consistência
+              if (responseData.analysisV21.meta) {
+                responseData.analysisV21.meta.prompt_version = PROMPT_VERSION as any;
+                responseData.analysisV21.meta.version = PROMPT_VERSION as any; // Usar promptVersion como version também
+              } else {
+                // Se meta não existir, criar
+                responseData.analysisV21.meta = {
+                  ...(analysisV21.meta || {}),
+                  prompt_version: PROMPT_VERSION as any,
+                  version: PROMPT_VERSION as any,
+                };
+              }
+              
             request.log.info(
               {
                 requestId,
                 listingId,
                 tenantId,
                 listingIdExt: listing.listing_id_ext,
-                promptVersion: analysisV21.meta.prompt_version,
-                analyzedAt: analysisV21.meta.analyzed_at,
+                promptVersion: PROMPT_VERSION,
+                analyzedAt: responseData.analysisV21.meta?.analyzed_at || analysisV21.meta?.analyzed_at,
                 verdict: analysisV21.verdict?.substring(0, 50),
               },
               'Including Expert analysis in response'
@@ -1214,6 +1170,45 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Incluir Expert se disponível no cache — sanitizar antes de enviar
         if (cachedResult.analysisV21) {
           cacheResponseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
+          
+              // Normalizar meta.prompt_version e meta.version também no cache
+              if (cacheResponseData.analysisV21?.meta) {
+                cacheResponseData.analysisV21.meta.prompt_version = PROMPT_VERSION as any;
+                cacheResponseData.analysisV21.meta.version = PROMPT_VERSION as any;
+              }
+          
+          // Incluir benchmark do cache se disponível, senão fallback
+          if ((cachedResult as any).benchmark) {
+            cacheResponseData.benchmark = (cachedResult as any).benchmark;
+          } else {
+            // Fallback padrão se não existir no cache antigo
+            cacheResponseData.benchmark = cacheBenchmarkResult || {
+              benchmarkSummary: {
+                categoryId: listing.category,
+                sampleSize: 0,
+                computedAt: new Date().toISOString(),
+                confidence: 'unavailable',
+                notes: 'Benchmark indisponível (cache antigo)',
+                stats: {
+                  medianPicturesCount: 0,
+                  percentageWithVideo: 0,
+                  medianPrice: 0,
+                  medianTitleLength: 0,
+                  sampleSize: 0,
+                },
+                baselineConversion: {
+                  conversionRate: null,
+                  sampleSize: 0,
+                  totalVisits: 0,
+                  confidence: 'unavailable',
+                },
+              },
+              youWinHere: [],
+              youLoseHere: [],
+              tradeoffs: 'Comparação com concorrentes indisponível (cache antigo).',
+              recommendations: [],
+            };
+          }
           
           // Log para debug
           request.log.info({

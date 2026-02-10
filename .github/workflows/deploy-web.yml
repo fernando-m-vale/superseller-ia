@@ -70,10 +70,11 @@ jobs:
           FULL_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:$IMAGE_TAG
           LATEST_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${ECR_REPOSITORY}:latest
           
-          echo "Building Docker image..."
-          # Pass NEXT_PUBLIC_API_URL as build arg (if empty, the app uses production default from lib/api.ts)
+          echo "Building Docker image with GIT_SHA=$GITHUB_SHA..."
+          # Pass NEXT_PUBLIC_API_URL and GIT_SHA as build args
           docker build -f apps/web/Dockerfile.prod \
             --build-arg NEXT_PUBLIC_API_URL="${{ steps.secrets.outputs.NEXT_PUBLIC_API_URL }}" \
+            --build-arg GIT_SHA=$GITHUB_SHA \
             -t "$FULL_IMAGE_URI" -t "$LATEST_IMAGE_URI" .
           
           echo "Pushing images to ECR..."
