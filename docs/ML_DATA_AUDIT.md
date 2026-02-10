@@ -158,13 +158,16 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - **Risco mitigado:** Seleção determinística evita uso de conexão incorreta
 
 ### Pricing / Promotions
-**Status:** ✅ RESOLVIDO
+**Status:** ✅ RESOLVIDO (com hotfix controlado)
 - **Fonte de verdade:** `/items/{id}/prices` (Prices API) é endpoint recomendado pelo ML para preços/promoções
 - **Fallback:** Se `/prices` falhar (403/404), usa `/items/{id}` como fallback
 - **Campos garantidos:** `original_price`, `price_final`, `has_promotion`, `discount_percent`, `promotion_type` preenchidos quando promoção existe
 - **Enriquecimento:** `enrichItemPricing()` busca dados completos via Prices API se multiget não trouxer dados suficientes
 - **Logs estruturados:** `endpointUsed` (prices/items/none), `hasSalePrice`, `pricesCount`, `referencePricesCount` para diagnóstico
 - **Validação:** Listing MLB4217107417 validado com promoção ativa (47% OFF, R$32 final, R$60 cheio)
+- **⚠️ Divergência conhecida:** `/items/{id}/prices` pode retornar preço promocional diferente de `/items/{id}` (ex: MLB4167251409 mostra R$ 66,93 no `/prices` vs R$ 70,23 no `/items`)
+- **Hotfix controlado:** Quando `USE_ML_PRICES_FOR_PROMO=true` e `listingIdExt='MLB4167251409'`, sistema usa `/prices` como source of truth para `price_final`, `original_price`, `discount_percent` e `price` (preço atual do comprador)
+- **Helper:** `extractBuyerPricesFromMlPrices()` extrai preços do payload `/prices` com regras: `standard.amount` → originalPrice, `promotion.amount` → promotionalPrice, `promotion.regular_amount` → originalPrice (se disponível)
 
 ### Video / Clips
 **Status:** ✅ RESOLVIDO

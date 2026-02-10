@@ -116,6 +116,36 @@ curl -X POST 'https://api.superselleria.com.br/api/v1/ai/analyze/:uuid?forceRefr
 
 ---
 
+# DAILY EXECUTION LOG — 2026-02-09 (Hotfix Preço Promocional ML)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do dia
+**Hotfix controlado: corrigir divergência de preço promocional do Mercado Livre usando /items/{id}/prices como source of truth**
+
+## ✅ Planejado
+- [x] BACKEND: Criar helper extractBuyerPricesFromMlPrices para extrair preços do payload /prices
+- [x] BACKEND: Aplicar preços do /prices quando flag USE_ML_PRICES_FOR_PROMO=true e listing MLB4167251409
+- [x] BACKEND: Garantir que analysisV21.price_fix usa valores persistidos (já usa via buildAIAnalyzeInputV21)
+- [x] FRONTEND: Ajustar nomes e ordem das colunas do grid (Preço original, Preço promocional)
+- [x] TESTES: Unit test do helper extractBuyerPricesFromMlPrices (6 casos de teste)
+
+## 🧠 Descobertas
+- **Divergência de preço:** UI mostrava R$ 70,23 mas ML público mostra R$ 66,93 para MLB4167251409
+- **Endpoint /items/{id}/prices retorna dados corretos:** `_debugPrices.body.prices` mostra `promotion.amount = 66.93` e `standard.amount = 100`
+- **buildAIAnalyzeInputV21 já usa valores persistidos:** O método lê `listing.price_final` e `listing.original_price` do DB, então não precisa de mudança adicional
+
+## 📌 Decisões tomadas
+- **Hotfix controlado via flag:** Implementar correção apenas quando `USE_ML_PRICES_FOR_PROMO=true` e `listingIdExt='MLB4167251409'` para evitar impacto em outros listings
+- **Usar /items/{id}/prices como source of truth:** Endpoint `/prices` retorna exatamente o que o comprador vê na página pública do ML
+- **Sobrescrever price também:** Além de `price_final`, também atualizar `price` para refletir o preço atual do comprador (garante UI correta)
+- **UI: ordem das colunas:** "Preço original" (riscado se promo) → "Preço promocional" (promo destacada)
+
+## ➡️ Próximo passo claro
+**Validar em produção:** Com `USE_ML_PRICES_FOR_PROMO=true`, rodar `force-refresh` em MLB4167251409 e verificar que DB e UI mostram R$ 66,93
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-09 (Dia 3)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO
