@@ -886,6 +886,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             metrics30d: result.score.metrics_30d,
             dataQuality: result.dataQuality,
             cacheHit: false,
+            // Versões
+            promptVersion: PROMPT_VERSION,
+            schemaVersion: 'analysisV21', // Versão do schema/formatter
             // IA Score V2: Action Plan and Score Explanation
             actionPlan,
             scoreExplanation,
@@ -1165,6 +1168,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           metrics30d: scoreResult.metrics_30d,
           dataQuality: scoreResult.dataQuality,
           cacheHit: true,
+          // Versões
+          promptVersion: PROMPT_VERSION,
+          schemaVersion: 'analysisV21', // Versão do schema/formatter
           // IA Score V2: Action Plan and Score Explanation
           actionPlan,
           scoreExplanation,
