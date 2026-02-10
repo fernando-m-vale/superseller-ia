@@ -28,6 +28,7 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 # Build argument for GIT_SHA (for version tracking)
 ARG GIT_SHA
 ENV GIT_SHA=${GIT_SHA}
+ENV COMMIT_SHA=${GIT_SHA}
 
 # Build packages in dependency order
 RUN pnpm --filter @superseller/core build

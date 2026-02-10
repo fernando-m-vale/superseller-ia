@@ -62,6 +62,8 @@ export interface BenchmarkResult {
   _debug?: {
     stage: string;
     error: string;
+    categoryId?: string;
+    statusCode?: number;
   };
 }
 
@@ -76,8 +78,9 @@ export class BenchmarkService {
 
   /**
    * Busca concorrentes na mesma categoria via ML Search API
+   * Retorna array vazio em caso de erro, mas lança erro com detalhes para diagnóstico
    */
-  private async fetchCompetitors(categoryId: string, excludeItemId?: string): Promise<CompetitorItem[]> {
+  private async fetchCompetitors(categoryId: string, excludeItemId?: string): Promise<{ competitors: CompetitorItem[]; error?: { stage: string; statusCode?: number; message: string } }> {
     try {
       // Buscar via /sites/MLB/search com category_id
       const url = `${ML_API_BASE}/sites/MLB/search`;
@@ -86,6 +89,11 @@ export class BenchmarkService {
           category: categoryId,
           limit: COMPETITORS_SAMPLE_SIZE,
           sort: 'relevance', // Ordenar por relevância
+        },
+        timeout: 7000, // 7 segundos de timeout
+        headers: {
+          'User-Agent': 'SuperSeller-IA/1.0',
+          'Accept': 'application/json',
         },
       });
 
@@ -105,10 +113,42 @@ export class BenchmarkService {
           listing_type_id: item.listing_type_id,
         }));
 
-      return competitors;
-    } catch (error) {
-      console.warn(`[BENCHMARK] Erro ao buscar concorrentes para categoryId=${categoryId}:`, error instanceof Error ? error.message : 'Erro desconhecido');
-      return []; // Retornar array vazio em caso de erro
+      return { competitors };
+    } catch (error: any) {
+      // Capturar detalhes do erro para diagnóstico
+      const statusCode = error.response?.status;
+      const errorMessage = error.message || 'Erro desconhecido';
+      const isTimeout = error.code === 'ECONNABORTED' || errorMessage.includes('timeout');
+      const isRateLimit = statusCode === 429;
+      const isForbidden = statusCode === 403;
+      
+      let stage = 'ml-search';
+      let message = errorMessage;
+      
+      if (isTimeout) {
+        stage = 'ml-search-timeout';
+        message = `Timeout ao buscar concorrentes (7s)`;
+      } else if (isRateLimit) {
+        stage = 'ml-search-rate-limited';
+        message = `ML API retornou 429 (rate limit)`;
+      } else if (isForbidden) {
+        stage = 'ml-search-forbidden';
+        message = `ML API retornou 403 (forbidden)`;
+      } else if (statusCode) {
+        stage = `ml-search-${statusCode}`;
+        message = `ML API retornou ${statusCode}: ${errorMessage}`;
+      }
+      
+      console.warn(`[BENCHMARK] Erro ao buscar concorrentes para categoryId=${categoryId}:`, message);
+      
+      return {
+        competitors: [],
+        error: {
+          stage,
+          statusCode,
+          message,
+        },
+      };
     }
   }
 
@@ -413,11 +453,61 @@ export class BenchmarkService {
   ): Promise<BenchmarkResult | null> {
     try {
       // 1. Buscar concorrentes
-      const competitors = await this.fetchCompetitors(listing.categoryId, listing.listingIdExt);
+      const { competitors, error: fetchError } = await this.fetchCompetitors(listing.categoryId, listing.listingIdExt);
 
       if (competitors.length === 0) {
-        // Se não houver concorrentes, retornar null (dados indisponíveis)
-        return null;
+        // Se não houver concorrentes, retornar objeto com confidence="unavailable" e _debug
+        let notes = 'Não foi possível buscar concorrentes da categoria.';
+        if (fetchError) {
+          if (fetchError.stage === 'ml-search-rate-limited') {
+            notes = 'ML search retornou 429 (rate limit). Tente novamente em alguns instantes.';
+          } else if (fetchError.stage === 'ml-search-timeout') {
+            notes = 'Timeout ao buscar concorrentes (7s). API do ML pode estar lenta.';
+          } else if (fetchError.stage === 'ml-search-forbidden') {
+            notes = 'ML search retornou 403 (forbidden). Endpoint pode estar bloqueado.';
+          } else if (fetchError.statusCode) {
+            notes = `ML search retornou ${fetchError.statusCode}: ${fetchError.message}`;
+          } else {
+            notes = `Erro ao buscar concorrentes: ${fetchError.message}`;
+          }
+        }
+        
+        return {
+          benchmarkSummary: {
+            categoryId: listing.categoryId,
+            sampleSize: 0,
+            computedAt: new Date().toISOString(),
+            confidence: 'unavailable',
+            notes,
+            stats: {
+              medianPicturesCount: 0,
+              percentageWithVideo: 0,
+              medianPrice: 0,
+              medianTitleLength: 0,
+              sampleSize: 0,
+            },
+            baselineConversion: {
+              conversionRate: null,
+              sampleSize: 0,
+              totalVisits: 0,
+              confidence: 'unavailable',
+            },
+          },
+          youWinHere: [],
+          youLoseHere: [],
+          tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+          recommendations: [],
+          _debug: fetchError ? {
+            stage: fetchError.stage,
+            error: fetchError.message,
+            categoryId: listing.categoryId,
+            statusCode: fetchError.statusCode,
+          } : {
+            stage: 'ml-search-empty',
+            error: 'Nenhum concorrente encontrado',
+            categoryId: listing.categoryId,
+          },
+        };
       }
 
       // 2. Calcular estatísticas
