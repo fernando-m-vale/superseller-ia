@@ -5,6 +5,7 @@ import { RecommendationService } from './RecommendationService';
 import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
 import { resolveMercadoLivreConnection } from '../utils/ml-connection-resolver';
 import { getValidAccessToken } from '../utils/ml-token-helper';
+import { extractBuyerPricesFromMlPrices } from '../utils/ml-prices-extractor';
 
 const prisma = new PrismaClient();
 
@@ -1319,6 +1320,40 @@ export class MercadoLivreSyncService {
           promotionType = null;
         }
         
+        // HOTFIX CONTROLADO: usar /items/{id}/prices como source of truth para preço promocional
+        // Aplicar apenas quando flag ativa e listing específico
+        const useMlPricesForPromo = process.env.USE_ML_PRICES_FOR_PROMO === 'true';
+        const isTargetListing = item.id === 'MLB4167251409';
+        
+        if (useMlPricesForPromo && isTargetListing && item.marketplace === 'mercadolivre') {
+          // Tentar extrair preços do payload /prices se disponível
+          if (item.prices?.prices && Array.isArray(item.prices.prices)) {
+            const buyerPrices = extractBuyerPricesFromMlPrices({ prices: item.prices.prices });
+            
+            if (buyerPrices.hasPromotionEffective && buyerPrices.originalPrice && buyerPrices.promotionalPrice) {
+              // Sobrescrever valores com preços do /prices
+              const oldPriceFinal = priceFinal;
+              const oldDiscount = discountPercent;
+              
+              priceFinal = buyerPrices.promotionalPrice;
+              originalPrice = buyerPrices.originalPrice;
+              hasPromotion = true;
+              discountPercent = buyerPrices.discountPercent ?? null;
+              
+              // Log estruturado (sem tokens)
+              console.log(`[ML-SYNC] ml-prices-applied itemId=${item.id}`, {
+                stage: 'ml-prices-applied',
+                listingIdExt: item.id,
+                oldPriceFinal,
+                newPriceFinal: priceFinal,
+                oldDiscount,
+                newDiscount: discountPercent,
+                tenantId: this.tenantId,
+              });
+            }
+          }
+        }
+        
         // Log estruturado com candidateFinalPrice para diagnóstico
         console.log(`[ML-SYNC] Promoção - resultado final itemId=${item.id}`, {
           candidateFinalPrice,
@@ -1336,6 +1371,10 @@ export class MercadoLivreSyncService {
         listingData.discount_percent = discountPercent;
         listingData.promotion_type = promotionType;
         listingData.promotion_checked_at = now;
+        
+        // IMPORTANTE: price também deve refletir o preço atual do comprador (price_final se houver promoção)
+        // Isso garante que a UI do grid mostre o preço correto
+        listingData.price = hasPromotion ? priceFinal : currentPrice;
         
         // Log estruturado para debug (sem expor tokens) - já logado acima no resultado final
 
