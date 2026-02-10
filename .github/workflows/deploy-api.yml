@@ -74,16 +74,26 @@ jobs:
           # Wait for service to be in RUNNING state before starting deployment
           echo "Checking service status before deployment..."
           MAX_PRE_WAIT=300  # 5 minutes max to wait for RUNNING
-          PRE_WAIT_INTERVAL=10
+          PRE_WAIT_INTERVAL=15
+          MAX_RETRIES=$((MAX_PRE_WAIT / PRE_WAIT_INTERVAL))  # ~20 retries
           PRE_ELAPSED=0
+          RETRY_COUNT=0
           
-          while [ $PRE_ELAPSED -lt $MAX_PRE_WAIT ]; do
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             PRE_STATUS=$(aws apprunner describe-service \
               --service-arn $APPRUNNER_SERVICE_ARN \
               --query 'Service.Status' \
-              --output text)
+              --output text 2>/dev/null || echo "ERROR")
             
-            echo "Pre-deployment status: $PRE_STATUS (${PRE_ELAPSED}s elapsed)"
+            if [ "$PRE_STATUS" = "ERROR" ]; then
+              echo "⚠️ Failed to get service status, retrying..."
+              sleep $PRE_WAIT_INTERVAL
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              PRE_ELAPSED=$((PRE_ELAPSED + PRE_WAIT_INTERVAL))
+              continue
+            fi
+            
+            echo "Pre-deployment status: $PRE_STATUS (${PRE_ELAPSED}s elapsed, retry ${RETRY_COUNT}/${MAX_RETRIES})"
             
             if [ "$PRE_STATUS" = "RUNNING" ]; then
               echo "✓ Service is RUNNING, proceeding with deployment"
@@ -91,6 +101,7 @@ jobs:
             elif [ "$PRE_STATUS" = "OPERATION_IN_PROGRESS" ] || [ "$PRE_STATUS" = "CREATE_FAILED" ] || [ "$PRE_STATUS" = "UPDATE_FAILED" ]; then
               echo "Waiting for service to be RUNNING (current: $PRE_STATUS)..."
               sleep $PRE_WAIT_INTERVAL
+              RETRY_COUNT=$((RETRY_COUNT + 1))
               PRE_ELAPSED=$((PRE_ELAPSED + PRE_WAIT_INTERVAL))
             else
               echo "⚠️ Service status: $PRE_STATUS (proceeding anyway)"
@@ -98,8 +109,10 @@ jobs:
             fi
           done
           
-          if [ $PRE_ELAPSED -ge $MAX_PRE_WAIT ]; then
-            echo "⚠️ Timeout waiting for RUNNING state, proceeding with deployment anyway"
+          if [ $RETRY_COUNT -ge $MAX_RETRIES ] && [ "$PRE_STATUS" != "RUNNING" ]; then
+            echo "❌ Timeout waiting for RUNNING state after ${MAX_PRE_WAIT}s (status: $PRE_STATUS)"
+            echo "This may indicate a service issue. Check AWS Console for details."
+            exit 1
           fi
           
           # Trigger deployment

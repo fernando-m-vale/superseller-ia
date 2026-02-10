@@ -61,6 +61,7 @@ export function ListingAIAnalysisPanel({
   listingPriceFinal,
   listingHasPromotion,
   listingDiscountPercent,
+  benchmark,
   onRegenerate,
   isRegenerating = false,
 }: ListingAIAnalysisPanelProps) {
