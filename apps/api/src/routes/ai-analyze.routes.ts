@@ -1398,6 +1398,38 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           }, 'Cache hit but no analysisV21 found');
         }
 
+        // Debug controlado: capturar payload do ML /prices (só para listing específico)
+        const query = AnalyzeQuerySchema.parse(request.query);
+        const debugPrices = query.debugPrices ?? false;
+        
+        if ((debugPrices || process.env.DEBUG_ML_PRICES === 'true') && listing.listing_id_ext === 'MLB4167251409' && listing.marketplace === 'mercadolivre') {
+          try {
+            const syncService = new MercadoLivreSyncService(tenantId);
+            const debugPricesResult = await syncService.debugFetchPrices(listing.listing_id_ext);
+            
+            request.log.warn({
+              requestId,
+              tenantId,
+              listingId,
+              listingIdExt: listing.listing_id_ext,
+              statusCode: debugPricesResult.statusCode,
+              blockedBy: debugPricesResult.blockedBy,
+              code: debugPricesResult.code,
+              message: debugPricesResult.message,
+            }, 'Debug ML Prices API (cache response, debugPrices=true)');
+            
+            cacheResponseData._debugPrices = debugPricesResult;
+          } catch (debugError) {
+            request.log.error({
+              requestId,
+              tenantId,
+              listingId,
+              listingIdExt: listing.listing_id_ext,
+              error: debugError instanceof Error ? debugError.message : 'Erro desconhecido',
+            }, 'Erro ao executar debugPrices (cache)');
+          }
+        }
+
         // Adicionar header com commit SHA
         setVersionHeader(reply);
 

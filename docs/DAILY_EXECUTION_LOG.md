@@ -43,6 +43,36 @@
 
 ---
 
+# DAILY EXECUTION LOG — 2026-02-09 (Dia 4 - Final Closure)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do dia
+**Final Closure Dia 04 — Correções finais de UI e instrumentação de debug**
+
+## ✅ Planejado
+- [x] Fix /api/v1/meta — gitShaShort não pode ser "unknown" em produção
+- [x] Diagnóstico Benchmark vazio (confidence=unavailable, sampleSize=0)
+- [x] (Opcional UX) Preço "ML você vende por" vs preço para o comprador
+- [x] WEB — Ajuste de UI: não duplicar promo nas duas colunas
+- [x] API — Instrumentação CONTROLADA para capturar payload do ML /prices (debug)
+
+## 🧠 Descobertas
+- **Benchmark._debug agora mostra 403 forbidden:** Quando ML Search API retorna 403 PolicyAgent, `benchmark._debug` inclui `stage='ml-search-forbidden'`, `statusCode=403`, `code` e `message` detalhados
+- **Debug controlado de prices:** Implementado mecanismo seguro para capturar payload do ML `/items/{id}/prices` apenas quando `debugPrices=true` e `listingIdExt='MLB4167251409'`
+- **UI de preços duplicava promoção:** Coluna "Preço" mostrava original riscado + promo, enquanto "Preço Promocional" também mostrava promo → redundância
+
+## 📌 Decisões tomadas
+- **Propagar GIT_SHA para runtime stage:** Adicionar ARG e ENV GIT_SHA no runtime stage do Dockerfile da API; adicionar ENV COMMIT_SHA para compatibilidade
+- **Diagnóstico detalhado de benchmark:** Incluir `_debug` no BenchmarkResult quando `competitors.length === 0`; capturar statusCode, stage e mensagem detalhada; adicionar timeout (7s) e headers (User-Agent, Accept) no fetchCompetitors
+- **UI de preços sem duplicidade:** Coluna "Preço de venda (comprador)" mostra apenas preço atual (promo se houver); coluna "Preço Promocional" mostra original riscado se houver promoção
+- **Debug controlado de prices:** Só executa quando `debugPrices=true` (query param) OU `DEBUG_ML_PRICES=true` (env) E `listingIdExt='MLB4167251409'`; nunca retorna tokens completos; inclui `_debugPrices` no response
+
+## ➡️ Próximo passo claro
+**Dia 05 — Validação & Consolidação: Validar pipeline verde, validar benchmark na UI, verificar cacheHit vs fresh, verificar promptVersion em produção, testes end-to-end**
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-09 (Dia 3)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO
