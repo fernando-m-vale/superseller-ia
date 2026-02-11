@@ -968,6 +968,22 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
+        // 5. HOTFIX DIA 05: Materializar orders/gmv em listing_metrics_daily
+        // Reutilizar os mesmos listingIds processados em visits
+        app.log.info({ 
+          tenantId, 
+          dateFrom: dateFromUtc.toISOString(), 
+          dateTo: dateToUtc.toISOString(),
+          listingIdsCount: visitsResult.listingIds.length,
+        }, 'Iniciando materialização de orders/gmv...');
+        
+        const ordersMetricsResult = await syncService.syncOrdersMetricsDaily(
+          tenantId,
+          dateFromUtc,
+          dateToUtc,
+          visitsResult.listingIds
+        );
+
         const totalDuration = Date.now() - startTime;
 
         app.log.info({
@@ -984,6 +1000,8 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           metricsRowsUpserted: metricsResult.rowsUpserted,
           visitsListingsProcessed: visitsResult.listingsProcessed,
           visitsRowsUpserted: visitsResult.rowsUpserted,
+          ordersMetricsListingsProcessed: ordersMetricsResult.listingsProcessed,
+          ordersMetricsRowsUpserted: ordersMetricsResult.rowsUpserted,
           totalDuration,
         }, 'Refresh completo concluído');
 
@@ -1039,6 +1057,14 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
               visits_status: visitsResult.visits_status,
               failures_summary: visitsResult.failures_summary,
               errors: visitsResult.errors.length > 0 ? visitsResult.errors : undefined,
+            },
+            ordersMetrics: {
+              listingsProcessed: ordersMetricsResult.listingsProcessed,
+              rowsUpserted: ordersMetricsResult.rowsUpserted,
+              min_date: ordersMetricsResult.min_date,
+              max_date: ordersMetricsResult.max_date,
+              success: ordersMetricsResult.success,
+              errors: ordersMetricsResult.errors.length > 0 ? ordersMetricsResult.errors : undefined,
             },
             duration: `${totalDuration}ms`,
             ordersDuration: `${ordersResult.duration}ms`,

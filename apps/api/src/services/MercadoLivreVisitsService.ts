@@ -380,6 +380,7 @@ export class MercadoLivreVisitsService {
     duration: number;
     visits_status: 'ok' | 'partial' | 'unavailable';
     failures_summary: Record<string, number>;
+    listingIds: string[]; // HOTFIX DIA 05: Retornar IDs dos listings processados
   }> {
     const startTime = Date.now();
     const result = {
@@ -392,6 +393,7 @@ export class MercadoLivreVisitsService {
       duration: 0,
       visits_status: 'unavailable' as 'ok' | 'partial' | 'unavailable',
       failures_summary: {} as Record<string, number>,
+      listingIds: [] as string[], // HOTFIX DIA 05: IDs dos listings processados
     };
     
     // Contadores para agregação de status
@@ -439,6 +441,7 @@ export class MercadoLivreVisitsService {
         result.duration = Date.now() - startTime;
         result.min_date = fromDate.toISOString().split('T')[0];
         result.max_date = toDate.toISOString().split('T')[0];
+        result.listingIds = []; // HOTFIX DIA 05
         return result;
       }
 
@@ -552,8 +555,12 @@ export class MercadoLivreVisitsService {
         result.duration = Date.now() - startTime;
         result.min_date = fromDate.toISOString().split('T')[0];
         result.max_date = toDate.toISOString().split('T')[0];
+        result.listingIds = []; // HOTFIX DIA 05
         return result;
       }
+
+      // HOTFIX DIA 05: Coletar IDs dos listings processados
+      result.listingIds = listingsToProcess.map(l => l.id);
 
       // 3. Processar listings em batches (5-10 concorrentes)
       const batchSize = 5;
@@ -857,6 +864,7 @@ export class MercadoLivreVisitsService {
       const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
       result.errors.push(errorMsg);
       result.duration = Date.now() - startTime;
+      result.listingIds = []; // HOTFIX DIA 05: Em caso de erro, retornar array vazio
       console.error('[ML-VISITS] Erro fatal no sync:', errorMsg);
       return result;
     }
