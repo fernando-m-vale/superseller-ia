@@ -7,6 +7,7 @@ import { resolveMercadoLivreConnection } from '../utils/ml-connection-resolver';
 import { getValidAccessToken } from '../utils/ml-token-helper';
 import { extractBuyerPricesFromMlPrices, applyBuyerPricesOverrideFromMlPrices } from '../utils/ml-prices-extractor';
 import { shouldFetchMlPricesForPromo, getPromoPricesTtlHours } from '../utils/ml-prices-ttl';
+import { getBooleanEnv } from '../utils/env-parser';
 
 const prisma = new PrismaClient();
 
@@ -1448,7 +1449,8 @@ export class MercadoLivreSyncService {
           }
         } else {
           // TTL ainda válido ou flag desativada
-          const reason = process.env.USE_ML_PRICES_FOR_PROMO !== 'true' ? 'flag_off' : 'ttl_not_expired';
+          const useMlPricesForPromo = getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false);
+          const reason = !useMlPricesForPromo ? 'flag_off' : 'ttl_not_expired';
           console.log(`[ML-SYNC] ml-prices-skipped itemId=${item.id}`, {
             stage: 'ml-prices-skipped',
             listingIdExt: item.id,

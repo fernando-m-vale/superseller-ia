@@ -1547,8 +1547,9 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         }, 'Force refresh concluído');
 
         // Obter configuração de preços promocionais para observabilidade
-        const useMlPricesForPromo = process.env.USE_ML_PRICES_FOR_PROMO === 'true';
-        const promoPricesTtlHours = parseInt(process.env.PROMO_PRICES_TTL_HOURS || '12', 10) || 12;
+        const { getBooleanEnv, getNumberEnv } = await import('../utils/env-parser');
+        const useMlPricesForPromo = getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false);
+        const promoPricesTtlHours = getNumberEnv('PROMO_PRICES_TTL_HOURS', 12);
 
         return reply.status(200).send({
           message: 'Force refresh concluído com sucesso',

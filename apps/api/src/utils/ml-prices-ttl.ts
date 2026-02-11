@@ -3,6 +3,8 @@
  * com base em TTL (Time To Live) para evitar rate limits e controlar custos.
  */
 
+import { getBooleanEnv, getNumberEnv } from './env-parser';
+
 /**
  * Determina se devemos buscar preços via /items/{id}/prices para um listing
  * 
@@ -20,8 +22,8 @@ export function shouldFetchMlPricesForPromo(
   listingDb: { promotion_checked_at: Date | null } | null,
   now: Date = new Date()
 ): boolean {
-  // Verificar flag de feature
-  const useMlPricesForPromo = process.env.USE_ML_PRICES_FOR_PROMO === 'true';
+  // Verificar flag de feature (parser robusto para suportar plaintext e JSON)
+  const useMlPricesForPromo = getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false);
   if (!useMlPricesForPromo) {
     return false;
   }
@@ -31,9 +33,9 @@ export function shouldFetchMlPricesForPromo(
     return true;
   }
 
-  // Calcular TTL em horas (default 12)
-  const ttlHours = parseInt(process.env.PROMO_PRICES_TTL_HOURS || '12', 10);
-  if (isNaN(ttlHours) || ttlHours <= 0) {
+  // Calcular TTL em horas (default 12) - parser robusto para suportar plaintext e JSON
+  const ttlHours = getNumberEnv('PROMO_PRICES_TTL_HOURS', 12);
+  if (ttlHours <= 0) {
     // TTL inválido, usar default seguro
     return true;
   }
@@ -51,6 +53,6 @@ export function shouldFetchMlPricesForPromo(
  * Obtém o TTL configurado em horas
  */
 export function getPromoPricesTtlHours(): number {
-  const ttlHours = parseInt(process.env.PROMO_PRICES_TTL_HOURS || '12', 10);
-  return isNaN(ttlHours) || ttlHours <= 0 ? 12 : ttlHours;
+  const ttlHours = getNumberEnv('PROMO_PRICES_TTL_HOURS', 12);
+  return ttlHours <= 0 ? 12 : ttlHours;
 }
