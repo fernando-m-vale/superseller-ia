@@ -2481,15 +2481,20 @@ export class MercadoLivreSyncService {
       console.log(`[ML-METRICS] Encontrados ${orderItems.length} order_items no período`);
 
       // 4. Agregar por listing_id e por dia
-      // Estrutura: Map<listingId, Map<dayStr, { orders: number, gmv: number }>>
-      const metricsByListingAndDay = new Map<string, Map<string, { orders: number; gmv: number }>>();
+      // HOTFIX DIA 05: Estrutura: Map<listingId, Map<dayStr, { orderIds: Set<string>, gmv: number }>>
+      // Usar Set de order_ids para contar DISTINCT orders, não quantity
+      const metricsByListingAndDay = new Map<string, Map<string, { orderIds: Set<string>; gmv: number }>>();
       
       for (const orderItem of orderItems) {
         if (!orderItem.listing_id) continue; // Pular items sem listing_id (não deveria acontecer após backfill)
 
-        // Usar paid_date se disponível, senão order_date como fallback
+        // HOTFIX DIA 05: Usar paid_date se disponível, senão order_date como fallback
+        // Normalizar para timezone do Brasil antes de extrair dia
         const orderDate = orderItem.order.paid_date || orderItem.order.order_date;
         const paymentDate = new Date(orderDate);
+        
+        // HOTFIX DIA 05: Converter para timezone do Brasil antes de extrair dia
+        // Usar UTC midnight como padrão (já que order_date/paid_date já devem estar em UTC)
         paymentDate.setUTCHours(0, 0, 0, 0);
         const dayStr = paymentDate.toISOString().split('T')[0];
 
@@ -2504,9 +2509,10 @@ export class MercadoLivreSyncService {
         }
         
         const dayMap = metricsByListingAndDay.get(orderItem.listing_id)!;
-        const existing = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
+        const existing = dayMap.get(dayStr) || { orderIds: new Set<string>(), gmv: 0 };
         
-        existing.orders += orderItem.quantity;
+        // HOTFIX DIA 05: Adicionar order_id ao Set (conta DISTINCT orders)
+        existing.orderIds.add(orderItem.order.id);
         existing.gmv += Number(orderItem.total_price); // Usar total_price já calculado
         
         dayMap.set(dayStr, existing);
@@ -2515,15 +2521,62 @@ export class MercadoLivreSyncService {
       console.log(`[ML-METRICS] Agregados ${metricsByListingAndDay.size} listings com métricas`);
 
       // 5. Para cada listing, fazer UPSERT para cada dia do range
+      // HOTFIX DIA 05: Preservar visits e outros campos existentes no update
       const upsertPromises: Promise<void>[] = [];
+      
+      // HOTFIX DIA 05: Logs estruturados para sample de 5 dias
+      const sampleDays: Array<{ listingId: string; day: string; before: { orders: number | null; gmv: number | null }; after: { orders: number; gmv: number } }> = [];
+      const maxSampleDays = 5;
+      let sampleDaysCount = 0;
       
       for (const listing of listings) {
         // Usar listing.id em vez de listing_id_ext (agora agregamos por listing_id)
         const dayMap = metricsByListingAndDay.get(listing.id) || new Map();
         
         for (const dayStr of dayStrings) {
-          const dayMetrics = dayMap.get(dayStr) || { orders: 0, gmv: 0 };
+          const dayMetrics = dayMap.get(dayStr) || { orderIds: new Set<string>(), gmv: 0 };
+          // HOTFIX DIA 05: Contar DISTINCT orders (tamanho do Set)
+          const ordersCount = dayMetrics.orderIds.size;
+          const gmvValue = dayMetrics.gmv;
           const dayDate = new Date(dayStr + 'T00:00:00.000Z');
+
+          // HOTFIX DIA 05: Buscar valores atuais antes do upsert (para logs e preservação)
+          const existingMetric = await prisma.listingMetricsDaily.findUnique({
+            where: {
+              tenant_id_listing_id_date: {
+                tenant_id: tenantId,
+                listing_id: listing.id,
+                date: dayDate,
+              },
+            },
+            select: {
+              visits: true,
+              orders: true,
+              gmv: true,
+              impressions: true,
+              clicks: true,
+              ctr: true,
+              conversion: true,
+              source: true,
+            },
+          });
+
+          // HOTFIX DIA 05: Coletar sample para logs (primeiros 5 dias com mudanças)
+          if (sampleDaysCount < maxSampleDays && (ordersCount > 0 || gmvValue > 0)) {
+            sampleDays.push({
+              listingId: listing.id,
+              day: dayStr,
+              before: {
+                orders: existingMetric?.orders ?? null,
+                gmv: existingMetric?.gmv ? Number(existingMetric.gmv) : null,
+              },
+              after: {
+                orders: ordersCount,
+                gmv: gmvValue,
+              },
+            });
+            sampleDaysCount++;
+          }
 
           // Criar promise de UPSERT
           upsertPromises.push(
@@ -2540,8 +2593,8 @@ export class MercadoLivreSyncService {
                 listing_id: listing.id,
                 date: dayDate,
                 visits: null, // Não inventar dados
-                orders: dayMetrics.orders,
-                gmv: dayMetrics.gmv,
+                orders: ordersCount,
+                gmv: gmvValue,
                 conversion: null, // Sem visits, não calcular conversão
                 impressions: null, // Não inventar dados
                 clicks: null, // Não inventar dados
@@ -2550,14 +2603,22 @@ export class MercadoLivreSyncService {
                 period_days: periodDays,
               },
               update: {
-                visits: null, // Não inventar dados
-                orders: dayMetrics.orders,
-                gmv: dayMetrics.gmv,
-                conversion: null, // Sem visits, não calcular conversão
-                impressions: null, // Não inventar dados
-                clicks: null, // Não inventar dados
-                ctr: null, // Não inventar dados
-                source: 'ml_orders_daily',
+                // HOTFIX DIA 05: Preservar visits e outros campos existentes (não zerar)
+                visits: existingMetric?.visits ?? undefined, // Preservar se existir
+                orders: ordersCount, // Atualizar orders
+                gmv: gmvValue, // Atualizar gmv
+                // HOTFIX DIA 05: Preservar impressions, clicks, ctr se existirem
+                impressions: existingMetric?.impressions ?? undefined,
+                clicks: existingMetric?.clicks ?? undefined,
+                ctr: existingMetric?.ctr ?? undefined,
+                // HOTFIX DIA 05: Recalcular conversion se visits existir
+                conversion: existingMetric?.visits && existingMetric.visits > 0 
+                  ? (ordersCount / existingMetric.visits) * 100 
+                  : (existingMetric?.conversion ? Number(existingMetric.conversion) : undefined),
+                // HOTFIX DIA 05: Atualizar source para indicar que orders foram atualizados
+                source: existingMetric?.source === 'ml_visits_daily' 
+                  ? 'ml_visits_and_orders_daily' 
+                  : 'ml_orders_daily',
                 period_days: periodDays,
               },
             }).then(() => {
@@ -2591,6 +2652,14 @@ export class MercadoLivreSyncService {
       console.log(`[ML-METRICS] Processados: ${result.listingsProcessed} listings, ${dayStrings.length} dias`);
       console.log(`[ML-METRICS] Rows upserted: ${result.rowsUpserted} (esperado: ~${result.listingsProcessed * dayStrings.length})`);
       console.log(`[ML-METRICS] Range: ${result.min_date} até ${result.max_date}`);
+      
+      // HOTFIX DIA 05: Logs estruturados com sample de before/after
+      if (sampleDays.length > 0) {
+        console.log(`[ML-METRICS] Sample de ${sampleDays.length} dias com orders/gmv atualizados:`);
+        for (const sample of sampleDays) {
+          console.log(`[ML-METRICS]   - Listing ${sample.listingId} dia ${sample.day}: orders ${sample.before.orders ?? 'null'}→${sample.after.orders}, gmv ${sample.before.gmv ?? 'null'}→${sample.after.gmv}`);
+        }
+      }
 
       return result;
     } catch (error) {
