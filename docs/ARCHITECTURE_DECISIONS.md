@@ -685,4 +685,72 @@ Deploy App Runner falhava intermitentemente com erro "Can't start a deployment .
 - UX do modal de análise (layout e hierarquia)
 - Benchmark por categoria (agregação interna vs endpoints públicos)
 
+---
+
+## ADR-020: Promo Pricing via ML /prices com TTL e Feature Flag
+
+**Data:** 2026-02-09  
+**Status:** Implementado
+
+### Contexto
+Promoções não eram capturadas corretamente via `/items?ids=...` (multiget). Mercado Livre recomenda usar `/items/{id}/prices` para dados de preços/promoções. Sistema precisava ser escalável para milhares de anúncios sem allowlist hardcoded, e rate-limit friendly para evitar abuso da API do ML.
+
+### Decisão
+**Usar `/items/{id}/prices` (Prices API) como fonte de verdade para promoções, com TTL (Time To Live) baseado em `promotion_checked_at` e feature flag `USE_ML_PRICES_FOR_PROMO` via Secrets Manager. Override manual via query param `forcePromoPrices=true` para debug quando necessário.**
+
+### Justificativa
+- Prices API é endpoint recomendado pelo ML para preços/promoções
+- Retorna dados estruturados de `sale_price`, `prices`, `reference_prices`, `promotions`, `deals`
+- TTL garante rate-limit safety sem abuso da API do ML
+- Feature flag permite ativar/desativar sem deploy
+- Override manual permite debug/manual force quando necessário
+- Escalável para milhares de anúncios (sem allowlist hardcoded)
+- Multi-tenant ready (funciona para qualquer tenant/anúncio)
+
+### Implementação
+- **TTL baseado em `promotion_checked_at`:**
+  - `/prices` só é chamado quando `promotion_checked_at` é `null` (nunca verificado) OU `now - promotion_checked_at > TTL` (expirado)
+  - TTL padrão: 12h (`PROMO_PRICES_TTL_HOURS` configurável via env var)
+  - `promotion_checked_at` é atualizado apenas quando `/prices` é efetivamente chamado
+- **Feature flag via Secrets Manager:**
+  - `USE_ML_PRICES_FOR_PROMO` injetado no App Runner via Terraform
+  - Parser robusto (`getBooleanEnv()`) suporta plaintext (`"true"`) e JSON (`{"USE_ML_PRICES_FOR_PROMO":"true"}`)
+  - Permite ativar/desativar sem deploy
+- **Override manual:**
+  - Endpoint `force-refresh` aceita query param `forcePromoPrices=true` para ignorar TTL
+  - Força busca de `/prices` mesmo com `promotion_checked_at` recente
+  - Útil para debug/manual force quando necessário
+- **Observabilidade:**
+  - Response do `force-refresh` inclui `config` e `enrichment` com detalhes completos
+  - `enrichment.reason` indica por que pulou (`ttl_not_expired`, `flag_off`, etc)
+  - Logs estruturados para diagnóstico
+
+### Consequências positivas
+- **Confiabilidade:** Promoções capturadas corretamente via source of truth
+- **Escala:** Sistema escalável para milhares de anúncios sem allowlist
+- **Rate-limit safety:** TTL garante que sistema não abuse da API do ML
+- **Auditabilidade:** Observabilidade completa permite debug sem logs
+- **Flexibilidade:** Feature flag permite ativar/desativar sem deploy
+- **Multi-tenant ready:** Funciona para qualquer tenant/anúncio
+
+### Trade-offs
+- **Latência:** Chamada adicional a `/prices` adiciona latência (mitigado por TTL)
+- **Rate-limit:** TTL pode atrasar atualização de promoções (aceitável para rate-limit safety)
+- **Complexidade:** Parser robusto para env vars adiciona complexidade (necessário para robustez)
+
+### Relação com multi-tenant SaaS
+- Sistema não usa allowlist hardcoded (escala para qualquer tenant/anúncio)
+- TTL garante rate-limit safety mesmo com múltiplos tenants
+- Feature flag permite controle global sem deploy
+- Override manual permite debug específico quando necessário
+
+### Alternativas consideradas
+- Heurística de desconto: Menos confiável, pode gerar dados incorretos
+- Sem TTL: Abuso de rate-limit, custos desnecessários
+- Allowlist hardcoded: Não escala, não é multi-tenant ready
+- Sem feature flag: Requer deploy para ativar/desativar
+- Sem override: Dificulta debug em produção
+
+---
+
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.

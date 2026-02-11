@@ -1,3 +1,44 @@
+# DAILY EXECUTION LOG — 2026-02-09 (Dia 4 — Promo Pricing Confiável + TTL + Feature Flag)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do dia
+**Promo pricing confiável (source of truth) — Correção definitiva do bug de promoção — Robustez infra + observabilidade — Preparação para Action Engine (Dia 05)**
+
+## ✅ Planejado
+- [x] Validar persistência correta de preço promocional
+- [x] Integrar /items/{id}/prices com TTL escalável (sem allowlist)
+- [x] Criar feature flag via Secrets Manager (USE_ML_PRICES_FOR_PROMO)
+- [x] Garantir rate-limit safety (TTL padrão 12h)
+- [x] Corrigir UX do benchmark (403 tratado como indisponível, não bug)
+- [x] Criar override manual para debug (forcePromoPrices=true)
+- [x] Parser robusto para feature flags (plaintext + JSON)
+- [x] Observabilidade completa no force-refresh
+
+## 🧠 Descobertas
+- **App Runner NÃO injeta secrets automaticamente:** Secrets precisam estar explicitamente configurados no Terraform (`runtime_environment_secrets`)
+- **Secrets plaintext vs JSON exigem parser robusto:** AWS Secrets Manager pode retornar `"true"` (plaintext) ou `{"USE_ML_PRICES_FOR_PROMO":"true"}` (JSON key/value), exigindo `getBooleanEnv()` que suporta ambos
+- **/prices é a única fonte confiável para promo real no Mercado Livre:** `/items?ids=...` (multiget) não retorna dados suficientes de promoção; `/items/{id}/prices` retorna exatamente o que o comprador vê
+- **TTL é obrigatório para evitar abuso de rate-limit:** Sem TTL, múltiplas chamadas seguidas ao `force-refresh` causariam rate limit desnecessário; `promotion_checked_at` controla quando buscar novamente
+- **Observabilidade no force-refresh é essencial para debug de produção:** Response inclui `config`, `enrichment.applied`, `enrichment.reason` para diagnóstico sem logs
+
+## ⚠️ Bloqueios / riscos
+- Nenhum bloqueio ativo
+- Benchmark ML Search pode continuar retornando 403 (tratado como indisponível, não bug)
+
+## 📌 Decisões tomadas
+- **/items/{id}/prices é source of truth para promo:** Nunca usar heurística de desconto quando `/prices` estiver disponível
+- **TTL padrão de promo pricing = 12h:** `PROMO_PRICES_TTL_HOURS` configurável via env var (default 12h)
+- **Feature flag USE_ML_PRICES_FOR_PROMO via Secrets Manager:** Permite ativar/desativar sem deploy
+- **Override manual via query param forcePromoPrices=true:** Ignora TTL para debug/manual force quando necessário
+- **Benchmark 403 tratado como indisponível (UX):** Mensagem amigável "Benchmark indisponível no momento (Mercado Livre retornou 403)." evita aparência de bug
+- **Nenhuma allowlist por anúncio:** Sistema escalável para milhares de anúncios; TTL garante rate-limit safety sem hardcoding
+
+## ➡️ Próximo passo claro
+**Iniciar DIA 05: Benchmark → Action Engine → Conteúdo Gerado (core value)**
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-09 (Dia 4)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

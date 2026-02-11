@@ -1,74 +1,50 @@
-# NEXT SESSION PLAN — Dia 5 (Validação & Consolidação)
+# NEXT SESSION PLAN — Dia 5 (Benchmark + Action Engine + Conteúdo Gerado)
 
 ## 🗓️ Próxima Sessão — Dia 05
 
 ### Objetivo principal
-**Pipeline CI/Deploy 100% verde — Validação funcional do benchmark na UI — Verificação de cacheHit vs fresh — Verificação de promptVersion em produção**
+**Transformar benchmark em Top 3 prioridades acionáveis — Exibir ganhos e perdas de forma vendável — Gerar conteúdo pronto para copy/paste (core value)**
 
 ### Status do Dia 04
-- ✅ Benchmark nunca retorna null (sempre objeto com confidence="unavailable" se falhar)
-- ✅ Logs estruturados quando benchmark falhar
-- ✅ Refresh de listing quando forceRefresh=true
-- ✅ Cache funcionando corretamente (fingerprint inclui promptVersion)
-- ✅ promptVersion e schemaVersion expostos no response
-- ✅ BenchmarkPanel integrado na UI (ListingAIAnalysisPanel)
-- ✅ Tipagem TypeScript corrigida (benchmark em AIAnalysisResponse)
-- ✅ Pipelines App Runner resilientes a estados transitórios
-- ⚠️ CI/Deploy em fase final de estabilização (hotfix de tipagem aplicado)
+- ✅ Promo pricing confiável via /items/{id}/prices (source of truth)
+- ✅ TTL escalável implementado (sem allowlist, multi-tenant ready)
+- ✅ Feature flag USE_ML_PRICES_FOR_PROMO via Secrets Manager
+- ✅ Parser robusto para env vars (plaintext + JSON)
+- ✅ Force override via forcePromoPrices=true
+- ✅ Observabilidade completa no force-refresh
+- ✅ Benchmark 403 tratado como indisponível (UX)
+- ✅ Rate-limit safety garantido (TTL padrão 12h)
 
 ### Checklist inicial (Dia 05)
 
-#### 1. Conferir Actions (WEB + API)
-- [ ] Verificar se build WEB passa (TypeScript sem erros)
-- [ ] Verificar se build API passa
-- [ ] Verificar se lint passa em ambos
-- [ ] Confirmar que CI está verde
+#### 1. Criar Action Engine (rankGaps)
+- [ ] Implementar `rankGaps()` que transforma benchmark em Top 3 prioridades acionáveis
+- [ ] Normalizar wins / losses / criticalGaps
+- [ ] Integrar com ScoreActionEngine existente
+- [ ] Testes unitários para rankGaps
 
-#### 2. Conferir deploy App Runner
-- [ ] Verificar se deploy WEB App Runner completou com sucesso
-- [ ] Verificar se deploy API App Runner completou com sucesso
-- [ ] Confirmar que serviços estão em estado RUNNING
-- [ ] Validar que pre-check de estado RUNNING está funcionando
+#### 2. Gerar conteúdo pronto para copy/paste
+- [ ] Gerar títulos otimizados baseados em benchmark + gaps
+- [ ] Gerar bullets de valor (benefícios, diferenciais)
+- [ ] Gerar descrição SEO estruturada
+- [ ] Garantir que copy está pronta para colar no ML
 
-#### 3. Validar /api/v1/meta
-- [ ] Verificar que endpoint retorna `gitShaShort` e `promptVersion`
-- [ ] Confirmar que `promptVersion` corresponde ao esperado (`ml-expert-v22`)
-- [ ] Validar que `gitShaShort` corresponde ao commit atual
+#### 3. UI mínima vendável
+- [ ] Exibir Top 3 prioridades acionáveis
+- [ ] Mostrar "Você ganha aqui" vs "Você perde aqui" de forma vendável
+- [ ] Exibir conteúdo gerado (título, bullets, descrição) com botão de copiar
+- [ ] Garantir que UI não quebra quando benchmark indisponível
 
-#### 4. Rodar fluxo completo de análise (fresh + cache)
-- [ ] Gerar análise fresh (sem cache)
-  - [ ] Verificar que `cacheHit: false`
-  - [ ] Verificar que `benchmark` está presente
-  - [ ] Verificar que `promptVersion` e `schemaVersion` estão presentes
-  - [ ] Verificar que `x-api-commit` header está presente
-- [ ] Gerar análise cached (com cache)
-  - [ ] Verificar que `cacheHit: true`
-  - [ ] Verificar que `benchmark` está presente (mesmo que confidence='unavailable')
-  - [ ] Verificar que payload é idêntico (exceto timestamps)
+#### 4. Testes e validação
+- [ ] Testes unitários para Action Engine
+- [ ] Testes de integração para geração de conteúdo
+- [ ] Validação manual com listing real (MLB4217107417 ou similar)
+- [ ] Validar que conteúdo gerado é acionável e vendável
 
-#### 5. Validar benchmark na UI
-- [ ] Verificar que BenchmarkPanel renderiza quando `benchmark` existe
-- [ ] Verificar que mostra "Comparação indisponível" quando `confidence='unavailable'`
-- [ ] Verificar que mostra "Você ganha aqui" e "Você perde aqui" quando disponível
-- [ ] Verificar que não quebra quando `benchmark` é null ou undefined
-
-#### 6. Validar forceRefresh
-- [ ] Rodar análise com `forceRefresh=true`
-- [ ] Verificar que listing foi atualizado antes de analisar
-- [ ] Verificar logs de before/after (price_final, original_price, has_promotion, discount_percent)
-- [ ] Confirmar que análise usa dados atualizados
-
-#### 7. Registrar evidências
-- [ ] Screenshots de benchmark na UI (disponível e unavailable)
-- [ ] Logs de cacheHit (fresh e cached)
-- [ ] Payload de /api/v1/meta
-- [ ] Payload de análise (fresh e cached)
-- [ ] Evidências de forceRefresh atualizando dados
-
-### Próximos passos (após validação)
-- [ ] Continuar com melhorias de benchmark (se necessário)
-- [ ] Avançar para próxima feature prioritária
-- [ ] Documentar aprendizados e débitos técnicos
+#### 5. Atualizar documentação
+- [ ] Atualizar DAILY_EXECUTION_LOG.md com conclusão do Dia 05
+- [ ] Atualizar NEXT_SESSION_PLAN.md para Dia 06
+- [ ] Registrar decisões arquiteturais se necessário
 
 ---
 

@@ -75,11 +75,11 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - Operação: jobs internos + scheduler (fase atual, crítico para clientes reais)
 - Próxima épica: Benchmark/Ads/Automações (após dados e operação sólidos)
 
-## 🧠 Estado atual do produto (2026-02-09 — Dia 4 Tecnicamente Concluído)
+## 🧠 Estado atual do produto (2026-02-09 — Dia 4 Concluído)
 
-**Dia atual do projeto:** Dia 4 tecnicamente concluído, aguardando validação final de pipeline  
-**Fase ativa:** Validação & Consolidação (Dia 05)  
-**Status:** Benchmark implementado (backend + UI), versões unificadas, CI/Deploy em fase final de estabilização
+**Dia atual do projeto:** Dia 4 concluído com sucesso  
+**Fase ativa:** DIA 05 — Benchmark → Action Engine → Conteúdo Gerado (core value)  
+**Status:** Fundação de dados e confiabilidade estabelecida; pronto para geração de valor direto ao usuário
 
 - **SuperSeller IA opera com Prompts Versionados (V2.1 Expert e V2.2 Sales):** Sistema permite alternar via `AI_PROMPT_VERSION`
 - **UX V2.1 implementada:** Accordion inline substituindo modal lateral, cards consultor sênior
@@ -90,12 +90,19 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - **Pipeline de análise IA está operacional:** Prompts versionados ativos, validação de qualidade, retry automático
 - **Sistema está preparado para escalar IA, dados e UX:** Fundação sólida para evolução futura
 - **Dia 3 concluído:** Fix conexão ML, promoção end-to-end, IA Prompt v22 com ML Safe Mode, ScoreActionEngine calibrado
-- **Dia 4 tecnicamente concluído:** Benchmark implementado (backend + UI), promptVersion unificado, forceRefresh funcional, cache consistency garantida
+- **Dia 4 concluído:** Promo pricing confiável, TTL escalável, feature flag, observabilidade, benchmark 403 tratado
+  - **Promo pricing:** 100% funcional, persistido corretamente no banco, TTL + override implementados
+  - **Infra:** App Runner com secrets corretamente injetados, env-parser robusto (plaintext + JSON)
+  - **API:** force-refresh observável e auditável (config, enrichment.applied, enrichment.reason)
+  - **UX:** Benchmark 403 tratado como indisponível (não bug)
+  - **Qualidade:** Testes unitários cobrindo TTL, override e parsing de env
   - **Benchmark:** Backend `BenchmarkService` calcula comparação com concorrentes; UI `BenchmarkPanel` renderiza "você ganha/perde aqui"
   - **Versões:** `promptVersion` e `schemaVersion` expostos no response; fonte única em `apps/api/src/utils/prompt-version.ts`
-  - **forceRefresh:** Atualiza listing antes de analisar quando `forceRefresh=true`
+  - **forceRefresh:** Respeita TTL por padrão; `forcePromoPrices=true` para override manual
   - **Cache:** Fingerprint inclui `promptVersion`; cacheHit funciona corretamente
   - **CI/Deploy:** Pipelines App Runner resilientes a estados transitórios; aguardam `RUNNING` antes de `start-deployment`
+
+**Nota importante:** O DIA 04 fecha a fundação de dados e confiabilidade. A partir do DIA 05, o foco passa a ser geração de valor direto ao usuário (conteúdo pronto para copy/paste, ações acionáveis baseadas em benchmark).
 
 ## ⚠️ PROBLEMAS ABERTOS (INFRA/DEPLOY — NÃO CONCEITUAIS)
 

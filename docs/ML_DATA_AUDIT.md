@@ -158,19 +158,39 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - **Risco mitigado:** Seleção determinística evita uso de conexão incorreta
 
 ### Pricing / Promotions
-**Status:** ✅ RESOLVIDO (com TTL e force override)
-- **Fonte de verdade:** `/items/{id}/prices` (Prices API) é endpoint recomendado pelo ML para preços/promoções
+**Status:** ✅ RESOLVIDO (com TTL escalável e force override)
+- **Fonte de verdade:**
+  - `price` / `original_price`: API `/items?ids=...` (multiget) ou `/items/{id}`
+  - `price_final` / `discount_percent`: API `/items/{id}/prices` (Prices API) — **source of truth para promoções**
 - **Fallback:** Se `/prices` falhar (403/404), usa `/items/{id}` como fallback
 - **Campos garantidos:** `original_price`, `price_final`, `has_promotion`, `discount_percent`, `promotion_type` preenchidos quando promoção existe
 - **Enriquecimento:** `enrichItemPricing()` busca dados completos via Prices API se multiget não trouxer dados suficientes
 - **Logs estruturados:** `endpointUsed` (prices/items/none), `hasSalePrice`, `pricesCount`, `referencePricesCount` para diagnóstico
 - **Validação:** Listing MLB4217107417 validado com promoção ativa (47% OFF, R$32 final, R$60 cheio)
-- **⚠️ Divergência conhecida:** `/items/{id}/prices` pode retornar preço promocional diferente de `/items/{id}` (ex: MLB4167251409 mostra R$ 66,93 no `/prices` vs R$ 70,23 no `/items`)
-- **TTL (Time To Live):** Sistema respeita TTL (`PROMO_PRICES_TTL_HOURS`, default 12h) para evitar rate limits. `/prices` só é chamado quando:
-  - `promotion_checked_at` é `null` (nunca verificado)
-  - `now - promotion_checked_at > TTL` (expirado)
-  - `USE_ML_PRICES_FOR_PROMO=true` (flag ativa)
-- **Force override:** Endpoint `force-refresh` aceita query param `forcePromoPrices=true` para ignorar TTL e forçar busca de `/prices` mesmo com `promotion_checked_at` recente (útil para debug/manual force)
+- **⚠️ Divergência conhecida:** `/items/{id}/prices` pode retornar preço promocional diferente de `/items/{id}` (ex: MLB4167251409 mostra R$ 66,93 no `/prices` vs R$ 70,23 no `/items`). **Nunca usar heurística de desconto quando `/prices` estiver disponível.**
+- **TTL (Time To Live) — Rate-limit safety:**
+  - Sistema respeita TTL (`PROMO_PRICES_TTL_HOURS`, default 12h) para evitar rate limits
+  - `/prices` só é chamado quando:
+    - `promotion_checked_at` é `null` (nunca verificado)
+    - `now - promotion_checked_at > TTL` (expirado)
+    - `USE_ML_PRICES_FOR_PROMO=true` (flag ativa)
+  - `promotion_checked_at` é atualizado apenas quando `/prices` é efetivamente chamado
+  - **Rate-limit safety é requisito de produto:** TTL garante que sistema não abuse de API do ML
+- **Feature flag:**
+  - `USE_ML_PRICES_FOR_PROMO` via AWS Secrets Manager (App Runner)
+  - Parser robusto suporta plaintext (`"true"`) e JSON (`{"USE_ML_PRICES_FOR_PROMO":"true"}`)
+  - Permite ativar/desativar sem deploy
+- **Force override:**
+  - Endpoint `force-refresh` aceita query param `forcePromoPrices=true` para ignorar TTL
+  - Força busca de `/prices` mesmo com `promotion_checked_at` recente
+  - Útil para debug/manual force quando necessário
+  - Não afeta comportamento padrão (respeita TTL quando ausente)
+- **Observabilidade:**
+  - Response do `force-refresh` inclui:
+    - `config: { useMlPricesForPromo, promoPricesTtlHours, forcePromoPrices }`
+    - `enrichment: { endpointUsed, statusCode, applied, payloadSize, appliedValues?, reason? }`
+  - `endpointUsed`: `"prices"` (chamou), `"none"` (pulou), `"items"` (fallback)
+  - `reason`: `"ttl_not_expired"`, `"flag_off"`, `"promo_not_effective"`, `"fetch_failed"`, `"no_prices_available"`
 - **Helper:** `extractBuyerPricesFromMlPrices()` extrai preços do payload `/prices` com regras: `standard.amount` → originalPrice, `promotion.amount` → promotionalPrice, `promotion.regular_amount` → originalPrice (se disponível)
 
 ### Video / Clips
