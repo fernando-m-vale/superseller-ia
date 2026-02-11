@@ -6,6 +6,7 @@ import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService
 import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
 import { ScoreCalculator } from '../services/ScoreCalculator';
 import { authGuard } from '../plugins/auth';
+import { getBooleanEnv, getNumberEnv } from '../utils/env-parser';
 
 const prisma = new PrismaClient();
 
