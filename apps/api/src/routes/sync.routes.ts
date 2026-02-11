@@ -1450,6 +1450,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
    * 
    * Força refresh de um anúncio específico, atualizando todos os campos incluindo promoção.
    * Útil para corrigir anúncios que não foram processados corretamente.
+   * 
+   * Query params:
+   * - forcePromoPrices (boolean, opcional): Se true, ignora TTL e força busca de /prices mesmo se promotion_checked_at recente.
+   *   Por padrão, respeita TTL para evitar rate limits.
    */
   app.post(
     '/mercadolivre/listings/:listingIdExt/force-refresh',
@@ -1472,6 +1476,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             message: 'listingIdExt é obrigatório',
           });
         }
+
+        // Parse query param forcePromoPrices (opcional, default false)
+        const query = request.query as { forcePromoPrices?: string };
+        const forcePromoPrices = query.forcePromoPrices === 'true' || query.forcePromoPrices === '1';
 
         app.log.info({ 
           requestId,
@@ -1497,8 +1505,9 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Instanciar service e buscar item do ML
+        // Passar forcePromoPrices para ignorar TTL se solicitado
         const syncService = new MercadoLivreSyncService(tenantId);
-        const items = await syncService.fetchItemsDetails([listingIdExt]);
+        const items = await syncService.fetchItemsDetails([listingIdExt], forcePromoPrices);
 
         if (items.length === 0) {
           return reply.status(404).send({
@@ -1507,7 +1516,12 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        const enrichmentMeta = items[0]._enrichmentMeta ?? { endpointUsed: 'none' as const, statusCode: 0, payloadSize: 0 };
+        const enrichmentMeta = items[0]._enrichmentMeta ?? { 
+          endpointUsed: 'none' as const, 
+          statusCode: 0, 
+          payloadSize: 0,
+          reason: undefined
+        };
 
         // Aplicar mesma lógica de persistência do sync
         const { updated } = await syncService.upsertListings(items, 'force_refresh', false);
@@ -1551,6 +1565,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         const useMlPricesForPromo = getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false);
         const promoPricesTtlHours = getNumberEnv('PROMO_PRICES_TTL_HOURS', 12);
 
+        // Determinar se aplicou preços promocionais
+        const applied = enrichmentMeta.endpointUsed === 'prices';
+        const reason = enrichmentMeta.reason || (applied ? undefined : (useMlPricesForPromo ? 'ttl_not_expired' : 'flag_off'));
+
         return reply.status(200).send({
           message: 'Force refresh concluído com sucesso',
           data: {
@@ -1560,17 +1578,19 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
             config: {
               useMlPricesForPromo,
               promoPricesTtlHours,
+              forcePromoPrices,
             },
             enrichment: {
               endpointUsed: enrichmentMeta.endpointUsed,
               statusCode: enrichmentMeta.statusCode,
-              applied: enrichmentMeta.endpointUsed === 'prices' || enrichmentMeta.endpointUsed === 'prices-forced-hotfix',
-              appliedValues: enrichmentMeta.endpointUsed === 'prices' || enrichmentMeta.endpointUsed === 'prices-forced-hotfix' ? {
+              payloadSize: enrichmentMeta.payloadSize,
+              applied,
+              appliedValues: applied ? {
                 original_price: updatedListing?.original_price ?? null,
                 price_final: updatedListing?.price_final ?? null,
                 discount_percent: updatedListing?.discount_percent ?? null,
               } : undefined,
-              payloadSize: enrichmentMeta.payloadSize,
+              reason,
             },
           },
         });

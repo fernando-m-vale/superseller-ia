@@ -85,9 +85,10 @@ interface MercadoLivreItem {
   }>;
   deal_ids?: string[];
   _enrichmentMeta?: {
-    endpointUsed: 'prices' | 'prices-forced-hotfix' | 'items' | 'none';
+    endpointUsed: 'prices' | 'items' | 'none';
     statusCode: number;
     payloadSize: number;
+    reason?: 'ttl_not_expired' | 'flag_off' | 'promo_not_effective' | 'fetch_failed' | 'no_prices_available';
   };
 }
 
@@ -753,32 +754,55 @@ export class MercadoLivreSyncService {
   /**
    * Enriquece dados de preço/promoção de um item via endpoint adicional se necessário
    * Prioridade: GET /items/{itemId}/prices (API de Preços) > GET /items/{id} (fallback)
+   * 
+   * @param item Item do Mercado Livre
+   * @param existingListing Listing existente no DB (opcional, para verificar TTL)
+   * @param forcePromoPrices Se true, ignora TTL e força busca de /prices (default: false)
    */
-  private async enrichItemPricing(item: MercadoLivreItem): Promise<MercadoLivreItem> {
+  private async enrichItemPricing(
+    item: MercadoLivreItem,
+    existingListing?: { promotion_checked_at: Date | null } | null,
+    forcePromoPrices: boolean = false
+  ): Promise<MercadoLivreItem> {
     const hasConfirmedPromo =
       (item.original_price !== undefined && item.original_price !== null && item.original_price > 0 && item.original_price !== item.price) ||
       (item.sale_price !== undefined && item.sale_price !== null && item.sale_price > 0 && item.sale_price !== item.price);
 
-    if (hasConfirmedPromo) {
-      const forcePricesHotfix = process.env.USE_ML_PRICES_FOR_PROMO === 'true' && item.id === 'MLB4167251409';
-      if (!forcePricesHotfix) {
-        console.log(`[ML-SYNC] Item ${item.id} já tem promoção confirmada (original_price=${item.original_price}, sale_price=${item.sale_price}), pulando enriquecimento`);
-        return item;
-      }
+    // Verificar se devemos buscar /prices (escalável, baseado em TTL)
+    const shouldFetch = shouldFetchMlPricesForPromo(existingListing || null, new Date(), forcePromoPrices);
 
-      // Exceção: hotfix cirúrgico exige sempre tentar /prices para source of truth do comprador
-      console.log(`[ML-SYNC] Item ${item.id} tem promoção via /items, mas hotfix ativo: forçando fetch /prices`);
+    if (hasConfirmedPromo && !shouldFetch) {
+      // Tem promoção confirmada e TTL ainda válido, não precisa buscar /prices
+      const useMlPricesForPromo = getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false);
+      const reason = !useMlPricesForPromo ? 'flag_off' : 'ttl_not_expired';
+      console.log(`[ML-SYNC] Item ${item.id} já tem promoção confirmada (original_price=${item.original_price}, sale_price=${item.sale_price}), ${reason === 'ttl_not_expired' ? 'TTL ainda válido' : 'flag desativada'}, pulando enriquecimento`);
+      // Definir metadata para indicar que pulou
+      item._enrichmentMeta = { 
+        endpointUsed: 'none', 
+        statusCode: 0, 
+        payloadSize: 0,
+        reason
+      };
+      return item;
     }
 
-    let endpointUsed: 'prices' | 'prices-forced-hotfix' | 'items' | 'none' = 'none';
+    if (shouldFetch) {
+      const reasonText = forcePromoPrices 
+        ? 'forçado via forcePromoPrices' 
+        : existingListing?.promotion_checked_at 
+          ? 'TTL expirado' 
+          : 'nunca verificado';
+      console.log(`[ML-SYNC] Item ${item.id} ${hasConfirmedPromo ? 'tem promoção via /items, mas' : ''} deve buscar /prices (flag ativa, ${reasonText})`);
+    }
+
+    let endpointUsed: 'prices' | 'items' | 'none' = 'none';
     let enrichStatusCode = 0;
     let enrichPayloadSize = 0;
 
     const pricesData = await this.fetchItemPrices(item.id);
 
     if (pricesData) {
-      const forcePricesHotfix = process.env.USE_ML_PRICES_FOR_PROMO === 'true' && item.id === 'MLB4167251409';
-      endpointUsed = forcePricesHotfix ? 'prices-forced-hotfix' : 'prices';
+      endpointUsed = 'prices'; // Sempre "prices" quando chamou /prices
       enrichStatusCode = pricesData.statusCode;
       enrichPayloadSize = pricesData.payloadSize;
 
@@ -881,7 +905,12 @@ export class MercadoLivreSyncService {
       }
     }
 
-    item._enrichmentMeta = { endpointUsed, statusCode: enrichStatusCode, payloadSize: enrichPayloadSize };
+    item._enrichmentMeta = { 
+      endpointUsed, 
+      statusCode: enrichStatusCode, 
+      payloadSize: enrichPayloadSize,
+      reason: endpointUsed === 'none' ? (shouldFetch ? undefined : (getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false) ? 'ttl_not_expired' : 'flag_off')) : undefined
+    };
 
     console.log(`[ML-SYNC] enrichItemPricing resultado item=${item.id}`, {
       endpointUsed,
@@ -904,8 +933,11 @@ export class MercadoLivreSyncService {
    * Enriquece dados de preço/promoção se necessário
    * 
    * Garante inicialização automática quando chamado externamente (ex: rotas)
+   * 
+   * @param itemIds IDs dos itens a buscar
+   * @param forcePromoPrices Se true, ignora TTL e força busca de /prices para todos os itens (default: false)
    */
-  async fetchItemsDetails(itemIds: string[]): Promise<MercadoLivreItem[]> {
+  async fetchItemsDetails(itemIds: string[], forcePromoPrices: boolean = false): Promise<MercadoLivreItem[]> {
     if (itemIds.length === 0) return [];
     if (itemIds.length > 20) {
       throw new Error('Máximo de 20 itens por requisição');
@@ -931,10 +963,32 @@ export class MercadoLivreSyncService {
         const CONCURRENCY_LIMIT = 5;
         const enrichedItems: MercadoLivreItem[] = [];
         
+        // Buscar listings existentes para verificar TTL (se não for forcePromoPrices)
+        const existingListingsMap = new Map<string, { promotion_checked_at: Date | null }>();
+        if (!forcePromoPrices) {
+          const existingListings = await prisma.listing.findMany({
+            where: {
+              tenant_id: this.tenantId,
+              marketplace: Marketplace.mercadolivre,
+              listing_id_ext: { in: items.map(i => i.id) },
+            },
+            select: {
+              listing_id_ext: true,
+              promotion_checked_at: true,
+            },
+          });
+          existingListings.forEach(listing => {
+            existingListingsMap.set(listing.listing_id_ext, { promotion_checked_at: listing.promotion_checked_at });
+          });
+        }
+
         for (let i = 0; i < items.length; i += CONCURRENCY_LIMIT) {
           const chunk = items.slice(i, i + CONCURRENCY_LIMIT);
           const enrichedChunk = await Promise.all(
-            chunk.map(item => this.enrichItemPricing(item))
+            chunk.map(item => {
+              const existingListing = existingListingsMap.get(item.id);
+              return this.enrichItemPricing(item, existingListing, forcePromoPrices);
+            })
           );
           enrichedItems.push(...enrichedChunk);
         }
