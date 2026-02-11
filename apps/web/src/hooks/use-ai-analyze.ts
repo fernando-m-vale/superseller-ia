@@ -227,6 +227,31 @@ export interface AIAnalysisResponse {
     tradeoffs?: string
     recommendations?: string[]
   } | null
+  // Benchmark Insights (Dia 05) - insights acionáveis
+  benchmarkInsights?: {
+    confidence: 'high' | 'medium' | 'low' | 'unavailable'
+    wins: Array<{ message: string; evidence?: string }>
+    losses: Array<{ message: string; evidence?: string }>
+    criticalGaps: Array<{
+      id: string
+      dimension: 'price' | 'title' | 'images' | 'video' | 'description'
+      title: string
+      whyItMatters: string
+      impact: 'high' | 'medium' | 'low'
+      effort: 'low' | 'medium' | 'high'
+      confidence: 'high' | 'medium' | 'low'
+      metrics?: Record<string, number | string>
+    }>
+  }
+  // Generated Content (Dia 05) - conteúdo pronto para copy/paste
+  generatedContent?: {
+    titles: Array<{ variation: 'A' | 'B' | 'C'; text: string }>
+    bullets: string[]
+    seoDescription: {
+      short: string
+      long: string
+    }
+  }
 }
 
 /**

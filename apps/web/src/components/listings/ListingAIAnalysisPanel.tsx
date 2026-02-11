@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
-import type { NormalizedAIAnalysisV21 } from '@/lib/ai/normalizeAiAnalyze'
+import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent } from '@/lib/ai/normalizeAiAnalyze'
 import { useToast } from '@/hooks/use-toast'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 import { PromotionHighlightPanel, type PromotionPlacementItem } from '@/components/ai/PromotionHighlightPanel'
@@ -50,6 +50,8 @@ interface ListingAIAnalysisPanelProps {
     tradeoffs?: string
     recommendations?: string[]
   } | null
+  benchmarkInsights?: NormalizedBenchmarkInsights | null
+  generatedContent?: GeneratedContent | null
   onRegenerate?: () => Promise<void>
   isRegenerating?: boolean
 }

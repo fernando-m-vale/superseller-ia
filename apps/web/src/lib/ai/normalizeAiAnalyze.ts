@@ -8,6 +8,12 @@
 import type { AIAnalysisResponse } from '@/hooks/use-ai-analyze'
 
 /**
+ * Tipos exportados para uso em componentes
+ */
+export type NormalizedBenchmarkInsights = AIAnalysisResponse['benchmarkInsights']
+export type GeneratedContent = AIAnalysisResponse['generatedContent']
+
+/**
  * Tipo normalizado para o frontend (camelCase)
  */
 export interface NormalizedAIAnalysisV21 {
