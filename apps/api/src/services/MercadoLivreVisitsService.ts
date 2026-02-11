@@ -444,6 +444,48 @@ export class MercadoLivreVisitsService {
 
       // 3. Buscar listings do tenant APENAS da conexão ativa
       // IMPORTANTE: Incluir active E paused, mas EXCLUIR blocked_by_policy e unauthorized
+      
+      // HOTFIX DIA 05: Logs de diagnóstico antes da query
+      const totalListingsCount = await prisma.listing.count({
+        where: {
+          tenant_id: tenantId,
+          marketplace: Marketplace.mercadolivre,
+        },
+      });
+      
+      const activePausedCount = await prisma.listing.count({
+        where: {
+          tenant_id: tenantId,
+          marketplace: Marketplace.mercadolivre,
+          status: { in: [ListingStatus.active, ListingStatus.paused] },
+        },
+      });
+      
+      const accessibleCount = await prisma.listing.count({
+        where: {
+          tenant_id: tenantId,
+          marketplace: Marketplace.mercadolivre,
+          status: { in: [ListingStatus.active, ListingStatus.paused] },
+          access_status: ListingAccessStatus.accessible,
+        },
+      });
+      
+      const withConnectionCount = await prisma.listing.count({
+        where: {
+          tenant_id: tenantId,
+          marketplace: Marketplace.mercadolivre,
+          status: { in: [ListingStatus.active, ListingStatus.paused] },
+          access_status: ListingAccessStatus.accessible,
+          marketplace_connection_id: activeConnection.id,
+        },
+      });
+      
+      console.log(`[ML-VISITS] Diagnóstico de listings elegíveis:`);
+      console.log(`[ML-VISITS]   - Total ML: ${totalListingsCount}`);
+      console.log(`[ML-VISITS]   - Active/Paused: ${activePausedCount}`);
+      console.log(`[ML-VISITS]   - Accessible: ${accessibleCount}`);
+      console.log(`[ML-VISITS]   - Com connection_id=${activeConnection.id}: ${withConnectionCount}`);
+      
       const listings = await prisma.listing.findMany({
         where: {
           tenant_id: tenantId,
@@ -459,8 +501,53 @@ export class MercadoLivreVisitsService {
       });
 
       console.log(`[ML-VISITS] Encontrados ${listings.length} listings ativos/pausados acessíveis`);
+      
+      // HOTFIX DIA 05: Log IDs dos listings que serão processados
+      let listingsToProcess = listings;
+      
+      if (listings.length > 0) {
+        const listingIds = listings.map(l => l.id).slice(0, 10); // Primeiros 10 para não poluir log
+        console.log(`[ML-VISITS] IDs de listings que serão processados (primeiros 10): ${listingIds.join(', ')}`);
+        if (listings.length > 10) {
+          console.log(`[ML-VISITS] ... e mais ${listings.length - 10} listings`);
+        }
+      } else {
+        // HOTFIX DIA 05: Se nenhum listing encontrado, tentar sem filtro de connection_id (fallback)
+        console.log(`[ML-VISITS] ⚠️ Nenhum listing encontrado com filtros completos. Tentando fallback sem filtro de connection_id...`);
+        const listingsWithoutConnectionFilter = await prisma.listing.findMany({
+          where: {
+            tenant_id: tenantId,
+            marketplace: Marketplace.mercadolivre,
+            status: { in: [ListingStatus.active, ListingStatus.paused] },
+            access_status: ListingAccessStatus.accessible,
+          },
+          select: {
+            id: true,
+            listing_id_ext: true,
+            marketplace_connection_id: true,
+          },
+        });
+        
+        if (listingsWithoutConnectionFilter.length > 0) {
+          console.log(`[ML-VISITS] ⚠️ Fallback: Encontrados ${listingsWithoutConnectionFilter.length} listings sem connection_id ou com connection_id diferente`);
+          console.log(`[ML-VISITS] ⚠️ Usando fallback: processando ${listingsWithoutConnectionFilter.length} listings sem filtro de connection_id`);
+          
+          // Usar fallback apenas se houver poucos listings (evitar processar listings de outras conexões por engano)
+          if (listingsWithoutConnectionFilter.length <= 20) {
+            listingsToProcess = listingsWithoutConnectionFilter.map(l => ({
+              id: l.id,
+              listing_id_ext: l.listing_id_ext,
+            }));
+            console.log(`[ML-VISITS] ⚠️ Fallback aplicado: ${listingsToProcess.length} listings serão processados`);
+          } else {
+            console.log(`[ML-VISITS] ⚠️ Fallback não aplicado: muitos listings (${listingsWithoutConnectionFilter.length}) sem connection_id. Pode indicar problema de sincronização.`);
+          }
+        } else {
+          console.log(`[ML-VISITS] ⚠️ Fallback também não encontrou listings. Verificar se há listings ML no tenant.`);
+        }
+      }
 
-      if (listings.length === 0) {
+      if (listingsToProcess.length === 0) {
         result.success = true;
         result.duration = Date.now() - startTime;
         result.min_date = fromDate.toISOString().split('T')[0];
@@ -470,9 +557,9 @@ export class MercadoLivreVisitsService {
 
       // 3. Processar listings em batches (5-10 concorrentes)
       const batchSize = 5;
-      const batches: typeof listings[] = [];
-      for (let i = 0; i < listings.length; i += batchSize) {
-        batches.push(listings.slice(i, i + batchSize));
+      const batches: typeof listingsToProcess[] = [];
+      for (let i = 0; i < listingsToProcess.length; i += batchSize) {
+        batches.push(listingsToProcess.slice(i, i + batchSize));
       }
 
       console.log(`[ML-VISITS] Processando ${batches.length} lotes de até ${batchSize} listings`);
