@@ -104,6 +104,31 @@ interface AIAnalysisApiResponse {
     tradeoffs?: string
     recommendations?: string[]
   } | null
+  // Benchmark Insights (Dia 05) - insights acionáveis
+  benchmarkInsights?: {
+    confidence: 'high' | 'medium' | 'low' | 'unavailable'
+    wins: Array<{ message: string; evidence?: string }>
+    losses: Array<{ message: string; evidence?: string }>
+    criticalGaps: Array<{
+      id: string
+      dimension: 'price' | 'title' | 'images' | 'video' | 'description'
+      title: string
+      whyItMatters: string
+      impact: 'high' | 'medium' | 'low'
+      effort: 'low' | 'medium' | 'high'
+      confidence: 'high' | 'medium' | 'low'
+      metrics?: Record<string, number | string>
+    }>
+  }
+  // Generated Content (Dia 05) - conteúdo pronto para copy/paste
+  generatedContent?: {
+    titles: Array<{ variation: 'A' | 'B' | 'C'; text: string }>
+    bullets: string[]
+    seoDescription: {
+      short: string
+      long: string
+    }
+  }
 }
 
 // Interface adaptada para o frontend
@@ -241,6 +266,10 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     analysisV21: undefined,
     // Benchmark (Dia 04) - não processado pelo adaptador, será preenchido diretamente do response
     // Não incluir aqui pois é opcional e será lido de result.data.benchmark
+    // Benchmark Insights (Dia 05) - será preenchido diretamente do response
+    benchmarkInsights: apiResponse.benchmarkInsights,
+    // Generated Content (Dia 05) - será preenchido diretamente do response
+    generatedContent: apiResponse.generatedContent,
   }
 }
 
@@ -417,6 +446,27 @@ export function useAIAnalyze(listingId: string | null) {
           listingId,
           confidence: benchmark?.benchmarkSummary?.confidence,
           sampleSize: benchmark?.benchmarkSummary?.sampleSize,
+        })
+      }
+
+      // Ler benchmarkInsights e generatedContent (Dia 05)
+      const benchmarkInsights = result.data?.benchmarkInsights ?? null
+      if (benchmarkInsights) {
+        adaptedData.benchmarkInsights = benchmarkInsights
+        console.log('[AI-ANALYZE] BenchmarkInsights found', {
+          listingId,
+          confidence: benchmarkInsights?.confidence,
+          criticalGapsCount: benchmarkInsights?.criticalGaps?.length || 0,
+        })
+      }
+
+      const generatedContent = result.data?.generatedContent ?? null
+      if (generatedContent) {
+        adaptedData.generatedContent = generatedContent
+        console.log('[AI-ANALYZE] GeneratedContent found', {
+          listingId,
+          titlesCount: generatedContent?.titles?.length || 0,
+          bulletsCount: generatedContent?.bullets?.length || 0,
         })
       }
       

@@ -21,6 +21,8 @@ import { generateActionPlan, DataQuality, MediaInfo } from '../services/ScoreAct
 import { explainScore } from '../services/ScoreExplanationService';
 import { getMediaVerdict } from '../utils/media-verdict';
 import { BenchmarkService } from '../services/BenchmarkService';
+import { normalizeBenchmarkInsights } from '../services/BenchmarkInsightsService';
+import { generateListingContent } from '../services/GeneratedContentService';
 import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
 import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 
@@ -976,6 +978,44 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           };
 
+          // Calcular benchmarkInsights (Dia 05) - normalizar benchmark em insights acionáveis
+          const benchmarkInsights = normalizeBenchmarkInsights(
+            benchmarkResult,
+            {
+              picturesCount: listing.pictures_count || 0,
+              hasClips: listing.has_clips ?? null,
+              titleLength: listing.title?.length || 0,
+              price: Number(listing.price),
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent,
+            },
+            {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+            }
+          );
+
+          // Gerar conteúdo acionável (Dia 05) - títulos, bullets, descrição SEO
+          const generatedContent = generateListingContent(
+            {
+              title: listing.title || '',
+              description: listing.description,
+              picturesCount: listing.pictures_count || 0,
+              hasClips: listing.has_clips ?? null,
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent,
+              price: Number(listing.price),
+              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              category: listing.category,
+            },
+            benchmarkInsights.criticalGaps
+          );
+
+          // Adicionar benchmarkInsights e generatedContent ao responseData
+          responseData.benchmarkInsights = benchmarkInsights;
+          responseData.generatedContent = generatedContent;
+
           // Se header x-debug: 1, incluir benchmarkDebug no payload
           const debugHeader = request.headers['x-debug'];
           if (debugHeader === '1' && benchmarkResult?._debug) {
@@ -1259,6 +1299,40 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           };
         }
 
+        // Calcular benchmarkInsights (Dia 05) - também para cache
+        const cacheBenchmarkInsights = normalizeBenchmarkInsights(
+          cacheBenchmarkResult,
+          {
+            picturesCount: listing.pictures_count || 0,
+            hasClips: listing.has_clips ?? null,
+            titleLength: listing.title?.length || 0,
+            price: Number(listing.price),
+            hasPromotion: listing.has_promotion ?? false,
+            discountPercent: listing.discount_percent,
+          },
+          {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          }
+        );
+
+        // Gerar conteúdo acionável (Dia 05) - também para cache
+        const cacheGeneratedContent = generateListingContent(
+          {
+            title: listing.title || '',
+            description: listing.description,
+            picturesCount: listing.pictures_count || 0,
+            hasClips: listing.has_clips ?? null,
+            hasPromotion: listing.has_promotion ?? false,
+            discountPercent: listing.discount_percent,
+            price: Number(listing.price),
+            originalPrice: listing.original_price ? Number(listing.original_price) : null,
+            category: listing.category,
+          },
+          cacheBenchmarkInsights.criticalGaps
+        );
+
         // Preparar resposta do cache incluindo Expert se disponível
         const cacheResponseData: any = {
           listingId, // GARANTIR que usa o listingId do request, não do cache
@@ -1311,6 +1385,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           },
         };
 
+        // Benchmark Insights (Dia 05) - insights acionáveis do benchmark
+        cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
+        // Generated Content (Dia 05) - conteúdo pronto para copy/paste
+        cacheResponseData.generatedContent = cacheGeneratedContent;
         // Se header x-debug: 1, incluir benchmarkDebug no payload
         const debugHeader = request.headers['x-debug'];
         if (debugHeader === '1' && cacheBenchmarkResult?._debug) {

@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 import { PromotionHighlightPanel, type PromotionPlacementItem } from '@/components/ai/PromotionHighlightPanel'
 import { BenchmarkPanel } from '@/components/ai/BenchmarkPanel'
+import { BenchmarkInsightsPanel } from '@/components/ai/BenchmarkInsightsPanel'
+import { GeneratedContentPanel } from '@/components/ai/GeneratedContentPanel'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -62,6 +64,8 @@ export function ListingAIAnalysisPanel({
   listingHasPromotion,
   listingDiscountPercent,
   benchmark,
+  benchmarkInsights,
+  generatedContent,
   onRegenerate,
   isRegenerating = false,
 }: ListingAIAnalysisPanelProps) {
@@ -475,8 +479,14 @@ export function ListingAIAnalysisPanel({
         placements={promoPlacements}
       />
 
-      {/* 5️⃣ COMPARAÇÃO COM CONCORRENTES — BENCHMARK */}
-      {benchmark && <BenchmarkPanel benchmark={benchmark} />}
+      {/* 5️⃣ COMPARAÇÃO COM CONCORRENTES — BENCHMARK INSIGHTS (Dia 05) */}
+      {benchmarkInsights && <BenchmarkInsightsPanel benchmarkInsights={benchmarkInsights} />}
+
+      {/* 6️⃣ CONTEÚDO GERADO — PRONTO PARA COPY/PASTE (Dia 05) */}
+      {generatedContent && <GeneratedContentPanel generatedContent={generatedContent} />}
+
+      {/* COMPARAÇÃO COM CONCORRENTES — BENCHMARK (legado, mantido para compatibilidade) */}
+      {benchmark && !benchmarkInsights && <BenchmarkPanel benchmark={benchmark} />}
 
       {/* Diagnostico de preco da IA (complementar) */}
       {analysisV21.priceFix && (

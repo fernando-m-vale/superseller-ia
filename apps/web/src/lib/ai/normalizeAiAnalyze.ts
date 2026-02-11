@@ -48,7 +48,7 @@ export interface NormalizedAIAnalysisV21 {
 /**
  * Tipo completo normalizado incluindo dados V1
  */
-export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark'> {
+export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark' | 'benchmarkInsights' | 'generatedContent'> {
   analysisV21?: NormalizedAIAnalysisV21
   seoSuggestions?: {
     suggestedTitle?: string
@@ -69,8 +69,12 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
     howTo?: string[]
     mlDeeplink?: string
   }>
-  // Benchmark (Dia 04) - mantém formato original
+  // Benchmark (Dia 04) - mantém formato original (compatibilidade)
   benchmark?: AIAnalysisResponse['benchmark']
+  // Benchmark Insights (Dia 05) - insights acionáveis
+  benchmarkInsights?: AIAnalysisResponse['benchmarkInsights']
+  // Generated Content (Dia 05) - conteúdo pronto para copy/paste
+  generatedContent?: AIAnalysisResponse['generatedContent']
 }
 
 /**
@@ -227,6 +231,9 @@ export function normalizeAiAnalyzeResponse(
     ...responseWithoutActionPlan,
     analysisV21: normalizeAnalysisV21(response.analysisV21),
     seoSuggestions: seoSuggestionsNormalized,
+    // Propagar benchmarkInsights e generatedContent (Dia 05)
+    benchmarkInsights: response.benchmarkInsights,
+    generatedContent: response.generatedContent,
   }
 
   // Construir actionPlan a partir de analysisV21
