@@ -819,6 +819,46 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             };
           }
 
+          // Calcular benchmarkInsights (Dia 05) - normalizar benchmark em insights acionáveis
+          // HOTFIX P0: Passar dados de fallback para heurísticas quando benchmark unavailable
+          const benchmarkInsights = normalizeBenchmarkInsights(
+            benchmarkResult,
+            {
+              picturesCount: listing.pictures_count || 0,
+              hasClips: listing.has_clips ?? null,
+              titleLength: listing.title?.length || 0,
+              price: Number(listing.price),
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent,
+            },
+            {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+            },
+            {
+              mediaVerdict,
+              seoSuggestions: result.analysis.seoSuggestions,
+              analysisV21: analysisV21 as Record<string, unknown> | null | undefined,
+            }
+          );
+
+          // Gerar conteúdo acionável (Dia 05) - títulos, bullets, descrição SEO
+          const generatedContent = generateListingContent(
+            {
+              title: listing.title || '',
+              description: listing.description,
+              picturesCount: listing.pictures_count || 0,
+              hasClips: listing.has_clips ?? null,
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent,
+              price: Number(listing.price),
+              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              category: listing.category,
+            },
+            benchmarkInsights.criticalGaps
+          );
+
           // Step 6: Save to cache (incluindo V2.1 e benchmark) - DEPOIS do cálculo do benchmark
           try {
             const cachePayload: any = {
@@ -990,47 +1030,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           };
 
-          // Calcular benchmarkInsights (Dia 05) - normalizar benchmark em insights acionáveis
-          // HOTFIX P0: Passar dados de fallback para heurísticas quando benchmark unavailable
-          const benchmarkInsights = normalizeBenchmarkInsights(
-            benchmarkResult,
-            {
-              picturesCount: listing.pictures_count || 0,
-              hasClips: listing.has_clips ?? null,
-              titleLength: listing.title?.length || 0,
-              price: Number(listing.price),
-              hasPromotion: listing.has_promotion ?? false,
-              discountPercent: listing.discount_percent,
-            },
-            {
-              visits: result.score.metrics_30d.visits,
-              orders: result.score.metrics_30d.orders,
-              conversionRate: result.score.metrics_30d.conversionRate,
-            },
-            {
-              mediaVerdict,
-              seoSuggestions: result.analysis.seoSuggestions,
-              analysisV21,
-            }
-          );
-
-          // Gerar conteúdo acionável (Dia 05) - títulos, bullets, descrição SEO
-          const generatedContent = generateListingContent(
-            {
-              title: listing.title || '',
-              description: listing.description,
-              picturesCount: listing.pictures_count || 0,
-              hasClips: listing.has_clips ?? null,
-              hasPromotion: listing.has_promotion ?? false,
-              discountPercent: listing.discount_percent,
-              price: Number(listing.price),
-              originalPrice: listing.original_price ? Number(listing.original_price) : null,
-              category: listing.category,
-            },
-            benchmarkInsights.criticalGaps
-          );
-
-          // Adicionar benchmarkInsights e generatedContent ao responseData
+          // Adicionar benchmarkInsights e generatedContent ao responseData (já calculados acima)
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
 
@@ -1347,7 +1347,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           {
             mediaVerdict,
             seoSuggestions: cachedResult.analysis.seoSuggestions,
-            analysisV21: cachedResult.analysisV21,
+            analysisV21: cachedResult.analysisV21 as Record<string, unknown> | null | undefined,
           }
         );
 

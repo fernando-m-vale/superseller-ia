@@ -88,7 +88,7 @@ export function BenchmarkInsightsPanel({ benchmarkInsights }: BenchmarkInsightsP
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Banner quando fallback heurístico (HOTFIX P0) */}
-        {confidence === 'low' && criticalGaps.length > 0 && criticalGaps.some(g => g.metrics?.source === 'internal_heuristics') && (
+        {confidence === 'low' && criticalGaps.length > 0 && criticalGaps.some(g => g.metrics?.source === 'internal_heuristics' || g.metrics?.fieldsUsed) && (
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription className="text-xs text-muted-foreground">

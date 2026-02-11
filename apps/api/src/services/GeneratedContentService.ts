@@ -47,15 +47,15 @@ export function generateListingContent(
   const titles: GeneratedTitle[] = [
     {
       variation: 'A',
-      text: generateTitleVariation(listing, criticalGaps, 'A', mainKeywords),
+      text: generateTitleVariation({ ...listing, picturesCount: listing.picturesCount }, criticalGaps, 'A', mainKeywords),
     },
     {
       variation: 'B',
-      text: generateTitleVariation(listing, criticalGaps, 'B', mainKeywords),
+      text: generateTitleVariation({ ...listing, picturesCount: listing.picturesCount }, criticalGaps, 'B', mainKeywords),
     },
     {
       variation: 'C',
-      text: generateTitleVariation(listing, criticalGaps, 'C', mainKeywords),
+      text: generateTitleVariation({ ...listing, picturesCount: listing.picturesCount }, criticalGaps, 'C', mainKeywords),
     },
   ];
 
@@ -76,7 +76,12 @@ export function generateListingContent(
  * Gera variação de título (A/B/C)
  */
 function generateTitleVariation(
-  listing: { title: string; hasPromotion: boolean; discountPercent: number | null },
+  listing: { 
+    title: string; 
+    hasPromotion: boolean; 
+    discountPercent: number | null;
+    picturesCount?: number;
+  },
   criticalGaps: CriticalGap[],
   variation: 'A' | 'B' | 'C',
   mainKeywords: string
@@ -102,7 +107,7 @@ function generateTitleVariation(
       return `${mainKeywords} - Veja ${imageGap.metrics.median} imagens detalhadas`;
     }
     // Se não tiver gap mas tiver picturesCount real, usar ele
-    if (listing.picturesCount > 0 && listing.picturesCount >= 5) {
+    if (listing.picturesCount && listing.picturesCount > 0 && listing.picturesCount >= 5) {
       return `${mainKeywords} - Veja ${listing.picturesCount} imagens detalhadas`;
     }
     return `${mainKeywords} - Detalhes Completos`;

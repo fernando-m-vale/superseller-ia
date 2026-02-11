@@ -74,7 +74,7 @@ export function normalizeBenchmarkInsights(
       descriptionFix?: {
         diagnostic?: string;
       };
-    };
+    } | Record<string, unknown> | null;
   }
 ): BenchmarkInsights {
   // Se benchmark indisponível, usar fallback heurístico (HOTFIX P0)
@@ -325,7 +325,7 @@ function generateFallbackGaps(
       descriptionFix?: {
         diagnostic?: string;
       };
-    };
+    } | Record<string, unknown> | null;
   }
 ): CriticalGap[] {
   const gaps: CriticalGap[] = [];
@@ -346,14 +346,19 @@ function generateFallbackGaps(
       metrics: {
         hasVideo: 'false',
         source: 'internal_heuristics',
-        fields: ['hasClips', 'mediaVerdict.canSuggestClip'],
+        fieldsUsed: 'hasClips,mediaVerdict.canSuggestClip',
       },
     });
   }
 
   // 2. Gap de título (se há sugestão de título ou problema detectado)
+  const analysisV21 = fallbackData?.analysisV21;
+  const hasTitleProblem = analysisV21 && typeof analysisV21 === 'object' && 'titleFix' in analysisV21
+    ? (analysisV21.titleFix as { problem?: string })?.problem
+    : undefined;
+  
   if (
-    (fallbackData?.seoSuggestions?.suggestedTitle || fallbackData?.analysisV21?.titleFix?.problem) &&
+    (fallbackData?.seoSuggestions?.suggestedTitle || hasTitleProblem) &&
     listing.titleLength < 50
   ) {
     gaps.push({
@@ -367,7 +372,7 @@ function generateFallbackGaps(
       metrics: {
         currentLength: listing.titleLength,
         source: 'internal_heuristics',
-        fields: ['titleLength', 'seoSuggestions', 'titleFix'],
+        fieldsUsed: 'titleLength,seoSuggestions,titleFix',
       },
     });
   }
@@ -385,13 +390,17 @@ function generateFallbackGaps(
       metrics: {
         current: listing.picturesCount,
         source: 'internal_heuristics',
-        fields: ['picturesCount'],
+        fieldsUsed: 'picturesCount',
       },
     });
   }
 
   // 4. Gap de descrição (se há problema detectado)
-  if (fallbackData?.analysisV21?.descriptionFix?.diagnostic) {
+  const hasDescriptionProblem = analysisV21 && typeof analysisV21 === 'object' && 'descriptionFix' in analysisV21
+    ? (analysisV21.descriptionFix as { diagnostic?: string })?.diagnostic
+    : undefined;
+  
+  if (hasDescriptionProblem) {
     gaps.push({
       id: 'gap_description_fallback',
       dimension: 'description',
@@ -402,7 +411,7 @@ function generateFallbackGaps(
       confidence: 'medium',
       metrics: {
         source: 'internal_heuristics',
-        fields: ['descriptionFix'],
+        fieldsUsed: 'descriptionFix',
       },
     });
   }
