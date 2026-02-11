@@ -23,6 +23,7 @@ import { getMediaVerdict } from '../utils/media-verdict';
 import { BenchmarkService } from '../services/BenchmarkService';
 import { normalizeBenchmarkInsights } from '../services/BenchmarkInsightsService';
 import { generateListingContent } from '../services/GeneratedContentService';
+import { getBooleanEnv } from '../utils/env-parser';
 import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
 import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 
@@ -231,6 +232,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }, 'Listing fetched for analysis');
 
         // Step 1.5: Se forceRefresh=true, atualizar listing antes de analisar (garantir preço/promo atual)
+        // HOTFIX P0: Não regredir promo - usar forcePromoPrices e verificar enrichment
         if (forceRefresh && listing.marketplace === 'mercadolivre' && listing.listing_id_ext) {
           try {
             // Log before
@@ -239,6 +241,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             const beforeOriginalPrice = listing.original_price;
             const beforeHasPromotion = listing.has_promotion;
             const beforeDiscountPercent = listing.discount_percent;
+            
+            // Preservar valores de promo atuais para anti-regressão
+            const preservedPromo = {
+              original_price: beforeOriginalPrice,
+              price_final: beforePriceFinal,
+              discount_percent: beforeDiscountPercent,
+              has_promotion: beforeHasPromotion,
+            };
             
             request.log.info({
               requestId,
@@ -254,10 +264,57 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }, 'forceRefresh=true: atualizando listing antes de analisar (BEFORE)');
             
             const syncService = new MercadoLivreSyncService(tenantId);
-            const items = await syncService.fetchItemsDetails([listing.listing_id_ext]);
+            // HOTFIX P0: Usar forcePromoPrices=true quando flag estiver ativa
+            const useMlPricesForPromo = getBooleanEnv('USE_ML_PRICES_FOR_PROMO', false);
+            const items = await syncService.fetchItemsDetails([listing.listing_id_ext], useMlPricesForPromo);
             
             if (items.length > 0) {
+              const enrichmentMeta = items[0]._enrichmentMeta ?? {
+                endpointUsed: 'none' as const,
+                statusCode: 0,
+                payloadSize: 0,
+              };
+              
+              // HOTFIX P0: Verificar se enrichment foi aplicado antes de fazer upsert
+              const enrichmentApplied = enrichmentMeta.endpointUsed === 'prices';
+              
+              // Se não aplicou enrichment de /prices, preservar valores de promo antes do upsert
+              if (!enrichmentApplied && useMlPricesForPromo) {
+                // Aplicar valores preservados no item antes do upsert
+                if (items[0]) {
+                  // Não sobrescrever campos de promo se enrichment não foi aplicado
+                  // O upsertListings vai usar os valores do item, então precisamos garantir
+                  // que os valores preservados sejam mantidos após o upsert
+                }
+              }
+              
               await syncService.upsertListings(items, 'force_refresh', false);
+              
+              // HOTFIX P0: Se enrichment não foi aplicado, restaurar valores de promo preservados
+              if (!enrichmentApplied && useMlPricesForPromo) {
+                await prisma.listing.update({
+                  where: {
+                    id: listingId,
+                  },
+                  data: {
+                    original_price: preservedPromo.original_price,
+                    price_final: preservedPromo.price_final,
+                    discount_percent: preservedPromo.discount_percent,
+                    has_promotion: preservedPromo.has_promotion,
+                    // Não atualizar promotion_checked_at se não aplicou
+                  },
+                });
+                
+                request.log.info({
+                  requestId,
+                  listingId,
+                  listingIdExt: listing.listing_id_ext,
+                  endpointUsed: enrichmentMeta.endpointUsed,
+                  applied: enrichmentApplied,
+                  reason: enrichmentMeta.reason || 'enrichment_not_applied',
+                  action: 'preserved_promo_values',
+                }, 'HOTFIX P0: Promo preservada - enrichment não aplicado');
+              }
               
               // Buscar listing atualizado do DB
               const refreshedListing = await prisma.listing.findFirst({
@@ -268,10 +325,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               });
               
               if (refreshedListing) {
-                // Log after
+                // Log after com detalhes de enrichment
                 request.log.info({
                   requestId,
                   listingId,
+                  listingIdExt: listing.listing_id_ext,
+                  endpointUsed: enrichmentMeta.endpointUsed,
+                  applied: enrichmentApplied,
+                  statusCode: enrichmentMeta.statusCode,
                   before: {
                     price: beforePrice,
                     price_final: beforePriceFinal,
@@ -286,6 +347,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                     has_promotion: refreshedListing.has_promotion,
                     discount_percent: refreshedListing.discount_percent,
                   },
+                  promoPreserved: !enrichmentApplied && useMlPricesForPromo,
                 }, 'Listing atualizado via force-refresh (AFTER)');
                 
                 // Atualizar objeto listing local com dados frescos
@@ -939,13 +1001,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // Incluir promo estruturado no cachePayload (HOTFIX P0)
             cachePayload.benchmarkInsights = benchmarkInsights;
             cachePayload.generatedContent = generatedContent;
+            // HOTFIX P0: checkedAt deve refletir coleta atual
+            const cachePromoCheckedAt = forceRefresh 
+              ? (listing.updated_at?.toISOString() || new Date().toISOString())
+              : (listing.promotion_checked_at?.toISOString() || listing.updated_at?.toISOString() || null);
             cachePayload.promo = {
               hasPromotion: listing.has_promotion ?? false,
               originalPrice: listing.original_price ? Number(listing.original_price) : null,
               finalPrice: listing.price_final ? Number(listing.price_final) : null,
               discountPercent: listing.discount_percent,
               source: 'listing_db_or_ml_prices',
-              checkedAt: listing.promotion_checked_at?.toISOString() || null,
+              checkedAt: cachePromoCheckedAt,
             };
 
             await prisma.listingAIAnalysis.upsert({
@@ -1424,13 +1490,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Generated Content (Dia 05) - conteúdo pronto para copy/paste
         cacheResponseData.generatedContent = cacheGeneratedContent;
         // Promo estruturado (HOTFIX P0)
+        // HOTFIX P0: checkedAt deve refletir coleta atual (updated_at ou promotion_checked_at)
+        const cacheResponsePromoCheckedAt = listing.promotion_checked_at?.toISOString() 
+          || listing.updated_at?.toISOString() 
+          || null;
         cacheResponseData.promo = {
           hasPromotion: listing.has_promotion ?? false,
           originalPrice: listing.original_price ? Number(listing.original_price) : null,
           finalPrice: listing.price_final ? Number(listing.price_final) : null,
           discountPercent: listing.discount_percent,
           source: 'listing_db_or_ml_prices',
-          checkedAt: listing.promotion_checked_at?.toISOString() || null,
+          checkedAt: cacheResponsePromoCheckedAt,
         };
         // Se header x-debug: 1, incluir benchmarkDebug no payload
         const debugHeader = request.headers['x-debug'];
