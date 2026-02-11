@@ -896,6 +896,18 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               };
             }
 
+            // Incluir promo estruturado no cachePayload (HOTFIX P0)
+            cachePayload.benchmarkInsights = benchmarkInsights;
+            cachePayload.generatedContent = generatedContent;
+            cachePayload.promo = {
+              hasPromotion: listing.has_promotion ?? false,
+              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              finalPrice: listing.price_final ? Number(listing.price_final) : null,
+              discountPercent: listing.discount_percent,
+              source: 'listing_db_or_ml_prices',
+              checkedAt: listing.promotion_checked_at?.toISOString() || null,
+            };
+
             await prisma.listingAIAnalysis.upsert({
               where: {
                 tenant_id_listing_id_period_days_fingerprint: {
@@ -979,6 +991,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           };
 
           // Calcular benchmarkInsights (Dia 05) - normalizar benchmark em insights acionáveis
+          // HOTFIX P0: Passar dados de fallback para heurísticas quando benchmark unavailable
           const benchmarkInsights = normalizeBenchmarkInsights(
             benchmarkResult,
             {
@@ -993,6 +1006,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               visits: result.score.metrics_30d.visits,
               orders: result.score.metrics_30d.orders,
               conversionRate: result.score.metrics_30d.conversionRate,
+            },
+            {
+              mediaVerdict,
+              seoSuggestions: result.analysis.seoSuggestions,
+              analysisV21,
             }
           );
 
@@ -1015,6 +1033,16 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Adicionar benchmarkInsights e generatedContent ao responseData
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
+
+          // Adicionar objeto promo estruturado (HOTFIX P0)
+          responseData.promo = {
+            hasPromotion: listing.has_promotion ?? false,
+            originalPrice: listing.original_price ? Number(listing.original_price) : null,
+            finalPrice: listing.price_final ? Number(listing.price_final) : null,
+            discountPercent: listing.discount_percent,
+            source: 'listing_db_or_ml_prices',
+            checkedAt: listing.promotion_checked_at?.toISOString() || null,
+          };
 
           // Se header x-debug: 1, incluir benchmarkDebug no payload
           const debugHeader = request.headers['x-debug'];
@@ -1300,6 +1328,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // Calcular benchmarkInsights (Dia 05) - também para cache
+        // HOTFIX P0: Passar dados de fallback para heurísticas quando benchmark unavailable
         const cacheBenchmarkInsights = normalizeBenchmarkInsights(
           cacheBenchmarkResult,
           {
@@ -1314,6 +1343,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             visits: scoreResult.metrics_30d.visits,
             orders: scoreResult.metrics_30d.orders,
             conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          {
+            mediaVerdict,
+            seoSuggestions: cachedResult.analysis.seoSuggestions,
+            analysisV21: cachedResult.analysisV21,
           }
         );
 
@@ -1389,6 +1423,15 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
         // Generated Content (Dia 05) - conteúdo pronto para copy/paste
         cacheResponseData.generatedContent = cacheGeneratedContent;
+        // Promo estruturado (HOTFIX P0)
+        cacheResponseData.promo = {
+          hasPromotion: listing.has_promotion ?? false,
+          originalPrice: listing.original_price ? Number(listing.original_price) : null,
+          finalPrice: listing.price_final ? Number(listing.price_final) : null,
+          discountPercent: listing.discount_percent,
+          source: 'listing_db_or_ml_prices',
+          checkedAt: listing.promotion_checked_at?.toISOString() || null,
+        };
         // Se header x-debug: 1, incluir benchmarkDebug no payload
         const debugHeader = request.headers['x-debug'];
         if (debugHeader === '1' && cacheBenchmarkResult?._debug) {

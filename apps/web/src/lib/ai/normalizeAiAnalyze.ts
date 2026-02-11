@@ -81,6 +81,8 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   benchmarkInsights?: AIAnalysisResponse['benchmarkInsights']
   // Generated Content (Dia 05) - conteúdo pronto para copy/paste
   generatedContent?: AIAnalysisResponse['generatedContent']
+  // Promo estruturado (HOTFIX P0)
+  promo?: AIAnalysisResponse['promo']
 }
 
 /**
@@ -237,9 +239,10 @@ export function normalizeAiAnalyzeResponse(
     ...responseWithoutActionPlan,
     analysisV21: normalizeAnalysisV21(response.analysisV21),
     seoSuggestions: seoSuggestionsNormalized,
-    // Propagar benchmarkInsights e generatedContent (Dia 05)
+    // Propagar benchmarkInsights, generatedContent e promo (Dia 05 + HOTFIX P0)
     benchmarkInsights: response.benchmarkInsights,
     generatedContent: response.generatedContent,
+    promo: response.promo,
   }
 
   // Construir actionPlan a partir de analysisV21

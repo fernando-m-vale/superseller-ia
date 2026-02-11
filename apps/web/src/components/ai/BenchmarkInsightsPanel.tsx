@@ -2,7 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, TrendingDown, AlertCircle, Target } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { TrendingUp, TrendingDown, AlertCircle, Target, Info } from 'lucide-react'
 
 interface BenchmarkWin {
   message: string
@@ -86,6 +87,16 @@ export function BenchmarkInsightsPanel({ benchmarkInsights }: BenchmarkInsightsP
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Banner quando fallback heurístico (HOTFIX P0) */}
+        {confidence === 'low' && criticalGaps.length > 0 && criticalGaps.some(g => g.metrics?.source === 'internal_heuristics') && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs text-muted-foreground">
+              Benchmark do Mercado Livre indisponível. Priorização baseada em sinais do seu anúncio.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* 2 colunas: Você ganha vs Você perde */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Você ganha aqui */}

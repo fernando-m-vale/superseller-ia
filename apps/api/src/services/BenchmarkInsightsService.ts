@@ -42,6 +42,7 @@ export interface BenchmarkInsights {
 
 /**
  * Normaliza output do BenchmarkService em BenchmarkInsights
+ * HOTFIX P0: Implementa fallback heurístico quando benchmark unavailable
  */
 export function normalizeBenchmarkInsights(
   benchmarkResult: BenchmarkResult | null,
@@ -57,15 +58,33 @@ export function normalizeBenchmarkInsights(
     visits: number;
     orders: number;
     conversionRate: number | null;
+  },
+  fallbackData?: {
+    mediaVerdict?: {
+      hasClipDetected: boolean | null;
+      canSuggestClip: boolean;
+    };
+    seoSuggestions?: {
+      suggestedTitle?: string;
+    };
+    analysisV21?: {
+      titleFix?: {
+        problem?: string;
+      };
+      descriptionFix?: {
+        diagnostic?: string;
+      };
+    };
   }
 ): BenchmarkInsights {
-  // Se benchmark indisponível, retornar estrutura vazia
-  if (!benchmarkResult || benchmarkResult.benchmarkSummary.confidence === 'unavailable') {
+  // Se benchmark indisponível, usar fallback heurístico (HOTFIX P0)
+  if (!benchmarkResult || benchmarkResult.benchmarkSummary.confidence === 'unavailable' || benchmarkResult.benchmarkSummary.sampleSize === 0) {
+    const fallbackGaps = generateFallbackGaps(listing, metrics30d, fallbackData);
     return {
-      confidence: 'unavailable',
+      confidence: 'low', // Mudado de 'unavailable' para 'low' quando há fallback
       wins: [],
       losses: [],
-      criticalGaps: [],
+      criticalGaps: fallbackGaps,
     };
   }
 
@@ -266,6 +285,138 @@ export function rankGaps(
     }
     
     // 3. Confidence DESC
+    const confidenceOrder: Record<ConfidenceLevel, number> = { high: 3, medium: 2, low: 1 };
+    return confidenceOrder[b.confidence] - confidenceOrder[a.confidence];
+  });
+
+  // Retornar máximo 3 gaps
+  return gaps.slice(0, 3);
+}
+
+/**
+ * Gera gaps heurísticos quando benchmark está unavailable (HOTFIX P0)
+ * Usa apenas dados internos do listing/análise, sem inventar números
+ */
+function generateFallbackGaps(
+  listing: {
+    picturesCount: number;
+    hasClips: boolean | null;
+    titleLength: number;
+    hasPromotion: boolean;
+    discountPercent: number | null;
+  },
+  metrics30d: {
+    visits: number;
+    orders: number;
+    conversionRate: number | null;
+  },
+  fallbackData?: {
+    mediaVerdict?: {
+      hasClipDetected: boolean | null;
+      canSuggestClip: boolean;
+    };
+    seoSuggestions?: {
+      suggestedTitle?: string;
+    };
+    analysisV21?: {
+      titleFix?: {
+        problem?: string;
+      };
+      descriptionFix?: {
+        diagnostic?: string;
+      };
+    };
+  }
+): CriticalGap[] {
+  const gaps: CriticalGap[] = [];
+
+  // 1. Gap de vídeo (se não há vídeo e pode sugerir)
+  if (
+    listing.hasClips === false &&
+    fallbackData?.mediaVerdict?.canSuggestClip === true
+  ) {
+    gaps.push({
+      id: 'gap_video_fallback',
+      dimension: 'video',
+      title: 'Adicionar vídeo para aumentar confiança e engajamento',
+      whyItMatters: 'Vídeos aumentam a confiança do comprador e podem melhorar a conversão.',
+      impact: 'high',
+      effort: 'medium',
+      confidence: 'medium',
+      metrics: {
+        hasVideo: 'false',
+        source: 'internal_heuristics',
+        fields: ['hasClips', 'mediaVerdict.canSuggestClip'],
+      },
+    });
+  }
+
+  // 2. Gap de título (se há sugestão de título ou problema detectado)
+  if (
+    (fallbackData?.seoSuggestions?.suggestedTitle || fallbackData?.analysisV21?.titleFix?.problem) &&
+    listing.titleLength < 50
+  ) {
+    gaps.push({
+      id: 'gap_title_fallback',
+      dimension: 'title',
+      title: 'Otimizar título para melhor visibilidade e SEO',
+      whyItMatters: 'Títulos otimizados aumentam a visibilidade nas buscas e melhoram o CTR.',
+      impact: 'high',
+      effort: 'low',
+      confidence: 'medium',
+      metrics: {
+        currentLength: listing.titleLength,
+        source: 'internal_heuristics',
+        fields: ['titleLength', 'seoSuggestions', 'titleFix'],
+      },
+    });
+  }
+
+  // 3. Gap de imagens (se tiver poucas imagens)
+  if (listing.picturesCount < 5) {
+    gaps.push({
+      id: 'gap_images_fallback',
+      dimension: 'images',
+      title: `Adicionar mais imagens (atualmente ${listing.picturesCount})`,
+      whyItMatters: 'Anúncios com mais imagens tendem a gerar maior engajamento e conversão.',
+      impact: 'medium',
+      effort: 'low',
+      confidence: 'low',
+      metrics: {
+        current: listing.picturesCount,
+        source: 'internal_heuristics',
+        fields: ['picturesCount'],
+      },
+    });
+  }
+
+  // 4. Gap de descrição (se há problema detectado)
+  if (fallbackData?.analysisV21?.descriptionFix?.diagnostic) {
+    gaps.push({
+      id: 'gap_description_fallback',
+      dimension: 'description',
+      title: 'Otimizar descrição para melhor SEO e conversão',
+      whyItMatters: 'Descrições estruturadas melhoram SEO e reduzem objeções do comprador.',
+      impact: 'medium',
+      effort: 'low',
+      confidence: 'medium',
+      metrics: {
+        source: 'internal_heuristics',
+        fields: ['descriptionFix'],
+      },
+    });
+  }
+
+  // Ordenar por prioridade: Impact DESC, Effort ASC, Confidence DESC
+  gaps.sort((a, b) => {
+    const impactOrder: Record<ImpactLevel, number> = { high: 3, medium: 2, low: 1 };
+    if (impactOrder[a.impact] !== impactOrder[b.impact]) {
+      return impactOrder[b.impact] - impactOrder[a.impact];
+    }
+    const effortOrder: Record<EffortLevel, number> = { low: 1, medium: 2, high: 3 };
+    if (effortOrder[a.effort] !== effortOrder[b.effort]) {
+      return effortOrder[a.effort] - effortOrder[b.effort];
+    }
     const confidenceOrder: Record<ConfidenceLevel, number> = { high: 3, medium: 2, low: 1 };
     return confidenceOrder[b.confidence] - confidenceOrder[a.confidence];
   });

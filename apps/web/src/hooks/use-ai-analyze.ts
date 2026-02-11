@@ -129,6 +129,15 @@ interface AIAnalysisApiResponse {
       long: string
     }
   }
+  // Promo estruturado (HOTFIX P0)
+  promo?: {
+    hasPromotion: boolean
+    originalPrice: number | null
+    finalPrice: number | null
+    discountPercent: number | null
+    source: string
+    checkedAt: string | null
+  }
 }
 
 // Interface adaptada para o frontend
@@ -251,6 +260,15 @@ export interface AIAnalysisResponse {
       short: string
       long: string
     }
+  }
+  // Promo estruturado (HOTFIX P0)
+  promo?: {
+    hasPromotion: boolean
+    originalPrice: number | null
+    finalPrice: number | null
+    discountPercent: number | null
+    source: string
+    checkedAt: string | null
   }
 }
 
