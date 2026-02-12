@@ -66,15 +66,31 @@ export function useApplyAction(listingId: string | null): UseApplyActionResult {
       })
 
       if (!response.ok) {
+        // DIA 06.2: Capturar status e body do erro para mostrar detalhes
         const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || 'Erro ao aplicar ação')
+        const status = response.status
+        const message = errorData.error || errorData.message || 'Erro desconhecido'
+        const errorMessage = `Erro ao registrar ação (HTTP ${status}): ${message}`
+        
+        // Em dev, log completo do erro
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Erro ao aplicar ação:', {
+            status,
+            errorData,
+            input,
+            listingId,
+          })
+        }
+        
+        throw new Error(errorMessage)
       }
 
       const result = await response.json()
       setIsLoading(false)
       return result.data
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro ao aplicar ação'
+      // DIA 06.2: Preservar mensagem de erro detalhada
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao registrar ação'
       setError(errorMessage)
       setIsLoading(false)
       throw err

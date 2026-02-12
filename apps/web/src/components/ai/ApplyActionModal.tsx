@@ -63,9 +63,9 @@ export function ApplyActionModal({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Aplicar Sugestão - {actionTypeLabels[actionType]}</DialogTitle>
+          <DialogTitle>Registrar como aplicado - {actionTypeLabels[actionType]}</DialogTitle>
           <DialogDescription>
-            Confirme a aplicação da sugestão. Esta ação será registrada internamente.
+            Isso não altera automaticamente o anúncio no Mercado Livre. Apenas registra no SuperSeller IA.
           </DialogDescription>
         </DialogHeader>
 
@@ -125,12 +125,12 @@ export function ApplyActionModal({
             {isLoading || isConfirming ? (
               <>
                 <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Aplicando...
+                Registrando...
               </>
             ) : (
               <>
                 <CheckCircle2 className="h-4 w-4 mr-2" />
-                Confirmar Aplicação
+                Confirmar registro
               </>
             )}
           </Button>

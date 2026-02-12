@@ -94,6 +94,11 @@ interface ListingAIAnalysisPanelProps {
   listingPriceFinal?: number | null
   listingHasPromotion?: boolean | null
   listingDiscountPercent?: number | null
+  pricingNormalized?: {
+    originalPriceForDisplay: number
+    finalPriceForDisplay: number
+    hasPromotion: boolean
+  }
   appliedActions?: Array<{
     actionType: string
     appliedAt: string
@@ -136,10 +141,8 @@ export function ListingAIAnalysisPanel({
   listingIdExt,
   listingTitle,
   listingPrice,
-  listingPriceBase,
-  listingPriceFinal,
-  listingHasPromotion,
   listingDiscountPercent,
+  pricingNormalized,
   appliedActions = [],
   benchmark,
   benchmarkInsights,
@@ -199,19 +202,38 @@ export function ListingAIAnalysisPanel({
     }
 
     try {
+      // DIA 06.2: Construir payloads corretos baseados no actionType
+      let beforePayload: Record<string, unknown> = {}
+      let afterPayload: Record<string, unknown> = {}
+
+      if (applyModalActionType === 'seo_title') {
+        beforePayload = { title: typeof applyModalBefore === 'string' ? applyModalBefore : String(applyModalBefore) }
+        afterPayload = { title: typeof applyModalAfter === 'string' ? applyModalAfter : String(applyModalAfter) }
+      } else if (applyModalActionType === 'seo_description') {
+        beforePayload = { description: typeof applyModalBefore === 'string' ? applyModalBefore : String(applyModalBefore) }
+        afterPayload = { description: typeof applyModalAfter === 'string' ? applyModalAfter : String(applyModalAfter) }
+      } else if (applyModalActionType === 'media_images') {
+        beforePayload = { plan: typeof applyModalBefore === 'string' ? applyModalBefore : null }
+        afterPayload = { plan: typeof applyModalAfter === 'string' ? applyModalAfter : String(applyModalAfter) }
+      } else {
+        // Fallback para outros tipos
+        beforePayload = typeof applyModalBefore === 'string' 
+          ? { value: applyModalBefore }
+          : { type: 'react_node' }
+        afterPayload = typeof applyModalAfter === 'string'
+          ? { value: applyModalAfter }
+          : { type: 'react_node' }
+      }
+
       await applyAction({
         actionType: applyModalActionType,
-        beforePayload: typeof applyModalBefore === 'string' 
-          ? { value: applyModalBefore }
-          : { type: 'react_node' },
-        afterPayload: typeof applyModalAfter === 'string'
-          ? { value: applyModalAfter }
-          : { type: 'react_node' },
+        beforePayload,
+        afterPayload,
       })
 
       toast({
         title: 'Sucesso!',
-        description: 'Sugestão aplicada com sucesso',
+        description: 'Ação registrada com sucesso',
         duration: 2000,
       })
 
@@ -220,10 +242,12 @@ export function ListingAIAnalysisPanel({
         await onRegenerate()
       }
     } catch (error) {
+      // DIA 06.2: Toast já mostra mensagem detalhada do hook
       toast({
-        title: 'Erro',
-        description: error instanceof Error ? error.message : 'Erro ao aplicar sugestão',
+        title: 'Erro ao registrar ação',
+        description: error instanceof Error ? error.message : 'Erro desconhecido ao registrar ação',
         variant: 'destructive',
+        duration: 5000, // Mais tempo para ler mensagem detalhada
       })
       throw error
     }
@@ -282,11 +306,12 @@ export function ListingAIAnalysisPanel({
         <div className="space-y-1">
           <h3 className="text-xl font-bold">{listingTitle || 'Anúncio'}</h3>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {listingHasPromotion && listingPriceBase && listingPriceFinal ? (
+            {/* DIA 06.2: Usar pricingNormalized como fonte única de verdade */}
+            {pricingNormalized?.hasPromotion ? (
               <>
-                <span className="line-through">R$ {Number(listingPriceBase).toFixed(2)}</span>
+                <span className="line-through">R$ {pricingNormalized.originalPriceForDisplay.toFixed(2)}</span>
                 <span className="text-primary font-semibold">
-                  R$ {Number(listingPriceFinal).toFixed(2)}
+                  R$ {pricingNormalized.finalPriceForDisplay.toFixed(2)}
                 </span>
                 {listingDiscountPercent && (
                   <Badge variant="secondary" className="text-xs">
@@ -295,7 +320,7 @@ export function ListingAIAnalysisPanel({
                 )}
               </>
             ) : (
-              <span>Preço: R$ {Number(listingPrice ?? 0).toFixed(2)}</span>
+              <span>Preço: R$ {(pricingNormalized?.finalPriceForDisplay ?? listingPrice ?? 0).toFixed(2)}</span>
             )}
           </div>
         </div>
@@ -411,7 +436,7 @@ export function ListingAIAnalysisPanel({
                           )}
                         >
                           <CheckCircle2 className="h-4 w-4 mr-2" />
-                          Aplicar Sugestão
+                          Registrar como aplicado
                         </Button>
                       )}
                       <Button
@@ -503,7 +528,7 @@ export function ListingAIAnalysisPanel({
                     className="flex-1"
                   >
                     <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Aplicar Sugestão
+                    Registrar como aplicado
                   </Button>
                 )}
                 {editUrl && (

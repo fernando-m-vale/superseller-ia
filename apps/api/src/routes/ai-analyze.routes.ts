@@ -1000,11 +1000,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               };
             }
 
-            // DIA 06.1: Calcular promoText determinístico para cache
+            // DIA 06.2: Normalizar preços para cache também
+            const cacheOriginalPriceForDisplay = listing.has_promotion && listing.original_price
+              ? Number(listing.original_price)
+              : listing.original_price
+                ? Number(listing.original_price)
+                : Number(listing.price);
+            
+            const cacheFinalPriceForDisplay = listing.has_promotion && listing.price_final
+              ? Number(listing.price_final)
+              : Number(listing.price);
+
+            // DIA 06.1: Calcular promoText determinístico para cache usando preços normalizados
             const cachePromoText = buildPromoText({
               hasPromotion: listing.has_promotion ?? false,
-              originalPrice: listing.original_price ? Number(listing.original_price) : null,
-              finalPrice: listing.price_final ? Number(listing.price_final) : null,
+              originalPrice: cacheOriginalPriceForDisplay,
+              finalPrice: cacheFinalPriceForDisplay,
             });
 
             // DIA 06.1: Sanitizar generatedContent antes de salvar no cache
@@ -1042,6 +1053,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               promoText: cachePromoText, // DIA 06.1: texto determinístico
               source: 'listing_db_or_ml_prices',
               checkedAt: cachePromoCheckedAt,
+            };
+
+            // DIA 06.2: Adicionar pricingNormalized no cache também
+            cachePayload.pricingNormalized = {
+              originalPriceForDisplay: cacheOriginalPriceForDisplay,
+              finalPriceForDisplay: cacheFinalPriceForDisplay,
+              hasPromotion: listing.has_promotion ?? false,
             };
 
             await prisma.listingAIAnalysis.upsert({
@@ -1130,11 +1148,23 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
 
-          // DIA 06.1: Calcular promoText determinístico
+          // DIA 06.2: Normalizar preços para garantir consistência em toda UI
+          // Fonte de verdade única para preços originais/finais
+          const originalPriceForDisplay = listing.has_promotion && listing.original_price
+            ? Number(listing.original_price)
+            : listing.original_price
+              ? Number(listing.original_price)
+              : Number(listing.price);
+          
+          const finalPriceForDisplay = listing.has_promotion && listing.price_final
+            ? Number(listing.price_final)
+            : Number(listing.price);
+
+          // DIA 06.1: Calcular promoText determinístico usando preços normalizados
           const promoText = buildPromoText({
             hasPromotion: listing.has_promotion ?? false,
-            originalPrice: listing.original_price ? Number(listing.original_price) : null,
-            finalPrice: listing.price_final ? Number(listing.price_final) : null,
+            originalPrice: originalPriceForDisplay,
+            finalPrice: finalPriceForDisplay,
           });
 
           // DIA 06.1: Sanitizar analysisV21.descriptionFix.optimizedCopy se existir
@@ -1149,7 +1179,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }
           }
 
-          // Adicionar objeto promo estruturado (HOTFIX P0 + DIA 06.1)
+          // Adicionar objeto promo estruturado (HOTFIX P0 + DIA 06.1 + DIA 06.2)
           responseData.promo = {
             hasPromotion: listing.has_promotion ?? false,
             originalPrice: listing.original_price ? Number(listing.original_price) : null,
@@ -1158,6 +1188,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             promoText, // DIA 06.1: texto determinístico de promoção
             source: 'listing_db_or_ml_prices',
             checkedAt: listing.promotion_checked_at?.toISOString() || null,
+          };
+
+          // DIA 06.2: Adicionar pricingNormalized para garantir consistência
+          responseData.pricingNormalized = {
+            originalPriceForDisplay,
+            finalPriceForDisplay,
+            hasPromotion: listing.has_promotion ?? false,
           };
 
           // Se header x-debug: 1, incluir benchmarkDebug no payload
@@ -1547,11 +1584,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
         // Generated Content (Dia 05) - conteúdo pronto para copy/paste
         cacheResponseData.generatedContent = cacheGeneratedContent;
-        // DIA 06.1: Calcular promoText determinístico para cache response
+        // DIA 06.2: Normalizar preços para cache response também
+        const cacheResponseOriginalPriceForDisplay = listing.has_promotion && listing.original_price
+          ? Number(listing.original_price)
+          : listing.original_price
+            ? Number(listing.original_price)
+            : Number(listing.price);
+        
+        const cacheResponseFinalPriceForDisplay = listing.has_promotion && listing.price_final
+          ? Number(listing.price_final)
+          : Number(listing.price);
+
+        // DIA 06.1: Calcular promoText determinístico para cache response usando preços normalizados
         const cacheResponsePromoText = buildPromoText({
           hasPromotion: listing.has_promotion ?? false,
-          originalPrice: listing.original_price ? Number(listing.original_price) : null,
-          finalPrice: listing.price_final ? Number(listing.price_final) : null,
+          originalPrice: cacheResponseOriginalPriceForDisplay,
+          finalPrice: cacheResponseFinalPriceForDisplay,
         });
 
         // DIA 06.1: Sanitizar generatedContent do cache se existir
@@ -1587,6 +1635,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           promoText: cacheResponsePromoText, // DIA 06.1: texto determinístico
           source: 'listing_db_or_ml_prices',
           checkedAt: cacheResponsePromoCheckedAt,
+        };
+
+        // DIA 06.2: Adicionar pricingNormalized no cache response também
+        cacheResponseData.pricingNormalized = {
+          originalPriceForDisplay: cacheResponseOriginalPriceForDisplay,
+          finalPriceForDisplay: cacheResponseFinalPriceForDisplay,
+          hasPromotion: listing.has_promotion ?? false,
         };
         // Se header x-debug: 1, incluir benchmarkDebug no payload
         const debugHeader = request.headers['x-debug'];

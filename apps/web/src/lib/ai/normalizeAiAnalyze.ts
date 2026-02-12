@@ -83,6 +83,8 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   generatedContent?: AIAnalysisResponse['generatedContent']
   // Promo estruturado (HOTFIX P0)
   promo?: AIAnalysisResponse['promo']
+  // DIA 06.2: Preços normalizados para garantir consistência
+  pricingNormalized?: AIAnalysisResponse['pricingNormalized']
   // Applied Actions (Dia 06)
   appliedActions?: AIAnalysisResponse['appliedActions']
 }
@@ -245,6 +247,7 @@ export function normalizeAiAnalyzeResponse(
     benchmarkInsights: response.benchmarkInsights,
     generatedContent: response.generatedContent,
     promo: response.promo,
+    pricingNormalized: response.pricingNormalized,
     appliedActions: response.appliedActions,
   }
 

@@ -135,8 +135,15 @@ interface AIAnalysisApiResponse {
     originalPrice: number | null
     finalPrice: number | null
     discountPercent: number | null
+    promoText?: string | null
     source: string
     checkedAt: string | null
+  }
+  // DIA 06.2: Preços normalizados para garantir consistência
+  pricingNormalized?: {
+    originalPriceForDisplay: number
+    finalPriceForDisplay: number
+    hasPromotion: boolean
   }
   // Applied Actions (Dia 06)
   appliedActions?: Array<{
@@ -272,8 +279,15 @@ export interface AIAnalysisResponse {
     originalPrice: number | null
     finalPrice: number | null
     discountPercent: number | null
+    promoText?: string | null
     source: string
     checkedAt: string | null
+  }
+  // DIA 06.2: Preços normalizados para garantir consistência
+  pricingNormalized?: {
+    originalPriceForDisplay: number
+    finalPriceForDisplay: number
+    hasPromotion: boolean
   }
   // Applied Actions (Dia 06)
   appliedActions?: Array<{
