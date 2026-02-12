@@ -2524,8 +2524,8 @@ export class MercadoLivreSyncService {
       // HOTFIX DIA 05: Preservar visits e outros campos existentes no update
       const upsertPromises: Promise<void>[] = [];
       
-      // HOTFIX DIA 05: Logs estruturados para sample de 5 dias
-      const sampleDays: Array<{ listingId: string; day: string; before: { orders: number | null; gmv: number | null }; after: { orders: number; gmv: number } }> = [];
+      // HOTFIX P0: Logs estruturados para sample de 5 dias (incluir conversion)
+      const sampleDays: Array<{ listingId: string; day: string; before: { orders: number | null; gmv: number | null; conversion: number | null; visits: number | null }; after: { orders: number; gmv: number; conversion: number | null; visits: number | null } }> = [];
       const maxSampleDays = 5;
       let sampleDaysCount = 0;
       
@@ -2561,6 +2561,11 @@ export class MercadoLivreSyncService {
             },
           });
 
+          // HOTFIX P0: Calcular conversion para logs (fração 0..1)
+          const conversionValue = existingMetric?.visits && existingMetric.visits > 0 
+            ? Number((ordersCount / existingMetric.visits).toFixed(4))
+            : null;
+
           // HOTFIX DIA 05: Coletar sample para logs (primeiros 5 dias com mudanças)
           if (sampleDaysCount < maxSampleDays && (ordersCount > 0 || gmvValue > 0)) {
             sampleDays.push({
@@ -2569,10 +2574,14 @@ export class MercadoLivreSyncService {
               before: {
                 orders: existingMetric?.orders ?? null,
                 gmv: existingMetric?.gmv ? Number(existingMetric.gmv) : null,
+                conversion: existingMetric?.conversion ? Number(existingMetric.conversion) : null,
+                visits: existingMetric?.visits ?? null,
               },
               after: {
                 orders: ordersCount,
                 gmv: gmvValue,
+                conversion: conversionValue,
+                visits: existingMetric?.visits ?? null,
               },
             });
             sampleDaysCount++;
@@ -2611,9 +2620,9 @@ export class MercadoLivreSyncService {
                 impressions: existingMetric?.impressions ?? undefined,
                 clicks: existingMetric?.clicks ?? undefined,
                 ctr: existingMetric?.ctr ?? undefined,
-                // HOTFIX DIA 05: Recalcular conversion se visits existir
+                // HOTFIX P0: conversion como fração (0..1) para evitar overflow numeric(5,4)
                 conversion: existingMetric?.visits && existingMetric.visits > 0 
-                  ? (ordersCount / existingMetric.visits) * 100 
+                  ? Number((ordersCount / existingMetric.visits).toFixed(4))
                   : (existingMetric?.conversion ? Number(existingMetric.conversion) : undefined),
                 // HOTFIX DIA 05: Atualizar source para indicar que orders foram atualizados
                 source: existingMetric?.source === 'ml_visits_daily' 
@@ -2653,11 +2662,11 @@ export class MercadoLivreSyncService {
       console.log(`[ML-METRICS] Rows upserted: ${result.rowsUpserted} (esperado: ~${result.listingsProcessed * dayStrings.length})`);
       console.log(`[ML-METRICS] Range: ${result.min_date} até ${result.max_date}`);
       
-      // HOTFIX DIA 05: Logs estruturados com sample de before/after
+      // HOTFIX P0: Logs estruturados com conversion
       if (sampleDays.length > 0) {
-        console.log(`[ML-METRICS] Sample de ${sampleDays.length} dias com orders/gmv atualizados:`);
+        console.log(`[ML-METRICS] Sample de ${sampleDays.length} dias com orders/gmv/conversion atualizados:`);
         for (const sample of sampleDays) {
-          console.log(`[ML-METRICS]   - Listing ${sample.listingId} dia ${sample.day}: orders ${sample.before.orders ?? 'null'}→${sample.after.orders}, gmv ${sample.before.gmv ?? 'null'}→${sample.after.gmv}`);
+          console.log(`[ML-METRICS]   - Listing ${sample.listingId} dia ${sample.day}: orders ${sample.before.orders ?? 'null'}→${sample.after.orders}, gmv ${sample.before.gmv ?? 'null'}→${sample.after.gmv}, conversion ${sample.before.conversion ?? 'null'}→${sample.after.conversion ?? 'null'}, visits ${sample.before.visits ?? 'null'}`);
         }
       }
 
@@ -2798,7 +2807,8 @@ export class MercadoLivreSyncService {
       console.log(`[ML-ORDERS-METRICS] Agregados ${metricsByListingAndDay.size} listings com métricas`);
 
       // 3. Para cada listing, fazer UPSERT para cada dia do range
-      const sampleDays: Array<{ listingId: string; day: string; before: { orders: number | null; gmv: number | null }; after: { orders: number; gmv: number } }> = [];
+      // HOTFIX P0: Incluir conversion nos logs
+      const sampleDays: Array<{ listingId: string; day: string; before: { orders: number | null; gmv: number | null; conversion: number | null; visits: number | null }; after: { orders: number; gmv: number; conversion: number | null; visits: number | null } }> = [];
       const maxSampleDays = 5;
       let sampleDaysCount = 0;
 
@@ -2832,6 +2842,11 @@ export class MercadoLivreSyncService {
             },
           });
 
+          // HOTFIX P0: Calcular conversion para logs (fração 0..1)
+          const conversionValue = existingMetric?.visits && existingMetric.visits > 0 
+            ? Number((ordersCount / existingMetric.visits).toFixed(4))
+            : null;
+
           // Coletar sample para logs (primeiros 5 dias com mudanças)
           if (sampleDaysCount < maxSampleDays && (ordersCount > 0 || gmvValue > 0)) {
             sampleDays.push({
@@ -2840,10 +2855,14 @@ export class MercadoLivreSyncService {
               before: {
                 orders: existingMetric?.orders ?? null,
                 gmv: existingMetric?.gmv ? Number(existingMetric.gmv) : null,
+                conversion: existingMetric?.conversion ? Number(existingMetric.conversion) : null,
+                visits: existingMetric?.visits ?? null,
               },
               after: {
                 orders: ordersCount,
                 gmv: gmvValue,
+                conversion: conversionValue,
+                visits: existingMetric?.visits ?? null,
               },
             });
             sampleDaysCount++;
@@ -2880,8 +2899,9 @@ export class MercadoLivreSyncService {
               impressions: existingMetric?.impressions ?? undefined,
               clicks: existingMetric?.clicks ?? undefined,
               ctr: existingMetric?.ctr ?? undefined,
+              // HOTFIX P0: conversion como fração (0..1) para evitar overflow numeric(5,4)
               conversion: existingMetric?.visits && existingMetric.visits > 0 
-                ? (ordersCount / existingMetric.visits) * 100 
+                ? Number((ordersCount / existingMetric.visits).toFixed(4))
                 : (existingMetric?.conversion ? Number(existingMetric.conversion) : undefined),
               source: existingMetric?.source === 'ml_visits_daily' 
                 ? 'ml_visits_and_orders_daily' 
@@ -2896,11 +2916,11 @@ export class MercadoLivreSyncService {
         result.listingsProcessed++;
       }
 
-      // Logs estruturados
+      // HOTFIX P0: Logs estruturados com conversion
       if (sampleDays.length > 0) {
-        console.log(`[ML-ORDERS-METRICS] Sample de ${sampleDays.length} dias com orders/gmv atualizados:`);
+        console.log(`[ML-ORDERS-METRICS] Sample de ${sampleDays.length} dias com orders/gmv/conversion atualizados:`);
         for (const sample of sampleDays) {
-          console.log(`[ML-ORDERS-METRICS]   - Listing ${sample.listingId} dia ${sample.day}: orders ${sample.before.orders ?? 'null'}→${sample.after.orders}, gmv ${sample.before.gmv ?? 'null'}→${sample.after.gmv}`);
+          console.log(`[ML-ORDERS-METRICS]   - Listing ${sample.listingId} dia ${sample.day}: orders ${sample.before.orders ?? 'null'}→${sample.after.orders}, gmv ${sample.before.gmv ?? 'null'}→${sample.after.gmv}, conversion ${sample.before.conversion ?? 'null'}→${sample.after.conversion ?? 'null'}, visits ${sample.before.visits ?? 'null'}`);
         }
       }
 
