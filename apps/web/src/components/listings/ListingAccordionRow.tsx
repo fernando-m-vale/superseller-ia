@@ -220,6 +220,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
               ) : aiAnalysis?.analysisV21 ? (
                 <ListingAIAnalysisPanel
                   analysisV21={aiAnalysis.analysisV21}
+                  listingId={listing.id}
                   listingIdExt={listing.listingIdExt}
                   listingTitle={listing.title}
                   listingPrice={listing.price}
@@ -227,6 +228,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   listingPriceFinal={promotionalPrice}
                   listingHasPromotion={hasPromotion}
                   listingDiscountPercent={listing.discountPercent}
+                  appliedActions={aiAnalysis.appliedActions}
                   benchmark={aiAnalysis.benchmark ?? null}
                   benchmarkInsights={aiAnalysis.benchmarkInsights}
                   generatedContent={aiAnalysis.generatedContent}

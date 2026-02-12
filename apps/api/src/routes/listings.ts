@@ -140,5 +140,53 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
+  // POST /api/v1/listings/:listingId/apply-action
+  app.post<{ Params: { listingId: string } }>(
+    '/:listingId/apply-action',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        // @ts-ignore - tenantId é injetado pelo authGuard
+        const tenantId = req.user?.tenantId || req.tenantId;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        const { listingId } = req.params as { listingId: string };
+        const body = z.object({
+          actionType: z.enum(['seo', 'midia', 'cadastro', 'competitividade']),
+          beforePayload: z.record(z.unknown()),
+          afterPayload: z.record(z.unknown()),
+        }).parse(req.body);
+
+        const { AppliedActionService } = await import('../services/AppliedActionService');
+        const service = new AppliedActionService();
+
+        const result = await service.applyAction({
+          tenantId,
+          listingId,
+          actionType: body.actionType,
+          beforePayload: body.beforePayload,
+          afterPayload: body.afterPayload,
+        });
+
+        return reply.status(200).send({
+          message: 'Ação aplicada com sucesso',
+          data: result,
+        });
+      } catch (error) {
+        app.log.error(error);
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({ error: 'Invalid input', details: error.errors });
+        }
+        if (error instanceof Error && error.message.includes('não encontrado')) {
+          return reply.status(404).send({ error: error.message });
+        }
+        return reply.status(500).send({ error: 'Failed to apply action' });
+      }
+    }
+  );
+
   done();
 };

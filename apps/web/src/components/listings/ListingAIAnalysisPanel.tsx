@@ -14,9 +14,12 @@ import { PromotionHighlightPanel, type PromotionPlacementItem } from '@/componen
 import { BenchmarkPanel } from '@/components/ai/BenchmarkPanel'
 import { BenchmarkInsightsPanel } from '@/components/ai/BenchmarkInsightsPanel'
 import { GeneratedContentPanel } from '@/components/ai/GeneratedContentPanel'
+import { ApplyActionModal } from '@/components/ai/ApplyActionModal'
+import { useApplyAction } from '@/hooks/use-apply-action'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
+  listingId?: string
   listingIdExt?: string | null
   listingTitle?: string
   listingPrice?: number
@@ -24,6 +27,10 @@ interface ListingAIAnalysisPanelProps {
   listingPriceFinal?: number | null
   listingHasPromotion?: boolean | null
   listingDiscountPercent?: number | null
+  appliedActions?: Array<{
+    actionType: string
+    appliedAt: string
+  }>
   benchmark?: {
     benchmarkSummary: {
       categoryId: string | null
@@ -58,6 +65,7 @@ interface ListingAIAnalysisPanelProps {
 
 export function ListingAIAnalysisPanel({
   analysisV21,
+  listingId,
   listingIdExt,
   listingTitle,
   listingPrice,
@@ -65,6 +73,7 @@ export function ListingAIAnalysisPanel({
   listingPriceFinal,
   listingHasPromotion,
   listingDiscountPercent,
+  appliedActions = [],
   benchmark,
   benchmarkInsights,
   generatedContent,
@@ -73,6 +82,69 @@ export function ListingAIAnalysisPanel({
 }: ListingAIAnalysisPanelProps) {
   const { toast } = useToast()
   const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
+  const [applyModalOpen, setApplyModalOpen] = useState(false)
+  const [applyModalActionType, setApplyModalActionType] = useState<'seo' | 'midia' | 'cadastro' | 'competitividade'>('seo')
+  const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
+  const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
+  
+  const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
+
+  // Verificar se ação já foi aplicada
+  const isActionApplied = (actionType: string) => {
+    return appliedActions.some(action => action.actionType === actionType)
+  }
+
+  const handleOpenApplyModal = (
+    actionType: 'seo' | 'midia' | 'cadastro' | 'competitividade',
+    before: string | React.ReactNode,
+    after: string | React.ReactNode
+  ) => {
+    setApplyModalActionType(actionType)
+    setApplyModalBefore(before)
+    setApplyModalAfter(after)
+    setApplyModalOpen(true)
+  }
+
+  const handleConfirmApply = async () => {
+    if (!listingId) {
+      toast({
+        title: 'Erro',
+        description: 'ID do anúncio não disponível',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      await applyAction({
+        actionType: applyModalActionType,
+        beforePayload: typeof applyModalBefore === 'string' 
+          ? { value: applyModalBefore }
+          : { type: 'react_node' },
+        afterPayload: typeof applyModalAfter === 'string'
+          ? { value: applyModalAfter }
+          : { type: 'react_node' },
+      })
+
+      toast({
+        title: 'Sucesso!',
+        description: 'Sugestão aplicada com sucesso',
+        duration: 2000,
+      })
+
+      // Recarregar análise para atualizar appliedActions
+      if (onRegenerate) {
+        await onRegenerate()
+      }
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Erro ao aplicar sugestão',
+        variant: 'destructive',
+      })
+      throw error
+    }
+  }
 
   const handleCopy = async (text: string, label: string) => {
     try {
@@ -174,7 +246,7 @@ export function ListingAIAnalysisPanel({
     actions,
   }: {
     icon: React.ElementType
-    title: string
+    title: string | React.ReactNode
     diagnostic: React.ReactNode
     impact: React.ReactNode
     actions: React.ReactNode
@@ -185,7 +257,7 @@ export function ListingAIAnalysisPanel({
           <div className="p-2 rounded-lg bg-primary/10">
             <Icon className="h-5 w-5 text-primary" />
           </div>
-          <CardTitle className="text-lg">{title}</CardTitle>
+          <CardTitle className="text-lg">{typeof title === 'string' ? title : title}</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -342,24 +414,40 @@ export function ListingAIAnalysisPanel({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-medium text-muted-foreground">Depois (otimizado):</p>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleCopy(analysisV21.titleFix!.after, 'Título')}
-                    className="bg-primary hover:bg-primary/90"
-                  >
-                    {copiedTexts.has(analysisV21.titleFix.after) ? (
-                      <>
-                        <Check className="h-4 w-4 mr-2 text-white" />
-                        Copiado
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copiar título
-                      </>
+                  <div className="flex items-center gap-2">
+                    {!isActionApplied('seo') && analysisV21.titleFix && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenApplyModal(
+                          'seo',
+                          analysisV21.titleFix!.before,
+                          analysisV21.titleFix!.after
+                        )}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Aplicar Sugestão
+                      </Button>
                     )}
-                  </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleCopy(analysisV21.titleFix!.after, 'Título')}
+                      className="bg-primary hover:bg-primary/90"
+                    >
+                      {copiedTexts.has(analysisV21.titleFix.after) ? (
+                        <>
+                          <Check className="h-4 w-4 mr-2 text-white" />
+                          Copiado
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copiar título
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 <Textarea
                   readOnly
@@ -387,7 +475,17 @@ export function ListingAIAnalysisPanel({
       {analysisV21.imagePlan && analysisV21.imagePlan.length > 0 && (
         <SectionTemplate
           icon={ImageIcon}
-          title="2️⃣ Imagens — Diagnóstico + Ação"
+          title={
+            <div className="flex items-center justify-between w-full">
+              <span>2️⃣ Imagens — Diagnóstico + Ação</span>
+              {isActionApplied('midia') && (
+                <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Implementado
+                </Badge>
+              )}
+            </div>
+          }
           diagnostic={<p>Sequência de imagens pode melhorar conversão</p>}
           impact={<p>Imagens fortes elevam CTR e conversão.</p>}
           actions={
@@ -405,17 +503,34 @@ export function ListingAIAnalysisPanel({
                   </li>
                 ))}
               </ol>
-              {editUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenEdit}
-                  className="w-full"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir anúncio para editar imagens
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {!isActionApplied('midia') && analysisV21.imagePlan && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenApplyModal(
+                      'midia',
+                      'Plano de imagens atual',
+                      analysisV21.imagePlan!.map(item => `Imagem ${item.image}: ${item.action}`).join('\n')
+                    )}
+                    className="flex-1"
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Aplicar Sugestão
+                  </Button>
+                )}
+                {editUrl && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenEdit}
+                    className={isActionApplied('midia') ? 'w-full' : 'flex-1'}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Abrir anúncio para editar imagens
+                  </Button>
+                )}
+              </div>
             </div>
           }
         />
@@ -425,31 +540,57 @@ export function ListingAIAnalysisPanel({
       {analysisV21.descriptionFix && (
         <SectionTemplate
           icon={Sparkles}
-          title="3️⃣ Descrição — SEO + Conversão"
+          title={
+            <div className="flex items-center justify-between w-full">
+              <span>3️⃣ Descrição — SEO + Conversão</span>
+              {isActionApplied('seo') && (
+                <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  Implementado
+                </Badge>
+              )}
+            </div>
+          }
           diagnostic={<p>{analysisV21.descriptionFix.diagnostic}</p>}
           impact={<p>Descrição estruturada melhora SEO e reduz objeções.</p>}
           actions={
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-foreground">Descrição otimizada:</p>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => handleCopy(analysisV21.descriptionFix!.optimizedCopy, 'Descrição')}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  {copiedTexts.has(analysisV21.descriptionFix.optimizedCopy) ? (
-                    <>
-                      <Check className="h-4 w-4 mr-2 text-white" />
-                      Copiado
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copiar descrição
-                    </>
+                <div className="flex items-center gap-2">
+                  {!isActionApplied('seo') && analysisV21.descriptionFix && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenApplyModal(
+                        'seo',
+                        listingTitle || 'Descrição atual não disponível',
+                        analysisV21.descriptionFix!.optimizedCopy
+                      )}
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
+                      Aplicar Sugestão
+                    </Button>
                   )}
-                </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleCopy(analysisV21.descriptionFix!.optimizedCopy, 'Descrição')}
+                    className="bg-primary hover:bg-primary/90"
+                  >
+                    {copiedTexts.has(analysisV21.descriptionFix.optimizedCopy) ? (
+                      <>
+                        <Check className="h-4 w-4 mr-2 text-white" />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-2" />
+                        Copiar descrição
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
               <Textarea
                 readOnly
@@ -489,6 +630,17 @@ export function ListingAIAnalysisPanel({
 
       {/* COMPARAÇÃO COM CONCORRENTES — BENCHMARK (legado, mantido para compatibilidade) */}
       {benchmark && !benchmarkInsights && <BenchmarkPanel benchmark={benchmark} />}
+
+      {/* Modal de Aplicar Sugestão */}
+      <ApplyActionModal
+        open={applyModalOpen}
+        onClose={() => setApplyModalOpen(false)}
+        onConfirm={handleConfirmApply}
+        actionType={applyModalActionType}
+        beforeValue={applyModalBefore}
+        afterValue={applyModalAfter}
+        isLoading={isApplyingAction}
+      />
 
       {/* Diagnostico de preco da IA (complementar) */}
       {analysisV21.priceFix && (

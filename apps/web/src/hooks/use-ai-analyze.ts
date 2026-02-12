@@ -138,6 +138,11 @@ interface AIAnalysisApiResponse {
     source: string
     checkedAt: string | null
   }
+  // Applied Actions (Dia 06)
+  appliedActions?: Array<{
+    actionType: string
+    appliedAt: string
+  }>
 }
 
 // Interface adaptada para o frontend
@@ -270,6 +275,11 @@ export interface AIAnalysisResponse {
     source: string
     checkedAt: string | null
   }
+  // Applied Actions (Dia 06)
+  appliedActions?: Array<{
+    actionType: string
+    appliedAt: string
+  }>
 }
 
 /**
@@ -512,6 +522,16 @@ export function useAIAnalyze(listingId: string | null) {
           bulletsCount: generatedContent?.bullets?.length || 0,
         })
       }
+
+      // Ler appliedActions (Dia 06)
+      const appliedActions = result.data?.appliedActions ?? []
+      if (appliedActions) {
+        adaptedData.appliedActions = appliedActions
+        console.log('[AI-ANALYZE] AppliedActions found', {
+          listingId,
+          count: appliedActions.length,
+        })
+      }
       
       // Normalizar resposta (snake_case → camelCase)
       const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
@@ -644,6 +664,12 @@ export function useAIAnalyze(listingId: string | null) {
       const benchmark = result.data?.benchmark ?? null
       if (benchmark) {
         adaptedData.benchmark = benchmark
+      }
+
+      // Ler appliedActions (Dia 06)
+      const appliedActions = result.data?.appliedActions ?? []
+      if (appliedActions) {
+        adaptedData.appliedActions = appliedActions
       }
       
       // Normalizar resposta

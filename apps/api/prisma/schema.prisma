@@ -121,6 +121,7 @@ model Tenant {
   listing_action_outcomes ListingActionOutcome[]
   recommendations         Recommendation[]
   listing_ai_analysis     ListingAIAnalysis[]
+  applied_actions         AppliedAction[]
 
   @@map("tenants")
 }
@@ -209,6 +210,7 @@ model Listing {
   order_items             OrderItem[]
   recommendations         Recommendation[]
   listing_ai_analysis     ListingAIAnalysis[]
+  applied_actions         AppliedAction[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -458,4 +460,24 @@ model ListingAIAnalysis {
   @@index([listing_id])
   @@index([fingerprint])
   @@map("listing_ai_analysis")
+}
+
+model AppliedAction {
+  id            String   @id @default(uuid())
+  tenant_id     String
+  listing_id    String
+  action_type   String   // "seo" | "midia" | "cadastro" | "competitividade"
+  before_payload Json
+  after_payload  Json
+  applied_at    DateTime @default(now())
+  created_at    DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([tenant_id, listing_id, action_type]) // Uma ação por tipo por listing
+  @@index([tenant_id])
+  @@index([listing_id])
+  @@index([action_type])
+  @@map("applied_actions")
 }

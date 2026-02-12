@@ -24,6 +24,7 @@ import { BenchmarkService } from '../services/BenchmarkService';
 import { normalizeBenchmarkInsights } from '../services/BenchmarkInsightsService';
 import { generateListingContent } from '../services/GeneratedContentService';
 import { getBooleanEnv } from '../utils/env-parser';
+import { AppliedActionService } from '../services/AppliedActionService';
 import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
 import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 
@@ -1196,6 +1197,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }
           }
 
+          // Buscar appliedActions para incluir na resposta
+          const appliedActionService = new AppliedActionService();
+          const appliedActions = await appliedActionService.getAppliedActions(tenantId, listingId);
+          responseData.appliedActions = appliedActions.map((action) => ({
+            actionType: action.actionType,
+            appliedAt: action.appliedAt.toISOString(),
+          }));
+
           // Adicionar header com commit SHA
           setVersionHeader(reply);
 
@@ -1595,6 +1604,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }, 'Erro ao executar debugPrices (cache)');
           }
         }
+
+        // Buscar appliedActions para incluir na resposta (cache também)
+        const appliedActionService = new AppliedActionService();
+        const appliedActions = await appliedActionService.getAppliedActions(tenantId, listingId);
+        cacheResponseData.appliedActions = appliedActions.map((action) => ({
+          actionType: action.actionType,
+          appliedAt: action.appliedAt.toISOString(),
+        }));
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
