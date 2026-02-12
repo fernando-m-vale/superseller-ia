@@ -68,41 +68,38 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - **Preparação para IA visual futura:** Armazenar `pictures_json`, `pictures_count` sem análise visual por IA neste momento (decisão consciente para evitar complexidade prematura)
 
 ## 🧭 Roadmap (alto nível)
-- ONDA 1/2: Score V2 + UX (concluído)
-- ONDA 3: IA como amplificador (em progresso)
-  - ✅ Análise IA Expert (ml-expert-v1) — **TECNICAMENTE FUNCIONAL**
-  - ⏳ Estabilização e refinamento de qualidade — **PENDENTE (Dia 2 não encerrado)**
-- Operação: jobs internos + scheduler (fase atual, crítico para clientes reais)
-- Próxima épica: Benchmark/Ads/Automações (após dados e operação sólidos)
+- ✅ ONDA 1/2: Score V2 + UX (concluído)
+- ✅ ONDA 3: IA como amplificador (concluído)
+  - ✅ Análise IA Expert (ml-expert-v1) — **FUNCIONAL**
+  - ✅ Benchmark → Action Engine → Conteúdo Gerado — **CONCLUÍDO (Dia 5)**
+- 🚀 Próxima fase: Execução Assistida + Jobs Automáticos + Hacks ML Contextuais (Dia 06-10)
 
-## 🧠 Estado atual do produto (2026-02-09 — Dia 4 Concluído)
+## 🧠 Estado atual do produto (2026-02-11 — Dia 5 Concluído)
 
-**Dia atual do projeto:** Dia 4 concluído com sucesso  
-**Fase ativa:** DIA 05 — Benchmark → Action Engine → Conteúdo Gerado (core value)  
-**Status:** Fundação de dados e confiabilidade estabelecida; pronto para geração de valor direto ao usuário
+**Dia atual do projeto:** Dia 5 concluído com sucesso  
+**Fase ativa:** DIA 06 — Execução Assistida (Modo Aplicar)  
+**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, dashboard consistente
 
-- **SuperSeller IA opera com Prompts Versionados (V2.1 Expert e V2.2 Sales):** Sistema permite alternar via `AI_PROMPT_VERSION`
-- **UX V2.1 implementada:** Accordion inline substituindo modal lateral, cards consultor sênior
-- **Validações de qualidade implementadas:** Gate obrigatório antes de responder usuário (900 chars, 7 ações, promo/clip rules)
-- **Debug payload endpoint criado:** `GET /api/v1/ai/debug-payload/:listingIdExt` permite transparência da IA
-- **Endpoints de promoção funcionais:** Force refresh e backfill implementados
-- **Testes com fixture:** `item-MLB4217107417.json` permite testes anti-regressão
-- **Pipeline de análise IA está operacional:** Prompts versionados ativos, validação de qualidade, retry automático
-- **Sistema está preparado para escalar IA, dados e UX:** Fundação sólida para evolução futura
-- **Dia 3 concluído:** Fix conexão ML, promoção end-to-end, IA Prompt v22 com ML Safe Mode, ScoreActionEngine calibrado
-- **Dia 4 concluído:** Promo pricing confiável, TTL escalável, feature flag, observabilidade, benchmark 403 tratado
-  - **Promo pricing:** 100% funcional, persistido corretamente no banco, TTL + override implementados
-  - **Infra:** App Runner com secrets corretamente injetados, env-parser robusto (plaintext + JSON)
-  - **API:** force-refresh observável e auditável (config, enrichment.applied, enrichment.reason)
-  - **UX:** Benchmark 403 tratado como indisponível (não bug)
-  - **Qualidade:** Testes unitários cobrindo TTL, override e parsing de env
-  - **Benchmark:** Backend `BenchmarkService` calcula comparação com concorrentes; UI `BenchmarkPanel` renderiza "você ganha/perde aqui"
-  - **Versões:** `promptVersion` e `schemaVersion` expostos no response; fonte única em `apps/api/src/utils/prompt-version.ts`
-  - **forceRefresh:** Respeita TTL por padrão; `forcePromoPrices=true` para override manual
-  - **Cache:** Fingerprint inclui `promptVersion`; cacheHit funciona corretamente
-  - **CI/Deploy:** Pipelines App Runner resilientes a estados transitórios; aguardam `RUNNING` antes de `start-deployment`
+- **SuperSeller IA agora possui:**
+  - ✅ **Diagnóstico:** Análise profunda de anúncio com IA especialista
+  - ✅ **Priorização inteligente (Top 3):** rankGaps() com regra dura (máx 3 criticalGaps), ordenação por Impact DESC → Effort ASC → Confidence DESC
+  - ✅ **Conteúdo gerado contextual:** Títulos, bullets, descrição prontos para copy/paste
+  - ✅ **Promo confiável:** Anti-regressão implementada, TTL + feature flag, observabilidade completa
+  - ✅ **Dashboard consistente:** Visits, orders, gmv separados e confiáveis
+  - ✅ **Infra com power orchestration:** Lambda orchestrator, CodeBuild para NAT, RDS controlado
 
-**Nota importante:** O DIA 04 fecha a fundação de dados e confiabilidade. A partir do DIA 05, o foco passa a ser geração de valor direto ao usuário (conteúdo pronto para copy/paste, ações acionáveis baseadas em benchmark).
+- **Dia 5 concluído:** Benchmark → Action Engine → Conteúdo Gerado
+  - **Backend:** BenchmarkInsightsService, rankGaps(), GeneratedContentService, anti-regressão de promo, conversion como fração (HOTFIX P0)
+  - **Frontend:** BenchmarkInsightsPanel, GeneratedContentPanel, badge de confiança, banner de fallback, conteúdo copiável
+  - **Infra:** Lambda power-orchestrator, CodeBuild para NAT toggle, RDS controlado
+
+- **Decisão estratégica:** Produto deixa de ser "auditor" e passa a ser "assistente vendedor"
+
+**Limitação atual:**
+- Benchmark ML ainda depende de desbloqueio 403 (fora do controle atual)
+- Pequeno desalinhamento de fuso (-1 dia) tolerado temporariamente
+
+**Produto já entrega valor prático imediato.**
 
 ## ⚠️ PROBLEMAS ABERTOS (INFRA/DEPLOY — NÃO CONCEITUAIS)
 
@@ -182,12 +179,27 @@ Próximo foco: **Encerrar Dia 2** — corrigir profundidade de descrição, prom
 - **Decisão registrada:** Padronizar UUID no domínio
 - **Mudança planejada, não urgente:** Não é bloqueador atual
 
-## 🚧 Riscos conhecidos (backlog)
+## 🚧 Débitos Técnicos (backlog)
+
+### Produto / UX
 - **Multi-conexões:** Sistema não suporta múltiplas conexões ativas simultaneamente (usa sempre a mais recente)
 - **Inserção manual de anúncios:** Não implementado; sistema depende de sync do Mercado Livre
 - **Backfill automático:** Por enquanto, backfill de visits/metrics é manual; automação futura
 - **UX com termos técnicos:** "V2.1", "indisponível" precisam refinamento para linguagem de usuário final
-- **Qualidade do output da IA:** Descrições rasas, promoção chutada, vídeo com lógica incorreta — **BLOQUEADORES DO DIA 2**
+
+### Dados / Engenharia
+- **Benchmark ML 403:** Ainda depende de desbloqueio externo (fora do controle atual)
+- **Desalinhamento de fuso (-1 dia):** Tolerado temporariamente
+- **Reconciliação completa de status:** Job dedicado para verificação periódica
+- **Orders x seller_id:** Investigar quando conexão muda de sellerId
+- **Limpeza de dados históricos:** Soft delete / reprocess
+
+### Backlog Pós-Dia 10
+- Multi-marketplace
+- Análise visual de imagens
+- Estratégia de Ads
+- Execução automática no ML
+- Score evolutivo
 
 ## 🧭 Próxima entrega crítica
 ✅ **VISITS reais no banco (valores > 0) e exibidos no overview** — CONCLUÍDO

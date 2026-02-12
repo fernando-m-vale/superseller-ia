@@ -753,4 +753,107 @@ Promoções não eram capturadas corretamente via `/items?ids=...` (multiget). M
 
 ---
 
+## ADR-005: Conversion como Fração (0..1)
+
+**Data:** 2026-02-11  
+**Status:** Implementado (HOTFIX P0)
+
+### Contexto
+Erro `PostgresError code 22003 numeric field overflow` ocorria quando `conversion` era calculado como percentual (0..100) e armazenado em coluna `numeric(5,4)` (máximo 9.9999). Valores acima de 9.9999% causavam overflow.
+
+### Decisão
+**Armazenar `conversion` como FRAÇÃO (0..1) no banco de dados. Percentual apenas na camada de exibição (UI/API response).**
+
+### Justificativa
+- `numeric(5,4)` aceita valores de 0.0000 até 1.0000 (compatível com fração)
+- Fração é matematicamente mais consistente (orders/visits)
+- Evita overflow mesmo com conversões altas (>10%)
+- Percentual pode ser calculado na camada de apresentação quando necessário
+
+### Implementação
+- **Cálculo:** `conversion = visits > 0 ? Number((orders / visits).toFixed(4)) : null`
+- **Armazenamento:** `listing_metrics_daily.conversion` como `numeric(5,4)`
+- **Logs:** Incluem `conversionBefore`, `conversionAfter`, `visits`, `orders`
+- **Aplicado em:** `MercadoLivreSyncService.syncOrdersMetricsDaily()` e `syncListingMetricsDaily()`
+
+### Impacto
+- **Confiabilidade:** Elimina erro de overflow 22003
+- **Consistência:** Dados sempre válidos no banco
+- **Observabilidade:** Logs estruturados facilitam debug
+
+### Alternativas consideradas
+- Alterar schema para `numeric(6,4)`: Requer migration, não resolve raiz do problema
+- Multiplicar por 100 na UI: Mantém inconsistência matemática
+- Usar percentual com clamp: Complexidade desnecessária
+
+---
+
+## ADR-006: Separação de Visits e OrdersMetrics
+
+**Data:** 2026-02-11  
+**Status:** Implementado
+
+### Contexto
+Orders/gmv estavam sendo atualizados dentro do bloco de métricas, causando acoplamento e dificultando manutenção. Dashboard precisava de dados confiáveis e independentes.
+
+### Decisão
+**Criar step independente `syncOrdersMetricsDaily()` separado de `syncVisitsByRange()`. Preservar visits quando atualizar orders/gmv.**
+
+### Justificativa
+- Separação de responsabilidades facilita manutenção
+- Dashboard precisa de dados confiáveis e independentes
+- Menor acoplamento entre sync de visits e orders
+- Permite execução independente de cada step
+
+### Implementação
+- **Step separado:** `syncOrdersMetricsDaily()` em `MercadoLivreSyncService`
+- **Preservação:** Upsert preserva `visits`, `impressions`, `clicks`, `ctr` quando atualiza `orders`, `gmv`, `conversion`
+- **Logs estruturados:** Incluem `conversionBefore`, `conversionAfter`, `visits`, `orders`
+- **Idempotência:** Pode ser executado múltiplas vezes sem efeitos colaterais
+
+### Impacto
+- **Confiabilidade:** Dashboard sempre mostra dados corretos
+- **Manutenibilidade:** Código mais modular e fácil de entender
+- **Escalabilidade:** Steps podem ser executados independentemente
+
+### Alternativas consideradas
+- Manter acoplado: Maior complexidade, difícil manutenção
+- Sempre sobrescrever: Perde dados de visits quando atualiza orders
+
+---
+
+## ADR-007: Anti-regressão de Promo
+
+**Data:** 2026-02-11  
+**Status:** Implementado
+
+### Contexto
+Endpoint `/ai/analyze` estava regravando promo incorretamente, causando regressão de dados. Enrichment podia falhar mas ainda assim sobrescrever valores corretos.
+
+### Decisão
+**Preservar valores de promo (`original_price`, `price_final`, `has_promotion`, `discount_percent`) caso enrichment não aplique. Usar `forcePromoPrices` conforme flag.**
+
+### Justificativa
+- Promo nunca deve regredir
+- Enrichment pode falhar (403, rate-limit) mas dados existentes são válidos
+- Flag `forcePromoPrices` permite override manual quando necessário
+- TTL garante que dados não ficam stale indefinidamente
+
+### Implementação
+- **Preservação:** Se enrichment não aplicar (TTL não expirado, flag off, erro), manter valores existentes
+- **Flag:** `forcePromoPrices=true` ignora TTL e força refresh
+- **Logs:** `enrichment.applied`, `enrichment.reason` indicam por que enrichment foi aplicado ou pulado
+- **Aplicado em:** `MercadoLivreSyncService.enrichItemPricing()`
+
+### Impacto
+- **Confiabilidade:** Promo nunca regride
+- **Observabilidade:** Logs mostram por que enrichment foi aplicado ou pulado
+- **Flexibilidade:** Flag permite override manual quando necessário
+
+### Alternativas consideradas
+- Sempre sobrescrever: Causa regressão de dados
+- Nunca atualizar: Dados ficam stale
+
+---
+
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.
