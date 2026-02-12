@@ -306,13 +306,22 @@ export function ListingAIAnalysisPanel({
         <div className="space-y-1">
           <h3 className="text-xl font-bold">{listingTitle || 'Anúncio'}</h3>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {/* DIA 06.2: Usar pricingNormalized como fonte única de verdade */}
+            {/* HOTFIX: Usar pricingNormalized como fonte única de verdade, sem calcular */}
             {pricingNormalized?.hasPromotion ? (
               <>
-                <span className="line-through">R$ {pricingNormalized.originalPriceForDisplay.toFixed(2)}</span>
-                <span className="text-primary font-semibold">
-                  R$ {pricingNormalized.finalPriceForDisplay.toFixed(2)}
-                </span>
+                {/* Só mostrar "de X por Y" se tiver originalPriceForDisplay da fonte */}
+                {pricingNormalized.originalPriceForDisplay ? (
+                  <>
+                    <span className="line-through">R$ {pricingNormalized.originalPriceForDisplay.toFixed(2)}</span>
+                    <span className="text-primary font-semibold">
+                      R$ {pricingNormalized.finalPriceForDisplay.toFixed(2)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-primary font-semibold">
+                    R$ {pricingNormalized.finalPriceForDisplay.toFixed(2)}
+                  </span>
+                )}
                 {listingDiscountPercent && (
                   <Badge variant="secondary" className="text-xs">
                     -{listingDiscountPercent}%
@@ -742,15 +751,16 @@ export function ListingAIAnalysisPanel({
             
             const actionLower = action.toLowerCase()
             
+            // HOTFIX: Mapa único (single source of truth) para actionType -> sectionId
             if (actionLower.includes('título') || actionLower.includes('titulo') || actionLower.includes('title')) {
               actionType = 'seo_title'
-              sectionId = 'section-title'
+              sectionId = 'section-seo-title'
             } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
               actionType = 'seo_description'
               sectionId = 'section-seo-description'
             } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
               actionType = 'media_images'
-              sectionId = 'section-images'
+              sectionId = 'section-media-images'
             } else if (actionLower.includes('selo') || actionLower.includes('capa')) {
               actionType = 'promo_cover_badge'
             } else if (actionLower.includes('banner')) {
@@ -770,7 +780,13 @@ export function ListingAIAnalysisPanel({
             handleOpenApplyModal(actionType, before, after)
           }}
           onScrollToSection={(sectionId) => {
-            // DIA 06.3: Scroll para a seção correspondente com highlight
+            // HOTFIX: Scroll robusto para a seção correspondente com highlight
+            if (!sectionId) {
+              // Fallback: scroll para topo
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+              return
+            }
+            
             const element = document.getElementById(sectionId)
             if (element) {
               // Scroll suave
@@ -781,6 +797,9 @@ export function ListingAIAnalysisPanel({
               setTimeout(() => {
                 element.classList.remove('ring-4', 'ring-primary', 'ring-offset-4', 'animate-pulse')
               }, 2000)
+            } else {
+              // Seção não encontrada: scroll para topo
+              window.scrollTo({ top: 0, behavior: 'smooth' })
             }
           }}
           editUrl={editUrl}

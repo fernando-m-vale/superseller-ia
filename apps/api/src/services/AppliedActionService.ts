@@ -93,13 +93,28 @@ export class AppliedActionService {
 
   /**
    * Busca ações aplicadas para um listing
+   * HOTFIX: Suporta filtrar por data da análise (para resetar badges ao regerar)
    */
-  async getAppliedActions(tenantId: string, listingId: string): Promise<AppliedActionResult[]> {
+  async getAppliedActions(
+    tenantId: string, 
+    listingId: string,
+    analysisCreatedAt?: Date | null
+  ): Promise<AppliedActionResult[]> {
+    const where: any = {
+      tenant_id: tenantId,
+      listing_id: listingId,
+    };
+
+    // HOTFIX: Se analysisCreatedAt for fornecido, filtrar apenas ações aplicadas após a análise
+    // Isso permite que ao regerar análise, os badges sejam resetados
+    if (analysisCreatedAt) {
+      where.applied_at = {
+        gte: analysisCreatedAt,
+      };
+    }
+
     const actions = await prisma.appliedAction.findMany({
-      where: {
-        tenant_id: tenantId,
-        listing_id: listingId,
-      },
+      where,
       orderBy: {
         applied_at: 'desc',
       },

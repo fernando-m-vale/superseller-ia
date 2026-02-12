@@ -26,11 +26,13 @@ export function formatMoneyBRL(value: number | null | undefined): string {
 /**
  * Constrói texto de promoção determinístico
  * 
+ * REGRA DE OURO: NUNCA calcular preços. Apenas exibir valores vindos do marketplace/DB.
+ * 
  * Regras:
  * - Se hasPromotion && originalPrice && finalPrice && originalPrice > finalPrice:
  *     return `de ${formatMoneyBRL(original)} por ${formatMoneyBRL(final)}`
- * - Se hasPromotion && finalPrice:
- *     return `por ${formatMoneyBRL(final)}`
+ * - Se hasPromotion && finalPrice MAS NÃO tem originalPrice:
+ *     return null (NÃO inventar "de X por Y", não usar "por Y" isolado)
  * - Se original == final, NUNCA retornar "de ... por ...", usar apenas "por ..."
  * - Senão return null
  */
@@ -50,7 +52,8 @@ export function buildPromoText(params: {
     return null;
   }
 
-  // Se tem originalPrice válido e é maior que finalPrice, usar formato "de X por Y"
+  // HOTFIX: Se tem originalPrice válido e é maior que finalPrice, usar formato "de X por Y"
+  // IMPORTANTE: Só montar "de X por Y" se TIVER AMBOS os valores da fonte
   if (
     originalPrice !== null &&
     originalPrice !== undefined &&
@@ -60,8 +63,9 @@ export function buildPromoText(params: {
     return `de ${formatMoneyBRL(originalPrice)} por ${formatMoneyBRL(finalPrice)}`;
   }
 
-  // Caso contrário, usar apenas "por Y"
-  return `por ${formatMoneyBRL(finalPrice)}`;
+  // HOTFIX: Se não tem originalPrice, NÃO inventar "por Y" isolado
+  // Retornar null para que o sistema use fallback seguro (ex: "Promoção ativa: X% de desconto")
+  return null;
 }
 
 /**

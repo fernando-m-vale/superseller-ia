@@ -1000,16 +1000,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               };
             }
 
-            // DIA 06.2: Normalizar preços para cache também
-            const cacheOriginalPriceForDisplay = listing.has_promotion && listing.original_price
-              ? Number(listing.original_price)
-              : listing.original_price
-                ? Number(listing.original_price)
-                : Number(listing.price);
+            // HOTFIX: Normalizar preços para cache SEM fallback perigoso
+            let cacheOriginalPriceForDisplay: number | null = null;
+            if (listing.original_price) {
+              cacheOriginalPriceForDisplay = Number(listing.original_price);
+            }
+            // NUNCA fazer: cacheOriginalPriceForDisplay = listing.price quando hasPromotion
             
-            const cacheFinalPriceForDisplay = listing.has_promotion && listing.price_final
-              ? Number(listing.price_final)
-              : Number(listing.price);
+            let cacheFinalPriceForDisplay: number = Number(listing.price);
+            if (listing.has_promotion && listing.price_final) {
+              cacheFinalPriceForDisplay = Number(listing.price_final);
+            }
 
             // DIA 06.1: Calcular promoText determinístico para cache usando preços normalizados
             const cachePromoText = buildPromoText({
@@ -1055,9 +1056,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               checkedAt: cachePromoCheckedAt,
             };
 
-            // DIA 06.2: Adicionar pricingNormalized no cache também
+            // HOTFIX: Adicionar pricingNormalized no cache também
             cachePayload.pricingNormalized = {
-              originalPriceForDisplay: cacheOriginalPriceForDisplay,
+              originalPriceForDisplay: cacheOriginalPriceForDisplay ?? null,
               finalPriceForDisplay: cacheFinalPriceForDisplay,
               hasPromotion: listing.has_promotion ?? false,
             };
@@ -1148,17 +1149,19 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
 
-          // DIA 06.2: Normalizar preços para garantir consistência em toda UI
-          // Fonte de verdade única para preços originais/finais
-          const originalPriceForDisplay = listing.has_promotion && listing.original_price
-            ? Number(listing.original_price)
-            : listing.original_price
-              ? Number(listing.original_price)
-              : Number(listing.price);
+          // HOTFIX: Normalizar preços SEM fallback perigoso
+          // Regra de ouro: NUNCA usar price como original quando hasPromotion=true
+          // Se não tiver original_price da fonte, não inventar "de X por Y"
+          let originalPriceForDisplay: number | null = null;
+          if (listing.original_price) {
+            originalPriceForDisplay = Number(listing.original_price);
+          }
+          // NUNCA fazer: originalPriceForDisplay = listing.price quando hasPromotion
           
-          const finalPriceForDisplay = listing.has_promotion && listing.price_final
-            ? Number(listing.price_final)
-            : Number(listing.price);
+          let finalPriceForDisplay: number = Number(listing.price);
+          if (listing.has_promotion && listing.price_final) {
+            finalPriceForDisplay = Number(listing.price_final);
+          }
 
           // DIA 06.1: Calcular promoText determinístico usando preços normalizados
           const promoText = buildPromoText({
@@ -1283,9 +1286,30 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }
           }
 
-          // Buscar appliedActions para incluir na resposta
+          // HOTFIX: Buscar appliedActions filtrados por data da análise atual
+          // Isso permite resetar badges ao regerar análise
           const appliedActionService = new AppliedActionService();
-          const appliedActions = await appliedActionService.getAppliedActions(tenantId, listingId);
+          
+          // Buscar análise atual para obter data de criação
+          const currentAnalysis = await prisma.listingAIAnalysis.findFirst({
+            where: {
+              tenant_id: tenantId,
+              listing_id: listingId,
+              period_days: PERIOD_DAYS,
+              fingerprint,
+            },
+            select: {
+              created_at: true,
+            },
+          });
+          
+          // Filtrar apenas ações aplicadas após a criação desta análise
+          const appliedActions = await appliedActionService.getAppliedActions(
+            tenantId, 
+            listingId,
+            currentAnalysis?.created_at || null
+          );
+          
           responseData.appliedActions = appliedActions.map((action) => ({
             actionType: action.actionType,
             appliedAt: action.appliedAt.toISOString(),
@@ -1584,16 +1608,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
         // Generated Content (Dia 05) - conteúdo pronto para copy/paste
         cacheResponseData.generatedContent = cacheGeneratedContent;
-        // DIA 06.2: Normalizar preços para cache response também
-        const cacheResponseOriginalPriceForDisplay = listing.has_promotion && listing.original_price
-          ? Number(listing.original_price)
-          : listing.original_price
-            ? Number(listing.original_price)
-            : Number(listing.price);
+        // HOTFIX: Normalizar preços para cache response SEM fallback perigoso
+        let cacheResponseOriginalPriceForDisplay: number | null = null;
+        if (listing.original_price) {
+          cacheResponseOriginalPriceForDisplay = Number(listing.original_price);
+        }
+        // NUNCA fazer: cacheResponseOriginalPriceForDisplay = listing.price quando hasPromotion
         
-        const cacheResponseFinalPriceForDisplay = listing.has_promotion && listing.price_final
-          ? Number(listing.price_final)
-          : Number(listing.price);
+        let cacheResponseFinalPriceForDisplay: number = Number(listing.price);
+        if (listing.has_promotion && listing.price_final) {
+          cacheResponseFinalPriceForDisplay = Number(listing.price_final);
+        }
 
         // DIA 06.1: Calcular promoText determinístico para cache response usando preços normalizados
         const cacheResponsePromoText = buildPromoText({
@@ -1637,9 +1662,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           checkedAt: cacheResponsePromoCheckedAt,
         };
 
-        // DIA 06.2: Adicionar pricingNormalized no cache response também
+        // HOTFIX: Adicionar pricingNormalized no cache response também
         cacheResponseData.pricingNormalized = {
-          originalPriceForDisplay: cacheResponseOriginalPriceForDisplay,
+          originalPriceForDisplay: cacheResponseOriginalPriceForDisplay ?? null,
           finalPriceForDisplay: cacheResponseFinalPriceForDisplay,
           hasPromotion: listing.has_promotion ?? false,
         };
@@ -1737,9 +1762,29 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           }
         }
 
-        // Buscar appliedActions para incluir na resposta (cache também)
+        // HOTFIX: Buscar appliedActions filtrados por data da análise do cache
         const appliedActionService = new AppliedActionService();
-        const appliedActions = await appliedActionService.getAppliedActions(tenantId, listingId);
+        
+        // Buscar análise do cache para obter data de criação
+        const cachedAnalysis = await prisma.listingAIAnalysis.findFirst({
+          where: {
+            tenant_id: tenantId,
+            listing_id: listingId,
+            period_days: PERIOD_DAYS,
+            fingerprint,
+          },
+          select: {
+            created_at: true,
+          },
+        });
+        
+        // Filtrar apenas ações aplicadas após a criação desta análise
+        const appliedActions = await appliedActionService.getAppliedActions(
+          tenantId, 
+          listingId,
+          cachedAnalysis?.created_at || null
+        );
+        
         cacheResponseData.appliedActions = appliedActions.map((action) => ({
           actionType: action.actionType,
           appliedAt: action.appliedAt.toISOString(),
