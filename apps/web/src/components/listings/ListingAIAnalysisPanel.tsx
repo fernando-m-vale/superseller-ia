@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Target, Zap, Flame, Brain, TrendingDown, CheckCircle2, ArrowRight } from 'lucide-react'
+import React, { useState } from 'react'
+import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,12 +10,79 @@ import { Separator } from '@/components/ui/separator'
 import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent } from '@/lib/ai/normalizeAiAnalyze'
 import { useToast } from '@/hooks/use-toast'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
-import { PromotionHighlightPanel, type PromotionPlacementItem } from '@/components/ai/PromotionHighlightPanel'
 import { BenchmarkPanel } from '@/components/ai/BenchmarkPanel'
 import { BenchmarkInsightsPanel } from '@/components/ai/BenchmarkInsightsPanel'
-import { GeneratedContentPanel } from '@/components/ai/GeneratedContentPanel'
 import { ApplyActionModal } from '@/components/ai/ApplyActionModal'
-import { useApplyAction } from '@/hooks/use-apply-action'
+import { useApplyAction, type ActionType } from '@/hooks/use-apply-action'
+import { ActionPlanChecklist } from '@/components/ai/ActionPlanChecklist'
+
+// Template padronizado para seções
+type SectionTemplateProps = {
+  icon: React.ElementType
+  title: string | React.ReactNode
+  diagnostic: React.ReactNode
+  impact: React.ReactNode
+  actions: React.ReactNode
+}
+
+const SectionTemplate = ({
+  icon: Icon,
+  title,
+  diagnostic,
+  impact,
+  actions,
+}: SectionTemplateProps) => {
+  return (
+    <Card className="border-l-4 border-l-primary">
+      <CardHeader className="pb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Icon className="h-5 w-5 text-primary" />
+          </div>
+          <CardTitle className="text-lg">{typeof title === 'string' ? title : title}</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Diagnóstico */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Brain className="h-4 w-4 text-primary" />
+            <span>🔍 Diagnóstico</span>
+          </div>
+          <div className="pl-6 text-sm leading-relaxed text-foreground">
+            {diagnostic}
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Impacto */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <TrendingDown className="h-4 w-4 text-orange-500" />
+            <span>📉 Impacto</span>
+          </div>
+          <div className="pl-6 text-sm leading-relaxed text-muted-foreground">
+            {impact}
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Ações Concretas */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <span>✅ Ações Concretas</span>
+          </div>
+          <div className="pl-6">
+            {actions}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -76,26 +143,42 @@ export function ListingAIAnalysisPanel({
   appliedActions = [],
   benchmark,
   benchmarkInsights,
-  generatedContent,
   onRegenerate,
   isRegenerating = false,
 }: ListingAIAnalysisPanelProps) {
   const { toast } = useToast()
   const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
   const [applyModalOpen, setApplyModalOpen] = useState(false)
-  const [applyModalActionType, setApplyModalActionType] = useState<'seo' | 'midia' | 'cadastro' | 'competitividade'>('seo')
+  const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
   const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
   const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
   
   const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
 
-  // Verificar se ação já foi aplicada
+  // DIA 06.1: Verificar se ação já foi aplicada (com compatibilidade)
   const isActionApplied = (actionType: string) => {
-    return appliedActions.some(action => action.actionType === actionType)
+    // Verificar ação específica
+    if (appliedActions.some(action => action.actionType === actionType)) {
+      return true;
+    }
+    
+    // Compatibilidade: se procurar "seo", verificar "seo_title" ou "seo_description"
+    if (actionType === 'seo') {
+      return appliedActions.some(action => 
+        action.actionType === 'seo_title' || action.actionType === 'seo_description'
+      );
+    }
+    
+    // Compatibilidade: se procurar "midia", verificar "media_images"
+    if (actionType === 'midia') {
+      return appliedActions.some(action => action.actionType === 'media_images');
+    }
+    
+    return false;
   }
 
   const handleOpenApplyModal = (
-    actionType: 'seo' | 'midia' | 'cadastro' | 'competitividade',
+    actionType: ActionType,
     before: string | React.ReactNode,
     after: string | React.ReactNode
   ) => {
@@ -190,116 +273,7 @@ export function ListingAIAnalysisPanel({
     }
   }
 
-  // Build promotion placement suggestions when promo is active
-  const promoPlacements: PromotionPlacementItem[] = (() => {
-    if (!listingHasPromotion) return []
-    const origPrice = listingPriceBase ?? listingPrice ?? 0
-    const finPrice = listingPriceFinal ?? origPrice
-    const pct = listingDiscountPercent
-      ? `${Math.round(listingDiscountPercent)}%`
-      : origPrice > 0
-        ? `${Math.round((1 - finPrice / origPrice) * 100)}%`
-        : '0%'
-    const label = `De R$ ${origPrice.toFixed(2)} por R$ ${finPrice.toFixed(2)}`
-    return [
-      {
-        id: 'promo_cover',
-        title: 'Selo de desconto na imagem de capa',
-        where: 'Imagem de capa do anuncio',
-        how: `Adicionar selo visual simples com '${pct} OFF' ou '${label}'.`,
-        constraints: ['Texto curto', 'Alta legibilidade', 'Nao poluir a imagem'],
-        exampleText: `${pct} OFF - ${label}`,
-      },
-      {
-        id: 'promo_secondary_image',
-        title: 'Banner de promocao na imagem 2 ou 3',
-        where: 'Imagem 2 ou 3 do anuncio',
-        how: `Criar imagem informativa com o preco promocional (${label}) e destaque visual do desconto.`,
-        constraints: ['Nao repetir a capa', 'Fundo limpo', 'Foco no preco e beneficio'],
-        exampleText: `Aproveite: ${label} - ${pct} de desconto`,
-      },
-      {
-        id: 'promo_description',
-        title: 'Destaque nas primeiras linhas da descricao',
-        where: 'Primeiras linhas da descricao do anuncio',
-        how: 'Incluir frase sobre a promocao ativa logo no inicio da descricao, antes dos detalhes do produto.',
-        constraints: ['Sem emojis', 'Sem markdown', 'Texto simples e direto'],
-        exampleText: `Promocao ativa: de R$ ${origPrice.toFixed(2)} por R$ ${finPrice.toFixed(2)} enquanto durar a oferta.`,
-      },
-      {
-        id: 'promo_seo_rule',
-        title: 'Regra de SEO - nao usar preco no titulo',
-        where: 'Titulo do anuncio',
-        how: 'Nao incluir valores monetarios no titulo. O algoritmo do Mercado Livre penaliza titulos com preco. Deixe o destaque de preco para imagens e descricao.',
-        constraints: ['Titulo sem cifrao ou valores', 'Manter keywords relevantes', 'Maximo 60 caracteres'],
-        exampleText: '',
-      },
-    ]
-  })()
-
-  // Template padronizado para seções
-  const SectionTemplate = ({
-    icon: Icon,
-    title,
-    diagnostic,
-    impact,
-    actions,
-  }: {
-    icon: React.ElementType
-    title: string | React.ReactNode
-    diagnostic: React.ReactNode
-    impact: React.ReactNode
-    actions: React.ReactNode
-  }) => (
-    <Card className="border-l-4 border-l-primary">
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
-          <CardTitle className="text-lg">{typeof title === 'string' ? title : title}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Diagnóstico */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Brain className="h-4 w-4 text-primary" />
-            <span>🔍 Diagnóstico</span>
-          </div>
-          <div className="pl-6 text-sm leading-relaxed text-foreground">
-            {diagnostic}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Impacto */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <TrendingDown className="h-4 w-4 text-orange-500" />
-            <span>📉 Impacto</span>
-          </div>
-          <div className="pl-6 text-sm leading-relaxed text-muted-foreground">
-            {impact}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Ações Concretas */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span>✅ Ações Concretas</span>
-          </div>
-          <div className="pl-6">
-            {actions}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
+  // DIA 06.1: promoPlacements removido (não mais usado após remoção do PromotionHighlightPanel)
 
   return (
     <div className="space-y-6 p-6 bg-background">
@@ -396,96 +370,109 @@ export function ListingAIAnalysisPanel({
 
       {/* 1️⃣ TÍTULO — DIAGNÓSTICO + AÇÃO */}
       {analysisV21.titleFix && (
-        <SectionTemplate
-          icon={Tag}
-          title="1️⃣ Título — Diagnóstico + Ação"
-          diagnostic={<p>{analysisV21.titleFix.problem}</p>}
-          impact={<p>{analysisV21.titleFix.impact}</p>}
-          actions={
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Antes:</p>
-                <Textarea
-                  readOnly
-                  value={analysisV21.titleFix.before}
-                  className="text-sm min-h-[60px] bg-muted/50"
-                />
+        <div id="section-title">
+          <SectionTemplate
+            icon={Tag}
+            title={
+              <div className="flex items-center justify-between w-full">
+                <span>1️⃣ Título — Diagnóstico + Ação</span>
+                {isActionApplied('seo_title') && (
+                  <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Implementado
+                  </Badge>
+                )}
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-muted-foreground">Depois (otimizado):</p>
-                  <div className="flex items-center gap-2">
-                    {!isActionApplied('seo') && analysisV21.titleFix && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleOpenApplyModal(
-                          'seo',
-                          analysisV21.titleFix!.before,
-                          analysisV21.titleFix!.after
-                        )}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Aplicar Sugestão
-                      </Button>
-                    )}
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handleCopy(analysisV21.titleFix!.after, 'Título')}
-                      className="bg-primary hover:bg-primary/90"
-                    >
-                      {copiedTexts.has(analysisV21.titleFix.after) ? (
-                        <>
-                          <Check className="h-4 w-4 mr-2 text-white" />
-                          Copiado
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copiar título
-                        </>
-                      )}
-                    </Button>
-                  </div>
+            }
+            diagnostic={<p>{analysisV21.titleFix.problem}</p>}
+            impact={<p>{analysisV21.titleFix.impact}</p>}
+            actions={
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Antes:</p>
+                  <Textarea
+                    readOnly
+                    value={analysisV21.titleFix.before}
+                    className="text-sm min-h-[60px] bg-muted/50"
+                  />
                 </div>
-                <Textarea
-                  readOnly
-                  value={analysisV21.titleFix.after}
-                  className="text-sm min-h-[60px] bg-primary/5 border-2 border-primary/20 font-medium"
-                />
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-muted-foreground">Depois (otimizado):</p>
+                    <div className="flex items-center gap-2">
+                      {!isActionApplied('seo_title') && analysisV21.titleFix && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenApplyModal(
+                            'seo_title',
+                            analysisV21.titleFix!.before,
+                            analysisV21.titleFix!.after
+                          )}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Aplicar Sugestão
+                        </Button>
+                      )}
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleCopy(analysisV21.titleFix!.after, 'Título')}
+                        className="bg-primary hover:bg-primary/90"
+                      >
+                        {copiedTexts.has(analysisV21.titleFix.after) ? (
+                          <>
+                            <Check className="h-4 w-4 mr-2 text-white" />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copiar título
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <Textarea
+                    readOnly
+                    value={analysisV21.titleFix.after}
+                    className="text-sm min-h-[60px] bg-primary/5 border-2 border-primary/20 font-medium"
+                  />
+                </div>
+                {editUrl && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenEdit}
+                    className="w-full"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Abrir anúncio para editar título
+                  </Button>
+                )}
               </div>
-              {editUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenEdit}
-                  className="w-full"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir anúncio para editar título
-                </Button>
-              )}
-            </div>
-          }
-        />
+            }
+          />
+        </div>
       )}
 
       {/* 2️⃣ IMAGENS — DIAGNÓSTICO + AÇÃO */}
       {analysisV21.imagePlan && analysisV21.imagePlan.length > 0 && (
-        <SectionTemplate
-          icon={ImageIcon}
-          title={
-            <div className="flex items-center justify-between w-full">
-              <span>2️⃣ Imagens — Diagnóstico + Ação</span>
-              {isActionApplied('midia') && (
-                <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Implementado
-                </Badge>
-              )}
-            </div>
-          }
+        <div id="section-images">
+          <SectionTemplate
+            icon={ImageIcon}
+            title={
+              <div className="flex items-center justify-between w-full">
+                <span>2️⃣ Imagens — Diagnóstico + Ação</span>
+                {isActionApplied('media_images') && (
+                  <Badge variant="default" className="bg-green-600 hover:bg-green-700">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Implementado
+                  </Badge>
+                )}
+              </div>
+            }
           diagnostic={<p>Sequência de imagens pode melhorar conversão</p>}
           impact={<p>Imagens fortes elevam CTR e conversão.</p>}
           actions={
@@ -504,12 +491,12 @@ export function ListingAIAnalysisPanel({
                 ))}
               </ol>
               <div className="flex items-center gap-2">
-                {!isActionApplied('midia') && analysisV21.imagePlan && (
+                {!isActionApplied('media_images') && analysisV21.imagePlan && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleOpenApplyModal(
-                      'midia',
+                      'media_images',
                       'Plano de imagens atual',
                       analysisV21.imagePlan!.map(item => `Imagem ${item.image}: ${item.action}`).join('\n')
                     )}
@@ -524,7 +511,7 @@ export function ListingAIAnalysisPanel({
                     variant="outline"
                     size="sm"
                     onClick={handleOpenEdit}
-                    className={isActionApplied('midia') ? 'w-full' : 'flex-1'}
+                    className={isActionApplied('media_images') ? 'w-full' : 'flex-1'}
                   >
                     <ExternalLink className="h-4 w-4 mr-2" />
                     Abrir anúncio para editar imagens
@@ -534,6 +521,7 @@ export function ListingAIAnalysisPanel({
             </div>
           }
         />
+        </div>
       )}
 
       {/* 3️⃣ DESCRIÇÃO — SEO + CONVERSÃO */}
@@ -543,7 +531,7 @@ export function ListingAIAnalysisPanel({
           title={
             <div className="flex items-center justify-between w-full">
               <span>3️⃣ Descrição — SEO + Conversão</span>
-              {isActionApplied('seo') && (
+              {isActionApplied('seo_title') && (
                 <Badge variant="default" className="bg-green-600 hover:bg-green-700">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   Implementado
@@ -558,12 +546,12 @@ export function ListingAIAnalysisPanel({
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium text-foreground">Descrição otimizada:</p>
                 <div className="flex items-center gap-2">
-                  {!isActionApplied('seo') && analysisV21.descriptionFix && (
+                  {!isActionApplied('seo_description') && analysisV21.descriptionFix && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleOpenApplyModal(
-                        'seo',
+                        'seo_description',
                         listingTitle || 'Descrição atual não disponível',
                         analysisV21.descriptionFix!.optimizedCopy
                       )}
@@ -613,20 +601,12 @@ export function ListingAIAnalysisPanel({
         />
       )}
 
-      {/* 4 PRECO / PROMOCAO — BLOCO ACIONAVEL */}
-      <PromotionHighlightPanel
-        hasPromotion={!!listingHasPromotion}
-        originalPrice={listingPriceBase ?? listingPrice}
-        finalPrice={listingPriceFinal ?? undefined}
-        discountPercent={listingDiscountPercent}
-        placements={promoPlacements}
-      />
-
+      {/* DIA 06.1: Removido bloco Preço/Promoção (duplicação) - promo já está incorporado nas seções */}
+      
       {/* 5️⃣ COMPARAÇÃO COM CONCORRENTES — BENCHMARK INSIGHTS (Dia 05) */}
       {benchmarkInsights && <BenchmarkInsightsPanel benchmarkInsights={benchmarkInsights} />}
 
-      {/* 6️⃣ CONTEÚDO GERADO — PRONTO PARA COPY/PASTE (Dia 05) */}
-      {generatedContent && <GeneratedContentPanel generatedContent={generatedContent} />}
+      {/* DIA 06.1: Conteúdo Gerado removido como bloco separado - será incorporado nas seções */}
 
       {/* COMPARAÇÃO COM CONCORRENTES — BENCHMARK (legado, mantido para compatibilidade) */}
       {benchmark && !benchmarkInsights && <BenchmarkPanel benchmark={benchmark} />}
@@ -713,29 +693,56 @@ export function ListingAIAnalysisPanel({
         />
       )}
 
-      {/* 🧨 PLANO FINAL — AÇÕES PRIORITÁRIAS (CHECKLIST VISUAL) */}
+      {/* 📋 PLANO DE EXECUÇÃO — CHECKLIST COM STATUS (DIA 06.1) */}
       {analysisV21.finalActionPlan && analysisV21.finalActionPlan.length > 0 && (
-        <SectionTemplate
-          icon={Target}
-          title="🧨 Plano Final — Ações Prioritárias"
-          diagnostic={<p>Plano priorizado para execução</p>}
-          impact={<p>Executar em ordem tende a maximizar impacto.</p>}
-          actions={
-            <div className="space-y-3">
-              {analysisV21.finalActionPlan.map((action, idx) => (
-                <div key={idx} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                  <div className="flex-shrink-0 mt-0.5">
-                    <div className="w-5 h-5 rounded border-2 border-primary flex items-center justify-center">
-                      <CheckCircle2 className="h-4 w-4 text-primary opacity-0" />
-                    </div>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{action}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          }
+        <ActionPlanChecklist
+          items={analysisV21.finalActionPlan.slice(0, 8).map((action, idx) => {
+            // Mapear ações para actionTypes baseado no conteúdo
+            let actionType: ActionType | null = null
+            let sectionId: string | undefined
+            
+            const actionLower = action.toLowerCase()
+            
+            if (actionLower.includes('título') || actionLower.includes('titulo') || actionLower.includes('title')) {
+              actionType = 'seo_title'
+              sectionId = 'section-title'
+            } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
+              actionType = 'seo_description'
+              sectionId = 'section-description'
+            } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
+              actionType = 'media_images'
+              sectionId = 'section-images'
+            } else if (actionLower.includes('selo') || actionLower.includes('capa')) {
+              actionType = 'promo_cover_badge'
+            } else if (actionLower.includes('banner')) {
+              actionType = 'promo_banner'
+            }
+            
+            return {
+              id: `action-${idx}`,
+              title: action,
+              actionType,
+              sectionId,
+              mlDeeplink: editUrl || undefined,
+            }
+          })}
+          appliedActions={appliedActions}
+          onApplyAction={(actionType, before, after) => {
+            handleOpenApplyModal(actionType, before, after)
+          }}
+          onScrollToSection={(sectionId) => {
+            // Scroll para a seção correspondente
+            const element = document.getElementById(sectionId)
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              // Highlight visual temporário
+              element.classList.add('ring-2', 'ring-primary', 'ring-offset-2')
+              setTimeout(() => {
+                element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
+              }, 2000)
+            }
+          }}
+          editUrl={editUrl}
         />
       )}
 

@@ -25,10 +25,15 @@ interface ApplyActionModalProps {
 }
 
 const actionTypeLabels: Record<ActionType, string> = {
-  seo: 'SEO',
-  midia: 'Mídia',
-  cadastro: 'Cadastro',
-  competitividade: 'Competitividade',
+  seo_title: 'Título SEO',
+  seo_description: 'Descrição SEO',
+  media_images: 'Plano de Imagens',
+  promo_cover_badge: 'Selo de Desconto',
+  promo_banner: 'Banner Promocional',
+  seo: 'SEO', // Compatibilidade
+  midia: 'Mídia', // Compatibilidade
+  cadastro: 'Cadastro', // Compatibilidade
+  competitividade: 'Competitividade', // Compatibilidade
 }
 
 export function ApplyActionModal({

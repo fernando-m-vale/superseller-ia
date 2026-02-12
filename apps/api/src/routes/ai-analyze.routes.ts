@@ -25,6 +25,7 @@ import { normalizeBenchmarkInsights } from '../services/BenchmarkInsightsService
 import { generateListingContent } from '../services/GeneratedContentService';
 import { getBooleanEnv } from '../utils/env-parser';
 import { AppliedActionService } from '../services/AppliedActionService';
+import { buildPromoText, formatMoneyBRL, sanitizePromoText, removeEmojis, removePricesFromTitle } from '../utils/promo-text';
 import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
 import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 
@@ -999,7 +1000,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               };
             }
 
-            // Incluir promo estruturado no cachePayload (HOTFIX P0)
+            // DIA 06.1: Calcular promoText determinístico para cache
+            const cachePromoText = buildPromoText({
+              hasPromotion: listing.has_promotion ?? false,
+              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              finalPrice: listing.price_final ? Number(listing.price_final) : null,
+            });
+
+            // DIA 06.1: Sanitizar generatedContent antes de salvar no cache
+            if (generatedContent) {
+              // Remover emojis da descrição longa
+              if (generatedContent.seoDescription?.long) {
+                generatedContent.seoDescription.long = removeEmojis(generatedContent.seoDescription.long);
+                // Sanitizar promo text na descrição
+                generatedContent.seoDescription.long = sanitizePromoText(
+                  generatedContent.seoDescription.long,
+                  cachePromoText
+                );
+              }
+              // Remover preços dos títulos
+              if (generatedContent.titles) {
+                generatedContent.titles = generatedContent.titles.map(title => ({
+                  ...title,
+                  text: removePricesFromTitle(title.text),
+                }));
+              }
+            }
+
+            // Incluir promo estruturado no cachePayload (HOTFIX P0 + DIA 06.1)
             cachePayload.benchmarkInsights = benchmarkInsights;
             cachePayload.generatedContent = generatedContent;
             // HOTFIX P0: checkedAt deve refletir coleta atual
@@ -1011,6 +1039,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               originalPrice: listing.original_price ? Number(listing.original_price) : null,
               finalPrice: listing.price_final ? Number(listing.price_final) : null,
               discountPercent: listing.discount_percent,
+              promoText: cachePromoText, // DIA 06.1: texto determinístico
               source: 'listing_db_or_ml_prices',
               checkedAt: cachePromoCheckedAt,
             };
@@ -1101,12 +1130,32 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
 
-          // Adicionar objeto promo estruturado (HOTFIX P0)
+          // DIA 06.1: Calcular promoText determinístico
+          const promoText = buildPromoText({
+            hasPromotion: listing.has_promotion ?? false,
+            originalPrice: listing.original_price ? Number(listing.original_price) : null,
+            finalPrice: listing.price_final ? Number(listing.price_final) : null,
+          });
+
+          // DIA 06.1: Sanitizar analysisV21.descriptionFix.optimizedCopy se existir
+          if (analysisV21?.description_fix?.optimized_copy) {
+            const sanitizedDescription = sanitizePromoText(
+              analysisV21.description_fix.optimized_copy,
+              promoText
+            );
+            // Atualizar no objeto analysisV21
+            if (analysisV21.description_fix) {
+              analysisV21.description_fix.optimized_copy = sanitizedDescription;
+            }
+          }
+
+          // Adicionar objeto promo estruturado (HOTFIX P0 + DIA 06.1)
           responseData.promo = {
             hasPromotion: listing.has_promotion ?? false,
             originalPrice: listing.original_price ? Number(listing.original_price) : null,
             finalPrice: listing.price_final ? Number(listing.price_final) : null,
             discountPercent: listing.discount_percent,
+            promoText, // DIA 06.1: texto determinístico de promoção
             source: 'listing_db_or_ml_prices',
             checkedAt: listing.promotion_checked_at?.toISOString() || null,
           };
@@ -1498,7 +1547,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
         // Generated Content (Dia 05) - conteúdo pronto para copy/paste
         cacheResponseData.generatedContent = cacheGeneratedContent;
-        // Promo estruturado (HOTFIX P0)
+        // DIA 06.1: Calcular promoText determinístico para cache response
+        const cacheResponsePromoText = buildPromoText({
+          hasPromotion: listing.has_promotion ?? false,
+          originalPrice: listing.original_price ? Number(listing.original_price) : null,
+          finalPrice: listing.price_final ? Number(listing.price_final) : null,
+        });
+
+        // DIA 06.1: Sanitizar generatedContent do cache se existir
+        if (cacheGeneratedContent) {
+          // Remover emojis da descrição longa
+          if (cacheGeneratedContent.seoDescription?.long) {
+            cacheGeneratedContent.seoDescription.long = removeEmojis(cacheGeneratedContent.seoDescription.long);
+            // Sanitizar promo text na descrição
+            cacheGeneratedContent.seoDescription.long = sanitizePromoText(
+              cacheGeneratedContent.seoDescription.long,
+              cacheResponsePromoText
+            );
+          }
+          // Remover preços dos títulos
+          if (cacheGeneratedContent.titles) {
+            cacheGeneratedContent.titles = cacheGeneratedContent.titles.map(title => ({
+              ...title,
+              text: removePricesFromTitle(title.text),
+            }));
+          }
+        }
+
+        // Promo estruturado (HOTFIX P0 + DIA 06.1)
         // HOTFIX P0: checkedAt deve refletir coleta atual (updated_at ou promotion_checked_at)
         const cacheResponsePromoCheckedAt = listing.promotion_checked_at?.toISOString() 
           || listing.updated_at?.toISOString() 
@@ -1508,6 +1584,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           originalPrice: listing.original_price ? Number(listing.original_price) : null,
           finalPrice: listing.price_final ? Number(listing.price_final) : null,
           discountPercent: listing.discount_percent,
+          promoText: cacheResponsePromoText, // DIA 06.1: texto determinístico
           source: 'listing_db_or_ml_prices',
           checkedAt: cacheResponsePromoCheckedAt,
         };

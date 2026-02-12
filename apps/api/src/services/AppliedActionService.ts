@@ -9,10 +9,22 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// DIA 06.1: ActionTypes granulares para melhor rastreamento
+export type ActionType = 
+  | 'seo_title'        // Título SEO
+  | 'seo_description' // Descrição SEO
+  | 'media_images'    // Plano de imagens
+  | 'promo_cover_badge' // Selo de desconto na capa
+  | 'promo_banner'    // Banner promo imagem 2/3
+  | 'seo'             // Compatibilidade: seo_title + seo_description
+  | 'midia'           // Compatibilidade: media_images
+  | 'cadastro'        // Compatibilidade legado
+  | 'competitividade'; // Compatibilidade legado
+
 export interface ApplyActionInput {
   tenantId: string;
   listingId: string;
-  actionType: 'seo' | 'midia' | 'cadastro' | 'competitividade';
+  actionType: ActionType;
   beforePayload: Record<string, unknown>;
   afterPayload: Record<string, unknown>;
 }
@@ -105,12 +117,14 @@ export class AppliedActionService {
 
   /**
    * Verifica se uma ação específica foi aplicada
+   * DIA 06.1: Suporta compatibilidade com actionTypes legados
    */
   async isActionApplied(
     tenantId: string,
     listingId: string,
-    actionType: 'seo' | 'midia' | 'cadastro' | 'competitividade'
+    actionType: ActionType
   ): Promise<boolean> {
+    // Verificar ação específica primeiro
     const action = await prisma.appliedAction.findUnique({
       where: {
         tenant_id_listing_id_action_type: {
@@ -121,6 +135,48 @@ export class AppliedActionService {
       },
     });
 
-    return action !== null;
+    if (action) {
+      return true;
+    }
+
+    // DIA 06.1: Compatibilidade com actionTypes legados
+    // Se procurar "seo", verificar se existe "seo_title" ou "seo_description"
+    if (actionType === 'seo') {
+      const seoTitle = await prisma.appliedAction.findUnique({
+        where: {
+          tenant_id_listing_id_action_type: {
+            tenant_id: tenantId,
+            listing_id: listingId,
+            action_type: 'seo_title',
+          },
+        },
+      });
+      const seoDescription = await prisma.appliedAction.findUnique({
+        where: {
+          tenant_id_listing_id_action_type: {
+            tenant_id: tenantId,
+            listing_id: listingId,
+            action_type: 'seo_description',
+          },
+        },
+      });
+      return seoTitle !== null || seoDescription !== null;
+    }
+
+    // Se procurar "midia", verificar se existe "media_images"
+    if (actionType === 'midia') {
+      const mediaImages = await prisma.appliedAction.findUnique({
+        where: {
+          tenant_id_listing_id_action_type: {
+            tenant_id: tenantId,
+            listing_id: listingId,
+            action_type: 'media_images',
+          },
+        },
+      });
+      return mediaImages !== null;
+    }
+
+    return false;
   }
 }

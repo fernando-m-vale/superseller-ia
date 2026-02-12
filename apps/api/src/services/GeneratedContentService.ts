@@ -193,36 +193,37 @@ function generateSeoDescription(
   short = short.substring(0, 200);
 
   // Long description (até 1000 caracteres)
+  // DIA 06.1: SEM emojis (removidos)
   let long = `${mainKeywords}.\n\n`;
   
-  // Seção de benefícios
-  long += '✨ BENEFÍCIOS:\n';
+  // Seção de benefícios (sem emojis)
+  long += 'BENEFICIOS:\n';
   if (listing.picturesCount >= 5) {
     long += `• Veja ${listing.picturesCount} imagens detalhadas do produto\n`;
   }
   if (listing.hasClips === true) {
-    long += '• Vídeo demonstrativo disponível\n';
+    long += '• Video demonstrativo disponivel\n';
   }
   if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
     long += `• ${listing.discountPercent}% de desconto\n`;
   }
   long += '• Produto de qualidade com garantia\n';
-  long += '• Envio rápido e seguro para todo o Brasil\n\n';
+  long += '• Envio rapido e seguro para todo o Brasil\n\n';
 
   // Seção de informações adicionais (baseado em gaps)
   const conversionGap = criticalGaps.find(g => g.id === 'gap_conversion_vs_promo');
   if (conversionGap) {
-    long += '💡 DICA: Este produto está em promoção. Aproveite enquanto dura!\n\n';
+    long += 'DICA: Este produto esta em promocao. Aproveite enquanto dura!\n\n';
   }
 
-  // Seção de confiança
-  long += '🛡️ COMPRE COM CONFIANÇA:\n';
+  // Seção de confiança (sem emojis)
+  long += 'COMPRE COM CONFIANCA:\n';
   long += '• Produto original e de qualidade\n';
   long += '• Atendimento especializado\n';
   long += '• Garantia do vendedor\n\n';
 
-  // CTA
-  long += '👉 Não perca esta oportunidade! Adicione ao carrinho agora.';
+  // CTA (sem emojis)
+  long += 'Nao perca esta oportunidade! Adicione ao carrinho agora.';
 
   // Limitar a 1000 caracteres
   long = long.substring(0, 1000);

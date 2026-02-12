@@ -4,7 +4,16 @@ import { useState } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 
-export type ActionType = 'seo' | 'midia' | 'cadastro' | 'competitividade'
+export type ActionType = 
+  | 'seo_title'
+  | 'seo_description'
+  | 'media_images'
+  | 'promo_cover_badge'
+  | 'promo_banner'
+  | 'seo' // Compatibilidade
+  | 'midia' // Compatibilidade
+  | 'cadastro' // Compatibilidade
+  | 'competitividade' // Compatibilidade
 
 export interface ApplyActionInput {
   actionType: ActionType
