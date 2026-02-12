@@ -154,11 +154,84 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         const { listingId } = req.params as { listingId: string };
-        const body = z.object({
-          actionType: z.enum(['seo', 'midia', 'cadastro', 'competitividade']),
-          beforePayload: z.record(z.unknown()),
-          afterPayload: z.record(z.unknown()),
-        }).parse(req.body);
+        
+        // DIA 06.3: Aceitar payload flexível e actionTypes granulares
+        const rawBody = req.body as any;
+        
+        // Normalizar actionType (aceitar actionType ou action_type)
+        const actionTypeRaw = rawBody.actionType || rawBody.action_type;
+        if (!actionTypeRaw) {
+          return reply.status(400).send({ 
+            error: 'Missing actionType',
+            message: 'Campo actionType é obrigatório'
+          });
+        }
+
+        // Validar actionType (granular + legacy)
+        const validActionTypes = [
+          'seo_title', 'seo_description', 'media_images',
+          'promo_cover_badge', 'promo_banner',
+          'seo', 'midia', 'cadastro', 'competitividade'
+        ];
+        if (!validActionTypes.includes(actionTypeRaw)) {
+          return reply.status(400).send({ 
+            error: `Invalid actionType: ${actionTypeRaw}`,
+            message: `actionType deve ser um dos: ${validActionTypes.join(', ')}`
+          });
+        }
+
+        // Normalizar beforePayload (aceitar beforePayload, before, before_payload)
+        let beforePayload: Record<string, unknown> = {};
+        if (rawBody.beforePayload) {
+          beforePayload = typeof rawBody.beforePayload === 'object' && !Array.isArray(rawBody.beforePayload)
+            ? rawBody.beforePayload
+            : { value: rawBody.beforePayload };
+        } else if (rawBody.before) {
+          beforePayload = typeof rawBody.before === 'object' && !Array.isArray(rawBody.before)
+            ? rawBody.before
+            : { value: rawBody.before };
+        } else if (rawBody.before_payload) {
+          beforePayload = typeof rawBody.before_payload === 'object' && !Array.isArray(rawBody.before_payload)
+            ? rawBody.before_payload
+            : { value: rawBody.before_payload };
+        }
+
+        // Normalizar afterPayload (aceitar afterPayload, after, after_payload)
+        let afterPayload: Record<string, unknown> = {};
+        if (rawBody.afterPayload) {
+          afterPayload = typeof rawBody.afterPayload === 'object' && !Array.isArray(rawBody.afterPayload)
+            ? rawBody.afterPayload
+            : { value: rawBody.afterPayload };
+        } else if (rawBody.after) {
+          afterPayload = typeof rawBody.after === 'object' && !Array.isArray(rawBody.after)
+            ? rawBody.after
+            : { value: rawBody.after };
+        } else if (rawBody.after_payload) {
+          afterPayload = typeof rawBody.after_payload === 'object' && !Array.isArray(rawBody.after_payload)
+            ? rawBody.after_payload
+            : { value: rawBody.after_payload };
+        }
+
+        // DIA 06.3: Se afterPayload vier como string, converter para objeto baseado no actionType
+        if (typeof afterPayload === 'string' || (Object.keys(afterPayload).length === 1 && afterPayload.value)) {
+          const afterValue = typeof afterPayload === 'string' ? afterPayload : String(afterPayload.value || '');
+          
+          if (actionTypeRaw === 'seo_title') {
+            afterPayload = { title: afterValue };
+          } else if (actionTypeRaw === 'seo_description') {
+            afterPayload = { description: afterValue };
+          } else if (actionTypeRaw === 'media_images') {
+            afterPayload = { plan: afterValue };
+          }
+        }
+
+        // Validar que afterPayload não está vazio
+        if (!afterPayload || Object.keys(afterPayload).length === 0) {
+          return reply.status(400).send({ 
+            error: 'Missing afterPayload',
+            message: 'Campo afterPayload é obrigatório e não pode estar vazio'
+          });
+        }
 
         const { AppliedActionService } = await import('../services/AppliedActionService');
         const service = new AppliedActionService();
@@ -166,9 +239,9 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         const result = await service.applyAction({
           tenantId,
           listingId,
-          actionType: body.actionType,
-          beforePayload: body.beforePayload,
-          afterPayload: body.afterPayload,
+          actionType: actionTypeRaw,
+          beforePayload,
+          afterPayload,
         });
 
         return reply.status(200).send({
@@ -176,14 +249,31 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           data: result,
         });
       } catch (error) {
-        app.log.error(error);
+        app.log.error({ error, listingId, tenantId }, 'Error applying action');
+        
+        // DIA 06.3: Mensagens de erro mais claras
         if (error instanceof z.ZodError) {
-          return reply.status(400).send({ error: 'Invalid input', details: error.errors });
+          const firstError = error.errors[0];
+          return reply.status(400).send({ 
+            error: firstError.message || 'Invalid input',
+            message: `Erro de validação: ${firstError.path.join('.')} - ${firstError.message}`,
+            details: error.errors
+          });
         }
-        if (error instanceof Error && error.message.includes('não encontrado')) {
-          return reply.status(404).send({ error: error.message });
+        if (error instanceof Error) {
+          if (error.message.includes('não encontrado')) {
+            return reply.status(404).send({ error: error.message });
+          }
+          // Retornar mensagem do erro se disponível
+          return reply.status(400).send({ 
+            error: error.message,
+            message: error.message
+          });
         }
-        return reply.status(500).send({ error: 'Failed to apply action' });
+        return reply.status(500).send({ 
+          error: 'Failed to apply action',
+          message: 'Erro interno ao registrar ação'
+        });
       }
     }
   );

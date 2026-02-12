@@ -61,15 +61,16 @@ export function ApplyActionModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>Registrar como aplicado - {actionTypeLabels[actionType]}</DialogTitle>
           <DialogDescription>
             Isso não altera automaticamente o anúncio no Mercado Livre. Apenas registra no SuperSeller IA.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        {/* DIA 06.3: Body scrollável */}
+        <div className="space-y-6 py-4 overflow-y-auto flex-1 min-h-0">
           {/* ANTES */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -108,7 +109,8 @@ export function ApplyActionModal({
           </div>
         </div>
 
-        <DialogFooter>
+        {/* DIA 06.3: Footer fixo */}
+        <DialogFooter className="flex-shrink-0 border-t pt-4 mt-4">
           <Button
             variant="outline"
             onClick={onClose}

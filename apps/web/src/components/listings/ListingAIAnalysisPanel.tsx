@@ -395,7 +395,7 @@ export function ListingAIAnalysisPanel({
 
       {/* 1️⃣ TÍTULO — DIAGNÓSTICO + AÇÃO */}
       {analysisV21.titleFix && (
-        <div id="section-title">
+        <div id="section-seo-title">
           <SectionTemplate
             icon={Tag}
             title={
@@ -484,7 +484,7 @@ export function ListingAIAnalysisPanel({
 
       {/* 2️⃣ IMAGENS — DIAGNÓSTICO + AÇÃO */}
       {analysisV21.imagePlan && analysisV21.imagePlan.length > 0 && (
-        <div id="section-images">
+        <div id="section-media-images">
           <SectionTemplate
             icon={ImageIcon}
             title={
@@ -551,12 +551,13 @@ export function ListingAIAnalysisPanel({
 
       {/* 3️⃣ DESCRIÇÃO — SEO + CONVERSÃO */}
       {analysisV21.descriptionFix && (
+        <div id="section-seo-description">
         <SectionTemplate
           icon={Sparkles}
           title={
             <div className="flex items-center justify-between w-full">
               <span>3️⃣ Descrição — SEO + Conversão</span>
-              {isActionApplied('seo_title') && (
+              {isActionApplied('seo_description') && (
                 <Badge variant="default" className="bg-green-600 hover:bg-green-700">
                   <CheckCircle2 className="h-3 w-3 mr-1" />
                   Implementado
@@ -624,6 +625,7 @@ export function ListingAIAnalysisPanel({
             </div>
           }
         />
+        </div>
       )}
 
       {/* DIA 06.1: Removido bloco Preço/Promoção (duplicação) - promo já está incorporado nas seções */}
@@ -676,7 +678,19 @@ export function ListingAIAnalysisPanel({
       )}
 
       {/* 5️⃣ HACKS DE ALGORITMO — FORMATO EXECUTIVO */}
-      {analysisV21.algorithmHacks && analysisV21.algorithmHacks.length > 0 && (
+      {/* DIA 06.3: Ocultar Hacks se redundante/genérico */}
+      {analysisV21.algorithmHacks && 
+       analysisV21.algorithmHacks.length > 0 && 
+       analysisV21.algorithmHacks.some(hack => {
+         // Verificar se há hacks diferenciados (não apenas recomendações genéricas)
+         const hackText = (hack.hack + ' ' + hack.howToApply).toLowerCase()
+         // Se o hack não contém recomendações já presentes em outras seções, mostrar
+         const isGeneric = hackText.includes('melhorar palavras-chave') || 
+                          hackText.includes('adicionar palavras-chave') ||
+                          (hackText.includes('título') && analysisV21.titleFix) ||
+                          (hackText.includes('descrição') && analysisV21.descriptionFix)
+         return !isGeneric
+       }) && (
         <SectionTemplate
           icon={Zap}
           title="5️⃣ Hacks de Algoritmo"
@@ -756,14 +770,16 @@ export function ListingAIAnalysisPanel({
             handleOpenApplyModal(actionType, before, after)
           }}
           onScrollToSection={(sectionId) => {
-            // Scroll para a seção correspondente
+            // DIA 06.3: Scroll para a seção correspondente com highlight
             const element = document.getElementById(sectionId)
             if (element) {
+              // Scroll suave
               element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              // Highlight visual temporário
-              element.classList.add('ring-2', 'ring-primary', 'ring-offset-2')
+              
+              // Highlight visual temporário (pulse effect)
+              element.classList.add('ring-4', 'ring-primary', 'ring-offset-4', 'animate-pulse')
               setTimeout(() => {
-                element.classList.remove('ring-2', 'ring-primary', 'ring-offset-2')
+                element.classList.remove('ring-4', 'ring-primary', 'ring-offset-4', 'animate-pulse')
               }, 2000)
             }
           }}
