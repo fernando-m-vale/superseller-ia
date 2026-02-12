@@ -208,3 +208,26 @@ output "scheduler_execution_role_arn" {
   description = "ARN da role de execução do scheduler (quando habilitado). Temporariamente desabilitado porque o scheduler TF ainda não está carregado no módulo."
   value       = null
 }
+
+# -----------------------------------------------------------------------------
+# Power Orchestrator
+# -----------------------------------------------------------------------------
+output "power_orchestrator_function_name" {
+  description = "Power Orchestrator Lambda function name"
+  value       = aws_lambda_function.power_orchestrator.function_name
+}
+
+output "power_orchestrator_function_arn" {
+  description = "Power Orchestrator Lambda function ARN"
+  value       = aws_lambda_function.power_orchestrator.arn
+}
+
+output "codebuild_nat_enable_project_name" {
+  description = "CodeBuild project name for enabling NAT Gateway"
+  value       = aws_codebuild_project.terraform_nat_enable.name
+}
+
+output "codebuild_nat_disable_project_name" {
+  description = "CodeBuild project name for disabling NAT Gateway"
+  value       = aws_codebuild_project.terraform_nat_disable.name
+}

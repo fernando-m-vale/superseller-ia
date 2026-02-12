@@ -1,0 +1,11 @@
+{
+  "name": "superseller-power-orchestrator",
+  "version": "1.0.0",
+  "description": "Power Orchestrator - Liga/Desliga completo do ambiente AWS",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.490.0",
+    "@aws-sdk/client-rds": "^3.490.0",
+    "@aws-sdk/client-codebuild": "^3.490.0"
+  }
+}

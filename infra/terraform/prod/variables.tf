@@ -206,3 +206,12 @@ variable "enable_scheduler_alarm" {
   type        = bool
   default     = false
 }
+
+# -----------------------------------------------------------------------------
+# Power Orchestrator Configuration
+# -----------------------------------------------------------------------------
+variable "rds_instance_identifier" {
+  description = "RDS instance identifier for power control"
+  type        = string
+  default     = "superseller-prod-db"
+}
