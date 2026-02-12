@@ -12,6 +12,12 @@ export interface VideoExtractionResult {
   hasVideo: boolean | null; // true = tem vídeo, false = confirmado que não tem, null = não detectável
   evidence: string[];
   isDetectable: boolean; // true se foi possível determinar via API
+  clipsEvidence?: {
+    source: string; // ex: "ml-video-extractor/items", "ml-video-extractor/clips"
+    status: number | null; // HTTP status code se disponível
+    signals: string[]; // ex: ["found_published_clip", "field:clips_count=1"]
+    rawShape?: string; // ex: "array", "object", "empty", "html", "string"
+  };
 }
 
 /**
@@ -24,16 +30,49 @@ export interface VideoExtractionResult {
  * - item.attributes: procurar IDs/nomes que sugiram vídeo
  * - item.tags: procurar algo como video/has_video
  */
-export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult {
+export function extractHasVideoFromMlItem(
+  item: unknown,
+  httpStatus?: number | null
+): VideoExtractionResult {
   const evidence: string[] = [];
+  const signals: string[] = [];
   let hasVideo: boolean | null = null; // Inicia como null (não detectável)
   let isDetectable = false;
+  let rawShape: string | undefined;
 
   if (!item || typeof item !== 'object') {
-    return { hasVideo: null, evidence: ['item is not an object'], isDetectable: false };
+    rawShape = typeof item;
+    return { 
+      hasVideo: null, 
+      evidence: [`item is not an object (type: ${rawShape})`], 
+      isDetectable: false,
+      clipsEvidence: {
+        source: 'ml-video-extractor/items',
+        status: httpStatus ?? null,
+        signals: [`invalid_shape:${rawShape}`],
+        rawShape,
+      },
+    };
   }
 
   const itemObj = item as Record<string, unknown>;
+  
+  // HOTFIX: Detectar se response veio como HTML ou string (shape drift)
+  if ('html' in itemObj || typeof itemObj === 'string' || 
+      (Object.keys(itemObj).length === 0 && !('video_id' in itemObj) && !('videos' in itemObj))) {
+    rawShape = 'html_or_unexpected';
+    return {
+      hasVideo: null,
+      evidence: ['response shape is HTML or unexpected format'],
+      isDetectable: false,
+      clipsEvidence: {
+        source: 'ml-video-extractor/items',
+        status: httpStatus ?? null,
+        signals: ['shape_drift:html_or_unexpected'],
+        rawShape,
+      },
+    };
+  }
 
   // 1. Verificar video_id (string não vazia)
   if ('video_id' in itemObj) {
@@ -42,23 +81,38 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
       hasVideo = true;
       isDetectable = true;
       evidence.push(`video_id present: "${videoId.substring(0, 20)}${videoId.length > 20 ? '...' : ''}"`);
+      signals.push('found_published_clip');
+      signals.push(`field:video_id=${videoId.substring(0, 10)}...`);
     } else if (videoId === null) {
-      // video_id null explicitamente = confirmado que não tem vídeo
-      hasVideo = false;
-      isDetectable = true;
-      evidence.push('video_id is null (explicitly no video)');
+      // video_id null explicitamente = confirmado que não tem vídeo (apenas se status 200)
+      if (httpStatus === 200) {
+        hasVideo = false;
+        isDetectable = true;
+        evidence.push('video_id is null (explicitly no video)');
+        signals.push('field:video_id=null');
+      } else {
+        // Se não for 200, não podemos confiar que null = sem vídeo
+        hasVideo = null;
+        evidence.push('video_id is null but status is not 200 (inconclusive)');
+        signals.push('field:video_id=null_inconclusive');
+      }
     } else {
       evidence.push('video_id is empty or invalid');
+      signals.push('field:video_id=empty_or_invalid');
     }
   }
 
   // 2. Verificar videos (array não vazio)
   if ('videos' in itemObj) {
     const videos = itemObj.videos;
+    rawShape = Array.isArray(videos) ? 'array' : videos === null ? 'null' : typeof videos;
+    
     if (Array.isArray(videos) && videos.length > 0) {
       hasVideo = true;
       isDetectable = true;
       evidence.push(`videos array present with ${videos.length} item(s)`);
+      signals.push('found_published_clip');
+      signals.push(`field:videos_count=${videos.length}`);
       
       // Verificar se tem IDs válidos
       const validVideos = videos.filter((v: unknown) => {
@@ -70,17 +124,37 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
       });
       if (validVideos.length > 0) {
         evidence.push(`videos array has ${validVideos.length} valid video ID(s)`);
+        signals.push(`field:valid_videos_count=${validVideos.length}`);
       }
     } else if (Array.isArray(videos) && videos.length === 0) {
-      // Array vazio = confirmado que não tem vídeos
-      hasVideo = false;
-      isDetectable = true;
-      evidence.push('videos array is empty');
+      // Array vazio = confirmado que não tem vídeos (apenas se status 200)
+      if (httpStatus === 200) {
+        hasVideo = false;
+        isDetectable = true;
+        evidence.push('videos array is empty');
+        signals.push('field:videos_count=0');
+      } else {
+        hasVideo = null;
+        evidence.push('videos array is empty but status is not 200 (inconclusive)');
+        signals.push('field:videos_count=0_inconclusive');
+      }
     } else if (videos === null) {
-      // videos null explicitamente = confirmado que não tem vídeos
-      hasVideo = false;
-      isDetectable = true;
-      evidence.push('videos is null (explicitly no videos)');
+      // videos null explicitamente = confirmado que não tem vídeos (apenas se status 200)
+      if (httpStatus === 200) {
+        hasVideo = false;
+        isDetectable = true;
+        evidence.push('videos is null (explicitly no videos)');
+        signals.push('field:videos=null');
+      } else {
+        hasVideo = null;
+        evidence.push('videos is null but status is not 200 (inconclusive)');
+        signals.push('field:videos=null_inconclusive');
+      }
+    } else {
+      // Shape inesperado
+      hasVideo = null;
+      evidence.push(`videos field has unexpected shape: ${rawShape}`);
+      signals.push(`shape_drift:videos=${rawShape}`);
     }
   }
 
@@ -158,6 +232,22 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
     hasVideo = null;
   }
 
-  return { hasVideo, evidence, isDetectable };
+  // Se não encontrou nenhuma evidência, registrar
+  if (evidence.length === 0) {
+    evidence.push('no video-related fields found');
+    signals.push('no_video_fields');
+  }
+
+  return { 
+    hasVideo, 
+    evidence, 
+    isDetectable,
+    clipsEvidence: {
+      source: 'ml-video-extractor/items',
+      status: httpStatus ?? null,
+      signals: signals.length > 0 ? signals : ['no_signals'],
+      rawShape: rawShape || 'object',
+    },
+  };
 }
 

@@ -164,6 +164,8 @@ export function rankGaps(
 
   // 2. Gap de vídeo (categoria tem alta % com vídeo e listing sem clip detectável)
   if (stats.percentageWithVideo > 50) {
+    // HOTFIX: Só sugerir vídeo se hasClips === false (confirmado que não tem)
+    // Se hasClips === null (não detectável), não acusar falta
     if (listing.hasClips === false) {
       gaps.push({
         id: 'gap_video',
@@ -178,22 +180,9 @@ export function rankGaps(
           hasVideo: 'false',
         },
       });
-    } else if (listing.hasClips === null) {
-      // Não detectável - sugerir verificar
-      gaps.push({
-        id: 'gap_video_check',
-        dimension: 'video',
-        title: 'Verificar se há vídeo no anúncio',
-        whyItMatters: `${Math.round(stats.percentageWithVideo)}% dos concorrentes têm vídeo detectável. Se não houver, considere adicionar.`,
-        impact: 'medium',
-        effort: 'low',
-        confidence: 'medium',
-        metrics: {
-          competitorsWithVideo: Math.round(stats.percentageWithVideo),
-          hasVideo: 'unknown',
-        },
-      });
     }
+    // HOTFIX: hasClips === null → não acusar falta, não adicionar gap
+    // O MediaVerdict já trata isso corretamente (canSuggestClip = false quando null)
   }
 
   // 3. Gap de título (titleLength muito fora da mediana)
