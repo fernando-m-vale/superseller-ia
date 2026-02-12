@@ -22,8 +22,8 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
   // GET /api/v1/listings
   app.get('/', { preHandler: authGuard }, async (req, reply) => {
     try {
-      // @ts-ignore - tenantId é injetado pelo authGuard
-      const tenantId = req.user?.tenantId || req.tenantId;
+      // tenantId é injetado pelo authGuard
+      const tenantId = req.tenantId;
 
       if (!tenantId) {
         return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
@@ -146,8 +146,8 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     { preHandler: authGuard },
     async (req, reply) => {
       try {
-        // @ts-ignore - tenantId é injetado pelo authGuard
-        const tenantId = req.user?.tenantId || req.tenantId;
+        // tenantId é injetado pelo authGuard
+        const tenantId = req.tenantId;
 
         if (!tenantId) {
           return reply.status(401).send({ error: 'Unauthorized: No tenant context' });

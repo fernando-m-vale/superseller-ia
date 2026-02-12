@@ -148,8 +148,13 @@ export function extractHasVideoFromMlItem(item: unknown): VideoExtractionResult 
     evidence.push('no video-related fields found');
   }
 
+  // HOTFIX: Se encontrou evidências positivas mas isDetectable ainda é false, marcar como detectável
+  if (hasVideo === true && !isDetectable) {
+    isDetectable = true;
+  }
+
   // Se não foi detectável (null), garantir que retorna null
-  if (!isDetectable) {
+  if (!isDetectable && hasVideo !== true) {
     hasVideo = null;
   }
 

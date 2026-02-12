@@ -747,7 +747,7 @@ export function ListingAIAnalysisPanel({
               sectionId = 'section-title'
             } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
               actionType = 'seo_description'
-              sectionId = 'section-description'
+              sectionId = 'section-seo-description'
             } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
               actionType = 'media_images'
               sectionId = 'section-images'

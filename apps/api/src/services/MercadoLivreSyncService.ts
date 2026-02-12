@@ -1558,9 +1558,22 @@ export class MercadoLivreSyncService {
           listingData.has_video = hasVideoFromAPI;
         }
         
-        // has_clips é um alias de has_video no ML (clip = vídeo)
+        // HOTFIX: has_clips é um alias de has_video no ML (clip = vídeo)
         // Garantir que ambos estejam sincronizados
+        // Se has_video é true, has_clips também deve ser true
+        // Se has_video é null (não detectável), has_clips também deve ser null (não acusar falta)
         listingData.has_clips = listingData.has_video;
+        
+        // HOTFIX: Se a extração encontrou evidências mas retornou null, verificar novamente
+        // Isso evita acusar "falta de clip" quando há evidências de clip no ML
+        if (listingData.has_clips === null && videoExtraction.evidence.some(e => 
+          e.includes('video_id') || e.includes('videos array') || e.includes('contains')
+        )) {
+          // Se há evidências de vídeo mas o resultado foi null, assumir que pode ter clip
+          // (melhor não acusar falta do que acusar incorretamente)
+          listingData.has_clips = null; // Manter null = não detectável, não false
+          listingData.has_video = null;
+        }
 
         // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos
         // Isso evita sobrescrever com 0 quando não há dados
