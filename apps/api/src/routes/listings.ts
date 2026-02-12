@@ -155,15 +155,15 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const { listingId } = req.params as { listingId: string };
         
-        // DIA 06.3: Aceitar payload flexível e actionTypes granulares
+        // HOTFIX: Aceitar payload flexível e actionTypes granulares
         const rawBody = req.body as any;
         
         // Normalizar actionType (aceitar actionType ou action_type)
         const actionTypeRaw = rawBody.actionType || rawBody.action_type;
-        if (!actionTypeRaw) {
+        if (!actionTypeRaw || typeof actionTypeRaw !== 'string') {
           return reply.status(400).send({ 
             error: 'Missing actionType',
-            message: 'Campo actionType é obrigatório'
+            message: 'Campo actionType é obrigatório e deve ser uma string'
           });
         }
 
@@ -212,16 +212,72 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
             : { value: rawBody.after_payload };
         }
 
-        // DIA 06.3: Se afterPayload vier como string, converter para objeto baseado no actionType
-        if (typeof afterPayload === 'string' || (Object.keys(afterPayload).length === 1 && afterPayload.value)) {
-          const afterValue = typeof afterPayload === 'string' ? afterPayload : String(afterPayload.value || '');
-          
-          if (actionTypeRaw === 'seo_title') {
-            afterPayload = { title: afterValue };
-          } else if (actionTypeRaw === 'seo_description') {
-            afterPayload = { description: afterValue };
-          } else if (actionTypeRaw === 'media_images') {
-            afterPayload = { plan: afterValue };
+        // HOTFIX: Normalizar actionType legado para granular baseado no payload
+        let normalizedActionType: string = actionTypeRaw;
+        
+        if (actionTypeRaw === 'seo') {
+          // Decidir pelo afterPayload: se tem "title" => seo_title, se tem "description" => seo_description
+          if (afterPayload && typeof afterPayload === 'object') {
+            if ('title' in afterPayload) {
+              normalizedActionType = 'seo_title';
+            } else if ('description' in afterPayload) {
+              normalizedActionType = 'seo_description';
+            } else if ('value' in afterPayload && typeof afterPayload.value === 'string') {
+              // Se for string, assumir título por padrão
+              normalizedActionType = 'seo_title';
+              afterPayload = { title: afterPayload.value };
+            } else {
+              // Default: seo_title
+              normalizedActionType = 'seo_title';
+            }
+          } else {
+            normalizedActionType = 'seo_title';
+          }
+        } else if (actionTypeRaw === 'midia') {
+          normalizedActionType = 'media_images';
+          // Se afterPayload for string ou tiver "value", converter para { plan: string }
+          if (afterPayload && typeof afterPayload === 'object' && 'value' in afterPayload) {
+            afterPayload = { plan: String(afterPayload.value || '') };
+          }
+        } else if (actionTypeRaw === 'competitividade') {
+          // Manter como está ou mapear para promo_banner? Por enquanto manter legado
+          normalizedActionType = 'competitividade';
+        }
+        // cadastro: manter legado
+
+        // HOTFIX: Normalizar afterPayload baseado no actionType normalizado
+        if (normalizedActionType === 'seo_title') {
+          if (typeof afterPayload === 'string') {
+            afterPayload = { title: afterPayload };
+          } else if (afterPayload && typeof afterPayload === 'object' && 'value' in afterPayload) {
+            afterPayload = { title: String(afterPayload.value || '') };
+          } else if (!('title' in afterPayload)) {
+            return reply.status(400).send({ 
+              error: 'Invalid afterPayload for seo_title',
+              message: 'afterPayload deve conter campo "title" ou ser uma string'
+            });
+          }
+        } else if (normalizedActionType === 'seo_description') {
+          if (typeof afterPayload === 'string') {
+            afterPayload = { description: afterPayload };
+          } else if (afterPayload && typeof afterPayload === 'object' && 'value' in afterPayload) {
+            afterPayload = { description: String(afterPayload.value || '') };
+          } else if (!('description' in afterPayload)) {
+            return reply.status(400).send({ 
+              error: 'Invalid afterPayload for seo_description',
+              message: 'afterPayload deve conter campo "description" ou ser uma string'
+            });
+          }
+        } else if (normalizedActionType === 'media_images') {
+          if (typeof afterPayload === 'string') {
+            afterPayload = { plan: afterPayload };
+          } else if (afterPayload && typeof afterPayload === 'object' && 'value' in afterPayload) {
+            afterPayload = { plan: String(afterPayload.value || '') };
+          } else if (!('plan' in afterPayload)) {
+            return reply.status(400).send({ 
+              error: 'Invalid afterPayload for media_images',
+              message: 'afterPayload deve conter campo "plan" ou ser uma string'
+            });
           }
         }
 
@@ -239,7 +295,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         const result = await service.applyAction({
           tenantId,
           listingId,
-          actionType: actionTypeRaw,
+          actionType: normalizedActionType as any, // HOTFIX: normalizedActionType é sempre válido após normalização
           beforePayload,
           afterPayload,
         });
@@ -249,7 +305,9 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           data: result,
         });
       } catch (error) {
-        app.log.error({ error, listingId, tenantId }, 'Error applying action');
+        const { listingId: listingIdParam } = req.params as { listingId: string };
+        const tenantIdForLog = req.user?.tenantId || req.tenantId;
+        app.log.error({ error, listingId: listingIdParam, tenantId: tenantIdForLog }, 'Error applying action');
         
         // DIA 06.3: Mensagens de erro mais claras
         if (error instanceof z.ZodError) {
