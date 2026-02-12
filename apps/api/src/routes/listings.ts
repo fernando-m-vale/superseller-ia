@@ -306,7 +306,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         });
       } catch (error) {
         const { listingId: listingIdParam } = req.params as { listingId: string };
-        const tenantIdForLog = req.user?.tenantId || req.tenantId;
+        const tenantIdForLog = req.tenantId;
         app.log.error({ error, listingId: listingIdParam, tenantId: tenantIdForLog }, 'Error applying action');
         
         // DIA 06.3: Mensagens de erro mais claras
