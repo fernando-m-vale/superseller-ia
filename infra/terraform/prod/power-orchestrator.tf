@@ -121,7 +121,7 @@ resource "aws_lambda_function" "power_orchestrator" {
   filename         = data.archive_file.power_orchestrator_zip.output_path
   source_code_hash = data.archive_file.power_orchestrator_zip.output_base64sha256
 
-  timeout = 1800 # 30 minutos (para aguardar RDS e CodeBuild)
+  timeout = 900 # 15 minutos (para aguardar RDS e CodeBuild)
 
   environment {
     variables = {
