@@ -125,7 +125,6 @@ resource "aws_lambda_function" "power_orchestrator" {
 
   environment {
     variables = {
-      AWS_REGION                        = var.aws_region
       DB_INSTANCE_IDENTIFIER            = var.rds_instance_identifier
       APPRUNNER_STARTUP_FUNCTION_NAME   = aws_lambda_function.power_startup.function_name
       APPRUNNER_SHUTDOWN_FUNCTION_NAME  = aws_lambda_function.power_shutdown.function_name
