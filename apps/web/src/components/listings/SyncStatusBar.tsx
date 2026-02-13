@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { useSyncStatus } from '@/hooks/use-sync-status';
 import { useAutoSync } from '@/hooks/use-auto-sync';
 import { useManualSync } from '@/hooks/use-manual-sync';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -32,11 +33,52 @@ export function SyncStatusBar() {
   const { data: status, isLoading } = useSyncStatus();
   const autoSync = useAutoSync();
   const manualSync = useManualSync();
+  const { toast } = useToast();
 
   // Auto-sync ao montar componente (silent)
   useEffect(() => {
     autoSync.mutate();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoSync]);
+
+  // Tratar resultado do sync manual
+  useEffect(() => {
+    if (manualSync.isSuccess && manualSync.data) {
+      const data = manualSync.data;
+      
+      if (data.started) {
+        toast({
+          title: 'Sincronização iniciada',
+          description: 'Os dados serão atualizados em breve.',
+        });
+      } else {
+        if (data.reason === 'cooldown' && data.retryAfterSeconds) {
+          const minutes = Math.ceil(data.retryAfterSeconds / 60);
+          toast({
+            title: 'Aguarde antes de sincronizar novamente',
+            description: `Aguarde ${minutes} minuto${minutes > 1 ? 's' : ''} antes de sincronizar novamente.`,
+            variant: 'default',
+          });
+        } else if (data.reason === 'running') {
+          toast({
+            title: 'Sincronização em andamento',
+            description: 'Uma sincronização já está sendo executada.',
+            variant: 'default',
+          });
+        }
+      }
+    }
+  }, [manualSync.isSuccess, manualSync.data, toast]);
+
+  // Tratar erro do sync manual
+  useEffect(() => {
+    if (manualSync.isError && manualSync.error) {
+      toast({
+        title: 'Erro ao sincronizar',
+        description: manualSync.error.message || 'Ocorreu um erro ao iniciar a sincronização.',
+        variant: 'destructive',
+      });
+    }
+  }, [manualSync.isError, manualSync.error, toast]);
 
   // Refetch listings quando sync terminar com sucesso
   useEffect(() => {
