@@ -74,11 +74,11 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
   - ✅ Benchmark → Action Engine → Conteúdo Gerado — **CONCLUÍDO (Dia 5)**
 - 🚀 Próxima fase: Execução Assistida + Jobs Automáticos + Hacks ML Contextuais (Dia 06-10)
 
-## 🧠 Estado atual do produto (2026-02-12 — Dia 6 Concluído)
+## 🧠 Estado atual do produto (2026-02-14 — Dia 8 Parcialmente Concluído)
 
-**Dia atual do projeto:** Dia 6 concluído com sucesso  
-**Fase ativa:** DIA 07 — Cadastro Manual + Anúncios sem Venda  
-**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, execução assistida funcional, robustez de mídia/preço
+**Dia atual do projeto:** Dia 8 parcialmente concluído (validação final pendente)  
+**Fase ativa:** DIA 08 — Validação Final (Produção)  
+**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, execução assistida funcional, robustez de mídia/preço, sincronização automática multi-tenant
 
 - **SuperSeller IA agora possui:**
   - ✅ **Diagnóstico:** Análise profunda de anúncio com IA especialista
@@ -95,13 +95,47 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
   - **Frontend:** Botões "Registrar como aplicado", ApplyActionModal, badges "Implementado", estado local imediato, Plano navegável
   - **Hotfixes:** CI fix (req.tenantId), clips robustez, promo sem fallback, badges reset correto
 
-- **Decisão estratégica:** Produto deixa de ser "auditor" e passa a ser "assistente vendedor" com execução assistida
+- **Dia 7 concluído:** Cadastro Manual + Anúncios sem Venda
+  - **Backend:** Endpoint POST /api/v1/listings/import, validação de MLB ID, sync inicial automático
+  - **Frontend:** Botão "Adicionar anúncio", modal de import, tratamento de anúncios sem métricas
+  - **Score Engine:** Proteção contra divisão por zero, performanceScore = 0 quando sem dados
+
+- **Dia 8 parcialmente concluído:** Jobs Automáticos Multi-tenant
+  - **Backend:** JobQueue interface, DbJobQueue, JobRunner, TenantSyncOrchestrator, ListingSyncWorker
+  - **Infra:** Locks + cooldowns, dedupe por lock_key, timestamptz(3), índice único parcial
+  - **Frontend:** Auto-sync com guard, polling controlado, SyncStatusBar
+  - **Hotfixes:** Request storm, timezone inconsistente, dedupe TENANT_SYNC
+  - **Status:** Implementação completa, validação final em produção pendente
+
+- **Decisão estratégica:** Produto deixa de ser "auditor" e passa a ser "assistente vendedor" com execução assistida e sincronização automática
 
 **Limitação atual:**
 - Benchmark ML ainda depende de desbloqueio 403 (fora do controle atual)
 - Pequeno desalinhamento de fuso (-1 dia) tolerado temporariamente
+- Jobs automáticos em validação final (Dia 8)
 
-**Produto já entrega valor prático imediato com execução assistida funcional.**
+**Produto já entrega valor prático imediato com execução assistida funcional e sincronização automática (em validação).**
+
+## Estado Atual — Sync Engine (Dia 08)
+
+**Arquitetura atual:**
+- Driver de fila: DB (preparado para SQS)
+- JobRunner embutido na API (ENABLE_JOB_RUNNER=true)
+- Locks por tenant e por listing
+- Cooldowns:
+  - Auto-sync: 24h
+  - Manual-sync: 15min
+  - Listing-sync: 10min
+
+**Decisão estratégica:**
+Manter DB Queue até:
+- Crescimento real de tenants (necessidade de escala)
+- Necessidade de desacoplamento via SQS/EventBridge
+
+**Status:**
+- ✅ Implementação técnica completa
+- ✅ Hotfixes aplicados (timezone, dedupe, request storm)
+- ⏳ Validação final em produção pendente
 
 ## ⚠️ PROBLEMAS ABERTOS (INFRA/DEPLOY — NÃO CONCEITUAIS)
 

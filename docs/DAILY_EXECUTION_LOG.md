@@ -1,3 +1,103 @@
+# DAILY EXECUTION LOG — 2026-02-14 (Dia 8 — Jobs Automáticos Multi-tenant)
+
+## ⏳ STATUS: PARCIALMENTE CONCLUÍDO (Validação Final Pendente)
+
+## 🎯 Foco do dia
+**Jobs Automáticos Multi-tenant (Hotfix + Hardening) — Transformar sincronização em sistema robusto, multi-tenant, com dedupe, locks e preparação para escala futura**
+
+## ✅ Entregas realizadas
+
+### Backend
+- ✅ Conversão de todos os timestamps críticos para timestamptz(3) (Tenant, Listing, SyncJob)
+- ✅ Migration aplicada assumindo UTC para colunas existentes
+- ✅ Dedupe TENANT_SYNC por lock_key (verificação antes de criar novo job)
+- ✅ Índice único parcial para evitar duplicação (UNIQUE(lock_key) WHERE status IN ('queued','running'))
+- ✅ Claim atômico no DbJobQueue usando transação e FOR UPDATE SKIP LOCKED
+- ✅ Comparação run_after <= now() consistente usando NOW() no banco
+- ✅ Logs estruturados com requestId e tenantId
+- ✅ Endpoint /api/v1/sync/jobs/health (debug)
+- ✅ Heartbeat do JobRunner (com DEBUG_JOB_RUNNER=1)
+- ✅ HOTFIX contra request storm no frontend (fire once guard + polling controlado)
+
+### Frontend
+- ✅ Auto-sync com guard (useRef + sessionStorage) para disparar apenas 1x por sessão/tenant
+- ✅ Polling inteligente de status (5s quando running, 30s quando idle)
+- ✅ SyncStatusBar sem auto-sync interno (apenas exibe status e botão manual)
+- ✅ Retry: 0 em todas as mutations/queries para evitar loops
+
+### Infra
+- ✅ JobRunner com guard rails (ENABLE_JOB_RUNNER=true)
+- ✅ Arquitetura preparada para SQS (interface JobQueue + stub SqsJobQueue)
+
+## 🧠 Decisão estratégica
+**Sistema agora possui sincronização automática escalável, preparada para múltiplos tenants e futura migração para SQS/EventBridge. Mantém DB Queue até crescimento real de tenants.**
+
+## 📌 Problemas enfrentados (antes)
+
+### Request Storm
+- Frontend disparava múltiplas requisições "auto" em loop, causando "Network Error"
+- Auto-sync sem guard re-disparava a cada mudança de status
+- Polling agressivo amplificava o problema
+
+### Jobs não processavam
+- Múltiplos TENANT_SYNC com status=queued e started_at NULL
+- Query run_after <= now() retornava vazio (timezone inconsistente)
+- Cálculo now() - last_auto_sync_at gerava valores negativos
+
+### Duplicação de jobs
+- Request storm gerava 7+ TENANT_SYNC iguais para o mesmo tenant
+- Sem dedupe por lock_key
+
+## 🔧 Hotfixes implementados (entregas do dia)
+
+### A) Timezone / Tipos de coluna
+- Conversão de todos os campos críticos para timestamptz(3) no Prisma schema
+- Migration para converter colunas existentes assumindo UTC
+- Comparações de tempo usando NOW() no banco (não no aplicativo)
+
+### B) Dedupe TENANT_SYNC
+- Verificação de jobs existentes (queued/running) com mesmo lock_key antes de criar
+- Índice único parcial para garantir dedupe mesmo com race conditions
+- lock_key inclui tipo: `tenant:${tenantId}:TENANT_SYNC`
+
+### C) Claim atômico de jobs
+- DbJobQueue.dequeue usa transação e FOR UPDATE SKIP LOCKED
+- Comparação run_after <= NOW() no banco (timezone consistente)
+- Atualização atômica de status para 'running'
+
+### D) JobRunner em produção
+- Logs explícitos de startup e heartbeat
+- Guard rails (ENABLE_JOB_RUNNER=true)
+- Endpoint /sync/jobs/health para debug
+
+### E) Frontend (Request Storm)
+- Auto-sync com fire once guard (useRef + sessionStorage)
+- Polling controlado (5s running, 30s idle, retry: 0)
+- SyncStatusBar não dispara auto-sync internamente
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ Migration aplicada com sucesso
+- ✅ Build passando (API e WEB)
+- ✅ Deploy realizado
+- ⏳ Validação final em produção pendente (amanhã)
+
+## 📌 Status do Dia 08
+⏳ **Parcialmente concluído**
+✅ Implementação técnica completa
+✅ Hotfixes aplicados
+⏳ Validação final em produção pendente
+
+## 📋 Backlog / Débitos técnicos gerados (não bloqueadores)
+- Migração para SQS quando necessário (arquitetura pronta)
+- Observabilidade avançada (métricas CloudWatch, alertas)
+- Testes automatizados de job processing
+- Retry policy configurável por tipo de job
+
+## ➡️ Próximo passo claro
+**DIA 08 — Validação Final (Produção): Rodar queries SQL de validação, validar logs do JobRunner, confirmar processamento real de jobs, validar timestamps após migration, confirmar que dedupe está funcionando**
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-12 (Dia 6 — Execução Assistida + Clips + Promo + Plano + Badges)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

@@ -36,18 +36,65 @@
 
 ---
 
-## 🗓️ DIA 08 — Jobs Automáticos
+## 🗓️ DIA 08 — Validação Final (Produção)
+
+**Objetivo:** Validar que o sistema de jobs automáticos está funcionando corretamente em produção.
+
+### Passos amanhã
+
+1. **Rodar queries SQL de validação**
+   - Verificar que não existem múltiplos TENANT_SYNC queued simultâneos
+   - Confirmar transição de status: queued → processing → succeeded
+   - Validar que last_auto_sync_at não gera minutos negativos
+   - Confirmar que listings.last_synced_at atualiza após sync
+
+2. **Validar logs do JobRunner**
+   - Confirmar ENABLE_JOB_RUNNER=true
+   - Buscar "JobRunner enabled" nos logs
+   - Verificar "Job claimed" e "Job finished"
+   - (Opcional) Verificar heartbeat se DEBUG_JOB_RUNNER=1
+
+3. **Confirmar processamento real de jobs**
+   - Abrir /listings e verificar que apenas 1 TENANT_SYNC é criado
+   - Verificar que jobs são processados (started_at preenchido)
+   - Confirmar que LISTING_SYNC jobs são criados e executados
+
+4. **Validar timestamps após migration**
+   - Verificar tipos de coluna (timestamptz)
+   - Confirmar consistência de timestamps
+   - Validar que comparações de tempo funcionam corretamente
+
+5. **Confirmar que dedupe está funcionando**
+   - Verificar índice único parcial
+   - Testar criação de job duplicado (deve retornar job existente)
+
+6. **Decidir:**
+   - ✅ **DIA 08 FECHADO** → Iniciar DIA 09 (Hacks ML Contextualizados)
+   - ⚠️ **AJUSTES NECESSÁRIOS** → Documentar e corrigir
+   - 🔴 **BLOQUEADOR** → Escalar e resolver
+
+**Referência:** Ver `docs/DIA08_PROD_VALIDATION_CHECKLIST.md` para checklist completo.
+
+---
+
+## 🗓️ DIA 08 — Jobs Automáticos (Implementação)
 
 **Objetivo:** Produto que trabalha sozinho.
 
 ### Entrega
 - Cron diário:
-  - sync visits
-  - sync orders
+  - sync visits (30 dias)
+  - sync orders (30 dias)
   - sync promo
+  - sync clips
 - Flag: "Dados atualizados há X horas"
+- Locks + cooldowns (anti-spam)
+- Multi-tenant desde o início
+- Preparado para SQS/EventBridge
 
 **Impacto:** Escalabilidade SaaS real.
+
+**Status:** ✅ Implementação completa, ⏳ Validação final pendente
 
 ---
 
