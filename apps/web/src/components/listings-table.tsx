@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Loader2, Search, AlertCircle, Plus } from 'lucide-react'
 import { ListingAccordionRow } from '@/components/listings/ListingAccordionRow'
 import { ImportListingModal } from '@/components/listings/ImportListingModal'
+import { SyncStatusBar } from '@/components/listings/SyncStatusBar'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -75,6 +76,9 @@ export function ListingsTable() {
 
   return (
     <div className="space-y-4">
+      {/* DIA 08: Barra de status de sync */}
+      <SyncStatusBar />
+
       {/* Filtros e Botão Adicionar */}
       <div className="flex gap-4 items-center justify-between">
         <div className="flex gap-4 items-center flex-1">

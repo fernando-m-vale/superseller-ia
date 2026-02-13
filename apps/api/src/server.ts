@@ -123,6 +123,14 @@ async function main() {
 
     // Iniciar cron job de refresh proativo de tokens (executa a cada hora)
     scheduleTokenRefresh();
+
+    // DIA 08: Iniciar JobRunner se habilitado
+    if (process.env.ENABLE_JOB_RUNNER === 'true') {
+      const { startJobRunner } = await import('./jobs/JobRunner');
+      startJobRunner().catch((err: unknown) => {
+        app.log.error({ err }, 'Error starting JobRunner');
+      });
+    }
   } catch (err) {
     app.log.fatal({ err }, 'FATAL ERROR STARTING SERVER');
     process.exit(1);

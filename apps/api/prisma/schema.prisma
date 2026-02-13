@@ -103,11 +103,44 @@ enum RecommendationStatus {
   expired // Expirou (anúncio mudou)
 }
 
+enum SyncStatus {
+  idle
+  running
+  success
+  error
+}
+
+enum SyncJobType {
+  TENANT_SYNC
+  LISTING_SYNC
+}
+
+enum SyncJobStatus {
+  queued
+  running
+  success
+  error
+  skipped
+}
+
+enum SyncJobPriority {
+  interactive
+  background
+}
+
 // Models
 model Tenant {
   id         String   @id @default(uuid())
   name       String
   created_at DateTime @default(now())
+
+  // DIA 08: Campos de sync automático
+  last_auto_sync_at     DateTime?
+  last_manual_sync_at   DateTime?
+  last_sync_status      SyncStatus @default(idle)
+  last_sync_error       String?    @db.Text
+  last_sync_started_at  DateTime?
+  last_sync_finished_at DateTime?
 
   users                   User[]
   marketplace_connections MarketplaceConnection[]
@@ -122,6 +155,7 @@ model Tenant {
   recommendations         Recommendation[]
   listing_ai_analysis     ListingAIAnalysis[]
   applied_actions         AppliedAction[]
+  sync_jobs               SyncJob[]
 
   @@map("tenants")
 }
@@ -200,6 +234,10 @@ model Listing {
   access_blocked_code       String? // Código do erro que bloqueou acesso (ex: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES")
   access_blocked_at         DateTime? // Quando foi bloqueado
   access_blocked_reason     String? // Mensagem sanitizada do erro (sem token)
+  // DIA 08: Campos de sync por listing
+  last_synced_at            DateTime?
+  last_sync_status          SyncStatus          @default(idle)
+  last_sync_error           String?             @db.Text
   created_at                DateTime            @default(now())
   updated_at                DateTime            @updatedAt
 
@@ -463,14 +501,14 @@ model ListingAIAnalysis {
 }
 
 model AppliedAction {
-  id            String   @id @default(uuid())
-  tenant_id     String
-  listing_id    String
-  action_type   String   // "seo" | "midia" | "cadastro" | "competitividade"
+  id             String   @id @default(uuid())
+  tenant_id      String
+  listing_id     String
+  action_type    String // "seo" | "midia" | "cadastro" | "competitividade"
   before_payload Json
   after_payload  Json
-  applied_at    DateTime @default(now())
-  created_at    DateTime @default(now())
+  applied_at     DateTime @default(now())
+  created_at     DateTime @default(now())
 
   tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
@@ -480,4 +518,30 @@ model AppliedAction {
   @@index([listing_id])
   @@index([action_type])
   @@map("applied_actions")
+}
+
+// DIA 08: Tabela de jobs para sync automático (DBQueue)
+model SyncJob {
+  id           String          @id @default(uuid())
+  tenant_id    String
+  type         SyncJobType
+  status       SyncJobStatus   @default(queued)
+  priority     SyncJobPriority @default(background)
+  payload      Json
+  lock_key     String
+  run_after    DateTime        @default(now())
+  attempts     Int             @default(0)
+  max_attempts Int             @default(3)
+  started_at   DateTime?
+  finished_at  DateTime?
+  error        String?         @db.Text
+  created_at   DateTime        @default(now())
+  updated_at   DateTime        @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([status, priority, run_after])
+  @@index([tenant_id, status])
+  @@index([lock_key, status])
+  @@map("sync_jobs")
 }

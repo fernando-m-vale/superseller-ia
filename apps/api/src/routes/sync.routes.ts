@@ -1830,5 +1830,220 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
     });
   });
 
+  // DIA 08: Rotas de sync automático multi-tenant
+  // POST /api/v1/sync/tenant/auto
+  app.post(
+    '/tenant/auto',
+    { preHandler: authGuard },
+    async (req: RequestWithAuth, reply: FastifyReply) => {
+      try {
+        const tenantId = req.tenantId;
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        // Buscar tenant
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: {
+            last_auto_sync_at: true,
+            last_sync_status: true,
+          },
+        });
+
+        if (!tenant) {
+          return reply.status(404).send({ error: 'Tenant não encontrado' });
+        }
+
+        // Verificar cooldown (24h)
+        const { checkAutoSyncCooldown } = await import('../jobs/locks');
+        const cooldown = checkAutoSyncCooldown(tenant.last_auto_sync_at);
+        
+        if (cooldown.inCooldown) {
+          return reply.status(200).send({
+            started: false,
+            reason: 'cooldown',
+            retryAfterSeconds: cooldown.retryAfterSeconds,
+          });
+        }
+
+        // Verificar lock
+        const { checkLock } = await import('../jobs/locks');
+        const lockCheck = await checkLock(`tenant:${tenantId}`);
+        
+        if (lockCheck.isLocked && !lockCheck.isStale) {
+          return reply.status(200).send({
+            started: false,
+            reason: 'running',
+          });
+        }
+
+        // Enfileirar job
+        const { getJobQueue } = await import('../jobs/jobQueueFactory');
+        const queue = getJobQueue();
+        const { jobId } = await queue.enqueue({
+          tenantId,
+          type: 'TENANT_SYNC',
+          priority: 'interactive',
+          lockKey: `tenant:${tenantId}`,
+          payload: {},
+        });
+
+        // Atualizar last_auto_sync_at (será atualizado novamente quando job iniciar)
+        await prisma.tenant.update({
+          where: { id: tenantId },
+          data: { last_auto_sync_at: new Date() },
+        });
+
+        const debug = req.headers['x-debug'] === '1';
+        if (debug || process.env.NODE_ENV === 'development') {
+          app.log.info({ tenantId, jobId, reason: 'auto_sync' }, 'Auto-sync enfileirado');
+        }
+
+        return reply.status(200).send({
+          started: true,
+          jobId,
+        });
+      } catch (error) {
+        app.log.error({ error, tenantId: req.tenantId }, 'Erro ao iniciar auto-sync');
+        return reply.status(500).send({
+          error: 'Erro ao iniciar sync automático',
+          message: error instanceof Error ? error.message : 'Erro desconhecido',
+        });
+      }
+    }
+  );
+
+  // POST /api/v1/sync/tenant/manual
+  app.post(
+    '/tenant/manual',
+    { preHandler: authGuard },
+    async (req: RequestWithAuth, reply: FastifyReply) => {
+      try {
+        const tenantId = req.tenantId;
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        // Buscar tenant
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: {
+            last_manual_sync_at: true,
+            last_sync_status: true,
+          },
+        });
+
+        if (!tenant) {
+          return reply.status(404).send({ error: 'Tenant não encontrado' });
+        }
+
+        // Verificar cooldown (15 min)
+        const { checkManualSyncCooldown } = await import('../jobs/locks');
+        const cooldown = checkManualSyncCooldown(tenant.last_manual_sync_at);
+        
+        if (cooldown.inCooldown) {
+          return reply.status(200).send({
+            started: false,
+            reason: 'cooldown',
+            retryAfterSeconds: cooldown.retryAfterSeconds,
+          });
+        }
+
+        // Verificar lock
+        const { checkLock } = await import('../jobs/locks');
+        const lockCheck = await checkLock(`tenant:${tenantId}`);
+        
+        if (lockCheck.isLocked && !lockCheck.isStale) {
+          return reply.status(200).send({
+            started: false,
+            reason: 'running',
+          });
+        }
+
+        // Enfileirar job
+        const { getJobQueue } = await import('../jobs/jobQueueFactory');
+        const queue = getJobQueue();
+        const { jobId } = await queue.enqueue({
+          tenantId,
+          type: 'TENANT_SYNC',
+          priority: 'interactive',
+          lockKey: `tenant:${tenantId}`,
+          payload: {},
+        });
+
+        // Atualizar last_manual_sync_at
+        await prisma.tenant.update({
+          where: { id: tenantId },
+          data: { last_manual_sync_at: new Date() },
+        });
+
+        const debug = req.headers['x-debug'] === '1';
+        if (debug || process.env.NODE_ENV === 'development') {
+          app.log.info({ tenantId, jobId, reason: 'manual_sync' }, 'Manual sync enfileirado');
+        }
+
+        return reply.status(200).send({
+          started: true,
+          jobId,
+        });
+      } catch (error) {
+        app.log.error({ error, tenantId: req.tenantId }, 'Erro ao iniciar manual sync');
+        return reply.status(500).send({
+          error: 'Erro ao iniciar sync manual',
+          message: error instanceof Error ? error.message : 'Erro desconhecido',
+        });
+      }
+    }
+  );
+
+  // GET /api/v1/sync/tenant/status
+  app.get(
+    '/tenant/status',
+    { preHandler: authGuard },
+    async (req: RequestWithAuth, reply: FastifyReply) => {
+      try {
+        const tenantId = req.tenantId;
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: {
+            last_auto_sync_at: true,
+            last_manual_sync_at: true,
+            last_sync_status: true,
+            last_sync_error: true,
+            last_sync_started_at: true,
+            last_sync_finished_at: true,
+          },
+        });
+
+        if (!tenant) {
+          return reply.status(404).send({ error: 'Tenant não encontrado' });
+        }
+
+        const isRunning = tenant.last_sync_status === 'running';
+
+        return reply.status(200).send({
+          lastAutoSyncAt: tenant.last_auto_sync_at?.toISOString() || null,
+          lastManualSyncAt: tenant.last_manual_sync_at?.toISOString() || null,
+          lastSyncStatus: tenant.last_sync_status,
+          lastSyncError: tenant.last_sync_error,
+          lastSyncStartedAt: tenant.last_sync_started_at?.toISOString() || null,
+          lastSyncFinishedAt: tenant.last_sync_finished_at?.toISOString() || null,
+          isRunning,
+        });
+      } catch (error) {
+        app.log.error({ error, tenantId: req.tenantId }, 'Erro ao buscar status de sync');
+        return reply.status(500).send({
+          error: 'Erro ao buscar status',
+          message: error instanceof Error ? error.message : 'Erro desconhecido',
+        });
+      }
+    }
+  );
+
   done();
 };
