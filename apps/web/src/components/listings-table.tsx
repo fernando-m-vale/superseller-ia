@@ -121,7 +121,8 @@ export function ListingsTable() {
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
         onSuccess={() => {
-          // Refetch será feito automaticamente pelo hook
+          // Refetch da lista após import bem-sucedido
+          refetch()
         }}
       />
 

@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
+import { mutate } from 'swr'
 
 interface ImportListingResponse {
   message: string
@@ -28,7 +28,6 @@ interface ImportListingError {
 export function useImportListing() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const queryClient = useQueryClient()
 
   const importListing = async (externalId: string): Promise<ImportListingResponse['data']> => {
     setIsLoading(true)
@@ -104,8 +103,19 @@ export function useImportListing() {
 
       const result = await response.json() as ImportListingResponse
       
-      // Invalidar cache de listings para atualizar a lista
-      queryClient.invalidateQueries({ queryKey: ['listings'] })
+      // Invalidar cache do SWR para atualizar a lista
+      // O SWR usa a URL como chave, então invalidamos todas as URLs que começam com /listings
+      // Isso força o refetch de todas as queries de listings (com diferentes filtros/paginação)
+      mutate(
+        (key) => {
+          if (typeof key === 'string') {
+            return key.startsWith('/listings')
+          }
+          return false
+        },
+        undefined,
+        { revalidate: true }
+      )
 
       return result.data
     } catch (err) {
