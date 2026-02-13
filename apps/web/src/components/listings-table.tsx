@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useListings, type ListingsFilters } from '@/hooks/use-listings'
+import { useAutoSync } from '@/hooks/use-auto-sync'
 import {
   Table,
   TableBody,
@@ -27,6 +28,26 @@ export function ListingsTable() {
   const [expandedListingId, setExpandedListingId] = useState<string | null>(null)
   // Estado para modal de import
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  
+  // HOTFIX: Auto-sync com guard para evitar loops
+  const autoSync = useAutoSync()
+  const autoSyncFiredRef = useRef(false)
+  
+  // Disparar auto-sync apenas 1x ao montar componente
+  useEffect(() => {
+    // Guard: não disparar se já foi disparado
+    if (autoSyncFiredRef.current) {
+      return;
+    }
+    
+    // Guard: não disparar se mutation já está em andamento
+    if (autoSync.isPending) {
+      return;
+    }
+    
+    autoSyncFiredRef.current = true;
+    autoSync.mutate();
+  }, []); // Disparar apenas 1x ao montar (guard via useRef + sessionStorage)
 
   const handleRowToggle = (listingId: string) => {
     setExpandedListingId(prev => prev === listingId ? null : listingId)

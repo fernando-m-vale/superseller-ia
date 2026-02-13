@@ -6,7 +6,6 @@
 
 import { useEffect } from 'react';
 import { useSyncStatus } from '@/hooks/use-sync-status';
-import { useAutoSync } from '@/hooks/use-auto-sync';
 import { useManualSync } from '@/hooks/use-manual-sync';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -31,14 +30,12 @@ function formatTimeAgo(dateString: string | null): string {
 
 export function SyncStatusBar() {
   const { data: status, isLoading } = useSyncStatus();
-  const autoSync = useAutoSync();
   const manualSync = useManualSync();
   const { toast } = useToast();
 
-  // Auto-sync ao montar componente (silent)
-  useEffect(() => {
-    autoSync.mutate();
-  }, [autoSync]);
+  // HOTFIX: Removido auto-sync deste componente
+  // O auto-sync deve ser disparado em um único lugar (ex: listings-table ou page)
+  // com guard adequado para evitar loops
 
   // Tratar resultado do sync manual
   useEffect(() => {
