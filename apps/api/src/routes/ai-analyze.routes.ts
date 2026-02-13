@@ -1303,14 +1303,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           });
           
-          // Filtrar apenas ações aplicadas após a criação desta análise
-          const appliedActions = await appliedActionService.getAppliedActions(
+          // HOTFIX: Instrumentação para debug (remover após validação)
+          const analysisCreatedAt = currentAnalysis?.created_at || null;
+          const allActions = await appliedActionService.getAppliedActions(tenantId, listingId, null);
+          const filteredActions = await appliedActionService.getAppliedActions(
             tenantId, 
             listingId,
-            currentAnalysis?.created_at || null
+            analysisCreatedAt
           );
           
-          responseData.appliedActions = appliedActions.map((action) => ({
+          // Log de debug (apenas em dev ou com flag)
+          if (process.env.NODE_ENV === 'development' || request.headers['x-debug'] === '1') {
+            request.log.info({
+              listingId,
+              tenantId,
+              forceRefresh: forceRefresh || false,
+              analysisCreatedAt: analysisCreatedAt?.toISOString() || null,
+              countAppliedActionsTotal: allActions.length,
+              countAfterFilter: filteredActions.length,
+              minAppliedAt: filteredActions.length > 0 
+                ? filteredActions.reduce((min, a) => a.appliedAt < min ? a.appliedAt : min, filteredActions[0].appliedAt).toISOString()
+                : null,
+              maxAppliedAt: filteredActions.length > 0
+                ? filteredActions.reduce((max, a) => a.appliedAt > max ? a.appliedAt : max, filteredActions[0].appliedAt).toISOString()
+                : null,
+            }, '[APPLIED-ACTIONS-DEBUG] AppliedActions filtrados');
+          }
+          
+          responseData.appliedActions = filteredActions.map((action) => ({
             actionType: action.actionType,
             appliedAt: action.appliedAt.toISOString(),
           }));
@@ -1778,14 +1798,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           },
         });
         
-        // Filtrar apenas ações aplicadas após a criação desta análise
-        const appliedActions = await appliedActionService.getAppliedActions(
+        // HOTFIX: Instrumentação para debug (remover após validação)
+        const cacheAnalysisCreatedAt = cachedAnalysis?.created_at || null;
+        const cacheAllActions = await appliedActionService.getAppliedActions(tenantId, listingId, null);
+        const cacheFilteredActions = await appliedActionService.getAppliedActions(
           tenantId, 
           listingId,
-          cachedAnalysis?.created_at || null
+          cacheAnalysisCreatedAt
         );
         
-        cacheResponseData.appliedActions = appliedActions.map((action) => ({
+        // Log de debug (apenas em dev ou com flag)
+        if (process.env.NODE_ENV === 'development' || request.headers['x-debug'] === '1') {
+          request.log.info({
+            listingId,
+            tenantId,
+            forceRefresh: false, // Cache hit
+            analysisCreatedAt: cacheAnalysisCreatedAt?.toISOString() || null,
+            countAppliedActionsTotal: cacheAllActions.length,
+            countAfterFilter: cacheFilteredActions.length,
+            minAppliedAt: cacheFilteredActions.length > 0 
+              ? cacheFilteredActions.reduce((min, a) => a.appliedAt < min ? a.appliedAt : min, cacheFilteredActions[0].appliedAt).toISOString()
+              : null,
+            maxAppliedAt: cacheFilteredActions.length > 0
+              ? cacheFilteredActions.reduce((max, a) => a.appliedAt > max ? a.appliedAt : max, cacheFilteredActions[0].appliedAt).toISOString()
+              : null,
+          }, '[APPLIED-ACTIONS-DEBUG] AppliedActions filtrados (cache)');
+        }
+        
+        cacheResponseData.appliedActions = cacheFilteredActions.map((action) => ({
           actionType: action.actionType,
           appliedAt: action.appliedAt.toISOString(),
         }));

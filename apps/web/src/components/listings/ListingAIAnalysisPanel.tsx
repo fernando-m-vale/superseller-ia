@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -152,29 +152,36 @@ export function ListingAIAnalysisPanel({
   const { toast } = useToast()
   const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
   const [applyModalOpen, setApplyModalOpen] = useState(false)
+  // HOTFIX: Estado local para appliedActions (atualizado imediatamente após aplicar)
+  const [localAppliedActions, setLocalAppliedActions] = useState<Array<{ actionType: string; appliedAt: string }>>(appliedActions)
+  
+  // Sincronizar com prop quando mudar (ex: após regerar análise)
+  useEffect(() => {
+    setLocalAppliedActions(appliedActions)
+  }, [appliedActions])
   const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
   const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
   const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
   
   const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
 
-  // DIA 06.1: Verificar se ação já foi aplicada (com compatibilidade)
+  // HOTFIX: Verificar se ação já foi aplicada (usando estado local)
   const isActionApplied = (actionType: string) => {
-    // Verificar ação específica
-    if (appliedActions.some(action => action.actionType === actionType)) {
+    // Verificar ação específica no estado local
+    if (localAppliedActions.some(action => action.actionType === actionType)) {
       return true;
     }
     
     // Compatibilidade: se procurar "seo", verificar "seo_title" ou "seo_description"
     if (actionType === 'seo') {
-      return appliedActions.some(action => 
+      return localAppliedActions.some(action => 
         action.actionType === 'seo_title' || action.actionType === 'seo_description'
       );
     }
     
     // Compatibilidade: se procurar "midia", verificar "media_images"
     if (actionType === 'midia') {
-      return appliedActions.some(action => action.actionType === 'media_images');
+      return localAppliedActions.some(action => action.actionType === 'media_images');
     }
     
     return false;
@@ -225,7 +232,8 @@ export function ListingAIAnalysisPanel({
           : { type: 'react_node' }
       }
 
-      await applyAction({
+      // HOTFIX: Aplicar ação e atualizar estado local imediatamente (sem forceRefresh)
+      const result = await applyAction({
         actionType: applyModalActionType,
         beforePayload,
         afterPayload,
@@ -237,10 +245,24 @@ export function ListingAIAnalysisPanel({
         duration: 2000,
       })
 
-      // Recarregar análise para atualizar appliedActions
-      if (onRegenerate) {
-        await onRegenerate()
+      // HOTFIX: Atualizar estado local imediatamente com a ação aplicada
+      const newAction = {
+        actionType: result.actionType,
+        appliedAt: result.appliedAt,
       }
+      
+      setLocalAppliedActions(prev => {
+        // Evitar duplicatas
+        if (prev.some(a => a.actionType === newAction.actionType)) {
+          return prev.map(a => 
+            a.actionType === newAction.actionType ? newAction : a
+          )
+        }
+        return [...prev, newAction]
+      })
+      
+      // HOTFIX: NÃO chamar onRegenerate() aqui - isso fazia forceRefresh=true e resetava badges
+      // O estado local já foi atualizado acima, então o badge aparece imediatamente
     } catch (error) {
       // DIA 06.2: Toast já mostra mensagem detalhada do hook
       toast({
@@ -775,7 +797,7 @@ export function ListingAIAnalysisPanel({
               mlDeeplink: editUrl || undefined,
             }
           })}
-          appliedActions={appliedActions}
+          appliedActions={localAppliedActions}
           onApplyAction={(actionType, before, after) => {
             handleOpenApplyModal(actionType, before, after)
           }}
