@@ -54,10 +54,20 @@ export function ImportListingModal({ open, onOpenChange, onSuccess }: ImportList
     } catch (err) {
       // Erro já é tratado pelo hook e exibido no toast
       const errorMessage = err instanceof Error ? err.message : 'Erro ao importar anúncio'
+      
+      // TAREFA C: Mensagem mais específica para erros de configuração
+      let displayMessage = errorMessage
+      if (errorMessage.includes('configuração da API inválida') || 
+          errorMessage.includes('NEXT_PUBLIC_API_URL') ||
+          errorMessage.includes('rota não encontrada')) {
+        displayMessage = 'Falha ao importar: configuração da API inválida (rota não encontrada). Verifique o ambiente NEXT_PUBLIC_API_URL.'
+      }
+      
       toast({
         title: 'Erro ao importar',
-        description: errorMessage,
+        description: displayMessage,
         variant: 'destructive',
+        duration: 6000, // Mais tempo para ler mensagem de erro
       })
     }
   }
