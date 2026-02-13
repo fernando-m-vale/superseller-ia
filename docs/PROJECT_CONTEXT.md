@@ -74,32 +74,34 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
   - ✅ Benchmark → Action Engine → Conteúdo Gerado — **CONCLUÍDO (Dia 5)**
 - 🚀 Próxima fase: Execução Assistida + Jobs Automáticos + Hacks ML Contextuais (Dia 06-10)
 
-## 🧠 Estado atual do produto (2026-02-11 — Dia 5 Concluído)
+## 🧠 Estado atual do produto (2026-02-12 — Dia 6 Concluído)
 
-**Dia atual do projeto:** Dia 5 concluído com sucesso  
-**Fase ativa:** DIA 06 — Execução Assistida (Modo Aplicar)  
-**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, dashboard consistente
+**Dia atual do projeto:** Dia 6 concluído com sucesso  
+**Fase ativa:** DIA 07 — Cadastro Manual + Anúncios sem Venda  
+**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, execução assistida funcional, robustez de mídia/preço
 
 - **SuperSeller IA agora possui:**
   - ✅ **Diagnóstico:** Análise profunda de anúncio com IA especialista
   - ✅ **Priorização inteligente (Top 3):** rankGaps() com regra dura (máx 3 criticalGaps), ordenação por Impact DESC → Effort ASC → Confidence DESC
   - ✅ **Conteúdo gerado contextual:** Títulos, bullets, descrição prontos para copy/paste
-  - ✅ **Promo confiável:** Anti-regressão implementada, TTL + feature flag, observabilidade completa
+  - ✅ **Promo confiável:** Anti-regressão implementada, TTL + feature flag, observabilidade completa, sem cálculo (fonte única de verdade)
   - ✅ **Dashboard consistente:** Visits, orders, gmv separados e confiáveis
+  - ✅ **Execução Assistida:** Botão "Registrar como aplicado", modal antes/depois, badge "Implementado", Plano de Execução navegável
+  - ✅ **Robustez de mídia:** Clips com tri-state (true/false/null), detecção robusta, persistência "true é sticky"
   - ✅ **Infra com power orchestration:** Lambda orchestrator, CodeBuild para NAT, RDS controlado
 
-- **Dia 5 concluído:** Benchmark → Action Engine → Conteúdo Gerado
-  - **Backend:** BenchmarkInsightsService, rankGaps(), GeneratedContentService, anti-regressão de promo, conversion como fração (HOTFIX P0)
-  - **Frontend:** BenchmarkInsightsPanel, GeneratedContentPanel, badge de confiança, banner de fallback, conteúdo copiável
-  - **Infra:** Lambda power-orchestrator, CodeBuild para NAT toggle, RDS controlado
+- **Dia 6 concluído:** Execução Assistida (ApplyAction + Clips + Promo + Plano + Badges)
+  - **Backend:** AppliedActionService, rota apply-action com validação flexível, ml-video-extractor tri-state, promo sem cálculo, filtro appliedActions por análise
+  - **Frontend:** Botões "Registrar como aplicado", ApplyActionModal, badges "Implementado", estado local imediato, Plano navegável
+  - **Hotfixes:** CI fix (req.tenantId), clips robustez, promo sem fallback, badges reset correto
 
-- **Decisão estratégica:** Produto deixa de ser "auditor" e passa a ser "assistente vendedor"
+- **Decisão estratégica:** Produto deixa de ser "auditor" e passa a ser "assistente vendedor" com execução assistida
 
 **Limitação atual:**
 - Benchmark ML ainda depende de desbloqueio 403 (fora do controle atual)
 - Pequeno desalinhamento de fuso (-1 dia) tolerado temporariamente
 
-**Produto já entrega valor prático imediato.**
+**Produto já entrega valor prático imediato com execução assistida funcional.**
 
 ## ⚠️ PROBLEMAS ABERTOS (INFRA/DEPLOY — NÃO CONCEITUAIS)
 

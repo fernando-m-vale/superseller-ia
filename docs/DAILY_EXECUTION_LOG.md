@@ -1,3 +1,117 @@
+# DAILY EXECUTION LOG — 2026-02-12 (Dia 6 — Execução Assistida + Clips + Promo + Plano + Badges)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do dia
+**Execução Assistida (Modo Aplicar Sugestão) — ApplyAction funcional — Robustez de detecção de clips (tri-state) — Promo/preço sem cálculo — Plano de Execução navegável — Reset de badges ao regerar — Badges aparecem imediatamente após aplicar**
+
+## ✅ Entregas consolidadas
+
+### Backend
+- ✅ AppliedAction model e migration (Prisma)
+- ✅ AppliedActionService com suporte a actionTypes granulares (seo_title, seo_description, media_images, promo_cover_badge, promo_banner) e legados
+- ✅ Rota POST /api/v1/listings/:listingId/apply-action com validação flexível e normalização
+- ✅ Fix CI: remover req.user?.tenantId, usar req.tenantId (injetado pelo authGuard)
+- ✅ ml-video-extractor com tri-state (true/false/null) e proteção contra shape drift
+- ✅ Persistência "true é sticky" (não sobrescreve true com null/false)
+- ✅ Promo/preço: remover fallback perigoso, buildPromoText não inventa "de X por Y" sem dados da fonte
+- ✅ Filtro de appliedActions por analysis.created_at para reset ao regerar
+- ✅ Instrumentação de debug (logs estruturados com counts, min/max appliedAt)
+
+### Frontend
+- ✅ Botão "Registrar como aplicado" em todos os blocos executáveis (Título, Descrição, Imagens)
+- ✅ ApplyActionModal com scroll e footer fixo (DIA 06.3)
+- ✅ Badge "Implementado" quando ação aplicada
+- ✅ Estado local (localAppliedActions) atualizado imediatamente após aplicar (sem forceRefresh)
+- ✅ Plano de Execução com navegação corrigida (section IDs corretos)
+- ✅ Scroll robusto com fallback para topo
+- ✅ UI de promo: só mostra "de X por Y" quando originalPriceForDisplay existe
+
+## 🧠 Decisão estratégica
+**Produto agora permite "execução assistida": usuário vê sugestão, compara antes/depois, confirma e registra. Sistema não publica no ML ainda, mas cria percepção de valor imediato.**
+
+## 📌 Problemas enfrentados (antes)
+
+### ApplyAction
+- ApplyAction retornava 400 por divergência de enum/actionType (granular vs legado)
+- Validação/normalização inconsistentes entre schema Zod e lógica manual
+- CI/Deploy falhando com TS2339: req.user não existe no type FastifyRequest
+
+### Clips
+- Sistema sugeria "Adicionar vídeo" mesmo quando anúncio tinha clip publicado
+- Detecção instável: shape drift (HTML/string inesperada), permissões (403), falta de evidência positiva
+
+### Promo/Preço
+- Em alguns blocos a IA "calculava" e aplicava desconto em cima do preço já com desconto
+- Fallback perigoso: originalPriceForDisplay = listing.price quando hasPromotion=true
+- Texto promo inventado sem dados da fonte
+
+### Plano de Execução
+- Botões "Aplicar" não navegavam para a seção correta (section IDs incorretos)
+- Scroll não tinha fallback quando elemento não existia
+
+### Badges
+- Regerar análise mantinha badges "Implementado" (deveria resetar)
+- Após correção de reset: badges pararam de aparecer mesmo com apply-action 200 (frontend fazia forceRefresh automático e/ou filtro de appliedActions incorreto)
+
+## 🔧 Hotfixes implementados (entregas do dia)
+
+### A) ApplyAction (backend + frontend)
+- Backend: aceitar payload flexível (actionType/action_type, beforePayload/before/before_payload, afterPayload/after/after_payload)
+- Aceitar actionTypes granulares: seo_title, seo_description, media_images, promo_cover_badge, promo_banner (+ legados seo, midia, cadastro, competitividade)
+- Normalização de legados para granulares quando necessário (seo → seo_title/seo_description baseado em payload)
+- Frontend: montar payload correto e exibir erro detalhado do backend
+- CI fix: remover uso de req.user?.tenantId e padronizar req.tenantId (injetado pelo authGuard)
+
+### B) Clips tri-state + evidências (robustez)
+- Extrator ml-video-extractor com tri-state (true/false/null) e proteção contra shape drift
+- True só com evidência positiva; false só com 200 + evidência negativa confiável; null em erro/permissão/shape inesperado
+- Persistência "true é sticky" (não sobrescreve true com null/false)
+- UI/insights: só sugerir clip quando hasClips === false, nunca quando null
+- Instrumentação: clipsEvidence com source, status, signals, rawShape
+
+### C) Promo/Preço "sem cálculo"
+- Remover fallback perigoso: originalPriceForDisplay = listing.price quando hasPromotion
+- buildPromoText não inventa "de X por Y" sem originalPrice da fonte
+- Frontend só exibe "de X por Y" quando originalPriceForDisplay existe
+- Aplicado em análise nova, cache payload e cache response
+
+### D) Plano de Execução
+- Corrigir mapeamento de section IDs: section-title → section-seo-title, section-images → section-media-images
+- Scroll robusto: checa existência do elemento, fallback para topo
+
+### E) Regerar análise e Badges (applied actions)
+- Reset badges somente em "Regerar análise" (forceRefresh=true)
+- Backend: filtrar appliedActions por applied_at >= analysis.created_at para análise atual
+- Bug: badges não apareciam pois o frontend chamava onRegenerate() após apply
+- Fix final: remover onRegenerate automático; aplicar estado local imediato (localAppliedActions) e sincronizar quando props mudarem
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ apply-action retorna 200 e badge aparece imediatamente (sem refetch)
+- ✅ refresh (F5) mantém badge (backend retorna appliedActions corretos)
+- ✅ clicar "Regerar análise" reseta badges
+- ✅ clips: não acusa falta quando null e não sugere quando detectado
+- ✅ promo: não calcula desconto em cima de desconto; texto promo só com fonte confiável
+- ✅ plano: clicar "Aplicar" navega para seção correta
+
+## 📌 Status do Dia 06
+✅ **Concluído**
+✅ Execução Assistida funcional (ApplyAction + badges)
+✅ Robustez de mídia/preço (tri-state clips, promo sem cálculo)
+✅ UX navegação (Plano de Execução)
+✅ Reset correto de badges
+
+## 📋 Backlog / Débitos técnicos gerados (não bloqueadores)
+- Permitir "desmarcar implementado" (com confirmação) ou histórico/undo
+- Melhorar observabilidade: logs estruturados + correlationId por request
+- Melhorar benchmark ML (403) + fallback e telemetria de falhas
+- Testes automatizados cobrindo: apply->badge, regenerate->reset, clips tri-state
+
+## ➡️ Próximo passo claro
+**DIA 07 — Cadastro Manual + Anúncios sem Venda: Permitir importar anúncio por URL/ID (MLB...) e analisar mesmo sem venda/pausados/novos**
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-11 (Dia 5 — Benchmark → Action Engine → Conteúdo Gerado)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

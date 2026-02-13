@@ -18,14 +18,21 @@
 
 ## 🗓️ DIA 07 — Cadastro Manual + Anúncios sem Venda
 
-**Objetivo:** Permitir alavancar anúncios com 0 venda.
+**Objetivo:** Permitir que o usuário traga anúncio por URL/ID (MLB...) e analisar mesmo sem venda/pausados/novos.
 
-### Entrega
-- Mostrar anúncios mesmo sem orders
-- Cadastro manual por listingIdExt
-- Sincronização inicial sob demanda
+### Entrega (DoD Dia 07)
+- Endpoint/flow: importar anúncio por ID externo (MLBxxxx) e criar listing interno no tenant
+- UI: botão "Adicionar anúncio" + modal (colar URL/ID) + feedback de import
+- Tratamento de "sem métricas": dataQuality mostrando ausência e recomendações focadas em cadastro/mídia/SEO
+- Garantir que analyze funciona com metrics vazias (sem quebrar score/ação)
 
-**Impacto:** Produto ajuda a vender, não apenas analisar o que já vende.
+### Plano de execução (checklist)
+- Backend: rota POST /listings/import (ou similar) + validação + sync inicial + persistência
+- Frontend: CTA na listagem + modal + refresh lista
+- Testes: importar ID válido, inválido, de outro seller, e anúncio pausado
+- Documentar decisões e riscos
+
+**Impacto:** Produto ajuda a vender, não apenas analisar o que já vende. Permite "Primeiro valor" (1 anúncio manual + 1 ação aplicada).
 
 ---
 

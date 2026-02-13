@@ -856,4 +856,49 @@ Endpoint `/ai/analyze` estava regravando promo incorretamente, causando regress�
 
 ---
 
+## ADR-021: AppliedActions — Badges Locais vs Refetch e Regra de Reset no ForceRefresh
+
+**Data:** 2026-02-12  
+**Status:** Implementado
+
+### Contexto
+Após aplicar uma ação (apply-action retorna 200 OK), o badge "Implementado" não aparecia porque o frontend estava fazendo `forceRefresh=true` automaticamente, o que resetava os badges. Além disso, ao regerar análise, badges de ações aplicadas anteriormente permaneciam visíveis quando deveriam resetar.
+
+### Decisão
+**Badges atualizam localmente após apply-action (sem refetch). Reset apenas via regenerate explícito (forceRefresh=true). Backend filtra appliedActions por `applied_at >= analysis.created_at` para análise atual.**
+
+### Justificativa
+- Evitar roundtrip custoso após aplicar ação (melhor UX: badge aparece instantaneamente)
+- Evitar apagamento por re-análise automática (badge deve persistir até regerar explicitamente)
+- Manter consistência: badges resetam apenas quando usuário solicita nova análise
+- Backend filtra por análise atual para garantir que badges refletem apenas ações aplicadas após a análise atual
+
+### Implementação
+- **Frontend:**
+  - Estado local `localAppliedActions` atualizado imediatamente após apply-action
+  - `isActionApplied()` usa estado local ao invés de prop
+  - Sincronização com prop quando muda (ex: após regerar análise)
+  - NÃO chama `onRegenerate()` após aplicar ação
+- **Backend:**
+  - `AppliedActionService.getAppliedActions()` aceita `analysisCreatedAt` opcional
+  - Filtra por `applied_at >= analysis.created_at` quando fornecido
+  - Busca `analysis.created_at` do registro atual (nova ou cache) antes de filtrar
+  - Aplicado em análise nova e cache response
+- **Instrumentação:**
+  - Logs estruturados com `analysisCreatedAt`, `countAppliedActionsTotal`, `countAfterFilter`, `min/max appliedAt`
+  - Logs apenas em dev ou com header `x-debug: 1`
+
+### Consequências
+- **UX:** Badge aparece instantaneamente após aplicar (sem refetch)
+- **Consistência:** Badges resetam apenas ao clicar "Regerar análise"
+- **Performance:** Evita roundtrip desnecessário após aplicar ação
+- **Observabilidade:** Logs permitem validar filtro e debug de problemas
+
+### Alternativas consideradas
+- Refetch após aplicar: Roundtrip custoso, pode resetar badges se forceRefresh automático
+- Sem filtro por análise: Badges de análises anteriores aparecem incorretamente
+- Reset manual de badges: Complexidade desnecessária, melhor resetar ao regerar
+
+---
+
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.
