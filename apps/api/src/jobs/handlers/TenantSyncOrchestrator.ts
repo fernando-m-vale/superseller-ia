@@ -15,8 +15,14 @@ const MAX_LISTINGS_PER_SYNC = 200;
 export async function handleTenantSync(tenantId: string): Promise<void> {
   const startTime = Date.now();
   const queue = getJobQueue();
+  const requestId = `tenant-sync-${tenantId}-${Date.now()}`;
+  const debug = process.env.DEBUG === '1' || process.env.DEBUG_JOB_RUNNER === '1' || process.env.NODE_ENV === 'development';
 
   try {
+    if (debug) {
+      console.log(`[TENANT_SYNC] Iniciando`, { requestId, tenantId });
+    }
+
     // Atualizar status do tenant para running
     await prisma.tenant.update({
       where: { id: tenantId },
@@ -60,7 +66,7 @@ export async function handleTenantSync(tenantId: string): Promise<void> {
         tenantId,
         type: 'LISTING_SYNC',
         priority: 'interactive',
-        lockKey: `listing:${listing.id}`,
+        lockKey: `listing:${listing.id}:LISTING_SYNC`, // HOTFIX: incluir tipo
         payload: {
           listingId: listing.id,
           listingIdExt: listing.listing_id_ext,
@@ -83,9 +89,16 @@ export async function handleTenantSync(tenantId: string): Promise<void> {
       },
     });
 
-    // Log em dev ou com x-debug
-    if (process.env.NODE_ENV === 'development' || process.env.DEBUG === '1') {
-      console.log(`[TENANT_SYNC] Concluído tenantId=${tenantId} enqueued=${enqueuedCount} skipped=${skippedCount} duration=${duration}ms`);
+    // HOTFIX: Logs estruturados
+    if (debug) {
+      console.log(`[TENANT_SYNC] Concluído`, {
+        requestId,
+        tenantId,
+        enqueued: enqueuedCount,
+        skipped: skippedCount,
+        duration: `${duration}ms`,
+        status: 'success',
+      });
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -101,7 +114,12 @@ export async function handleTenantSync(tenantId: string): Promise<void> {
       },
     });
 
-    console.error(`[TENANT_SYNC] Erro tenantId=${tenantId} duration=${duration}ms`, error);
+    console.error(`[TENANT_SYNC] Erro`, {
+      requestId,
+      tenantId,
+      duration: `${duration}ms`,
+      error: errorMessage,
+    });
     throw error;
   }
 }

@@ -32,8 +32,16 @@ export async function startJobRunner(): Promise<void> {
   isRunning = true;
   shouldStop = false;
 
+  const driver = process.env.JOB_QUEUE_DRIVER || 'db';
+  const processId = process.pid;
+  const debug = process.env.DEBUG_JOB_RUNNER === '1' || process.env.NODE_ENV === 'development';
+
   console.log('[JOB_RUNNER] Iniciando runner...');
+  console.log(`[JOB_RUNNER] Driver: ${driver}`);
   console.log(`[JOB_RUNNER] Poll interval: ${POLL_INTERVAL_MS}ms`);
+  console.log(`[JOB_RUNNER] Process ID: ${processId}`);
+
+  let heartbeatCounter = 0;
 
   // Loop principal
   while (!shouldStop) {
@@ -41,6 +49,13 @@ export async function startJobRunner(): Promise<void> {
       await processNextJob();
     } catch (error) {
       console.error('[JOB_RUNNER] Erro no loop principal:', error);
+    }
+
+    // Heartbeat a cada 30s (10 ciclos de 3s)
+    heartbeatCounter++;
+    if (debug && heartbeatCounter >= 10) {
+      console.log(`[JOB_RUNNER] Heartbeat (processId=${processId}, driver=${driver})`);
+      heartbeatCounter = 0;
     }
 
     // Aguardar antes do próximo poll
@@ -70,10 +85,19 @@ async function processNextJob(): Promise<void> {
   }
 
   const startTime = Date.now();
-  const debug = process.env.DEBUG === '1' || process.env.NODE_ENV === 'development';
+  const debug = process.env.DEBUG === '1' || process.env.DEBUG_JOB_RUNNER === '1' || process.env.NODE_ENV === 'development';
 
+  // HOTFIX: Logs estruturados com requestId e tenantId
+  const requestId = `job-${job.jobId}-${Date.now()}`;
+  
   if (debug) {
-    console.log(`[JOB_RUNNER] Processando job ${job.jobId} type=${job.type} tenantId=${job.tenantId}`);
+    console.log(`[JOB_RUNNER] Processando job`, {
+      requestId,
+      jobId: job.jobId,
+      type: job.type,
+      tenantId: job.tenantId,
+      lockKey: job.lockKey,
+    });
   }
 
   try {
@@ -109,7 +133,14 @@ async function processNextJob(): Promise<void> {
     const duration = Date.now() - startTime;
     
     if (debug) {
-      console.log(`[JOB_RUNNER] Job ${job.jobId} concluído em ${duration}ms`);
+      console.log(`[JOB_RUNNER] Job concluído`, {
+        requestId,
+        jobId: job.jobId,
+        type: job.type,
+        tenantId: job.tenantId,
+        duration: `${duration}ms`,
+        status: 'success',
+      });
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
@@ -119,7 +150,14 @@ async function processNextJob(): Promise<void> {
     // Por enquanto, marcar como erro (retry pode ser implementado depois)
     await queue.markError(job.jobId, errorMessage);
 
-    console.error(`[JOB_RUNNER] Erro ao processar job ${job.jobId} duration=${duration}ms:`, error);
+    console.error(`[JOB_RUNNER] Erro ao processar job`, {
+      requestId,
+      jobId: job.jobId,
+      type: job.type,
+      tenantId: job.tenantId,
+      duration: `${duration}ms`,
+      error: errorMessage,
+    });
   }
 }
 

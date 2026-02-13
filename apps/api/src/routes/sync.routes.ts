@@ -1867,9 +1867,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Verificar lock
+        // Verificar lock (HOTFIX: usar lock_key completo para dedupe)
         const { checkLock } = await import('../jobs/locks');
-        const lockCheck = await checkLock(`tenant:${tenantId}`);
+        const lockKey = `tenant:${tenantId}:TENANT_SYNC`;
+        const lockCheck = await checkLock(lockKey);
         
         if (lockCheck.isLocked && !lockCheck.isStale) {
           return reply.status(200).send({
@@ -1878,14 +1879,14 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Enfileirar job
+        // Enfileirar job (HOTFIX: lock_key inclui tipo para dedupe correto)
         const { getJobQueue } = await import('../jobs/jobQueueFactory');
         const queue = getJobQueue();
         const { jobId } = await queue.enqueue({
           tenantId,
           type: 'TENANT_SYNC',
           priority: 'interactive',
-          lockKey: `tenant:${tenantId}`,
+          lockKey, // HOTFIX: incluir tipo para dedupe
           payload: {},
         });
 
@@ -1950,9 +1951,10 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Verificar lock
+        // Verificar lock (HOTFIX: usar lock_key completo para dedupe)
         const { checkLock } = await import('../jobs/locks');
-        const lockCheck = await checkLock(`tenant:${tenantId}`);
+        const lockKey = `tenant:${tenantId}:TENANT_SYNC`;
+        const lockCheck = await checkLock(lockKey);
         
         if (lockCheck.isLocked && !lockCheck.isStale) {
           return reply.status(200).send({
@@ -1961,14 +1963,14 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Enfileirar job
+        // Enfileirar job (HOTFIX: lock_key inclui tipo para dedupe correto)
         const { getJobQueue } = await import('../jobs/jobQueueFactory');
         const queue = getJobQueue();
         const { jobId } = await queue.enqueue({
           tenantId,
           type: 'TENANT_SYNC',
           priority: 'interactive',
-          lockKey: `tenant:${tenantId}`,
+          lockKey, // HOTFIX: incluir tipo para dedupe
           payload: {},
         });
 
@@ -2039,6 +2041,66 @@ export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
         app.log.error({ error, tenantId: req.tenantId }, 'Erro ao buscar status de sync');
         return reply.status(500).send({
           error: 'Erro ao buscar status',
+          message: error instanceof Error ? error.message : 'Erro desconhecido',
+        });
+      }
+    }
+  );
+
+  // HOTFIX: Endpoint de debug para health check do JobRunner
+  app.get(
+    '/jobs/health',
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      // Proteger por x-debug ou NODE_ENV
+      const debug = req.headers['x-debug'] === '1' || process.env.NODE_ENV !== 'production';
+      
+      if (!debug) {
+        return reply.status(403).send({ error: 'Forbidden' });
+      }
+
+      try {
+        const jobRunnerEnabled = process.env.ENABLE_JOB_RUNNER === 'true';
+        const jobQueueDriver = process.env.JOB_QUEUE_DRIVER || 'db';
+        
+        // Buscar timestamps do banco
+        const dbNow = await prisma.$queryRaw<Array<{ now: Date }>>`SELECT NOW() as now`;
+        const nowUtc = new Date().toISOString();
+        
+        // Contar jobs por status nas últimas 24h
+        const stats = await prisma.syncJob.groupBy({
+          by: ['status'],
+          where: {
+            created_at: {
+              gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+            },
+          },
+          _count: {
+            id: true,
+          },
+        });
+
+        const statsMap: Record<string, number> = {};
+        stats.forEach(s => {
+          statsMap[s.status] = s._count.id;
+        });
+
+        return reply.status(200).send({
+          jobRunnerEnabled,
+          jobQueueDriver,
+          nowUtc,
+          dbNow: dbNow[0]?.now?.toISOString() || null,
+          stats: {
+            queued: statsMap.queued || 0,
+            running: statsMap.running || 0,
+            success: statsMap.success || 0,
+            error: statsMap.error || 0,
+            skipped: statsMap.skipped || 0,
+          },
+        });
+      } catch (error) {
+        app.log.error({ error }, 'Erro ao buscar health de jobs');
+        return reply.status(500).send({
+          error: 'Erro ao buscar health',
           message: error instanceof Error ? error.message : 'Erro desconhecido',
         });
       }

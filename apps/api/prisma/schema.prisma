@@ -134,13 +134,13 @@ model Tenant {
   name       String
   created_at DateTime @default(now())
 
-  // DIA 08: Campos de sync automático
-  last_auto_sync_at     DateTime?
-  last_manual_sync_at   DateTime?
-  last_sync_status      SyncStatus @default(idle)
-  last_sync_error       String?    @db.Text
-  last_sync_started_at  DateTime?
-  last_sync_finished_at DateTime?
+  // DIA 08: Campos de sync automático (HOTFIX: timestamptz para timezone consistente)
+  last_auto_sync_at     DateTime?   @db.Timestamptz(3)
+  last_manual_sync_at   DateTime?   @db.Timestamptz(3)
+  last_sync_status      SyncStatus  @default(idle)
+  last_sync_error       String?     @db.Text
+  last_sync_started_at  DateTime?   @db.Timestamptz(3)
+  last_sync_finished_at DateTime?   @db.Timestamptz(3)
 
   users                   User[]
   marketplace_connections MarketplaceConnection[]
@@ -234,10 +234,10 @@ model Listing {
   access_blocked_code       String? // Código do erro que bloqueou acesso (ex: "PA_UNAUTHORIZED_RESULT_FROM_POLICIES")
   access_blocked_at         DateTime? // Quando foi bloqueado
   access_blocked_reason     String? // Mensagem sanitizada do erro (sem token)
-  // DIA 08: Campos de sync por listing
-  last_synced_at            DateTime?
-  last_sync_status          SyncStatus          @default(idle)
-  last_sync_error           String?             @db.Text
+  // DIA 08: Campos de sync por listing (HOTFIX: timestamptz para timezone consistente)
+  last_synced_at            DateTime?   @db.Timestamptz(3)
+  last_sync_status          SyncStatus  @default(idle)
+  last_sync_error           String?     @db.Text
   created_at                DateTime            @default(now())
   updated_at                DateTime            @updatedAt
 
@@ -529,19 +529,21 @@ model SyncJob {
   priority     SyncJobPriority @default(background)
   payload      Json
   lock_key     String
-  run_after    DateTime        @default(now())
+  run_after    DateTime        @default(now()) @db.Timestamptz(3)
   attempts     Int             @default(0)
   max_attempts Int             @default(3)
-  started_at   DateTime?
-  finished_at  DateTime?
+  started_at   DateTime?       @db.Timestamptz(3)
+  finished_at  DateTime?       @db.Timestamptz(3)
   error        String?         @db.Text
-  created_at   DateTime        @default(now())
-  updated_at   DateTime        @updatedAt
+  created_at   DateTime        @default(now()) @db.Timestamptz(3)
+  updated_at   DateTime        @updatedAt @db.Timestamptz(3)
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([status, priority, run_after])
   @@index([tenant_id, status])
   @@index([lock_key, status])
+  // HOTFIX: Índice único parcial para dedupe de TENANT_SYNC
+  @@unique([lock_key], map: "sync_jobs_lock_key_unique")
   @@map("sync_jobs")
 }
