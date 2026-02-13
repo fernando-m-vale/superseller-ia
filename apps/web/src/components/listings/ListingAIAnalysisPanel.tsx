@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, ArrowRight } from 'lucide-react'
+import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, ArrowRight, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -103,6 +103,15 @@ interface ListingAIAnalysisPanelProps {
     actionType: string
     appliedAt: string
   }>
+  dataQuality?: {
+    performanceAvailable?: boolean
+    completenessScore?: number
+  }
+  metrics30d?: {
+    visits: number
+    orders: number
+    conversionRate: number | null
+  }
   benchmark?: {
     benchmarkSummary: {
       categoryId: string | null
@@ -144,6 +153,8 @@ export function ListingAIAnalysisPanel({
   listingDiscountPercent,
   pricingNormalized,
   appliedActions = [],
+  dataQuality,
+  metrics30d,
   benchmark,
   benchmarkInsights,
   onRegenerate,
@@ -389,6 +400,31 @@ export function ListingAIAnalysisPanel({
           )}
         </div>
       </div>
+
+      {/* Bloco de aviso quando não há métricas de performance */}
+      {dataQuality?.performanceAvailable === false && (
+        <Card className="border-l-4 border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <h4 className="font-semibold text-yellow-900 dark:text-yellow-100">
+                  ⚠️ Dados de performance ainda indisponíveis
+                </h4>
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  Este anúncio ainda não possui histórico suficiente de visitas e vendas.
+                  A análise abaixo foca em otimizações de cadastro, SEO e mídia que podem ajudar a melhorar a performance.
+                </p>
+                {(metrics30d?.visits === 0 || metrics30d?.orders === 0) && (
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
+                    Visitas: {metrics30d.visits || 0} | Pedidos: {metrics30d.orders || 0}
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 🔥 VEREDITO DIRETO — HERO CARD */}
       <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 shadow-lg">

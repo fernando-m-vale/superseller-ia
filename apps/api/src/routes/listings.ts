@@ -2,8 +2,11 @@ import { FastifyPluginCallback } from 'fastify';
 import { PrismaClient, Marketplace } from '@prisma/client';
 import { z } from 'zod';
 import { authGuard } from '../plugins/auth';
+import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
+import axios, { AxiosError } from 'axios';
 
 const prisma = new PrismaClient();
+const ML_API_BASE = 'https://api.mercadolibre.com';
 
 // TTL para considerar análise expirada (em dias)
 const ANALYSIS_TTL_DAYS = Number(process.env.ANALYSIS_TTL_DAYS) || 7;
@@ -331,6 +334,177 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         return reply.status(500).send({ 
           error: 'Failed to apply action',
           message: 'Erro interno ao registrar ação'
+        });
+      }
+    }
+  );
+
+  // POST /api/v1/listings/import
+  // Importa anúncio manualmente por URL ou ID MLB
+  app.post(
+    '/import',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        // Validar payload
+        const ImportSchema = z.object({
+          source: z.enum(['mercadolivre']).default('mercadolivre'),
+          externalId: z.string().min(1, 'externalId é obrigatório'),
+        });
+
+        const { source, externalId } = ImportSchema.parse(req.body);
+
+        // Extrair ID MLB da URL ou usar diretamente
+        let mlbId = externalId.trim();
+        
+        // Se vier URL completa, extrair ID
+        if (mlbId.includes('mercadolivre.com.br') || mlbId.includes('mercadolivre.com')) {
+          const urlMatch = mlbId.match(/MLB-?\d+/);
+          if (urlMatch) {
+            mlbId = urlMatch[0].replace('MLB-', 'MLB');
+          } else {
+            // Tentar extrair do path
+            const pathMatch = mlbId.match(/\/(MLB-?\d+)/);
+            if (pathMatch) {
+              mlbId = pathMatch[1].replace('MLB-', 'MLB');
+            }
+          }
+        }
+
+        // Validar formato MLB
+        if (!mlbId.startsWith('MLB')) {
+          return reply.status(400).send({ 
+            error: 'Invalid externalId',
+            message: 'O ID deve começar com MLB (ex: MLB1234567890)'
+          });
+        }
+
+        // Normalizar: garantir que seja MLB seguido de números
+        mlbId = mlbId.replace(/^MLB-?/, 'MLB');
+
+        app.log.info({ tenantId, mlbId, source }, 'Iniciando import manual de anúncio');
+
+        // Verificar se já existe
+        const existingListing = await prisma.listing.findFirst({
+          where: {
+            tenant_id: tenantId,
+            marketplace: Marketplace.mercadolivre,
+            listing_id_ext: mlbId,
+          },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        });
+
+        if (existingListing) {
+          app.log.info({ tenantId, mlbId, listingId: existingListing.id }, 'Anúncio já existe, retornando existente');
+          return reply.status(200).send({
+            message: 'Anúncio já existe',
+            data: {
+              id: existingListing.id,
+              title: existingListing.title,
+              status: existingListing.status,
+              listingIdExt: mlbId,
+              alreadyExists: true,
+            },
+          });
+        }
+
+        // Usar MercadoLivreSyncService para criar/atualizar listing
+        // Isso garante consistência com o fluxo de sync normal
+        const syncService = new MercadoLivreSyncService(tenantId);
+        
+        // Buscar detalhes completos via sync service (com autenticação)
+        const items = await syncService.fetchItemsDetails([mlbId], false);
+        
+        if (items.length === 0) {
+          return reply.status(404).send({
+            error: 'Anúncio não encontrado',
+            message: `O anúncio ${mlbId} não foi encontrado ou não está acessível.`,
+          });
+        }
+
+        // Upsert listing (criar ou atualizar)
+        const { created, updated } = await syncService.upsertListings(items, 'manual_import', false);
+
+        // Buscar listing criado
+        const importedListing = await prisma.listing.findUnique({
+          where: {
+            tenant_id_marketplace_listing_id_ext: {
+              tenant_id: tenantId,
+              marketplace: Marketplace.mercadolivre,
+              listing_id_ext: mlbId,
+            },
+          },
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            listing_id_ext: true,
+            price: true,
+            stock: true,
+            marketplace: true,
+          },
+        });
+
+        if (!importedListing) {
+          return reply.status(500).send({
+            error: 'Erro ao criar listing',
+            message: 'O anúncio foi processado mas não foi encontrado no banco de dados.',
+          });
+        }
+
+        app.log.info({ 
+          tenantId, 
+          mlbId, 
+          listingId: importedListing.id, 
+          created, 
+          updated 
+        }, 'Import manual concluído com sucesso');
+
+        return reply.status(201).send({
+          message: 'Anúncio importado com sucesso',
+          data: {
+            id: importedListing.id,
+            title: importedListing.title,
+            status: importedListing.status,
+            listingIdExt: importedListing.listing_id_ext,
+            price: Number(importedListing.price),
+            stock: importedListing.stock,
+            marketplace: importedListing.marketplace,
+            alreadyExists: false,
+          },
+        });
+      } catch (error) {
+        app.log.error({ error, tenantId: req.tenantId }, 'Erro ao importar anúncio');
+        
+        if (error instanceof z.ZodError) {
+          const firstError = error.errors[0];
+          return reply.status(400).send({
+            error: 'Invalid input',
+            message: firstError.message,
+            details: error.errors,
+          });
+        }
+
+        if (error instanceof Error) {
+          return reply.status(500).send({
+            error: 'Erro ao importar anúncio',
+            message: error.message || 'Erro interno ao importar anúncio',
+          });
+        }
+
+        return reply.status(500).send({
+          error: 'Erro ao importar anúncio',
+          message: 'Erro interno ao importar anúncio',
         });
       }
     }

@@ -13,8 +13,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { Loader2, Search, AlertCircle } from 'lucide-react'
+import { Loader2, Search, AlertCircle, Plus } from 'lucide-react'
 import { ListingAccordionRow } from '@/components/listings/ListingAccordionRow'
+import { ImportListingModal } from '@/components/listings/ImportListingModal'
+import { useState } from 'react'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
@@ -23,6 +25,8 @@ export function ListingsTable() {
   })
   // Estado para controlar qual linha está expandida (accordion single)
   const [expandedListingId, setExpandedListingId] = useState<string | null>(null)
+  // Estado para modal de import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
 
   const handleRowToggle = (listingId: string) => {
     setExpandedListingId(prev => prev === listingId ? null : listingId)
@@ -72,8 +76,9 @@ export function ListingsTable() {
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
-      <div className="flex gap-4 items-center">
+      {/* Filtros e Botão Adicionar */}
+      <div className="flex gap-4 items-center justify-between">
+        <div className="flex gap-4 items-center flex-1">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
           <Input
@@ -101,7 +106,25 @@ export function ListingsTable() {
           <option value="active">Ativos</option>
           <option value="paused">Pausados</option>
         </Select>
+        </div>
+
+        <Button
+          onClick={() => setIsImportModalOpen(true)}
+          className="ml-auto"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Adicionar anúncio
+        </Button>
       </div>
+
+      {/* Modal de Import */}
+      <ImportListingModal
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        onSuccess={() => {
+          // Refetch será feito automaticamente pelo hook
+        }}
+      />
 
       {/* Loading */}
       {isLoading && (
