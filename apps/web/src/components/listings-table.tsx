@@ -16,7 +16,6 @@ import { Button } from '@/components/ui/button'
 import { Loader2, Search, AlertCircle, Plus } from 'lucide-react'
 import { ListingAccordionRow } from '@/components/listings/ListingAccordionRow'
 import { ImportListingModal } from '@/components/listings/ImportListingModal'
-import { useState } from 'react'
 
 export function ListingsTable() {
   const [filters, setFilters] = useState<ListingsFilters>({
