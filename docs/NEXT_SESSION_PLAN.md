@@ -76,15 +76,26 @@
    - **Status atual:** ⚠️ Existem jobs skipped lock_running, mas não sabemos se são históricos ou novos
    - **Ação:** Rodar queries de investigação em `HOTFIX_DIA08_VALIDATION.md` para determinar período
 
-7. **Aplicar migration pendente no PROD (CRÍTICO)**
+7. **Validar skipped lock_running (usar DEPLOY_END_UTC)**
+   - Preencher `DEPLOY_END_UTC` em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` (seção "Marco do Deploy")
+   - Rodar Query 2 da seção "Investigação: Skipped lock_running"
+   - **Critério PASS:** 0 ocorrências após `DEPLOY_END_UTC`
+   - **Se FAIL:** Investigar onde ainda está sendo setado `lock_running`
+
+8. **Aplicar migration pendente no PROD (CRÍTICO)**
    - Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aparece com `finished_at NULL` em `_prisma_migrations`
    - **Risco:** Timezone inconsistente e dedupe pode não estar funcionando corretamente
-   - **Ação:** Seguir procedimento seguro em `HOTFIX_DIA08_VALIDATION.md` (backup, janela, deploy, validação)
+   - **Ação:** Seguir procedimento completo em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` (seção "Migração PROD — Verificação e Execução Segura")
+   - **Ordem:** Passo 1 (verificar pendente) → Passo 2 (verificar índice) → Passo 3 (executar) → Passo 4 (pós-checks)
 
-8. **Decidir:**
-   - ✅ **DIA 08 FECHADO** → Iniciar DIA 09 (Hacks ML Contextualizados)
-   - ⚠️ **AJUSTES NECESSÁRIOS** → Documentar e corrigir
-   - 🔴 **BLOQUEADOR** → Escalar e resolver
+9. **Completar checklist operacional**
+   - Usar `docs/DIA08_PROD_VALIDATION_CHECKLIST.md`
+   - Todos os critérios devem ser PASS para fechar DIA 08
+
+10. **Decidir:**
+    - ✅ **DIA 08 FECHADO** → Iniciar DIA 09 (Hacks ML Contextualizados)
+    - ⚠️ **AJUSTES NECESSÁRIOS** → Documentar e corrigir
+    - 🔴 **BLOQUEADOR** → Escalar e resolver
 
 **Referência:** Ver `docs/DIA08_PROD_VALIDATION_CHECKLIST.md` para checklist completo.
 

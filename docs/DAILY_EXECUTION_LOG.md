@@ -97,13 +97,19 @@
 - ⚠️ **Migration pendente:** Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aparece com `finished_at NULL` e `applied_steps_count 0` em `_prisma_migrations` — **Suspeita de que NÃO foi aplicada no banco PROD**
 
 ## 📌 Status do Dia 08
-⏳ **Parcialmente concluído — Validação em Andamento**
+⏳ **Parcialmente concluído — Validação Final Pendente**
 ✅ Implementação técnica completa
 ✅ Hotfixes aplicados
 ✅ JobRunner funcionando em produção (evidências confirmadas)
-⚠️ Validação completa pendente:
-   - Confirmar se jobs skipped lock_running são históricos ou novos
-   - Aplicar migration pendente no PROD (20260214000000_fix_sync_jobs_timezone_and_dedupe)
+
+**Condições para fechar DIA 08:**
+1. ✅ JobRunner habilitado e processando jobs
+2. ✅ Jobs TENANT_SYNC e LISTING_SYNC completando com success
+3. ⏳ **0 skipped lock_running após deploy** (usar `DEPLOY_END_UTC` em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md`)
+4. ✅ Listings.last_synced_at sendo atualizado
+5. ⏳ **Migration 20260214000000 aplicada no PROD** (ver `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` seção "Migração PROD")
+
+**Checklist operacional:** Ver `docs/DIA08_PROD_VALIDATION_CHECKLIST.md` (10 minutos para completar)
 
 ## 📋 Backlog / Débitos técnicos gerados (não bloqueadores)
 - Migração para SQS quando necessário (arquitetura pronta)
