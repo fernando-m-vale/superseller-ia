@@ -135,12 +135,12 @@ model Tenant {
   created_at DateTime @default(now())
 
   // DIA 08: Campos de sync automático (HOTFIX: timestamptz para timezone consistente)
-  last_auto_sync_at     DateTime?   @db.Timestamptz(3)
-  last_manual_sync_at   DateTime?   @db.Timestamptz(3)
-  last_sync_status      SyncStatus  @default(idle)
-  last_sync_error       String?     @db.Text
-  last_sync_started_at  DateTime?   @db.Timestamptz(3)
-  last_sync_finished_at DateTime?   @db.Timestamptz(3)
+  last_auto_sync_at     DateTime?  @db.Timestamptz(3)
+  last_manual_sync_at   DateTime?  @db.Timestamptz(3)
+  last_sync_status      SyncStatus @default(idle)
+  last_sync_error       String?    @db.Text
+  last_sync_started_at  DateTime?  @db.Timestamptz(3)
+  last_sync_finished_at DateTime?  @db.Timestamptz(3)
 
   users                   User[]
   marketplace_connections MarketplaceConnection[]
@@ -156,6 +156,7 @@ model Tenant {
   listing_ai_analysis     ListingAIAnalysis[]
   applied_actions         AppliedAction[]
   sync_jobs               SyncJob[]
+  ListingHack             ListingHack[]
 
   @@map("tenants")
 }
@@ -235,9 +236,9 @@ model Listing {
   access_blocked_at         DateTime? // Quando foi bloqueado
   access_blocked_reason     String? // Mensagem sanitizada do erro (sem token)
   // DIA 08: Campos de sync por listing (HOTFIX: timestamptz para timezone consistente)
-  last_synced_at            DateTime?   @db.Timestamptz(3)
-  last_sync_status          SyncStatus  @default(idle)
-  last_sync_error           String?     @db.Text
+  last_synced_at            DateTime?           @db.Timestamptz(3)
+  last_sync_status          SyncStatus          @default(idle)
+  last_sync_error           String?             @db.Text
   created_at                DateTime            @default(now())
   updated_at                DateTime            @updatedAt
 
@@ -249,6 +250,7 @@ model Listing {
   recommendations         Recommendation[]
   listing_ai_analysis     ListingAIAnalysis[]
   applied_actions         AppliedAction[]
+  listing_hacks           ListingHack[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -540,10 +542,34 @@ model SyncJob {
 
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
+  // HOTFIX: Índice único parcial para dedupe de TENANT_SYNC
+  @@unique([lock_key], map: "sync_jobs_lock_key_unique")
   @@index([status, priority, run_after])
   @@index([tenant_id, status])
   @@index([lock_key, status])
-  // HOTFIX: Índice único parcial para dedupe de TENANT_SYNC
-  @@unique([lock_key], map: "sync_jobs_lock_key_unique")
   @@map("sync_jobs")
+}
+
+// DIA 09: Feedback do usuário sobre hacks sugeridos
+model ListingHack {
+  id           String    @id @default(uuid())
+  tenant_id    String
+  listing_id   String
+  hack_id      String // Ex: "ml_full_shipping", "ml_bundle_kit", etc.
+  status       String // "confirmed" | "dismissed"
+  notes        String?   @db.Text
+  confirmed_at DateTime?
+  dismissed_at DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@unique([listing_id, hack_id]) // Um feedback por hack por listing
+  @@index([tenant_id, updated_at(sort: Desc)])
+  @@index([listing_id])
+  @@index([hack_id])
+  @@index([status])
+  @@map("listing_hacks")
 }

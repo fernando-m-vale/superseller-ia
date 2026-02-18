@@ -15,6 +15,7 @@ import { BenchmarkInsightsPanel } from '@/components/ai/BenchmarkInsightsPanel'
 import { ApplyActionModal } from '@/components/ai/ApplyActionModal'
 import { useApplyAction, type ActionType } from '@/hooks/use-apply-action'
 import { ActionPlanChecklist } from '@/components/ai/ActionPlanChecklist'
+import { HacksPanel } from '@/components/ai/HacksPanel'
 
 // Template padronizado para seções
 type SectionTemplateProps = {
@@ -140,6 +141,22 @@ interface ListingAIAnalysisPanelProps {
   } | null
   benchmarkInsights?: NormalizedBenchmarkInsights | null
   generatedContent?: GeneratedContent | null
+  growthHacks?: Array<{
+    id: string
+    title: string
+    summary: string
+    why: string[]
+    impact: 'low' | 'medium' | 'high'
+    confidence: number
+    confidenceLevel: 'low' | 'medium' | 'high'
+    evidence: string[]
+  }>
+  growthHacksMeta?: {
+    rulesEvaluated: number
+    rulesTriggered: number
+    skippedBecauseOfHistory: number
+    skippedBecauseOfRequirements: number
+  }
   onRegenerate?: () => Promise<void>
   isRegenerating?: boolean
 }
@@ -157,6 +174,7 @@ export function ListingAIAnalysisPanel({
   metrics30d,
   benchmark,
   benchmarkInsights,
+  growthHacks,
   onRegenerate,
   isRegenerating = false,
 }: ListingAIAnalysisPanelProps) {
@@ -699,6 +717,14 @@ export function ListingAIAnalysisPanel({
       
       {/* 5️⃣ COMPARAÇÃO COM CONCORRENTES — BENCHMARK INSIGHTS (Dia 05) */}
       {benchmarkInsights && <BenchmarkInsightsPanel benchmarkInsights={benchmarkInsights} />}
+
+      {/* DIA 09: HACKS MERCADO LIVRE — HackEngine v1 */}
+      {growthHacks && growthHacks.length > 0 && listingId && (
+        <HacksPanel 
+          hacks={growthHacks} 
+          listingId={listingId}
+        />
+      )}
 
       {/* DIA 06.1: Conteúdo Gerado removido como bloco separado - será incorporado nas seções */}
 

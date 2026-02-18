@@ -25,12 +25,22 @@ interface AIAnalysisApiResponse {
     competitividade?: string
   }
   critique: string
-  growthHacks: Array<{
+  growthHacks?: Array<{
+    id: string
     title: string
-    description: string
-    priority: 'high' | 'medium' | 'low'
-    estimatedImpact: string
+    summary: string
+    why: string[]
+    impact: 'low' | 'medium' | 'high'
+    confidence: number
+    confidenceLevel: 'low' | 'medium' | 'high'
+    evidence: string[]
   }>
+  growthHacksMeta?: {
+    rulesEvaluated: number
+    rulesTriggered: number
+    skippedBecauseOfHistory: number
+    skippedBecauseOfRequirements: number
+  }
   seoSuggestions: {
     suggestedTitle: string
     titleRationale: string
@@ -171,12 +181,22 @@ export interface AIAnalysisResponse {
     competitividade?: string
   }
   critique: string
-  growthHacks: Array<{
+  growthHacks?: Array<{
+    id: string
     title: string
-    description: string
-    priority: 'high' | 'medium' | 'low'
-    estimatedImpact: string
+    summary: string
+    why: string[]
+    impact: 'low' | 'medium' | 'high'
+    confidence: number
+    confidenceLevel: 'low' | 'medium' | 'high'
+    evidence: string[]
   }>
+  growthHacksMeta?: {
+    rulesEvaluated: number
+    rulesTriggered: number
+    skippedBecauseOfHistory: number
+    skippedBecauseOfRequirements: number
+  }
   seoSuggestions: {
     title: string
     description: string
@@ -313,6 +333,7 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     potentialGain: apiResponse.potentialGain,
     critique: apiResponse.critique,
     growthHacks: apiResponse.growthHacks || [],
+    growthHacksMeta: apiResponse.growthHacksMeta,
     seoSuggestions: {
       title: apiResponse.seoSuggestions.suggestedTitle || '',
       description: seoDescription,

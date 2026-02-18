@@ -235,6 +235,8 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   benchmark={aiAnalysis.benchmark ?? null}
                   benchmarkInsights={aiAnalysis.benchmarkInsights}
                   generatedContent={aiAnalysis.generatedContent}
+                  growthHacks={aiAnalysis.growthHacks}
+                  growthHacksMeta={aiAnalysis.growthHacksMeta}
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
                 />

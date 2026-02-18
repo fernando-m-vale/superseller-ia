@@ -1,3 +1,125 @@
+# DAILY EXECUTION LOG — 2026-02-19 (Dia 9 — HackEngine v1 Completo)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do dia
+**HackEngine v1 — Sistema determinístico de hacks contextualizados baseados em dados reais do anúncio**
+
+## ✅ Entregas realizadas
+
+### Backend
+- ✅ Prisma model `listing_hacks` criado com campos e índices
+- ✅ Migration `20260219000000_add_listing_hacks` criada
+- ✅ SignalsBuilder implementado (extração determinística de signals)
+- ✅ `isKitHeuristic` implementado (determinístico, sem LLM)
+- ✅ HackEngine v1 com 5 hacks e confidence scoring
+- ✅ ListingHacksService para persistir feedback
+- ✅ Endpoint `POST /api/v1/listings/:listingId/hacks/:hackId/feedback`
+- ✅ Integração no endpoint analyze (fresh e cache)
+
+### Frontend
+- ✅ Componente `HacksPanel` criado
+- ✅ Integração no `ListingAIAnalysisPanel`
+- ✅ Botões "Confirmar implementação" e "Não se aplica"
+- ✅ Badges de impact e confidence
+- ✅ Estado persistido após feedback
+
+### Documentação
+- ✅ `docs/HACK_ENGINE_CONTRACT.md` criado (contrato completo)
+- ✅ Testes unitários para SignalsBuilder e HackEngine
+- ✅ Documentação atualizada (ARCHITECTURE_DECISIONS, NEXT_SESSION_PLAN)
+
+## 🧠 Decisão estratégica
+**Sistema agora gera hacks específicos e acionáveis baseados em dados reais, não genéricos. 100% determinístico, auditável e preparado para futura automação.**
+
+## 📌 Problemas enfrentados (antes)
+- Hacks genéricos não agregavam valor real
+- Sistema não respeitava histórico do usuário
+- Confidence não era determinística
+- Sem persistência de feedback
+
+## 🔧 Implementações (entregas do dia)
+
+### A) SignalsBuilder
+- Extração determinística de signals de listing, pricing, shipping, metrics, benchmark
+- `isKitHeuristic` implementado com regras explícitas (sem LLM)
+- Interface `ListingSignals` completa
+
+### B) HackEngine v1
+- 5 hacks implementados com regras detalhadas:
+  - `ml_full_shipping`: Gates, pontuação, blocking
+  - `ml_bundle_kit`: Gates, pontuação, impact dinâmico
+  - `ml_smart_variations`: Pontuação baseada em signals
+  - `ml_category_adjustment`: Gates, blocking, pontuação
+  - `ml_psychological_pricing`: Gates, pontuação, impact dinâmico
+- Confidence scoring com bandas fixas (0-39/40-69/70-100)
+- Respeita histórico (confirmed nunca sugere, dismissed 30d cooldown)
+
+### C) Persistência de Feedback
+- Model `listing_hacks` com status `confirmed`/`dismissed`
+- Service para salvar e buscar histórico
+- Endpoint REST para feedback
+
+### D) Integração no Analyze
+- HackEngine integrado no fluxo de análise (fresh e cache)
+- Retorna `growthHacks` e `growthHacksMeta` no payload
+- Não quebra análise se hacks falharem (graceful degradation)
+
+### E) UI Frontend
+- Componente `HacksPanel` com cards por hack
+- Badges de impact e confidence
+- Botões de feedback com estado persistido
+- Integrado no `ListingAIAnalysisPanel`
+
+## 🧪 Evidências / Testes executados (após)
+
+### Desenvolvimento
+- ✅ Migration criada
+- ✅ Prisma generate executado
+- ✅ Build API passando
+- ✅ Build WEB passando
+- ✅ Testes unitários criados (SignalsBuilder e HackEngine)
+
+### Testes Unitários
+- ✅ `isKitHeuristic`: palavras-chave, variações, case-insensitive
+- ✅ `buildSignals`: construção básica, isKitHeuristic
+- ✅ `generateHacks`: gates, histórico, cenários completos
+- ✅ Cooldown 30 dias: dismissed < 30d não sugere, >= 30d pode sugerir
+
+## 📌 Status do Dia 09
+✅ **CONCLUÍDO**
+- ✅ Implementação técnica completa
+- ✅ UI integrada
+- ✅ Documentação completa
+- ✅ Testes unitários criados
+
+**Critérios de aceite (DoD):**
+1. ✅ Hacks aparecem para um anúncio real
+2. ✅ Confidence coerente com regras (bandas 0-39/40-69/70-100)
+3. ✅ Feedback persistido e respeitado
+4. ✅ Engine nunca sugere hack dismissed (<30d) ou confirmed
+5. ✅ Documentação completa gerada
+6. ✅ Testes unitários determinísticos
+7. ✅ UI com confirmação e estado persistido
+8. ✅ Build verde (API e WEB)
+
+## 📋 Backlog / Débitos técnicos gerados (não bloqueadores)
+- Extrair shipping mode de listing (hoje null)
+- Extrair variationsCount de listing.pictures_json
+- Extrair p25/p75 de benchmark (hoje null)
+- Melhorar evidências com mais dados contextuais
+- Automação futura: integrar com APIs do ML para aplicar hacks automaticamente
+
+## ➡️ Próximo passo claro
+**DIA 10 — Empacotamento Comercial + Go Live**
+- Landing simples
+- Planos (Starter / Growth / Pro)
+- Onboarding guiado
+- Primeiro anúncio analisado automaticamente
+- Lista de espera / early users
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-18 (Dia 8 — Fechamento: HOTFIX lock_running + Migration PROD)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

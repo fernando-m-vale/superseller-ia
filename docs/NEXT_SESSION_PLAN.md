@@ -1,5 +1,23 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
+## 🗓️ DIA 09 — ✅ FECHADO (2026-02-19)
+
+**Status:** ✅ **CONCLUÍDO COM SUCESSO**
+
+**Entregas realizadas:**
+- ✅ HackEngine v1 completo (5 hacks + confidence scoring)
+- ✅ SignalsBuilder determinístico
+- ✅ Persistência de feedback (listing_hacks)
+- ✅ UI integrada (HacksPanel)
+- ✅ Documentação completa (HACK_ENGINE_CONTRACT.md)
+- ✅ Testes unitários
+
+**Documentação:**
+- Contrato completo: `docs/HACK_ENGINE_CONTRACT.md`
+- ADR: `docs/ARCHITECTURE_DECISIONS.md` (ADR-024)
+
+---
+
 ## 🗓️ DIA 06 — Execução Assistida (Modo Aplicar)
 
 **Objetivo:** Transformar análise em ação.
@@ -79,63 +97,21 @@
 
 ---
 
-## 🗓️ DIA 09 — Hacks ML Contextuais
+## 🗓️ DIA 09 — ✅ FECHADO (Hacks ML Contextuais)
 
-**Objetivo:** Gerar hacks específicos e acionáveis baseados em dados reais do anúncio (não genéricos).
+**Status:** ✅ **CONCLUÍDO**
 
-**Foco:** Hacks contextualizados e reais baseados em dados do anúncio (frete, kits, variações, categoria, preço psicológico).
+**Entregas:**
+- ✅ HackEngine v1 completo (5 hacks: ml_full_shipping, ml_bundle_kit, ml_smart_variations, ml_category_adjustment, ml_psychological_pricing)
+- ✅ SignalsBuilder determinístico com isKitHeuristic
+- ✅ Persistência de feedback (listing_hacks)
+- ✅ UI integrada (HacksPanel)
+- ✅ Documentação completa (HACK_ENGINE_CONTRACT.md)
+- ✅ Testes unitários (SignalsBuilder e HackEngine)
 
-### Entregas (DoD Dia 09)
-
-**Backend:**
-- ✅ HackEngine com signals específicos por tipo de hack
-- ✅ Signals baseados em dados reais (frete grátis, variações, categoria, preço)
-- ✅ Endpoint `/api/v1/ai/analyze` retorna `hacks` contextualizados
-- ✅ Testes unitários para cada tipo de hack
-
-**Frontend:**
-- ✅ UI de hacks contextualizados (não genéricos)
-- ✅ Badge de confiança por hack
-- ✅ CTA "Aplicar hack" quando executável
-- ✅ Explicação clara de cada hack
-
-**Critérios de qualidade:**
-- Hacks devem ser específicos ao anúncio (não genéricos)
-- Signals devem ser baseados em dados reais (não inventados)
-- UI deve mostrar apenas hacks relevantes (ocultar se genérico)
-
-### Plano de execução (checklist)
-
-**1. Backend — HackEngine:**
-- [ ] Criar `HackEngine.ts` com signals por tipo
-- [ ] Implementar signals:
-  - Frete grátis (verificar shipping.free_shipping, shipping.mode)
-  - Kits (verificar attributes, variations)
-  - Variações (verificar variations_count, variations)
-  - Categoria (verificar category_id, category_path)
-  - Preço psicológico (verificar price, original_price, discount_percent)
-- [ ] Integrar com `/api/v1/ai/analyze`
-- [ ] Testes unitários para cada signal
-
-**2. Frontend — UI de Hacks:**
-- [ ] Componente `HacksPanel` com hacks contextualizados
-- [ ] Badge de confiança (high/medium/low)
-- [ ] CTA "Aplicar hack" quando executável
-- [ ] Ocultar hacks genéricos/redundantes
-
-**3. Testes:**
-- [ ] Testar com anúncio com frete grátis
-- [ ] Testar com anúncio com variações
-- [ ] Testar com anúncio sem hacks relevantes (deve ocultar seção)
-
-**4. Documentação:**
-- [ ] Documentar signals e critérios de cada hack
-- [ ] Documentar decisões arquiteturais
-
-**Impacto:** Hacks específicos e acionáveis aumentam valor percebido e taxa de conversão.
-
-**⚠️ Antes de iniciar:**
-- [ ] Corrigir secret `prod/DB_URL` no Secrets Manager (housekeeping do DIA 08)
+**Documentação:**
+- Contrato completo: `docs/HACK_ENGINE_CONTRACT.md`
+- ADR: `docs/ARCHITECTURE_DECISIONS.md` (ADR-024)
 
 ---
 

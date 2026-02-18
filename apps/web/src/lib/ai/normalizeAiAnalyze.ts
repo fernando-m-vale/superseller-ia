@@ -54,7 +54,7 @@ export interface NormalizedAIAnalysisV21 {
 /**
  * Tipo completo normalizado incluindo dados V1
  */
-export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark' | 'benchmarkInsights' | 'generatedContent'> {
+export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark' | 'benchmarkInsights' | 'generatedContent' | 'growthHacks' | 'growthHacksMeta'> {
   analysisV21?: NormalizedAIAnalysisV21
   seoSuggestions?: {
     suggestedTitle?: string
@@ -87,6 +87,9 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   pricingNormalized?: AIAnalysisResponse['pricingNormalized']
   // Applied Actions (Dia 06)
   appliedActions?: AIAnalysisResponse['appliedActions']
+  // Growth Hacks (DIA 09)
+  growthHacks?: AIAnalysisResponse['growthHacks']
+  growthHacksMeta?: AIAnalysisResponse['growthHacksMeta']
 }
 
 /**

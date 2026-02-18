@@ -972,4 +972,50 @@ Durante aplicação de migration em PROD, descobriu-se que secret `prod/DB_URL` 
 
 ---
 
+---
+
+## ADR-024: HackEngine v1 — Sistema Determinístico de Hacks Contextualizados
+
+**Data:** 2026-02-19  
+**Status:** Implementado
+
+### Contexto
+O sistema precisava gerar hacks específicos e acionáveis baseados em dados reais do anúncio, não genéricos. Hacks devem ser determinísticos, auditáveis e respeitar histórico do usuário.
+
+### Decisão
+**Implementar HackEngine v1 com 5 hacks específicos do Mercado Livre, confidence scoring determinístico (0-100), e persistência de feedback do usuário.**
+
+### Justificativa
+- Hacks genéricos não agregam valor real ao usuário
+- Sistema determinístico garante consistência e auditabilidade
+- Confidence scoring permite priorização clara
+- Feedback do usuário evita sugerir hacks já aplicados ou descartados
+- Preparado para futura automação (estrutura permite integração com APIs do ML)
+
+### Implementação
+- **SignalsBuilder:** Extrai signals determinísticos de listing, pricing, shipping, metrics, benchmark
+- **HackEngine v1:** 5 hacks implementados:
+  - `ml_full_shipping`: Ativar frete grátis Full
+  - `ml_bundle_kit`: Criar kit/combo
+  - `ml_smart_variations`: Adicionar variações
+  - `ml_category_adjustment`: Ajustar categoria
+  - `ml_psychological_pricing`: Ajustar preço psicológico
+- **Confidence scoring:** Bandas fixas (0-39 low, 40-69 medium, 70-100 high)
+- **Histórico:** Confirmed nunca sugere; dismissed tem cooldown de 30 dias
+- **Persistência:** Model `listing_hacks` com status `confirmed`/`dismissed`
+- **UI:** Componente `HacksPanel` com botões de feedback e badges de impact/confidence
+
+### Consequências
+- **Valor:** Hacks específicos e acionáveis aumentam taxa de conversão
+- **Consistência:** Sistema determinístico garante resultados previsíveis
+- **UX:** Feedback do usuário evita sugestões repetitivas
+- **Observabilidade:** Meta inclui `rulesEvaluated`, `rulesTriggered`, `skippedBecauseOfHistory`, `skippedBecauseOfRequirements`
+
+### Alternativas consideradas
+- Hacks genéricos via LLM: Menos específicos, não auditáveis
+- Sem histórico: Sugestões repetitivas prejudicam UX
+- Confidence fixa: Não permite priorização baseada em dados
+
+---
+
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.

@@ -339,6 +339,91 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
+  // POST /api/v1/listings/:listingId/hacks/:hackId/feedback
+  // Registra feedback do usuário sobre um hack sugerido
+  app.post(
+    '/:listingId/hacks/:hackId/feedback',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { listingId, hackId } = req.params as { listingId: string; hackId: string };
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        // Validar payload
+        const FeedbackSchema = z.object({
+          status: z.enum(['confirmed', 'dismissed']),
+          notes: z.string().optional().nullable(),
+        });
+
+        const { status, notes } = FeedbackSchema.parse(req.body);
+
+        // Validar que listing pertence ao tenant
+        const listing = await prisma.listing.findFirst({
+          where: {
+            id: listingId,
+            tenant_id: tenantId,
+          },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({ 
+            error: 'Listing not found',
+            message: 'Anúncio não encontrado'
+          });
+        }
+
+        // Salvar feedback
+        const { saveHackFeedback } = await import('../services/ListingHacksService');
+        await saveHackFeedback({
+          tenantId,
+          listingId,
+          hackId,
+          status,
+          notes: notes || null,
+        });
+
+        app.log.info({ tenantId, listingId, hackId, status }, 'Feedback de hack registrado');
+
+        return reply.status(200).send({
+          message: 'Feedback registrado com sucesso',
+          data: {
+            listingId,
+            hackId,
+            status,
+            notes: notes || null,
+          },
+        });
+      } catch (error) {
+        const { listingId, hackId } = (req.params as { listingId: string; hackId: string }) || {};
+        const tenantIdForLog = req.tenantId;
+        app.log.error({ error, listingId, hackId, tenantId: tenantIdForLog }, 'Error saving hack feedback');
+        
+        if (error instanceof z.ZodError) {
+          const firstError = error.errors[0];
+          return reply.status(400).send({ 
+            error: firstError.message || 'Invalid input',
+            message: `Erro de validação: ${firstError.path.join('.')} - ${firstError.message}`,
+            details: error.errors
+          });
+        }
+        if (error instanceof Error) {
+          return reply.status(400).send({ 
+            error: error.message,
+            message: error.message
+          });
+        }
+        return reply.status(500).send({ 
+          error: 'Failed to save feedback',
+          message: 'Erro interno ao registrar feedback'
+        });
+      }
+    }
+  );
+
   // POST /api/v1/listings/import
   // Importa anúncio manualmente por URL ou ID MLB
   app.post(

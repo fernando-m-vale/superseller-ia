@@ -430,8 +430,11 @@ APÓS O DEPLOY    | 0    ✅
 ```
 
 **Query 3: (Opcional) Listar lock_key e job "running" que estaria conflitando**
+
+**Nota:** Esta query não retorna resultados pois não há skipped lock_running após deploy.
+
 ```sql
--- Para cada skipped lock_running, verificar se existe job running com mesmo lock_key
+-- Para cada skipped lock_running NOVO, verificar se existe job running com mesmo lock_key
 SELECT 
   s.id as skipped_id,
   s.lock_key,
@@ -439,16 +442,24 @@ SELECT
   r.id as running_id,
   r.status as running_status,
   r.started_at as running_started_at,
-  r.created_at as running_created_at
+  r.created_at as running_created_at,
+  CASE 
+    WHEN r.id IS NULL THEN 'Nenhum job running encontrado (self-lock confirmado)'
+    WHEN r.started_at < s.created_at THEN 'Job running é anterior (pode ser legítimo)'
+    ELSE 'Job running é posterior (investigar)'
+  END as analise
 FROM sync_jobs s
 LEFT JOIN sync_jobs r ON r.lock_key = s.lock_key 
   AND r.status = 'running'
   AND r.started_at IS NOT NULL
 WHERE s.status = 'skipped'
   AND s.error LIKE '%lock_running%'
-  AND s.created_at >= '<DEPLOY_END_UTC>'::timestamptz  -- Apenas os novos
+  AND s.created_at >= '2026-02-18 17:42:30'::timestamptz  -- Apenas os novos
 ORDER BY s.created_at DESC;
 ```
+
+**Resultado (confirmado em produção):**
+- 0 linhas retornadas ✅ (não há skipped lock_running após deploy)
 
 **Critério PASS/FAIL:**
 - ✅ **PASS:** `count = 0` na linha "APÓS O DEPLOY" da Query 2

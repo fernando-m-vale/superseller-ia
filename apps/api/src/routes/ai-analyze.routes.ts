@@ -28,6 +28,9 @@ import { AppliedActionService } from '../services/AppliedActionService';
 import { buildPromoText, formatMoneyBRL, sanitizePromoText, removeEmojis, removePricesFromTitle } from '../utils/promo-text';
 import type { AIAnalysisResultV21 } from '../types/ai-analysis-v21';
 import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
+import { buildSignals } from '../services/SignalsBuilder';
+import { generateHacks } from '../services/HackEngine';
+import { getHackHistory } from '../services/ListingHacksService';
 
 const prisma = new PrismaClient();
 
@@ -1335,6 +1338,79 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             appliedAt: action.appliedAt.toISOString(),
           }));
 
+          // DIA 09: Gerar hacks contextualizados via HackEngine
+          try {
+            // Construir signals
+            const signals = buildSignals({
+              listing,
+              pricing: {
+                originalPrice: listing.original_price ? Number(listing.original_price) : null,
+                promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+                hasPromotion: listing.has_promotion ?? false,
+                discountPercent: listing.discount_percent ?? null,
+              },
+              shipping: {
+                mode: null, // TODO: extrair de listing se disponível
+                freeShipping: false, // TODO: extrair de listing se disponível
+                fullEligible: null, // TODO: extrair de listing se disponível
+              },
+              metrics30d: {
+                visits: result.score.metrics_30d.visits,
+                orders: result.score.metrics_30d.orders,
+                revenue: result.score.metrics_30d.revenue,
+                conversionRate: result.score.metrics_30d.conversionRate,
+              },
+              benchmark: benchmarkResult?.benchmarkSummary?.stats ? {
+                medianPrice: benchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
+                p25Price: null, // TODO: extrair de benchmark se disponível
+                p75Price: null, // TODO: extrair de benchmark se disponível
+              } : undefined,
+            });
+
+            // Buscar histórico de hacks
+            const hackHistory = await getHackHistory(tenantId, listingId);
+
+            // Gerar hacks
+            const hackEngineResult = generateHacks({
+              version: 'v1',
+              marketplace: 'mercadolivre',
+              tenantId,
+              listingId,
+              listingIdExt: listing.listing_id_ext,
+              signals,
+              history: hackHistory,
+              nowUtc: new Date(),
+            });
+
+            // Adicionar hacks ao response
+            responseData.growthHacks = hackEngineResult.hacks;
+            responseData.growthHacksMeta = hackEngineResult.meta;
+
+            request.log.info({
+              listingId,
+              tenantId,
+              hacksCount: hackEngineResult.hacks.length,
+              rulesEvaluated: hackEngineResult.meta.rulesEvaluated,
+              rulesTriggered: hackEngineResult.meta.rulesTriggered,
+            }, 'Hacks gerados via HackEngine v1');
+          } catch (hackError) {
+            // Não falhar análise se hacks falharem, apenas logar
+            request.log.warn({
+              listingId,
+              tenantId,
+              error: hackError instanceof Error ? hackError.message : 'Erro desconhecido',
+            }, 'Erro ao gerar hacks (continuando sem hacks)');
+            
+            // Incluir hacks vazios para não quebrar frontend
+            responseData.growthHacks = [];
+            responseData.growthHacksMeta = {
+              rulesEvaluated: 0,
+              rulesTriggered: 0,
+              skippedBecauseOfHistory: 0,
+              skippedBecauseOfRequirements: 0,
+            };
+          }
+
           // Adicionar header com commit SHA
           setVersionHeader(reply);
 
@@ -1829,6 +1905,79 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           actionType: action.actionType,
           appliedAt: action.appliedAt.toISOString(),
         }));
+
+        // DIA 09: Gerar hacks contextualizados via HackEngine (cache response)
+        try {
+          // Construir signals
+          const cacheSignals = buildSignals({
+            listing,
+            pricing: {
+              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent ?? null,
+            },
+            shipping: {
+              mode: null, // TODO: extrair de listing se disponível
+              freeShipping: false, // TODO: extrair de listing se disponível
+              fullEligible: null, // TODO: extrair de listing se disponível
+            },
+            metrics30d: {
+              visits: scoreResult.metrics_30d.visits,
+              orders: scoreResult.metrics_30d.orders,
+              revenue: scoreResult.metrics_30d.revenue,
+              conversionRate: scoreResult.metrics_30d.conversionRate,
+            },
+            benchmark: cacheBenchmarkResult?.benchmarkSummary?.stats ? {
+              medianPrice: cacheBenchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
+              p25Price: null, // TODO: extrair de benchmark se disponível
+              p75Price: null, // TODO: extrair de benchmark se disponível
+            } : undefined,
+          });
+
+          // Buscar histórico de hacks
+          const cacheHackHistory = await getHackHistory(tenantId, listingId);
+
+          // Gerar hacks
+          const cacheHackEngineResult = generateHacks({
+            version: 'v1',
+            marketplace: 'mercadolivre',
+            tenantId,
+            listingId,
+            listingIdExt: listing.listing_id_ext,
+            signals: cacheSignals,
+            history: cacheHackHistory,
+            nowUtc: new Date(),
+          });
+
+          // Adicionar hacks ao cache response
+          cacheResponseData.growthHacks = cacheHackEngineResult.hacks;
+          cacheResponseData.growthHacksMeta = cacheHackEngineResult.meta;
+
+          request.log.info({
+            listingId,
+            tenantId,
+            hacksCount: cacheHackEngineResult.hacks.length,
+            rulesEvaluated: cacheHackEngineResult.meta.rulesEvaluated,
+            rulesTriggered: cacheHackEngineResult.meta.rulesTriggered,
+          }, 'Hacks gerados via HackEngine v1 (cache)');
+        } catch (hackError) {
+          // Não falhar análise se hacks falharem, apenas logar
+          request.log.warn({
+            listingId,
+            tenantId,
+            error: hackError instanceof Error ? hackError.message : 'Erro desconhecido',
+          }, 'Erro ao gerar hacks no cache (continuando sem hacks)');
+          
+          // Incluir hacks vazios para não quebrar frontend
+          cacheResponseData.growthHacks = [];
+          cacheResponseData.growthHacksMeta = {
+            rulesEvaluated: 0,
+            rulesTriggered: 0,
+            skippedBecauseOfHistory: 0,
+            skippedBecauseOfRequirements: 0,
+          };
+        }
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
