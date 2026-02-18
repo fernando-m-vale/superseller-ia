@@ -58,6 +58,8 @@
    - Abrir /listings e verificar que apenas 1 TENANT_SYNC é criado
    - Verificar que jobs são processados (started_at preenchido)
    - Confirmar que LISTING_SYNC jobs são criados e executados
+   - **CRÍTICO:** Validar que jobs NÃO são marcados como `skipped` com erro `lock_running` (bug corrigido)
+   - Validar que `listings.last_synced_at` é atualizado após LISTING_SYNC
 
 4. **Validar timestamps após migration**
    - Verificar tipos de coluna (timestamptz)
@@ -68,7 +70,12 @@
    - Verificar índice único parcial
    - Testar criação de job duplicado (deve retornar job existente)
 
-6. **Decidir:**
+6. **Validar correção do bug self-lock**
+   - Query: `SELECT COUNT(*) FROM sync_jobs WHERE error LIKE '%lock_running%' AND created_at >= NOW() - INTERVAL '1 hour'`
+   - Esperado: 0 (jobs não devem ser skipped por lock_running)
+   - Validar que TENANT_SYNC cria LISTING_SYNC e estes executam com sucesso
+
+7. **Decidir:**
    - ✅ **DIA 08 FECHADO** → Iniciar DIA 09 (Hacks ML Contextualizados)
    - ⚠️ **AJUSTES NECESSÁRIOS** → Documentar e corrigir
    - 🔴 **BLOQUEADOR** → Escalar e resolver

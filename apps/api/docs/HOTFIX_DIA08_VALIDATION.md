@@ -1,5 +1,96 @@
 # HOTFIX DIA 08 — Validação e Queries SQL
 
+## 🐛 Bug Crítico Corrigido: Self-Lock no JobRunner
+
+### Problema
+O JobRunner estava se auto-bloqueando e marcando jobs como `skipped` com erro `Lock ativo: lock_running`.
+
+**Evidência:**
+- `sync_jobs` mostrava TENANT_SYNC como `skipped` com `error = 'Lock ativo: lock_running'`
+- `started_at`/`finished_at` preenchidos (runner pegou o job e pulou)
+- `listings.last_synced_at` continuava NULL (nenhum LISTING_SYNC efetivo)
+
+### Causa Raiz
+Em `JobRunner.ts`, após `dequeue()` (que faz claim e marca o job como `running`), o runner chamava `checkLock(job.lockKey)`.
+`checkLock()` procurava job `running` pelo `lock_key` e encontrava o **PRÓPRIO job** (acabara de ser marcado running).
+Resultado: `isLocked=true` => runner chamava `markSkipped()` => nenhum job executava.
+
+### Correção Aplicada (Abordagem A)
+**Removido o `checkLock` do JobRunner após `dequeue()`.**
+
+**Justificativa:**
+- O `dequeue()` já faz claim atômico com transação (`updateMany` com `status='queued'`)
+- O `enqueue()` já tem dedupe por `lock_key` (verifica jobs existentes antes de criar)
+- O índice único parcial (`UNIQUE(lock_key) WHERE status IN ('queued','running')`) garante que não há duplicação
+- Verificar lock após o claim causava self-lock desnecessário
+
+**Nota:** O `checkLock` ainda é usado em `sync.routes.ts` **antes** de enfileirar jobs, o que está correto.
+
+### Queries Esperadas Pós-Fix
+
+#### 1. Jobs devem transicionar corretamente (não skipped por lock_running)
+```sql
+SELECT 
+  status,
+  type,
+  COUNT(*) as count,
+  COUNT(CASE WHEN error LIKE '%lock_running%' THEN 1 END) as skipped_by_lock
+FROM sync_jobs
+WHERE created_at >= NOW() - INTERVAL '1 hour'
+GROUP BY status, type
+ORDER BY status, type;
+```
+**Esperado:** `skipped_by_lock = 0` para jobs recentes
+
+#### 2. TENANT_SYNC deve criar LISTING_SYNC jobs
+```sql
+SELECT 
+  t.id as tenant_sync_id,
+  t.status as tenant_status,
+  COUNT(l.id) as listing_sync_count,
+  COUNT(CASE WHEN l.status = 'success' THEN 1 END) as listing_success_count
+FROM sync_jobs t
+LEFT JOIN sync_jobs l ON l.payload->>'listingId' IS NOT NULL
+  AND l.created_at BETWEEN t.created_at AND t.created_at + INTERVAL '5 minutes'
+WHERE t.type = 'TENANT_SYNC'
+  AND t.created_at >= NOW() - INTERVAL '1 hour'
+GROUP BY t.id, t.status
+ORDER BY t.created_at DESC
+LIMIT 10;
+```
+**Esperado:** `listing_sync_count > 0` e `listing_success_count > 0`
+
+#### 3. Listings devem ter last_synced_at atualizado
+```sql
+SELECT 
+  listing_id_ext,
+  last_synced_at,
+  last_sync_status,
+  last_sync_error
+FROM listings
+WHERE last_synced_at >= NOW() - INTERVAL '1 hour'
+ORDER BY last_synced_at DESC
+LIMIT 20;
+```
+**Esperado:** `last_synced_at` preenchido e `last_sync_status = 'success'`
+
+#### 4. Métricas 30d devem estar atualizadas
+```sql
+SELECT 
+  l.listing_id_ext,
+  COUNT(m.date) as metrics_days,
+  MAX(m.date) as latest_metric_date
+FROM listings l
+LEFT JOIN listing_metrics_daily m ON m.listing_id = l.id
+WHERE l.last_synced_at >= NOW() - INTERVAL '1 hour'
+GROUP BY l.id, l.listing_id_ext
+ORDER BY l.last_synced_at DESC
+LIMIT 10;
+```
+**Esperado:** `metrics_days > 0` e `latest_metric_date` recente
+
+---
+
 ## Queries SQL para Validação
 
 ### 1) Contar jobs por status nas últimas 24h

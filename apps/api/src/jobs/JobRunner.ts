@@ -10,7 +10,6 @@
 import { getJobQueue } from './jobQueueFactory';
 import { handleTenantSync } from './handlers/TenantSyncOrchestrator';
 import { handleListingSync } from './handlers/ListingSyncWorker';
-import { checkLock } from './locks';
 
 const POLL_INTERVAL_MS = 3000; // 3 segundos
 const MAX_RETRIES = 3;
@@ -101,18 +100,11 @@ async function processNextJob(): Promise<void> {
   }
 
   try {
-    // Verificar lock antes de executar
-    const lockCheck = await checkLock(job.lockKey);
-    
-    if (lockCheck.isLocked && !lockCheck.isStale) {
-      // Lock ativo (outra réplica pegou)
-      await queue.markSkipped(job.jobId, `Lock ativo: ${lockCheck.reason}`);
-      
-      if (debug) {
-        console.log(`[JOB_RUNNER] Job ${job.jobId} pulado: lock ativo`);
-      }
-      return;
-    }
+    // HOTFIX: Removido checkLock após dequeue
+    // O dequeue() já faz claim atômico com transação, então não precisamos verificar lock novamente.
+    // O enqueue() já tem dedupe por lock_key e o índice único parcial garante que não há duplicação.
+    // Verificar lock aqui causava self-lock: o job acabava de ser marcado como 'running' pelo dequeue(),
+    // e o checkLock encontrava o próprio job como "lock ativo", marcando-o como skipped.
 
     // Executar handler baseado no tipo
     switch (job.type) {

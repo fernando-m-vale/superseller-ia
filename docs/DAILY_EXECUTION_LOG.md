@@ -43,6 +43,7 @@
 - Múltiplos TENANT_SYNC com status=queued e started_at NULL
 - Query run_after <= now() retornava vazio (timezone inconsistente)
 - Cálculo now() - last_auto_sync_at gerava valores negativos
+- **BUG CRÍTICO:** JobRunner se auto-bloqueava após dequeue (checkLock encontrava o próprio job como "lock ativo")
 
 ### Duplicação de jobs
 - Request storm gerava 7+ TENANT_SYNC iguais para o mesmo tenant
@@ -69,6 +70,7 @@
 - Logs explícitos de startup e heartbeat
 - Guard rails (ENABLE_JOB_RUNNER=true)
 - Endpoint /sync/jobs/health para debug
+- **HOTFIX CRÍTICO:** Removido checkLock após dequeue (causava self-lock)
 
 ### E) Frontend (Request Storm)
 - Auto-sync com fire once guard (useRef + sessionStorage)
@@ -79,7 +81,8 @@
 - ✅ Migration aplicada com sucesso
 - ✅ Build passando (API e WEB)
 - ✅ Deploy realizado
-- ⏳ Validação final em produção pendente (amanhã)
+- ✅ HOTFIX self-lock aplicado (checkLock removido do JobRunner)
+- ⏳ Validação final em produção pendente (jobs devem processar corretamente agora)
 
 ## 📌 Status do Dia 08
 ⏳ **Parcialmente concluído**
@@ -94,7 +97,7 @@
 - Retry policy configurável por tipo de job
 
 ## ➡️ Próximo passo claro
-**DIA 08 — Validação Final (Produção): Rodar queries SQL de validação, validar logs do JobRunner, confirmar processamento real de jobs, validar timestamps após migration, confirmar que dedupe está funcionando**
+**DIA 08 — Validação Final (Produção): Rodar queries SQL de validação, validar logs do JobRunner, confirmar processamento real de jobs (TENANT_SYNC → LISTING_SYNC → listings.last_synced_at atualizado), validar timestamps após migration, confirmar que dedupe está funcionando, validar que jobs não são mais marcados como skipped por lock_running**
 
 ---
 
