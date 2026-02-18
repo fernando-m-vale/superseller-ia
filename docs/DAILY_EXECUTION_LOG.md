@@ -78,17 +78,32 @@
 - SyncStatusBar não dispara auto-sync internamente
 
 ## 🧪 Evidências / Testes executados (após)
-- ✅ Migration aplicada com sucesso
+
+### Desenvolvimento
+- ✅ Migration aplicada com sucesso (local)
 - ✅ Build passando (API e WEB)
 - ✅ Deploy realizado
+
+### Produção (Validação Parcial)
+- ✅ **JobRunner habilitado:** `ENABLE_JOB_RUNNER=true` e `JOB_QUEUE_DRIVER=db` configurados
+- ✅ **Endpoint health:** `GET /api/v1/sync/jobs/health` retorna `jobRunnerEnabled: true`
+- ✅ **Sync manual funcionando:** `POST /api/v1/sync/tenant/manual` retorna `{ started: true, jobId: ... }`
+- ✅ **Jobs sendo processados:** Existem `TENANT_SYNC` e `LISTING_SYNC` com `status=success` no banco
+- ✅ **Listings atualizando:** `listings.last_synced_at` começou a ser preenchido para alguns anúncios
 - ✅ HOTFIX self-lock aplicado (checkLock removido do JobRunner)
-- ⏳ Validação final em produção pendente (jobs devem processar corretamente agora)
+
+### ⚠️ Pontos de Atenção em Produção
+- ⚠️ **Jobs skipped lock_running:** Ainda existem alguns jobs com `status=skipped` e `error="Lock ativo: lock_running"` — **A confirmar se são históricos ou novos**
+- ⚠️ **Migration pendente:** Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aparece com `finished_at NULL` e `applied_steps_count 0` em `_prisma_migrations` — **Suspeita de que NÃO foi aplicada no banco PROD**
 
 ## 📌 Status do Dia 08
-⏳ **Parcialmente concluído**
+⏳ **Parcialmente concluído — Validação em Andamento**
 ✅ Implementação técnica completa
 ✅ Hotfixes aplicados
-⏳ Validação final em produção pendente
+✅ JobRunner funcionando em produção (evidências confirmadas)
+⚠️ Validação completa pendente:
+   - Confirmar se jobs skipped lock_running são históricos ou novos
+   - Aplicar migration pendente no PROD (20260214000000_fix_sync_jobs_timezone_and_dedupe)
 
 ## 📋 Backlog / Débitos técnicos gerados (não bloqueadores)
 - Migração para SQS quando necessário (arquitetura pronta)

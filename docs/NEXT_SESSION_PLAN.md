@@ -72,10 +72,16 @@
 
 6. **Validar correção do bug self-lock**
    - Query: `SELECT COUNT(*) FROM sync_jobs WHERE error LIKE '%lock_running%' AND created_at >= NOW() - INTERVAL '1 hour'`
-   - Esperado: 0 (jobs não devem ser skipped por lock_running)
-   - Validar que TENANT_SYNC cria LISTING_SYNC e estes executam com sucesso
+   - Comparar `created_at` dos jobs skipped com timestamp do deploy do commit `808ed02` (fix self-lock)
+   - **Status atual:** ⚠️ Existem jobs skipped lock_running, mas não sabemos se são históricos ou novos
+   - **Ação:** Rodar queries de investigação em `HOTFIX_DIA08_VALIDATION.md` para determinar período
 
-7. **Decidir:**
+7. **Aplicar migration pendente no PROD (CRÍTICO)**
+   - Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aparece com `finished_at NULL` em `_prisma_migrations`
+   - **Risco:** Timezone inconsistente e dedupe pode não estar funcionando corretamente
+   - **Ação:** Seguir procedimento seguro em `HOTFIX_DIA08_VALIDATION.md` (backup, janela, deploy, validação)
+
+8. **Decidir:**
    - ✅ **DIA 08 FECHADO** → Iniciar DIA 09 (Hacks ML Contextualizados)
    - ⚠️ **AJUSTES NECESSÁRIOS** → Documentar e corrigir
    - 🔴 **BLOQUEADOR** → Escalar e resolver
