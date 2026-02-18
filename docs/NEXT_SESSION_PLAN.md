@@ -36,68 +36,25 @@
 
 ---
 
-## 🗓️ DIA 08 — Validação Final (Produção)
+## 🗓️ DIA 08 — ✅ FECHADO (2026-02-18)
 
-**Objetivo:** Validar que o sistema de jobs automáticos está funcionando corretamente em produção.
+**Status:** ✅ **CONCLUÍDO COM SUCESSO**
 
-### Passos amanhã
+**Validações realizadas:**
+- ✅ Bug self-lock corrigido: 0 skipped lock_running após deploy (10 históricos antes)
+- ✅ Migration aplicada: `20260214000000_fix_sync_jobs_timezone_and_dedupe` com `finished_at` preenchido
+- ✅ Índice único parcial criado: `sync_jobs_lock_key_unique` presente em PROD
+- ✅ JobRunner funcionando: `jobRunnerEnabled: true`, jobs sendo processados
+- ✅ Listings sincronizando: `last_synced_at` sendo atualizado
 
-1. **Rodar queries SQL de validação**
-   - Verificar que não existem múltiplos TENANT_SYNC queued simultâneos
-   - Confirmar transição de status: queued → processing → succeeded
-   - Validar que last_auto_sync_at não gera minutos negativos
-   - Confirmar que listings.last_synced_at atualiza após sync
+**Pendência (housekeeping):**
+- ⚠️ Corrigir secret `prod/DB_URL` no Secrets Manager (estava com placeholder `<DB_ENDPOINT>`)
+- **Ação:** Atualizar para endpoint real: `superseller-prod-db.ctei6kco4072.us-east-2.rds.amazonaws.com`
+- **Risco:** Não bloqueador, mas deve ser corrigido para padronização
 
-2. **Validar logs do JobRunner**
-   - Confirmar ENABLE_JOB_RUNNER=true
-   - Buscar "JobRunner enabled" nos logs
-   - Verificar "Job claimed" e "Job finished"
-   - (Opcional) Verificar heartbeat se DEBUG_JOB_RUNNER=1
-
-3. **Confirmar processamento real de jobs**
-   - Abrir /listings e verificar que apenas 1 TENANT_SYNC é criado
-   - Verificar que jobs são processados (started_at preenchido)
-   - Confirmar que LISTING_SYNC jobs são criados e executados
-   - **CRÍTICO:** Validar que jobs NÃO são marcados como `skipped` com erro `lock_running` (bug corrigido)
-   - Validar que `listings.last_synced_at` é atualizado após LISTING_SYNC
-
-4. **Validar timestamps após migration**
-   - Verificar tipos de coluna (timestamptz)
-   - Confirmar consistência de timestamps
-   - Validar que comparações de tempo funcionam corretamente
-
-5. **Confirmar que dedupe está funcionando**
-   - Verificar índice único parcial
-   - Testar criação de job duplicado (deve retornar job existente)
-
-6. **Validar correção do bug self-lock**
-   - Query: `SELECT COUNT(*) FROM sync_jobs WHERE error LIKE '%lock_running%' AND created_at >= NOW() - INTERVAL '1 hour'`
-   - Comparar `created_at` dos jobs skipped com timestamp do deploy do commit `808ed02` (fix self-lock)
-   - **Status atual:** ⚠️ Existem jobs skipped lock_running, mas não sabemos se são históricos ou novos
-   - **Ação:** Rodar queries de investigação em `HOTFIX_DIA08_VALIDATION.md` para determinar período
-
-7. **Validar skipped lock_running (usar DEPLOY_END_UTC)**
-   - Preencher `DEPLOY_END_UTC` em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` (seção "Marco do Deploy")
-   - Rodar Query 2 da seção "Investigação: Skipped lock_running"
-   - **Critério PASS:** 0 ocorrências após `DEPLOY_END_UTC`
-   - **Se FAIL:** Investigar onde ainda está sendo setado `lock_running`
-
-8. **Aplicar migration pendente no PROD (CRÍTICO)**
-   - Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aparece com `finished_at NULL` em `_prisma_migrations`
-   - **Risco:** Timezone inconsistente e dedupe pode não estar funcionando corretamente
-   - **Ação:** Seguir procedimento completo em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` (seção "Migração PROD — Verificação e Execução Segura")
-   - **Ordem:** Passo 1 (verificar pendente) → Passo 2 (verificar índice) → Passo 3 (executar) → Passo 4 (pós-checks)
-
-9. **Completar checklist operacional**
-   - Usar `docs/DIA08_PROD_VALIDATION_CHECKLIST.md`
-   - Todos os critérios devem ser PASS para fechar DIA 08
-
-10. **Decidir:**
-    - ✅ **DIA 08 FECHADO** → Iniciar DIA 09 (Hacks ML Contextualizados)
-    - ⚠️ **AJUSTES NECESSÁRIOS** → Documentar e corrigir
-    - 🔴 **BLOQUEADOR** → Escalar e resolver
-
-**Referência:** Ver `docs/DIA08_PROD_VALIDATION_CHECKLIST.md` para checklist completo.
+**Documentação:**
+- Checklist completo: `docs/DIA08_PROD_VALIDATION_CHECKLIST.md`
+- Validação detalhada: `apps/api/docs/HOTFIX_DIA08_VALIDATION.md`
 
 ---
 
@@ -124,14 +81,61 @@
 
 ## 🗓️ DIA 09 — Hacks ML Contextuais
 
-**Entrega**
-- Hacks de frete
-- Hacks de kits
-- Hacks de variações
-- Hacks de categoria
-- Estratégia de preço psicológico
+**Objetivo:** Gerar hacks específicos e acionáveis baseados em dados reais do anúncio (não genéricos).
 
-**Baseados no anúncio atual.**
+**Foco:** Hacks contextualizados e reais baseados em dados do anúncio (frete, kits, variações, categoria, preço psicológico).
+
+### Entregas (DoD Dia 09)
+
+**Backend:**
+- ✅ HackEngine com signals específicos por tipo de hack
+- ✅ Signals baseados em dados reais (frete grátis, variações, categoria, preço)
+- ✅ Endpoint `/api/v1/ai/analyze` retorna `hacks` contextualizados
+- ✅ Testes unitários para cada tipo de hack
+
+**Frontend:**
+- ✅ UI de hacks contextualizados (não genéricos)
+- ✅ Badge de confiança por hack
+- ✅ CTA "Aplicar hack" quando executável
+- ✅ Explicação clara de cada hack
+
+**Critérios de qualidade:**
+- Hacks devem ser específicos ao anúncio (não genéricos)
+- Signals devem ser baseados em dados reais (não inventados)
+- UI deve mostrar apenas hacks relevantes (ocultar se genérico)
+
+### Plano de execução (checklist)
+
+**1. Backend — HackEngine:**
+- [ ] Criar `HackEngine.ts` com signals por tipo
+- [ ] Implementar signals:
+  - Frete grátis (verificar shipping.free_shipping, shipping.mode)
+  - Kits (verificar attributes, variations)
+  - Variações (verificar variations_count, variations)
+  - Categoria (verificar category_id, category_path)
+  - Preço psicológico (verificar price, original_price, discount_percent)
+- [ ] Integrar com `/api/v1/ai/analyze`
+- [ ] Testes unitários para cada signal
+
+**2. Frontend — UI de Hacks:**
+- [ ] Componente `HacksPanel` com hacks contextualizados
+- [ ] Badge de confiança (high/medium/low)
+- [ ] CTA "Aplicar hack" quando executável
+- [ ] Ocultar hacks genéricos/redundantes
+
+**3. Testes:**
+- [ ] Testar com anúncio com frete grátis
+- [ ] Testar com anúncio com variações
+- [ ] Testar com anúncio sem hacks relevantes (deve ocultar seção)
+
+**4. Documentação:**
+- [ ] Documentar signals e critérios de cada hack
+- [ ] Documentar decisões arquiteturais
+
+**Impacto:** Hacks específicos e acionáveis aumentam valor percebido e taxa de conversão.
+
+**⚠️ Antes de iniciar:**
+- [ ] Corrigir secret `prod/DB_URL` no Secrets Manager (housekeeping do DIA 08)
 
 ---
 

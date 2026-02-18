@@ -227,8 +227,7 @@ WHERE status IN ('queued', 'running');
 **Exemplo:** `2026-02-14 15:30:00 UTC`
 
 ```bash
-# PREENCHER AQUI:
-DEPLOY_END_UTC = "<PREENCHER AQUI>"
+DEPLOY_END_UTC = "2026-02-18 17:42:30 UTC"
 ```
 
 **Uso:** Este timestamp será usado nas queries abaixo para classificar jobs `skipped lock_running` como **históricos** (antes do deploy) ou **novos** (após o deploy).
@@ -250,15 +249,28 @@ DEPLOY_END_UTC = "<PREENCHER AQUI>"
    - Existem jobs `TENANT_SYNC` e `LISTING_SYNC` com `status=success` no banco
    - `listings.last_synced_at` começou a ser preenchido para alguns anúncios
 
-### ⚠️ Pontos de Atenção
+### ✅ Validações Completas
 
-1. **Jobs skipped com lock_running:**
-   - Ainda existem alguns jobs com `status=skipped` e `error="Lock ativo: lock_running"`
-   - **A confirmar:** Se são resíduos históricos (antes do fix) ou se ainda estão sendo gerados
+1. **Jobs skipped lock_running:**
+   - ✅ **RESOLVIDO:** 0 ocorrências após deploy (10 históricas antes do deploy)
+   - ✅ Bug corrigido com sucesso
 
-2. **Migration pendente:**
-   - Em `_prisma_migrations`, a migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aparece com `finished_at NULL` e `applied_steps_count 0`
-   - **Suspeita:** Migration pode não ter sido aplicada no banco PROD
+2. **Migration aplicada:**
+   - ✅ Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` aplicada em PROD
+   - ✅ `finished_at = 2026-02-18 21:00:25.504304+00` (UTC)
+   - ✅ `applied_steps_count = 1`
+
+3. **Índice criado:**
+   - ✅ Índice `sync_jobs_lock_key_unique` presente em PROD
+   - ✅ Unique partial index funcionando corretamente
+
+### ⚠️ Nota Operacional (Housekeeping)
+
+**Secret `prod/DB_URL` no Secrets Manager:**
+- Secret estava com placeholder literal `<DB_ENDPOINT>`
+- Devin usou `prod/DB_SSELLERIA` com string correta para aplicar migration
+- **Ação corretiva:** Atualizar `prod/DB_URL` para endpoint real: `superseller-prod-db.ctei6kco4072.us-east-2.rds.amazonaws.com`
+- **Risco:** Não bloqueador do DIA 08, mas deve ser corrigido para padronização
 
 ---
 
@@ -371,7 +383,6 @@ LIMIT 20;
 
 **Query 1: Listar skipped lock_running e classificar período (antes/após deploy)**
 ```sql
--- Substituir '<DEPLOY_END_UTC>' pelo valor preenchido na seção "Marco do Deploy"
 SELECT 
   id,
   type,
@@ -382,7 +393,7 @@ SELECT
   started_at,
   finished_at,
   CASE 
-    WHEN created_at < '<DEPLOY_END_UTC>'::timestamptz THEN 'ANTES DO DEPLOY (histórico)'
+    WHEN created_at < '2026-02-18 17:42:30'::timestamptz THEN 'ANTES DO DEPLOY (histórico)'
     ELSE 'APÓS O DEPLOY (novo - BUG ainda ocorre)'
   END as periodo
 FROM sync_jobs
@@ -391,12 +402,15 @@ WHERE status = 'skipped'
 ORDER BY created_at DESC;
 ```
 
+**Resultado (confirmado em produção):**
+- ANTES DO DEPLOY: 10 ocorrências (históricas)
+- APÓS O DEPLOY: 0 ocorrências ✅
+
 **Query 2: Contar skipped lock_running antes/após deploy**
 ```sql
--- Substituir '<DEPLOY_END_UTC>' pelo valor preenchido na seção "Marco do Deploy"
 SELECT 
   CASE 
-    WHEN created_at < '<DEPLOY_END_UTC>'::timestamptz THEN 'ANTES DO DEPLOY'
+    WHEN created_at < '2026-02-18 17:42:30'::timestamptz THEN 'ANTES DO DEPLOY'
     ELSE 'APÓS O DEPLOY'
   END as periodo,
   COUNT(*) as count
@@ -405,6 +419,14 @@ WHERE status = 'skipped'
   AND error LIKE '%lock_running%'
 GROUP BY periodo
 ORDER BY periodo;
+```
+
+**Resultado (confirmado em produção):**
+```
+periodo          | count
+-----------------|------
+ANTES DO DEPLOY  | 10
+APÓS O DEPLOY    | 0    ✅
 ```
 
 **Query 3: (Opcional) Listar lock_key e job "running" que estaria conflitando**
@@ -432,7 +454,7 @@ ORDER BY s.created_at DESC;
 - ✅ **PASS:** `count = 0` na linha "APÓS O DEPLOY" da Query 2
 - ❌ **FAIL:** `count >= 1` na linha "APÓS O DEPLOY" da Query 2
 
-**Status atual:** ⚠️ **A CONFIRMAR** (preencher DEPLOY_END_UTC e rodar queries acima)
+**Status atual:** ✅ **PASS** (confirmado em produção - 0 ocorrências após deploy)
 
 ---
 
@@ -458,7 +480,7 @@ ORDER BY finished_at DESC NULLS LAST;
 - Se `finished_at IS NULL` e `applied_steps_count = 0`: Migration **NÃO foi aplicada** no banco PROD → **PRECISA APLICAR**
 - Se `finished_at IS NOT NULL` e `applied_steps_count > 0`: Migration foi aplicada com sucesso → **PULAR para Passo 4 (validação)**
 
-**Status atual:** ⚠️ **SUSPEITA** - Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` com `finished_at NULL` e `applied_steps_count 0`
+**Status atual:** ✅ **APLICADA** - Migration `20260214000000_fix_sync_jobs_timezone_and_dedupe` com `finished_at = 2026-02-18 21:00:25.504304+00` e `applied_steps_count = 1`
 
 ---
 
@@ -564,6 +586,10 @@ WHERE tablename = 'sync_jobs'
 
 **Esperado:** 1 linha retornada com `indexdef` contendo `UNIQUE` e `WHERE status IN ('queued', 'running')`
 
+**Resultado (confirmado em produção):**
+- Índice `sync_jobs_lock_key_unique` existe ✅
+- `indexdef` contém `CREATE UNIQUE INDEX ... ON sync_jobs(lock_key) WHERE status IN ('queued','running')` ✅
+
 **4.4. Validar timestamps não geram diferenças negativas:**
 ```sql
 SELECT 
@@ -594,7 +620,6 @@ As queries abaixo classificam jobs `skipped lock_running` como **históricos** (
 ### Query 1: Listar skipped lock_running e classificar período
 
 ```sql
--- Substituir '<DEPLOY_END_UTC>' pelo valor preenchido na seção "Marco do Deploy"
 SELECT 
   id,
   type,
@@ -605,7 +630,7 @@ SELECT
   started_at,
   finished_at,
   CASE 
-    WHEN created_at < '<DEPLOY_END_UTC>'::timestamptz THEN 'ANTES DO DEPLOY (histórico)'
+    WHEN created_at < '2026-02-18 17:42:30'::timestamptz THEN 'ANTES DO DEPLOY (histórico)'
     ELSE 'APÓS O DEPLOY (novo - BUG ainda ocorre)'
   END as periodo
 FROM sync_jobs
@@ -614,13 +639,16 @@ WHERE status = 'skipped'
 ORDER BY created_at DESC;
 ```
 
+**Resultado (confirmado em produção):**
+- 10 registros retornados, todos classificados como "ANTES DO DEPLOY (histórico)" ✅
+- 0 registros classificados como "APÓS O DEPLOY" ✅
+
 ### Query 2: Contar skipped lock_running antes/após deploy
 
 ```sql
--- Substituir '<DEPLOY_END_UTC>' pelo valor preenchido na seção "Marco do Deploy"
 SELECT 
   CASE 
-    WHEN created_at < '<DEPLOY_END_UTC>'::timestamptz THEN 'ANTES DO DEPLOY'
+    WHEN created_at < '2026-02-18 17:42:30'::timestamptz THEN 'ANTES DO DEPLOY'
     ELSE 'APÓS O DEPLOY'
   END as periodo,
   COUNT(*) as count
@@ -631,15 +659,23 @@ GROUP BY periodo
 ORDER BY periodo;
 ```
 
+**Resultado (confirmado em produção):**
+```
+periodo          | count
+-----------------|------
+ANTES DO DEPLOY  | 10
+APÓS O DEPLOY    | 0    ✅
+```
+
 **Interpretação:**
-- Se linha "APÓS O DEPLOY" tem `count = 0`: ✅ **PASS** - Bug corrigido, apenas resíduos históricos
-- Se linha "APÓS O DEPLOY" tem `count >= 1`: ❌ **FAIL** - Bug ainda ocorre, ver Query 3
+- ✅ **PASS** - Linha "APÓS O DEPLOY" tem `count = 0` → Bug corrigido, apenas resíduos históricos
 
 ### Query 3: (Opcional) Listar lock_key e job "running" que estaria conflitando
 
+**Nota:** Esta query não retorna resultados pois não há skipped lock_running após deploy.
+
 ```sql
 -- Para cada skipped lock_running NOVO, verificar se existe job running com mesmo lock_key
--- Substituir '<DEPLOY_END_UTC>' pelo valor preenchido na seção "Marco do Deploy"
 SELECT 
   s.id as skipped_id,
   s.lock_key,
@@ -659,17 +695,17 @@ LEFT JOIN sync_jobs r ON r.lock_key = s.lock_key
   AND r.started_at IS NOT NULL
 WHERE s.status = 'skipped'
   AND s.error LIKE '%lock_running%'
-  AND s.created_at >= '<DEPLOY_END_UTC>'::timestamptz  -- Apenas os novos
+  AND s.created_at >= '2026-02-18 17:42:30'::timestamptz  -- Apenas os novos
 ORDER BY s.created_at DESC;
 ```
 
-**Se Query 2 retornar FAIL (count >= 1 após deploy):**
-- 🔴 Criar ticket/ação corretiva no `NEXT_SESSION_PLAN`
-- 🔴 Investigar onde ainda está sendo setado `lock_running`
-- 🔴 Possíveis causas:
-  - Código antigo ainda em execução (deploy não completo, múltiplas réplicas)
-  - Outro ponto no código ainda chama `checkLock` após `dequeue`
-  - Race condition não coberta
+**Resultado (confirmado em produção):**
+- 0 linhas retornadas ✅ (não há skipped lock_running após deploy)
+
+**Conclusão:**
+- ✅ Bug corrigido com sucesso
+- ✅ Apenas resíduos históricos (10 ocorrências antes do deploy)
+- ✅ Nenhuma ocorrência nova após deploy
 
 ---
 

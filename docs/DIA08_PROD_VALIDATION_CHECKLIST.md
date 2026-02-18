@@ -1,19 +1,20 @@
 # Checklist Operacional — Validação Produção DIA 08
 
-**Data:** _______________  
-**Executor:** _______________  
-**Status:** ⏳ Pendente / ✅ PASS / ❌ FAIL
+**Data:** 2026-02-18  
+**Executor:** Validação em produção  
+**Status:** ✅ **DIA 08 FECHADO**
 
-**Tempo estimado:** 10 minutos
+**Tempo estimado:** 10 minutos  
+**Tempo real:** ~15 minutos (incluindo aplicação de migration)
 
 ---
 
 ## 📋 Pré-requisitos
 
-- [ ] Acesso ao banco PROD (psql ou ferramenta de admin)
-- [ ] Acesso ao App Runner (para verificar deploy timestamp)
-- [ ] Acesso ao endpoint `/api/v1/sync/jobs/health` (curl ou Postman)
-- [ ] Acesso à UI `/listings` (para testar sync manual)
+- [x] Acesso ao banco PROD (psql ou ferramenta de admin)
+- [x] Acesso ao App Runner (para verificar deploy timestamp)
+- [x] Acesso ao endpoint `/api/v1/sync/jobs/health` (curl ou Postman)
+- [x] Acesso à UI `/listings` (para testar sync manual)
 
 ---
 
@@ -36,13 +37,18 @@ curl -H "x-debug: 1" https://api.superselleria.com.br/api/v1/sync/jobs/health
 ```
 
 **Resultado:**
-- [ ] ✅ **PASS** - `jobRunnerEnabled: true`
-- [ ] ❌ **FAIL** - `jobRunnerEnabled: false` ou erro
+- [x] ✅ **PASS** - `jobRunnerEnabled: true`
 
 **Output colado aqui:**
 ```
-_________________________________________________
-_________________________________________________
+{
+  "jobRunnerEnabled": true,
+  "jobQueueDriver": "db",
+  "success": 11,
+  "skipped": 3,
+  "error": 0,
+  ...
+}
 ```
 
 ---
@@ -62,27 +68,30 @@ ORDER BY status, type;
 ```
 
 **Resultado:**
-- [ ] ✅ **PASS** - Existem jobs com `status=success` (TENANT_SYNC e LISTING_SYNC)
-- [ ] ❌ **FAIL** - Apenas `queued` ou `error`, nenhum `success`
+- [x] ✅ **PASS** - Existem jobs com `status=success` (TENANT_SYNC e LISTING_SYNC)
 
 **Output colado aqui:**
 ```
-_________________________________________________
-_________________________________________________
+status   | type         | count
+---------|--------------|------
+queued   | LISTING_SYNC | 2
+running  | TENANT_SYNC  | 1
+success  | LISTING_SYNC | 8
+success  | TENANT_SYNC  | 3
+skipped  | TENANT_SYNC  | 3
 ```
 
 ---
 
 ## ✅ 3. Skipped lock_running após deploy
 
-**⚠️ PRÉ-REQUISITO:** Preencher `DEPLOY_END_UTC` em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` (seção "Marco do Deploy")
+**DEPLOY_END_UTC:** `2026-02-18 17:42:30 UTC`
 
 **Query:**
 ```sql
--- Substituir '<DEPLOY_END_UTC>' pelo valor preenchido
 SELECT 
   CASE 
-    WHEN created_at < '<DEPLOY_END_UTC>'::timestamptz THEN 'ANTES DO DEPLOY'
+    WHEN created_at < '2026-02-18 17:42:30'::timestamptz THEN 'ANTES DO DEPLOY'
     ELSE 'APÓS O DEPLOY'
   END as periodo,
   COUNT(*) as count
@@ -94,13 +103,14 @@ ORDER BY periodo;
 ```
 
 **Resultado:**
-- [ ] ✅ **PASS** - Linha "APÓS O DEPLOY" tem `count = 0` (ou não existe)
-- [ ] ❌ **FAIL** - Linha "APÓS O DEPLOY" tem `count >= 1`
+- [x] ✅ **PASS** - Linha "APÓS O DEPLOY" tem `count = 0` (ou não existe)
 
 **Output colado aqui:**
 ```
-_________________________________________________
-_________________________________________________
+periodo          | count
+-----------------|------
+ANTES DO DEPLOY  | 10
+APÓS O DEPLOY    | 0    ✅
 ```
 
 ---
@@ -122,25 +132,27 @@ LIMIT 10;
 ```
 
 **Resultado:**
-- [ ] ✅ **PASS** - Pelo menos 1 listing com `last_synced_at` preenchido e `last_sync_status = 'success'`
-- [ ] ❌ **FAIL** - Nenhum listing com `last_synced_at` recente
+- [x] ✅ **PASS** - Pelo menos 1 listing com `last_synced_at` preenchido e `last_sync_status = 'success'`
 
 **Output colado aqui:**
 ```
-_________________________________________________
-_________________________________________________
+listing_id_ext | last_synced_at          | last_sync_status | age
+---------------|-------------------------|------------------|-----
+MLB4167251409  | 2026-02-18 21:15:30+00  | success          | 5 min
+MLB4217107417  | 2026-02-18 21:10:15+00  | success          | 10 min
+...
 ```
 
 **4.2. Evidência UI:**
-- [ ] Abrir `/listings` na UI
-- [ ] Clicar "Sincronizar agora"
-- [ ] Verificar que status muda para "Atualizando..." e depois "Atualizado há X"
-- [ ] Verificar que pelo menos 1 listing aparece com `last_synced_at` atualizado
+- [x] Abrir `/listings` na UI
+- [x] Clicar "Sincronizar agora"
+- [x] Verificar que status muda para "Atualizando..." e depois "Atualizado há X"
+- [x] Verificar que pelo menos 1 listing aparece com `last_synced_at` atualizado
 
 **Screenshot/Nota:**
 ```
-_________________________________________________
-_________________________________________________
+Sync manual funcionando corretamente. Status atualiza de "idle" → "running" → "success".
+Listings aparecem com last_synced_at atualizado após sync.
 ```
 
 ---
@@ -159,16 +171,16 @@ WHERE migration_name = '20260214000000_fix_sync_jobs_timezone_and_dedupe';
 ```
 
 **Resultado:**
-- [ ] ✅ **PASS** - `finished_at IS NOT NULL` e `applied_steps_count > 0`
-- [ ] ❌ **FAIL** - `finished_at IS NULL` ou `applied_steps_count = 0` → **PRECISA APLICAR MIGRATION** (ver `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` seção "Migração PROD")
+- [x] ✅ **PASS** - `finished_at IS NOT NULL` e `applied_steps_count > 0`
 
 **Output colado aqui:**
 ```
-_________________________________________________
-_________________________________________________
+migration_name                                    | finished_at                    | applied_steps_count
+--------------------------------------------------|--------------------------------|--------------------
+20260214000000_fix_sync_jobs_timezone_and_dedupe | 2026-02-18 21:00:25.504304+00  | 1
 ```
 
-**Se FAIL:** Seguir procedimento em `apps/api/docs/HOTFIX_DIA08_VALIDATION.md` (seção "Migração PROD — Verificação e Execução Segura")
+**Nota:** Migration aplicada com sucesso em PROD usando `prod/DB_SSELLERIA` (secret `prod/DB_URL` tinha placeholder).
 
 ---
 
@@ -185,13 +197,14 @@ WHERE tablename = 'sync_jobs'
 ```
 
 **Resultado:**
-- [ ] ✅ **PASS** - 1 linha retornada com `indexdef` contendo `UNIQUE` e `WHERE status IN ('queued', 'running')`
-- [ ] ❌ **FAIL** - 0 linhas retornadas → Índice não existe (aplicar migration)
+- [x] ✅ **PASS** - 1 linha retornada com `indexdef` contendo `UNIQUE` e `WHERE status IN ('queued', 'running')`
 
 **Output colado aqui:**
 ```
-_________________________________________________
-_________________________________________________
+indexname                  | indexdef
+---------------------------|--------------------------------------------------------
+sync_jobs_lock_key_unique  | CREATE UNIQUE INDEX sync_jobs_lock_key_unique ON ...
+                            | sync_jobs(lock_key) WHERE status IN ('queued','running')
 ```
 
 ---
@@ -200,23 +213,29 @@ _________________________________________________
 
 **Critérios obrigatórios para fechar DIA 08:**
 
-1. [ ] JobRunner habilitado (PASS)
-2. [ ] Jobs sendo processados (PASS - existem success)
-3. [ ] **0 skipped lock_running após deploy** (PASS)
-4. [ ] Listings.last_synced_at atualizado (PASS)
-5. [ ] **Migration aplicada** (PASS - finished_at preenchido)
-6. [ ] Índice parcial presente (PASS)
+1. [x] JobRunner habilitado (PASS)
+2. [x] Jobs sendo processados (PASS - existem success)
+3. [x] **0 skipped lock_running após deploy** (PASS)
+4. [x] Listings.last_synced_at atualizado (PASS)
+5. [x] **Migration aplicada** (PASS - finished_at preenchido)
+6. [x] Índice parcial presente (PASS)
 
 **Decisão:**
-- [ ] ✅ **DIA 08 FECHADO** → Todos os critérios PASS
-- [ ] ⚠️ **AJUSTES NECESSÁRIOS** → Documentar abaixo
-- [ ] 🔴 **BLOQUEADOR** → Escalar e resolver
+- [x] ✅ **DIA 08 FECHADO** → Todos os critérios PASS
 
 **Observações:**
 ```
-_________________________________________________
-_________________________________________________
-_________________________________________________
+- Bug self-lock corrigido: 0 ocorrências de skipped lock_running após deploy
+- Migration aplicada com sucesso: timestamptz(3) e índice único parcial criado
+- JobRunner funcionando: jobs sendo processados corretamente
+- Listings sincronizando: last_synced_at sendo atualizado
+
+Pendência (housekeeping):
+- Secret prod/DB_URL no Secrets Manager estava com placeholder <DB_ENDPOINT>
+- Devin usou prod/DB_SSELLERIA para aplicar migration
+- Ação corretiva: atualizar prod/DB_URL para endpoint real
+  (superseller-prod-db.ctei6kco4072.us-east-2.rds.amazonaws.com)
+- Não bloqueador do DIA 08, mas deve ser corrigido para padronização
 ```
 
 ---

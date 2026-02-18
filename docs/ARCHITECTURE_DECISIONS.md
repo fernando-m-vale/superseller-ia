@@ -901,4 +901,75 @@ Após aplicar uma ação (apply-action retorna 200 OK), o badge "Implementado" n
 
 ---
 
+---
+
+## ADR-022: Unique Partial Index em sync_jobs(lock_key) para Status Queued/Running
+
+**Data:** 2026-02-18  
+**Status:** Implementado
+
+### Contexto
+Sistema de jobs multi-tenant precisa evitar duplicação de jobs `TENANT_SYNC` mesmo com múltiplas réplicas e race conditions. Dedupe apenas em lógica de aplicação não é suficiente para garantir atomicidade.
+
+### Decisão
+**Criar índice único parcial `UNIQUE(lock_key) WHERE status IN ('queued','running')` na tabela `sync_jobs` para garantir dedupe atômico no nível do banco de dados.**
+
+### Justificativa
+- Dedupe apenas em lógica de aplicação não garante atomicidade com múltiplas réplicas
+- Índice único parcial garante que não pode existir 2 jobs com mesmo `lock_key` em status `queued` ou `running` simultaneamente
+- PostgreSQL garante atomicidade no nível do banco (não depende de locks de aplicação)
+- Funciona mesmo com race conditions e múltiplas réplicas do JobRunner
+
+### Implementação
+- **Migration:** `20260214000000_fix_sync_jobs_timezone_and_dedupe`
+- **Índice:** `CREATE UNIQUE INDEX sync_jobs_lock_key_unique ON sync_jobs(lock_key) WHERE status IN ('queued','running')`
+- **Lock key format:** `tenant:${tenantId}:TENANT_SYNC` ou `listing:${listingId}:LISTING_SYNC`
+- **Aplicado em:** PROD (2026-02-18 21:00:25 UTC)
+
+### Consequências
+- **Atomicidade:** Dedupe garantido no nível do banco, não apenas aplicação
+- **Escalabilidade:** Funciona com múltiplas réplicas sem coordenação externa
+- **Robustez:** Race conditions não causam duplicação
+- **Performance:** Índice parcial é mais eficiente que índice completo
+
+### Alternativas consideradas
+- Dedupe apenas em lógica de aplicação: Não garante atomicidade com múltiplas réplicas
+- Índice único completo: Menos eficiente, não permite múltiplos jobs com mesmo lock_key em status diferentes
+- Locks de aplicação (Redis/Distributed Lock): Adiciona dependência externa, complexidade operacional
+
+---
+
+## ADR-023: Single Source of Truth para DATABASE_URL Secret em PROD
+
+**Data:** 2026-02-18  
+**Status:** Pendente (housekeeping)
+
+### Contexto
+Durante aplicação de migration em PROD, descobriu-se que secret `prod/DB_URL` no Secrets Manager estava com placeholder literal `<DB_ENDPOINT>`. Devin usou `prod/DB_SSELLERIA` com string correta para aplicar migration.
+
+### Decisão
+**Padronizar secret `prod/DB_URL` como single source of truth para DATABASE_URL em PROD. Atualizar para endpoint real e remover placeholders.**
+
+### Justificativa
+- Placeholders causam confusão e erros operacionais
+- Single source of truth facilita manutenção e debug
+- Endpoint real deve estar em secret oficial (`prod/DB_URL`)
+- Evita necessidade de usar secrets alternativos
+
+### Implementação
+- **Ação corretiva:** Atualizar `prod/DB_URL` no Secrets Manager para endpoint real: `superseller-prod-db.ctei6kco4072.us-east-2.rds.amazonaws.com`
+- **Validação:** Testar conexão após atualização
+- **Documentação:** Registrar endpoint em documentação operacional
+
+### Consequências
+- **Clareza:** Secret oficial contém valor correto
+- **Manutenibilidade:** Single source of truth facilita atualizações futuras
+- **Operacional:** Evita necessidade de usar secrets alternativos
+
+### Alternativas consideradas
+- Manter placeholder: Causa confusão e erros operacionais
+- Usar sempre secret alternativo: Não é padrão, dificulta manutenção
+
+---
+
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.
