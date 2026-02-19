@@ -1,5 +1,102 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
+## 🔜 Próxima Sessão — Fechamento DIA 09 + Início DIA 10
+
+### Passo 1 — Executar MINI-CHECKLIST HOTFIX 09.1
+
+**Objetivo:** Validar que todas as correções do HOTFIX DIA 09.1 estão funcionando corretamente em ambiente de produção/staging antes de declarar DIA 09 oficialmente fechado.
+
+#### Checklist de Validação:
+
+1. **✅ Validar variações não sugeridas indevidamente**
+   - [ ] Abrir anúncio com 11+ variações
+   - [ ] Verificar que hack "ml_smart_variations" NÃO aparece
+   - [ ] Confirmar que `variationsCount` está sendo extraído corretamente
+
+2. **✅ Validar Full omitido quando unknown**
+   - [ ] Abrir anúncio com `shippingMode='unknown'` e `isFullEligible != true`
+   - [ ] Verificar que hack "ml_full_shipping" NÃO aparece
+   - [ ] Confirmar que gate está funcionando corretamente
+
+3. **✅ Validar botões feedback**
+   - [ ] Clicar em "Confirmar implementação" em um hack
+   - [ ] Verificar que request é enviado (Network tab)
+   - [ ] Confirmar que toast de sucesso aparece
+   - [ ] Verificar que badge "Implementado" aparece
+   - [ ] Repetir para "Não se aplica"
+
+4. **✅ Validar persistência após reload**
+   - [ ] Confirmar um hack como "Implementado"
+   - [ ] Recarregar a página (F5)
+   - [ ] Verificar que badge "Implementado" continua aparecendo
+   - [ ] Confirmar que botões não aparecem mais
+
+5. **✅ Validar tooltip Confidence**
+   - [ ] Passar mouse sobre ícone "i" ao lado do badge de Confidence
+   - [ ] Verificar que tooltip aparece com explicação
+   - [ ] Confirmar que bandas (Alta/Média/Baixa) estão visíveis
+
+6. **✅ Validar texto clip**
+   - [ ] Verificar mensagens relacionadas a mídia/vídeo
+   - [ ] Confirmar que termo "clip" é usado consistentemente
+   - [ ] Verificar que não há menções a "vídeo" indevidas
+
+**Critério de PASS:** Todos os itens acima devem passar. Se algum item falhar, investigar e corrigir antes de declarar DIA 09 fechado.
+
+**Se PASS → Declarar DIA 09 oficialmente fechado e prosseguir para DIA 10.**
+
+---
+
+### Passo 2 — Iniciar DIA 10
+
+## 🗓️ DIA 10 — Empacotamento Comercial + Go Live
+
+**Pré-requisito:** ✅ HOTFIX DIA 09.1 validado e DIA 09 oficialmente fechado
+
+**Objetivos:**
+
+1. **Refinar proposta de valor**
+   - Definir mensagem principal do produto
+   - Identificar diferenciais competitivos
+   - Criar narrativa de transformação (antes/depois)
+
+2. **Definir narrativa comercial**
+   - Storytelling para early adopters
+   - Casos de uso principais
+   - Benefícios mensuráveis
+
+3. **Definir pricing inicial**
+   - Estrutura de planos (Starter / Growth / Pro)
+   - Limites e features por plano
+   - Estratégia de preço (freemium? trial? paid only?)
+
+4. **Preparar landing/argumentação**
+   - Hero section com proposta de valor
+   - Seção de features principais
+   - Social proof (quando disponível)
+   - CTA claro
+
+5. **Definir estratégia de early adopters**
+   - Critérios para seleção de primeiros usuários
+   - Programa de beta/early access
+   - Incentivos para feedback
+
+6. **Planejar comunicação para primeiros usuários**
+   - Email de boas-vindas
+   - Onboarding guiado
+   - Suporte inicial (canal de comunicação)
+
+**Entrega (DoD DIA 10):**
+- ✅ Landing page funcional com proposta de valor clara
+- ✅ Planos definidos e exibidos
+- ✅ Onboarding guiado implementado
+- ✅ Primeiro anúncio analisado automaticamente após cadastro
+- ✅ Lista de espera / early users funcional
+
+**Objetivo:** Preparar monetização real e lançamento para primeiros usuários.
+
+---
+
 ## 🗓️ DIA 09 — ✅ FECHADO (2026-02-19)
 
 **Status:** ✅ **CONCLUÍDO COM SUCESSO**
