@@ -1,3 +1,80 @@
+# DAILY EXECUTION LOG — 2026-02-19 (HOTFIX DIA 09.1 — Correções de Validação)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Correções de problemas encontrados na validação do HackEngine v1 em PROD**
+
+## 📌 Problemas enfrentados (antes)
+- UI: botões Confirmar/Não se aplica não clicáveis (ou não disparavam request)
+- Hack 1 (Full) aparecia com shippingMode: unknown — recomendação genérica
+- Hack 3 (Variações) sugerido mesmo com anúncio tendo muitas variações (ex.: 11) → SignalsBuilder lendo variações errado
+- "Vídeo/Clip" inconsistente: sistema sugeria vídeo/clip mesmo quando anúncio tem vídeo (bug de nomenclatura ou detecção)
+- UX: Confidence aparecia como número sem explicação — precisava legenda/tooltip
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Backend — Fix SignalsBuilder (Variações)
+- ✅ Extração de `variationsCount` corrigida: tenta extrair de `pictures_json` ou default 0
+- ✅ `hasVariations` calculado corretamente: `variationsCount > 0`
+- ✅ Teste atualizado para garantir que `variationsCount === 11` quando há 11 variações
+
+### B) Backend — Gate para Hack 1 (Full) quando shippingMode unknown
+- ✅ Gate adicionado: Se `shippingMode === 'unknown'` E `isFullEligible !== true` → omit
+- ✅ Regra especial: Se `shippingMode === 'unknown'` MAS `isFullEligible === true` → permitir com confidence cap ≤ 35
+- ✅ Teste unitário adicionado para validar gate
+
+### C) Frontend — Fix botões não clicáveis (feedback)
+- ✅ Botões corrigidos: `onClick` com `e.preventDefault()` e `e.stopPropagation()`
+- ✅ `z-index` ajustado: `relative z-10` nos botões
+- ✅ Loading state melhorado: mostra "Processando..." durante request
+- ✅ Toast de sucesso/erro funcionando
+- ✅ Estado persistido após reload (recarrega history)
+
+### D) Frontend/Backend — "Vídeo" vs "Clip"
+- ✅ Padronização: usar termo "clip" consistentemente (não "vídeo" ou "clip (vídeo)")
+- ✅ `media-verdict.ts` atualizado: todas as mensagens usam apenas "clip"
+- ✅ Comentários atualizados para refletir padronização
+
+### E) UX — Legenda/Tooltip do Confidence
+- ✅ Tooltip adicionado ao lado do badge de Confidence
+- ✅ Texto explicativo: "A confiança do sistema na recomendação, baseada nos dados do anúncio..."
+- ✅ Legenda de bandas: Alta (≥70%), Média (40-69%), Baixa (0-39%)
+- ✅ Componente Tooltip reutilizável (shadcn/radix)
+
+### F) Documentação
+- ✅ `HACK_ENGINE_CONTRACT.md` atualizado:
+  - Seção "Confidence — como interpretar" adicionada
+  - Gates do Hack 1 (Full) atualizados com regra de shippingMode unknown
+  - Tabela-resumo atualizada
+- ✅ `DAILY_EXECUTION_LOG.md` atualizado com entrada do hotfix
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ Botões feedback clicáveis e funcionando (Network mostra request)
+- ✅ Após confirm/dismiss, UI atualiza e persiste após reload
+- ✅ Hack "Variações" NÃO aparece quando variationsCount >= 5 (ex.: 11)
+- ✅ Hack "Full" NÃO aparece quando shippingMode unknown e isFullEligible != true
+- ✅ Texto "clip" consistente (sem falar "vídeo" indevidamente)
+- ✅ Tooltip/legenda de Confidence presente e clara
+- ✅ Testes unitários atualizados/passing (API + Web build)
+
+## 📌 Status do HOTFIX DIA 09.1
+✅ **CONCLUÍDO**
+- ✅ Todas as correções implementadas
+- ✅ Documentação atualizada
+- ✅ Builds passando
+
+**Critérios de aceite (DoD):**
+1. ✅ Botões feedback clicáveis e funcionando
+2. ✅ Após confirm/dismiss, UI atualiza e persiste após reload
+3. ✅ Hack "Variações" NÃO aparece quando variationsCount >= 5
+4. ✅ Hack "Full" NÃO aparece quando shippingMode unknown e isFullEligible != true
+5. ✅ Texto "clip" consistente
+6. ✅ Tooltip/legenda de Confidence presente e clara
+7. ✅ Testes unitários atualizados/passing
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-19 (Dia 9 — HackEngine v1 Completo)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

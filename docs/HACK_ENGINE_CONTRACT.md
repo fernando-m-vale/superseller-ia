@@ -130,11 +130,21 @@ type ConfidenceLevel = 'low' | 'medium' | 'high';
 
 O HackEngine usa bandas fixas para classificar confidence:
 
-- **0-39:** `low`
-- **40-69:** `medium`
-- **70-100:** `high`
+- **0-39:** `low` (Baixa)
+- **40-69:** `medium` (Média)
+- **70-100:** `high` (Alta)
 
 A confidence é calculada através de pontuação determinística baseada em signals. Cada hack tem suas próprias regras de pontuação.
+
+### Como Interpretar Confidence
+
+**Confidence (Confiança)** é a confiança do sistema na recomendação, baseada nos dados do anúncio (visitas, conversão, preço, mídia etc.).
+
+- **Alta (≥70%):** Recomendação muito confiável. O sistema tem evidências fortes de que a ação trará resultados positivos.
+- **Média (40-69%):** Recomendação moderadamente confiável. O sistema tem evidências moderadas, mas pode haver fatores não considerados.
+- **Baixa (0-39%):** Recomendação com baixa confiança. O sistema tem poucas evidências ou há fatores que reduzem a confiabilidade.
+
+**Nota:** Confidence não é uma garantia de sucesso, mas sim uma medida de quão bem os dados do anúncio se alinham com as regras determinísticas do hack.
 
 ---
 
@@ -168,7 +178,14 @@ A confidence é calculada através de pontuação determinística baseada em sig
 
 **Gates (Omitir se):**
 - `shippingMode === 'full'` → omitir completamente
+- `shippingMode === 'unknown'` E `isFullEligible !== true` → omitir completamente (HOTFIX 09.1: genérico e inseguro)
 - `isFullEligible === false` → blocking=true, cap confidence ≤ 35
+
+**Regras Especiais (HOTFIX 09.1):**
+- Se `shippingMode === 'unknown'` MAS `isFullEligible === true`:
+  - Permitir sugerir, mas com confidence cap ≤ 35
+  - blocking=false (não é blocking, mas precisa de atenção)
+  - Mensagem deve indicar: "Não foi possível confirmar o modo atual; Full é elegível"
 
 **Pontuação:**
 
@@ -687,7 +704,7 @@ expect(isHackInCooldown(history, 'ml_full_shipping', nowUtc)).toBe(true);
 
 | Hack ID | Título | Impact | Gates | Confidence Range |
 |---------|--------|--------|-------|------------------|
-| `ml_full_shipping` | Ativar Frete Grátis Full | high | shippingMode=full → omit<br>isFullEligible=false → cap≤35 | 0-100 (cap 35 se blocking) |
+| `ml_full_shipping` | Ativar Frete Grátis Full | high | shippingMode=full → omit<br>shippingMode=unknown + isFullEligible≠true → omit<br>isFullEligible=false → cap≤35 | 0-100 (cap 35 se blocking ou unknown) |
 | `ml_bundle_kit` | Criar Kit/Combo | medium/high | isKitHeuristic=true → omit | 0-100 |
 | `ml_smart_variations` | Adicionar Variações | medium | - | 0-100 |
 | `ml_category_adjustment` | Ajustar Categoria | medium | categoryId ausente → cap≤40 | 0-100 (cap 40 se blocking) |

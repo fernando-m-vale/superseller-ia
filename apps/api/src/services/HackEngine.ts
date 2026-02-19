@@ -114,6 +114,12 @@ function evaluateMlFullShipping(signals: ListingSignals): { score: number; shoul
     return { score: 0, shouldOmit: true, blocking: false };
   }
   
+  // HOTFIX 09.1: Gate para shippingMode unknown
+  // Se shippingMode === 'unknown' E isFullEligible !== true → omit (genérico e inseguro)
+  if (signals.shippingMode === 'unknown' && signals.isFullEligible !== true) {
+    return { score: 0, shouldOmit: true, blocking: false };
+  }
+  
   let score = 0;
   let blocking = false;
   
@@ -121,6 +127,13 @@ function evaluateMlFullShipping(signals: ListingSignals): { score: number; shoul
   if (signals.isFullEligible === false) {
     blocking = true;
     score = Math.min(score, 35); // Cap at 35
+  }
+  
+  // HOTFIX 09.1: Se shippingMode === 'unknown' MAS isFullEligible === true
+  // Permitir sugerir, mas com confidence cap ≤ 35 e blocking=false
+  if (signals.shippingMode === 'unknown' && signals.isFullEligible === true) {
+    blocking = false; // Não é blocking, mas precisa de atenção
+    // Cap será aplicado no final
   }
   
   // Pontuação positiva
@@ -137,6 +150,11 @@ function evaluateMlFullShipping(signals: ListingSignals): { score: number; shoul
   
   // Aplicar cap se blocking
   if (blocking) {
+    score = Math.min(score, 35);
+  }
+  
+  // HOTFIX 09.1: Aplicar cap ≤ 35 se shippingMode unknown mas isFullEligible === true
+  if (signals.shippingMode === 'unknown' && signals.isFullEligible === true) {
     score = Math.min(score, 35);
   }
   

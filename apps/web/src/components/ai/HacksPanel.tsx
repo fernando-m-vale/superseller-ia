@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Zap, CheckCircle2, XCircle, TrendingUp, AlertCircle } from 'lucide-react'
+import { Zap, CheckCircle2, XCircle, TrendingUp, AlertCircle, Info } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
@@ -148,9 +149,37 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
                         <TrendingUp className="h-3 w-3 mr-1" />
                         Impacto: {hack.impact === 'high' ? 'Alto' : hack.impact === 'medium' ? 'Médio' : 'Baixo'}
                       </Badge>
-                      <Badge className={getConfidenceColor(hack.confidenceLevel)}>
-                        {hack.confidence}% {hack.confidenceLevel === 'high' ? 'Alta' : hack.confidenceLevel === 'medium' ? 'Média' : 'Baixa'}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge className={getConfidenceColor(hack.confidenceLevel)}>
+                          {hack.confidence}% {hack.confidenceLevel === 'high' ? 'Alta' : hack.confidenceLevel === 'medium' ? 'Média' : 'Baixa'}
+                        </Badge>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-full p-1 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                                aria-label="Informações sobre Confidence"
+                              >
+                                <Info className="h-3 w-3 text-muted-foreground" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <div className="space-y-2">
+                                <p className="font-semibold">Confidence (Confiança)</p>
+                                <p className="text-sm">
+                                  A confiança do sistema na recomendação, baseada nos dados do anúncio (visitas, conversão, preço, mídia etc.).
+                                </p>
+                                <div className="text-xs space-y-1 pt-2 border-t">
+                                  <p><strong>Alta (≥70%):</strong> Recomendação muito confiável</p>
+                                  <p><strong>Média (40-69%):</strong> Recomendação moderadamente confiável</p>
+                                  <p><strong>Baixa (0-39%):</strong> Recomendação com baixa confiança</p>
+                                </div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     </div>
                   </div>
 
@@ -203,22 +232,50 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => handleFeedback(hack.id, 'confirmed')}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleFeedback(hack.id, 'confirmed')
+                          }}
                           disabled={isDisabled}
-                          className="flex-1"
+                          className="flex-1 relative z-10"
+                          type="button"
                         >
-                          <CheckCircle2 className="h-4 w-4 mr-2" />
-                          Confirmar implementação
+                          {isSubmitting[hack.id] ? (
+                            <>
+                              <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Processando...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 mr-2" />
+                              Confirmar implementação
+                            </>
+                          )}
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleFeedback(hack.id, 'dismissed')}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleFeedback(hack.id, 'dismissed')
+                          }}
                           disabled={isDisabled}
-                          className="flex-1"
+                          className="flex-1 relative z-10"
+                          type="button"
                         >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Não se aplica
+                          {isSubmitting[hack.id] ? (
+                            <>
+                              <div className="h-4 w-4 mr-2 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
+                              Processando...
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Não se aplica
+                            </>
+                          )}
                         </Button>
                       </>
                     )}

@@ -18,6 +18,22 @@
 
 ---
 
+## 🗓️ HOTFIX DIA 09.1 — ✅ FECHADO (2026-02-19)
+
+**Status:** ✅ **CONCLUÍDO COM SUCESSO**
+
+**Correções realizadas:**
+- ✅ Fix SignalsBuilder: extração de variationsCount corrigida
+- ✅ Fix HackEngine: gate para ml_full_shipping quando shippingMode='unknown'
+- ✅ Fix Frontend: botões de feedback não clicáveis corrigidos
+- ✅ Padronização: texto "clip" vs "vídeo" consistente
+- ✅ UX: tooltip/legenda para Confidence adicionado
+- ✅ Documentação atualizada
+
+**Pré-requisito para DIA 10:** ✅ Concluído
+
+---
+
 ## 🗓️ DIA 06 — Execução Assistida (Modo Aplicar)
 
 **Objetivo:** Transformar análise em ação.
@@ -116,6 +132,8 @@
 ---
 
 ## 🗓️ DIA 10 — Empacotamento Comercial + Go Live
+
+**Pré-requisito:** ✅ HOTFIX DIA 09.1 concluído
 
 **Entrega**
 - Landing simples

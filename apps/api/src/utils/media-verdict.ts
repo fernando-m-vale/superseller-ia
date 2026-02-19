@@ -5,7 +5,7 @@
  * sobre clips (vídeo) de anúncios, garantindo que nunca afirmemos ausência
  * quando os dados são null ou true.
  * 
- * IMPORTANTE: No Mercado Livre, sellers só têm "CLIP" (vídeo). Não há distinção.
+ * IMPORTANTE: No Mercado Livre, sellers têm "CLIP". Usar termo "clip" consistentemente.
  * 
  * REGRAS OBRIGATÓRIAS:
  * - hasClips === true  → canSuggestClip = false, message afirma presença
@@ -14,7 +14,7 @@
  */
 
 export interface MediaVerdict {
-  /** Se clip (vídeo) foi detectado via API (true) ou não (false) ou não detectável (null) */
+  /** Se clip foi detectado via API (true) ou não (false) ou não detectável (null) */
   hasClipDetected: boolean | null;
   /** Se é seguro sugerir adicionar clip (false quando já tem ou quando null) */
   canSuggestClip: boolean;
@@ -25,7 +25,7 @@ export interface MediaVerdict {
 }
 
 /**
- * Gera verdict determinístico sobre mídia (clips/vídeo)
+ * Gera verdict determinístico sobre mídia (clips)
  * 
  * @param hasClips - Status do clip: true (tem), false (não tem), null (não detectável)
  * @param picturesCount - Quantidade de imagens (opcional, para contexto)
@@ -40,7 +40,7 @@ export function getMediaVerdict(
     return {
       hasClipDetected: true,
       canSuggestClip: false,
-      message: 'O anúncio possui clip (vídeo). Mídia está completa.',
+      message: 'O anúncio possui clip. Mídia está completa.',
       shortMessage: 'Clip presente',
     };
   }
@@ -52,13 +52,13 @@ export function getMediaVerdict(
         ? ' Imagens estão suficientes.'
         : picturesCount >= 6
         ? ' Considere adicionar mais imagens também.'
-        : ' Considere adicionar mais imagens e clip (vídeo).'
+        : ' Considere adicionar mais imagens e clip.'
       : '';
     
     return {
       hasClipDetected: false,
       canSuggestClip: true,
-      message: `O anúncio não possui clip (vídeo). Adicionar clip pode melhorar engajamento e conversão.${picturesContext}`,
+      message: `O anúncio não possui clip. Adicionar clip pode melhorar engajamento e conversão.${picturesContext}`,
       shortMessage: 'Sem clip',
     };
   }
@@ -75,7 +75,7 @@ export function getMediaVerdict(
   return {
     hasClipDetected: null,
     canSuggestClip: false,
-    message: `Não foi possível confirmar via API se o anúncio possui clip (vídeo). Valide no painel do Mercado Livre.${picturesContext}`,
+    message: `Não foi possível confirmar via API se o anúncio possui clip. Valide no painel do Mercado Livre.${picturesContext}`,
     shortMessage: 'Não detectável via API',
   };
 }
