@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { getOpportunityLabel, getOpportunityBadgeVariant } from '@/lib/hacks/opportunityScore'
 
 export interface HackEvidenceItem {
   key: string
@@ -47,17 +48,7 @@ export interface HackCardUX2Props {
   isLoading?: boolean
 }
 
-/**
- * Helper para calcular Opportunity Score
- * Formula: (confidence * 0.6) + (impactWeight * 0.4)
- */
-function computeOpportunityScore(
-  confidence: number,
-  impact: 'low' | 'medium' | 'high'
-): number {
-  const impactWeight = impact === 'high' ? 100 : impact === 'medium' ? 60 : 30
-  return Math.round(confidence * 0.6 + impactWeight * 0.4)
-}
+// HOTFIX 09.6: Opportunity Score agora é calculado no HacksPanel usando o helper centralizado
 
 /**
  * Helper para obter cor do impacto
@@ -115,7 +106,11 @@ export function HackCardUX2({
   opportunityScore,
   isLoading = false,
 }: HackCardUX2Props) {
-  const computedOpportunityScore = opportunityScore ?? computeOpportunityScore(confidence, impact)
+  // HOTFIX 09.6: Opportunity Score deve vir calculado do HacksPanel
+  // Se não vier, usar fallback simples (não ideal, mas evita erro)
+  const displayOpportunityScore = opportunityScore ?? Math.round(confidence * 0.6 + (impact === 'high' ? 90 : impact === 'medium' ? 65 : 35) * 0.4)
+  const opportunityLabel = getOpportunityLabel(displayOpportunityScore)
+  const opportunityBadgeVariant = getOpportunityBadgeVariant(displayOpportunityScore)
   const isDisabled = status !== 'suggested' || isLoading
 
   return (
@@ -150,9 +145,9 @@ export function HackCardUX2({
                 Impacto: {impact === 'high' ? 'Alto' : impact === 'medium' ? 'Médio' : 'Baixo'}
               </Badge>
               
-              {/* Opportunity Score */}
-              <Badge variant="outline" className="text-xs font-semibold">
-                Opportunity {computedOpportunityScore}/100
+              {/* Opportunity Score - HOTFIX 09.6 */}
+              <Badge variant={opportunityBadgeVariant} className="text-xs font-semibold">
+                {opportunityLabel} ({displayOpportunityScore}/100)
               </Badge>
               
               {/* Confidence (discreta + tooltip) */}

@@ -1,3 +1,57 @@
+# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.6 — Opportunity Score + Prioridade)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Implementar Opportunity Score (0-100) e Prioridade (1..N) para ordenar e destacar Top 3 hacks**
+
+## 📌 Contexto
+Após HOTFIX 09.5, o sistema já tinha UX 2.0 padronizado e hacks mais acionáveis. Agora precisamos de uma camada estratégica para ordenar e destacar os hacks que dão mais resultado (Top 3), com métrica simples e determinística.
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Frontend — Helper de Opportunity Score (P0)
+- ✅ Criado `apps/web/src/lib/hacks/opportunityScore.ts`
+- ✅ Funções:
+  - `computeImpactScore(impact)` => 90/65/35
+  - `computeGapScore({visits, orders, conversionRate})` => 0..100
+  - `computeOpportunityScore({impact, confidence, ...})` => 0..100
+  - `getOpportunityLabel(score)` => label textual
+  - `getOpportunityBadgeVariant(score)` => variante do badge
+
+### B) Frontend — Ordenação e Prioridade (P0)
+- ✅ `HacksPanel` calcula Opportunity Score para cada hack
+- ✅ Ordenação: opportunityScore desc → impact desc → confidence desc → hackId asc
+- ✅ Separação em Top 3, Outros e Confirmados
+
+### C) Frontend — UI (P0)
+- ✅ `HackCardUX2` exibe badge "Opportunity X/100" com label e variante
+- ✅ Badge de prioridade "#N" no header do card
+- ✅ Seções "🔥 Prioridades (Top 3)", "Outros hacks" e "Já aplicados"
+
+### D) Testes (P0)
+- ✅ Unit tests em `apps/web/src/lib/hacks/__tests__/opportunityScore.test.ts`
+- ✅ Cobertura: computeImpactScore, computeGapScore, computeOpportunityScore, labels, variantes
+
+### E) Documentação (P0)
+- ✅ Atualizado `docs/HACK_ENGINE_CONTRACT.md` com seção "Opportunity Score (Frontend v1)"
+- ✅ Fórmula, componentes, labels, ordenação e prioridade documentados
+
+## ✅ Critérios de Aceite (DoD 09.6)
+- ✅ Cada hack renderiza OpportunityScore X/100
+- ✅ Lista ordenada por OpportunityScore
+- ✅ Top 3 claramente exibidos
+- ✅ Build web passando
+- ✅ Testes unitários do helper passando
+
+## 📝 Estado Atual
+- ✅ Helper implementado e testado
+- ✅ Integração no HacksPanel completa
+- ✅ UI atualizada com badges e seções
+- ✅ Documentação atualizada
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-23 (HOTFIX DIA 09.5 — UX 2.0 Redesign dos Cards)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

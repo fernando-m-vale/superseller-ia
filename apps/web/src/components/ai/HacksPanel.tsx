@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import { HackCardUX2, type HackEvidenceItem, type HackRecommendation, type HackAction } from '@/components/hacks/HackCardUX2'
+import { computeOpportunityScore, getOpportunityLabel, getOpportunityBadgeVariant } from '@/lib/hacks/opportunityScore'
 
 export interface HackSuggestion {
   id: string
@@ -24,9 +25,15 @@ export interface HacksPanelProps {
   hacks: HackSuggestion[]
   listingId: string
   onFeedback?: (hackId: string, status: 'confirmed' | 'dismissed') => Promise<void>
+  // HOTFIX 09.6: Métricas para cálculo de Opportunity Score
+  metrics30d?: {
+    visits?: number | null
+    orders?: number | null
+    conversionRate?: number | null
+  }
 }
 
-export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
+export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPanelProps) {
   const [feedbackStatus, setFeedbackStatus] = useState<Record<string, 'confirmed' | 'dismissed' | null>>({})
   const [isSubmitting, setIsSubmitting] = useState<Record<string, boolean>>({})
   const { toast } = useToast()
@@ -34,6 +41,58 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
   if (!hacks || hacks.length === 0) {
     return null
   }
+
+  // HOTFIX 09.6: Calcular Opportunity Score e ordenar hacks
+  const hacksWithScore = hacks.map((hack) => {
+    const opportunityScore = computeOpportunityScore({
+      impact: hack.impact,
+      confidence: hack.confidence,
+      visits: metrics30d?.visits ?? null,
+      orders: metrics30d?.orders ?? null,
+      conversionRate: metrics30d?.conversionRate ?? null,
+    })
+    return {
+      ...hack,
+      opportunityScore,
+    }
+  })
+
+  // Ordenação: opportunityScore desc, depois impact desc, depois confidence desc, depois hackId asc
+  const sortedHacks = [...hacksWithScore].sort((a, b) => {
+    // 1. Opportunity Score (desc)
+    if (a.opportunityScore !== b.opportunityScore) {
+      return b.opportunityScore - a.opportunityScore
+    }
+    // 2. Impact (high > medium > low)
+    const impactOrder = { high: 3, medium: 2, low: 1 }
+    if (impactOrder[a.impact] !== impactOrder[b.impact]) {
+      return impactOrder[b.impact] - impactOrder[a.impact]
+    }
+    // 3. Confidence (desc)
+    if (a.confidence !== b.confidence) {
+      return b.confidence - a.confidence
+    }
+    // 4. Hack ID (asc, para estabilidade)
+    return a.id.localeCompare(b.id)
+  })
+
+  // Separar em Top 3 e outros
+  const top3Hacks = sortedHacks.filter((h) => {
+    const status = feedbackStatus[h.id] === 'confirmed' ? 'confirmed'
+      : feedbackStatus[h.id] === 'dismissed' ? 'dismissed'
+      : 'suggested'
+    return status === 'suggested'
+  }).slice(0, 3)
+
+  const otherHacks = sortedHacks.filter((h) => {
+    const status = feedbackStatus[h.id] === 'confirmed' ? 'confirmed'
+      : feedbackStatus[h.id] === 'dismissed' ? 'dismissed'
+      : 'suggested'
+    return status === 'suggested' && !top3Hacks.includes(h)
+  })
+
+  const confirmedHacks = sortedHacks.filter((h) => feedbackStatus[h.id] === 'confirmed')
+  const dismissedHacks = sortedHacks.filter((h) => feedbackStatus[h.id] === 'dismissed')
 
   /**
    * Transforma evidence string[] em HackEvidenceItem[]
@@ -192,7 +251,7 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
   /**
    * Transforma hack em props do HackCardUX2
    */
-  const transformHackToCardProps = (hack: HackSuggestion, index: number) => {
+  const transformHackToCardProps = (hack: HackSuggestion & { opportunityScore?: number }, priorityRank: number) => {
     const status: 'suggested' | 'confirmed' | 'dismissed' = 
       feedbackStatus[hack.id] === 'confirmed' ? 'confirmed'
       : feedbackStatus[hack.id] === 'dismissed' ? 'dismissed'
@@ -225,7 +284,8 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
       onConfirm: () => handleFeedback(hack.id, 'confirmed'),
       onDismiss: () => handleFeedback(hack.id, 'dismissed'),
       actions,
-      priorityRank: index + 1,
+      opportunityScore: hack.opportunityScore,
+      priorityRank,
       isLoading: isSubmitting[hack.id] || false,
     }
   }
@@ -241,12 +301,52 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {hacks.map((hack, index) => (
-          <HackCardUX2
-            key={hack.id}
-            {...transformHackToCardProps(hack, index)}
-          />
-        ))}
+        {/* HOTFIX 09.6: Top 3 Prioridades */}
+        {top3Hacks.length > 0 && (
+          <div className="space-y-4">
+            <div className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <span className="text-primary">🔥 Prioridades (Top 3)</span>
+            </div>
+            {top3Hacks.map((hack, idx) => (
+              <HackCardUX2
+                key={hack.id}
+                {...transformHackToCardProps(hack, idx + 1)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Outros hacks sugeridos */}
+        {otherHacks.length > 0 && (
+          <div className="space-y-4">
+            {top3Hacks.length > 0 && (
+              <div className="text-sm font-semibold text-muted-foreground flex items-center gap-2 mt-6">
+                <span>Outros hacks</span>
+              </div>
+            )}
+            {otherHacks.map((hack, idx) => (
+              <HackCardUX2
+                key={hack.id}
+                {...transformHackToCardProps(hack, top3Hacks.length + idx + 1)}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Hacks confirmados (já aplicados) */}
+        {confirmedHacks.length > 0 && (
+          <div className="space-y-4">
+            <div className="text-sm font-semibold text-muted-foreground flex items-center gap-2 mt-6">
+              <span>Já aplicados</span>
+            </div>
+            {confirmedHacks.map((hack, idx) => (
+              <HackCardUX2
+                key={hack.id}
+                {...transformHackToCardProps(hack, sortedHacks.length + idx + 1)}
+              />
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

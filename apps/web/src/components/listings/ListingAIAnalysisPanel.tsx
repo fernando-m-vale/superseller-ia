@@ -723,6 +723,7 @@ export function ListingAIAnalysisPanel({
         <HacksPanel 
           hacks={growthHacks} 
           listingId={listingId}
+          metrics30d={metrics30d}
         />
       )}
 

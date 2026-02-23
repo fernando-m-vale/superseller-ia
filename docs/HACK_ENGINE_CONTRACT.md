@@ -187,6 +187,74 @@ Os hacks são exibidos em cards de decisão com hierarquia visual forte:
 
 ---
 
+## 🎯 Opportunity Score (Frontend v1) — HOTFIX 09.6
+
+O Opportunity Score é uma métrica calculada no frontend que combina Impact, Confidence e Gap Score para ordenar e priorizar hacks. É usado para destacar os Top 3 hacks com maior potencial de resultado.
+
+### Fórmula
+
+```
+OpportunityScore = clamp(round(0.45 * ImpactScore + 0.35 * Confidence + 0.20 * GapScore), 0..100)
+```
+
+### Componentes
+
+#### Impact Score (0-100)
+- `high` = 90
+- `medium` = 65
+- `low` = 35
+
+#### Gap Score (0-100)
+Indica o "gap" entre performance atual e potencial:
+
+**Visits Score:**
+- `visits >= 300` => 40
+- `visits >= 200` => 30
+- `visits >= 100` => 15
+- `else` => 5
+
+**CR Penalty Score:**
+- `conversionRate < 0.01` (1%) => 40
+- `conversionRate < 0.02` (2%) => 25
+- `conversionRate < 0.03` (3%) => 10
+- `else` => 5
+
+**Orders Score:**
+- `orders == 0` => 20
+- `orders <= 2` => 12
+- `orders <= 10` => 6
+- `else` => 2
+
+**GapScore = clamp(visitsScore + crPenaltyScore + ordersScore, 0..100)**
+
+### Labels e Variantes
+
+- **Score >= 75:** "🔥 Alta oportunidade" (badge `default`)
+- **Score 50-74:** "Boa oportunidade" (badge `secondary`)
+- **Score < 50:** "Oportunidade baixa (revisar contexto)" (badge `outline`)
+
+### Ordenação
+
+Os hacks são ordenados por:
+1. **Opportunity Score** (descendente)
+2. **Impact** (high > medium > low)
+3. **Confidence** (descendente)
+4. **Hack ID** (ascendente, para estabilidade)
+
+### Prioridade
+
+- **Top 3:** Hacks com maior Opportunity Score aparecem primeiro na seção "🔥 Prioridades (Top 3)"
+- **Outros:** Hacks restantes aparecem na seção "Outros hacks"
+- **Confirmados:** Hacks já aplicados aparecem na seção "Já aplicados" (no final)
+
+### Implementação
+
+- **Helper:** `apps/web/src/lib/hacks/opportunityScore.ts`
+- **Cálculo:** Executado no `HacksPanel` antes da renderização
+- **Exibição:** Badge no `HackCardUX2` com label e variante baseados no score
+
+---
+
 ## 📊 Bandas de Confidence
 
 O HackEngine usa bandas fixas para classificar confidence:
