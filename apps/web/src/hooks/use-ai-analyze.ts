@@ -642,6 +642,7 @@ export function useAIAnalyze(listingId: string | null) {
 
   /**
    * Busca análise existente sem regenerar (para exibição ao expandir accordion)
+   * HOTFIX 09.2: Usa GET /latest primeiro para evitar regeneração desnecessária
    */
   const fetchExisting = async (): Promise<void> => {
     if (!listingId) return
@@ -653,7 +654,7 @@ export function useAIAnalyze(listingId: string | null) {
       return
     }
 
-    console.log('[AI-ANALYZE] Fetching existing analysis', { listingId })
+    console.log('[AI-ANALYZE] Fetching existing analysis (GET latest)', { listingId })
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
@@ -664,7 +665,90 @@ export function useAIAnalyze(listingId: string | null) {
         throw new Error('Usuário não autenticado')
       }
 
-      // Usar POST sem forceRefresh (que retorna cache se existir)
+      // HOTFIX 09.2: Tentar GET /latest primeiro (não chama OpenAI)
+      const latestResponse = await fetch(`${apiUrl}/ai/analyze/${listingId}/latest`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      // Se encontrou análise recente (< 7 dias), usar ela
+      if (latestResponse.ok) {
+        const latestResult = await latestResponse.json()
+        
+        console.log('[AI-ANALYZE] Latest analysis found (GET latest)', {
+          listingId,
+          available: latestResult.available !== false,
+          ageDays: latestResult.meta?.ageDays,
+        })
+
+        // Adaptar resposta da API
+        const adaptedData = adaptAIAnalysisResponse(latestResult.data as AIAnalysisApiResponse)
+        
+        // Ler analysisV21
+        const analysisV21 = latestResult.data?.analysisV21 ?? null
+        
+        if (analysisV21) {
+          adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
+        }
+
+        // Ler benchmark
+        const benchmark = latestResult.data?.benchmark ?? null
+        if (benchmark) {
+          adaptedData.benchmark = benchmark
+        }
+
+        // Ler appliedActions
+        const appliedActions = latestResult.data?.appliedActions ?? []
+        if (appliedActions) {
+          adaptedData.appliedActions = appliedActions
+        }
+
+        // Ler growthHacks (DIA 09)
+        const growthHacks = latestResult.data?.growthHacks ?? []
+        if (growthHacks) {
+          adaptedData.growthHacks = growthHacks
+        }
+        const growthHacksMeta = latestResult.data?.growthHacksMeta
+        if (growthHacksMeta) {
+          adaptedData.growthHacksMeta = growthHacksMeta
+        }
+        
+        // Normalizar resposta
+        const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
+        const normalizedData = normalizeAiAnalyzeResponse(adaptedData)
+        
+        // Extrair metadados
+        const cacheHit = latestResult.meta?.cacheHit ?? true
+        const analyzedAt = normalizedData.analysisV21?.meta?.analyzedAt || analysisV21?.meta?.analyzed_at
+        const message = latestResult.message ?? 'Análise encontrada (fetch-only)'
+        
+        setState({
+          data: normalizedData,
+          isLoading: false,
+          error: null,
+          analyzedAt,
+          cacheHit: Boolean(cacheHit),
+          message,
+        })
+        return // Sucesso: análise encontrada via GET latest
+      }
+
+      // Se não encontrou (404), não é erro - apenas não temos análise recente
+      if (latestResponse.status === 404) {
+        console.log('[AI-ANALYZE] No recent analysis found (GET latest returned 404)', { listingId })
+        setState(prev => ({ ...prev, isLoading: false, data: null }))
+        return
+      }
+
+      // Se GET latest falhou por outro motivo, tentar POST como fallback (comportamento antigo)
+      console.warn('[AI-ANALYZE] GET latest failed, falling back to POST', {
+        listingId,
+        status: latestResponse.status,
+      })
+
+      // Fallback: usar POST sem forceRefresh (que retorna cache se existir)
       const response = await fetch(`${apiUrl}/ai/analyze/${listingId}`, {
         method: 'POST',
         headers: {

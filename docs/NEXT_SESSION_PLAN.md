@@ -2,6 +2,27 @@
 
 ## 🔜 Próxima Sessão — Fechamento DIA 09 + Início DIA 10
 
+### Passo 0 — Validar HOTFIX 09.2 (Pré-requisito)
+
+**Status:** ✅ HOTFIX 09.2 implementado
+
+**Correções aplicadas:**
+- ✅ variations_count persistido no DB via sync ML
+- ✅ SignalsBuilder usa listing.variations_count (fonte de verdade)
+- ✅ Botões feedback corrigidos (onPointerDown/onMouseDown + z-index)
+- ✅ Endpoint GET /latest criado (não dispara análise ao abrir accordion)
+- ✅ Frontend atualizado para usar GET latest primeiro
+
+**Validação rápida:**
+- [ ] Listing com 11+ variações: hack "ml_smart_variations" NÃO aparece
+- [ ] Botões feedback clicáveis e funcionando
+- [ ] Abrir accordion de listing analisado <7 dias: NÃO dispara POST analyze
+- [ ] GET /latest retorna análise recente sem chamar OpenAI
+
+**Se PASS → Prosseguir para MINI-CHECKLIST HOTFIX 09.1**
+
+---
+
 ### Passo 1 — Executar MINI-CHECKLIST HOTFIX 09.1
 
 **Objetivo:** Validar que todas as correções do HOTFIX DIA 09.1 estão funcionando corretamente em ambiente de produção/staging antes de declarar DIA 09 oficialmente fechado.

@@ -160,31 +160,9 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   const hasVideo = listing.has_video ?? false;
   const hasClips = listing.has_clips ?? null;
   
-  // Variations: extrair de pictures_json ou campo direto
-  // NOTA: O ML armazena variações em um endpoint separado (/items/{id}/variations)
-  // Por enquanto, tentamos extrair de pictures_json se houver, senão default 0
-  // TODO: Adicionar campo variations_count no schema e extrair do endpoint /variations no sync
-  let variationsCount: number = 0;
-  
-  // Tentar extrair de pictures_json se disponível (pode conter metadados de variações)
-  if (listing.pictures_json) {
-    try {
-      const picturesData = listing.pictures_json as any;
-      // Se pictures_json tem um campo variations ou variations_count
-      if (typeof picturesData === 'object' && picturesData !== null) {
-        if (typeof picturesData.variations_count === 'number' && picturesData.variations_count >= 0) {
-          variationsCount = picturesData.variations_count;
-        } else if (Array.isArray(picturesData.variations)) {
-          variationsCount = picturesData.variations.length;
-        } else if (typeof picturesData.variations === 'number' && picturesData.variations >= 0) {
-          variationsCount = picturesData.variations;
-        }
-      }
-    } catch (e) {
-      // Se falhar ao parsear, usar default 0
-    }
-  }
-  
+  // HOTFIX 09.2: Variations - usar campo variations_count persistido no sync
+  // Fonte de verdade: listing.variations_count (extraído do item.variations no sync ML)
+  const variationsCount = listing.variations_count ?? 0;
   const hasVariations = variationsCount > 0;
   
   // Kit heuristic

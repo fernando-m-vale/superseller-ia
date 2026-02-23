@@ -2175,5 +2175,154 @@ if (enableAIPing) {
   });
 }
 
+  /**
+   * GET /api/v1/ai/analyze/:listingId/latest
+   * 
+   * HOTFIX 09.2: Retorna a última análise do listing sem chamar OpenAI.
+   * Útil para evitar regeneração ao abrir accordion quando já existe análise recente.
+   * 
+   * Regra de validade: se analyzedAt < now-7d => retorna 404 (ou 200 com available=false)
+   */
+  app.get<{ Params: { listingId: string }; Querystring: { periodDays?: string } }>(
+    '/analyze/:listingId/latest',
+    { preHandler: authGuard },
+    async (request: FastifyRequest<{ Params: { listingId: string }; Querystring: { periodDays?: string } }>, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Token inválido ou tenant não identificado',
+          });
+        }
+
+        const params = AnalyzeParamsSchema.parse(request.params);
+        const { listingId } = params;
+        const periodDays = request.query.periodDays ? parseInt(request.query.periodDays, 10) : PERIOD_DAYS;
+
+        request.log.info({ 
+          requestId,
+          userId,
+          tenantId,
+          listingId,
+          periodDays,
+        }, 'Fetching latest analysis (GET latest)');
+
+        // Buscar última análise do listing ordenada por created_at desc
+        const latestAnalysis = await prisma.listingAIAnalysis.findFirst({
+          where: {
+            tenant_id: tenantId,
+            listing_id: listingId,
+            period_days: periodDays,
+          },
+          orderBy: {
+            created_at: 'desc',
+          },
+        });
+
+        if (!latestAnalysis) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: 'Nenhuma análise encontrada para este anúncio',
+            available: false,
+          });
+        }
+
+        // Verificar se análise é válida (< 7 dias)
+        const now = new Date();
+        const analysisAge = now.getTime() - latestAnalysis.created_at.getTime();
+        const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+
+        if (analysisAge > sevenDaysInMs) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: 'Análise expirada (mais de 7 dias)',
+            available: false,
+            analyzedAt: latestAnalysis.created_at.toISOString(),
+            ageDays: Math.floor(analysisAge / (24 * 60 * 60 * 1000)),
+          });
+        }
+
+        // Buscar listing para construir resposta completa
+        const listing = await prisma.listing.findFirst({
+          where: {
+            id: listingId,
+            tenant_id: tenantId,
+          },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: 'Anúncio não encontrado',
+            available: false,
+          });
+        }
+
+        // Construir resposta no mesmo formato do POST /analyze
+        const resultJson = latestAnalysis.result_json as any;
+        
+        // Calcular score para incluir na resposta
+        const scoreService = new IAScoreService(tenantId);
+        const scoreResult = await scoreService.calculateScore(listingId, periodDays);
+
+        // Construir resposta completa (similar ao cache response do POST)
+        const responseData: any = {
+          analysis: resultJson.analysis || resultJson.analysisV21,
+          analysisV21: resultJson.analysisV21 || resultJson.analysis,
+          score: scoreResult.score,
+          metrics_30d: scoreResult.metrics_30d,
+          dataQuality: scoreResult.dataQuality,
+          appliedActions: [], // TODO: buscar applied actions se necessário
+          growthHacks: resultJson.growthHacks || [],
+          growthHacksMeta: resultJson.growthHacksMeta || {
+            rulesEvaluated: 0,
+            rulesTriggered: 0,
+            skippedBecauseOfHistory: 0,
+            skippedBecauseOfRequirements: 0,
+          },
+        };
+
+        // Adicionar header com commit SHA
+        setVersionHeader(reply);
+
+        return reply.status(200).send({
+          message: 'Análise encontrada (fetch-only)',
+          data: responseData,
+          meta: {
+            fetchOnly: true,
+            cacheHit: true,
+            analyzedAt: latestAnalysis.created_at.toISOString(),
+            ageDays: Math.floor(analysisAge / (24 * 60 * 60 * 1000)),
+          },
+        });
+      } catch (error) {
+        const { listingId } = (request.params as { listingId: string }) || {};
+
+        request.log.error({ 
+          requestId,
+          userId,
+          tenantId,
+          listingId,
+          err: error 
+        }, 'Error fetching latest analysis');
+
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Validation Error',
+            message: 'ID do anúncio inválido',
+          });
+        }
+
+        const errorMessage = error instanceof Error ? error.message : 'Erro ao buscar análise';
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: errorMessage,
+        });
+      }
+    }
+  );
+
   done();
 };

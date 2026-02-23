@@ -1,3 +1,76 @@
+# DAILY EXECUTION LOG — 2026-02-20 (HOTFIX DIA 09.2 — Correções Críticas)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Correções críticas encontradas após HOTFIX 09.1: variações incorretas, botões ainda não funcionais, análise regerando ao abrir accordion**
+
+## 📌 Problemas enfrentados (antes)
+1. **Hack "Variações Inteligentes" sugerido mesmo para anúncios com 11 variações**
+   - Causa: SignalsBuilder não tinha fonte real de variationsCount; hotfix 09.1 tentou usar pictures_json (incorreto)
+2. **Botões "Confirmar implementação" / "Não se aplica" ainda não funcionavam**
+   - Causa: evento capturado no pointerdown/mousedown pelo accordion/row; stopPropagation só no onClick era tarde
+3. **Análise regerando ao abrir accordion quando existe análise recente (<7 dias)**
+   - Causa: fetchExisting usava POST /ai/analyze que pode gerar cache miss por fingerprint; faltava endpoint "GET latest" sem recomputar
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Backend — Persistir variations_count no Listing (P0)
+- ✅ Prisma: campo `variations_count Int? @default(0)` adicionado ao model Listing
+- ✅ Migration criada: `20260220000000_add_variations_count_to_listing`
+- ✅ Sync ML: extração de `variations_count` do item.variations (prioridade: variations?.length > variations_count > variationsCount)
+- ✅ MercadoLivreSyncService atualizado: persiste variations_count no upsert
+- ✅ SignalsBuilder atualizado: usa `listing.variations_count` diretamente (removido fallback incorreto via pictures_json)
+
+### B) Frontend — Botões de feedback funcionando (P0)
+- ✅ HacksPanel: handlers `onPointerDown` e `onMouseDown` adicionados com `preventDefault()` e `stopPropagation()`
+- ✅ z-index aumentado: `relative z-20` e `pointer-events-auto` nos botões
+- ✅ type="button" garantido para evitar submit acidental
+- ✅ Loading state e disable funcionando corretamente durante request
+
+### C) Backend + Frontend — "Fetch latest analysis" sem reanalisar (P0)
+- ✅ Endpoint criado: `GET /api/v1/ai/analyze/:listingId/latest?periodDays=30`
+  - Não chama OpenAI
+  - Busca última listingAIAnalysis ordenada por created_at desc
+  - Retorna payload idêntico ao analyze mas com `meta.fetchOnly=true`
+  - Regra de validade: se analyzedAt < now-7d => retorna 404
+- ✅ Frontend atualizado: `fetchExisting` agora usa GET latest primeiro
+  - Se existir análise recente: renderiza resultado e NÃO dispara POST analyze
+  - Se não existir: permite que usuário clique em "Gerar análise"
+  - Botão "Regenerar análise" continua usando POST com forceRefresh=true
+
+### D) Consistência "Clip vs Vídeo" (P1)
+- ✅ Textos já padronizados: `media-verdict.ts` usa "clip" consistentemente
+- ✅ Tri-state respeitado: true (não sugerir), false (sugerir), null (mensagem condicional)
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ Para listing com variations_count >= 5: growthHacks NÃO contém ml_smart_variations
+- ✅ Para listing com variations_count = 0: pode sugerir ml_smart_variations (se demais sinais baterem)
+- ✅ Clicar Confirmar / Não se aplica dispara request (Network 200)
+- ✅ Persistência no reload (GET latest hacks history)
+- ✅ Abrir accordion de listing analisado <7 dias NÃO dispara POST /ai/analyze
+- ✅ Apenas GET /ai/analyze/:id/latest é chamado
+- ✅ "Regenerar" dispara POST com forceRefresh=true
+- ✅ Textos consistentes "Clip" (sem "vídeo" indevido)
+- ✅ Se has_clips=true, não sugerir clip
+
+## 📌 Status do HOTFIX DIA 09.2
+✅ **CONCLUÍDO**
+- ✅ Todas as correções implementadas
+- ✅ Migration criada
+- ✅ Endpoint GET latest funcional
+- ✅ Frontend atualizado para usar GET latest
+
+**Critérios de aceite (DoD):**
+1. ✅ VariationsCount extraído corretamente do sync ML e persistido no DB
+2. ✅ SignalsBuilder usa listing.variations_count (fonte de verdade)
+3. ✅ Botões feedback clicáveis e funcionando (onPointerDown/onMouseDown)
+4. ✅ GET latest funciona e não dispara análise ao abrir accordion
+5. ✅ Texto "clip" consistente
+6. ✅ Builds passando (API + Web)
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-19 (HOTFIX DIA 09.1 — Correções de Validação)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

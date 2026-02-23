@@ -232,13 +232,21 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
                         <Button
                           variant="default"
                           size="sm"
+                          onPointerDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }}
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
                             handleFeedback(hack.id, 'confirmed')
                           }}
                           disabled={isDisabled}
-                          className="flex-1 relative z-10"
+                          className="flex-1 relative z-20 pointer-events-auto"
                           type="button"
                         >
                           {isSubmitting[hack.id] ? (
@@ -256,13 +264,21 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
                         <Button
                           variant="outline"
                           size="sm"
+                          onPointerDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }}
                           onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
                             handleFeedback(hack.id, 'dismissed')
                           }}
                           disabled={isDisabled}
-                          className="flex-1 relative z-10"
+                          className="flex-1 relative z-20 pointer-events-auto"
                           type="button"
                         >
                           {isSubmitting[hack.id] ? (

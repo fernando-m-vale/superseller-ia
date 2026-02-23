@@ -667,6 +667,8 @@ expect(isHackInCooldown(history, 'ml_full_shipping', nowUtc)).toBe(true);
 1. **SignalsBuilder** (`apps/api/src/services/SignalsBuilder.ts`)
    - Extrai signals determinísticos de um listing
    - Implementa `isKitHeuristic`
+   - **HOTFIX 09.2:** `variationsCount` extraído de `listing.variations_count` (fonte de verdade persistida no sync ML)
+   - **Fonte de variationsCount:** Campo `variations_count` no model Listing, extraído do `item.variations` durante sync ML
 
 2. **HackEngine** (`apps/api/src/services/HackEngine.ts`)
    - Gera hacks baseados em signals
@@ -679,6 +681,10 @@ expect(isHackInCooldown(history, 'ml_full_shipping', nowUtc)).toBe(true);
 4. **Endpoint analyze** (`apps/api/src/routes/ai-analyze.routes.ts`)
    - Integra HackEngine no fluxo de análise
    - Retorna `growthHacks` e `growthHacksMeta` no payload
+   - **HOTFIX 09.2:** Novo endpoint `GET /api/v1/ai/analyze/:listingId/latest`
+     - Retorna última análise sem chamar OpenAI
+     - Validação: se analyzedAt < now-7d => retorna 404
+     - Payload idêntico ao POST analyze mas com `meta.fetchOnly=true`
 
 5. **Endpoint feedback** (`apps/api/src/routes/listings.ts`)
    - `POST /api/v1/listings/:listingId/hacks/:hackId/feedback`
@@ -733,6 +739,45 @@ expect(isHackInCooldown(history, 'ml_full_shipping', nowUtc)).toBe(true);
 
 ---
 
-**Versão:** 1.0  
-**Data:** 2026-02-19  
+**Versão:** 1.1 (HOTFIX 09.2)  
+**Data:** 2026-02-20  
 **Status:** ✅ Implementado
+
+---
+
+## 🔧 HOTFIX 09.2 — Mudanças
+
+### Fonte de variationsCount
+
+**Antes (HOTFIX 09.1):**
+- Tentativa de extrair de `pictures_json` (incorreto)
+- Fallback para 0 se não encontrado
+
+**Depois (HOTFIX 09.2):**
+- **Fonte de verdade:** Campo `listing.variations_count` persistido no banco
+- **Extração no sync ML:** `MercadoLivreSyncService` extrai de `item.variations?.length` ou `item.variations_count`
+- **SignalsBuilder:** Usa diretamente `listing.variations_count ?? 0`
+- **Migration:** `20260220000000_add_variations_count_to_listing`
+
+### Endpoint GET /latest
+
+**Novo endpoint:** `GET /api/v1/ai/analyze/:listingId/latest?periodDays=30`
+
+**Comportamento:**
+- Busca última análise do listing ordenada por `created_at DESC`
+- Não chama OpenAI (fetch-only)
+- Retorna payload idêntico ao POST analyze mas com `meta.fetchOnly=true`
+- **Validação:** Se `analyzedAt < now-7d` => retorna 404
+
+**Uso no frontend:**
+- `fetchExisting()` agora usa GET latest primeiro
+- Se encontrar análise recente: renderiza e NÃO dispara POST analyze
+- Se não encontrar: permite que usuário clique em "Gerar análise"
+- Botão "Regenerar" continua usando POST com `forceRefresh=true`
+
+### Botões de Feedback
+
+**Correções:**
+- Handlers `onPointerDown` e `onMouseDown` adicionados com `preventDefault()` e `stopPropagation()`
+- z-index aumentado: `relative z-20` e `pointer-events-auto`
+- type="button" garantido para evitar submit acidental

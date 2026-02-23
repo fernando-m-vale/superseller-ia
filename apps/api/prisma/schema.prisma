@@ -227,6 +227,7 @@ model Listing {
   has_clips                 Boolean? // Tem clips? (null = desconhecido/não detectável via API)
   clips_source              String? // Fonte: "unknown" | "override" | "api"
   clips_checked_at          DateTime? // Quando foi verificado/atualizado
+  variations_count          Int?                @default(0) // Quantidade de variações do anúncio (ex: cores, tamanhos)
   visits_last_7d            Int?                @default(0) // Visitas últimos 7 dias
   sales_last_7d             Int?                @default(0) // Vendas últimos 7 dias
   source                    String? // Origem da ingestão: "discovery" | "orders_fallback" | null

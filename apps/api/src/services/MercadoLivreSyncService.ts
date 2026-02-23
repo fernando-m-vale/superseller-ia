@@ -84,6 +84,7 @@ interface MercadoLivreItem {
     end_date?: string;
   }>;
   deal_ids?: string[];
+  variations?: Array<{ id?: string; [key: string]: any }>; // Variações do anúncio (cores, tamanhos, etc)
   _enrichmentMeta?: {
     endpointUsed: 'prices' | 'items' | 'none';
     statusCode: number;
@@ -1627,6 +1628,26 @@ export class MercadoLivreSyncService {
           listingData.sales_last_7d = 0;
         }
         // Se é update e não veio sales, NÃO atualizar (manter valor existente)
+
+        // HOTFIX 09.2: Extrair variations_count do item
+        // Prioridade: item.variations?.length > item.variations_count > 0
+        let variationsCount: number | null = null;
+        if (Array.isArray(item.variations) && item.variations.length > 0) {
+          variationsCount = item.variations.length;
+        } else if (typeof (item as any).variations_count === 'number' && (item as any).variations_count >= 0) {
+          variationsCount = (item as any).variations_count;
+        } else if (typeof (item as any).variationsCount === 'number' && (item as any).variationsCount >= 0) {
+          variationsCount = (item as any).variationsCount;
+        }
+        
+        // Atualizar variations_count apenas se extraímos um valor válido
+        if (variationsCount !== null && variationsCount >= 0) {
+          listingData.variations_count = variationsCount;
+        } else if (!existing) {
+          // Se é criação e não tem variations, setar 0
+          listingData.variations_count = 0;
+        }
+        // Se é update e não veio variations, NÃO atualizar (manter valor existente)
 
         // Atualizar source e discovery_blocked (sempre atualizar quando fornecidos)
         if (source !== undefined) {
