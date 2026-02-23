@@ -395,6 +395,9 @@ export function useAIAnalyze(listingId: string | null) {
 
   // HOTFIX 09.3: Single-flight guard para evitar múltiplas chamadas simultâneas
   const isFetchingExistingRef = useRef<boolean>(false)
+  
+  // HOTFIX 09.4: Anti-loop latch definitivo por listingId
+  const fetchAttemptStatusRef = useRef<Map<string, 'idle' | 'inflight' | 'done' | 'failed'>>(new Map())
 
   // Resetar COMPLETAMENTE o state quando listingId mudar
   // Isso evita misturar dados entre anúncios diferentes
@@ -407,8 +410,11 @@ export function useAIAnalyze(listingId: string | null) {
       cacheHit: undefined,
       message: undefined,
     })
-    // Resetar guard ao mudar listingId
+    // Resetar guards ao mudar listingId
     isFetchingExistingRef.current = false
+    if (listingId) {
+      fetchAttemptStatusRef.current.delete(listingId)
+    }
   }, [listingId])
 
   const analyze = async (forceRefresh: boolean = false): Promise<void> => {
@@ -649,10 +655,21 @@ export function useAIAnalyze(listingId: string | null) {
    * Busca análise existente sem regenerar (para exibição ao expandir accordion)
    * HOTFIX 09.2: Usa GET /latest primeiro para evitar regeneração desnecessária
    * HOTFIX 09.3: Single-flight guard para evitar múltiplas chamadas simultâneas
+   * HOTFIX 09.4: Anti-loop latch definitivo por listingId
    */
   const fetchExisting = async (): Promise<void> => {
     if (!listingId) return
     if (state.isLoading) return
+
+    // HOTFIX 09.4: Anti-loop latch - verificar status por listingId
+    const currentStatus = fetchAttemptStatusRef.current.get(listingId) || 'idle'
+    if (currentStatus !== 'idle') {
+      console.log('[AI-ANALYZE] Fetch attempt already processed, skipping', { 
+        listingId, 
+        status: currentStatus 
+      })
+      return
+    }
 
     // HOTFIX 09.3: Single-flight guard - se já está buscando, retornar
     if (isFetchingExistingRef.current) {
@@ -663,11 +680,13 @@ export function useAIAnalyze(listingId: string | null) {
     // Se já temos dados em memória, não buscar novamente
     if (state.data?.analysisV21) {
       console.log('[AI-ANALYZE] Using cached data in memory', { listingId })
+      fetchAttemptStatusRef.current.set(listingId, 'done')
       return
     }
 
     // Marcar como buscando
     isFetchingExistingRef.current = true
+    fetchAttemptStatusRef.current.set(listingId, 'inflight')
     console.log('[AI-ANALYZE] Fetching existing analysis (GET latest)', { listingId })
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
@@ -749,6 +768,26 @@ export function useAIAnalyze(listingId: string | null) {
         const analyzedAt = normalizedData.analysisV21?.meta?.analyzedAt || analysisV21?.meta?.analyzed_at
         const message = latestResult.message ?? 'Análise encontrada (fetch-only)'
         
+        // HOTFIX 09.4: Validar shape do payload antes de setar state
+        if (!normalizedData.listingId || !normalizedData.analyzedAt || normalizedData.score === undefined) {
+          console.warn('[AI-ANALYZE] Invalid payload shape from GET latest', {
+            listingId,
+            hasListingId: !!normalizedData.listingId,
+            hasAnalyzedAt: !!normalizedData.analyzedAt,
+            hasScore: normalizedData.score !== undefined,
+          })
+          // Marcar como failed e não loopar
+          fetchAttemptStatusRef.current.set(listingId, 'failed')
+          isFetchingExistingRef.current = false
+          setState(prev => ({
+            ...prev,
+            isLoading: false,
+            error: 'Formato de resposta inválido. Clique em "Gerar análise" para continuar.',
+            data: null,
+          }))
+          return
+        }
+
         setState({
           data: normalizedData,
           isLoading: false,
@@ -757,7 +796,8 @@ export function useAIAnalyze(listingId: string | null) {
           cacheHit: Boolean(cacheHit),
           message,
         })
-        // Resetar guard após sucesso
+        // HOTFIX 09.4: Marcar como done após sucesso
+        fetchAttemptStatusRef.current.set(listingId, 'done')
         isFetchingExistingRef.current = false
         return // Sucesso: análise encontrada via GET latest
       }
@@ -766,7 +806,8 @@ export function useAIAnalyze(listingId: string | null) {
       if (latestResponse.status === 404) {
         console.log('[AI-ANALYZE] No recent analysis found (GET latest returned 404)', { listingId })
         setState(prev => ({ ...prev, isLoading: false, data: null }))
-        // Resetar guard após 404
+        // HOTFIX 09.4: Marcar como done (sem loop) e habilitar botão "Gerar análise"
+        fetchAttemptStatusRef.current.set(listingId, 'done')
         isFetchingExistingRef.current = false
         return
       }
@@ -791,11 +832,13 @@ export function useAIAnalyze(listingId: string | null) {
         // Se não existir análise, não é erro - apenas não temos dados
         if (response.status === 404) {
           setState(prev => ({ ...prev, isLoading: false, data: null }))
-          // Resetar guard após 404
+          // HOTFIX 09.4: Marcar como done após 404
+          fetchAttemptStatusRef.current.set(listingId, 'done')
           isFetchingExistingRef.current = false
           return
         }
-        // Resetar guard em caso de erro
+        // HOTFIX 09.4: Marcar como failed em caso de erro
+        fetchAttemptStatusRef.current.set(listingId, 'failed')
         isFetchingExistingRef.current = false
         throw new Error(`Erro ao buscar análise: ${response.status}`)
       }
@@ -868,14 +911,15 @@ export function useAIAnalyze(listingId: string | null) {
       })
     } catch (error) {
       console.error('[AI-ANALYZE] Error fetching existing analysis', { listingId, error })
+      // HOTFIX 09.4: Marcar como failed e não re-tentar automaticamente
+      fetchAttemptStatusRef.current.set(listingId, 'failed')
+      isFetchingExistingRef.current = false
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
-        error: error instanceof Error ? error.message : 'Erro ao buscar análise',
+        error: error instanceof Error ? error.message : 'Não foi possível carregar a análise salva. Clique em "Gerar análise" para continuar.',
         data: null,
       }))
-      // HOTFIX 09.3: Resetar guard em caso de erro
-      isFetchingExistingRef.current = false
     }
   }
 

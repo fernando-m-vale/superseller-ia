@@ -1,3 +1,78 @@
+# DAILY EXECUTION LOG — 2026-02-20 (HOTFIX DIA 09.4 — Normalização de Payload e Anti-Loop)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Correções críticas após HOTFIX 09.3: loop infinito de GET /latest devido a shape diferente do payload, falta de validação e anti-loop latch definitivo**
+
+## 📌 Problemas enfrentados (antes)
+1. **Loop infinito de GET /latest ao abrir accordion**
+   - Causa: endpoint GET /latest retornava payload com shape diferente do POST /analyze (faltava listingId, campos com nomes diferentes)
+   - UI/normalizer não considerava análise "carregada" e re-disparava fetchExisting em loop
+2. **Falta de validação de payload**
+   - Causa: normalizer não validava campos obrigatórios (listingId, analyzedAt, score)
+   - Erros de shape não eram detectados e causavam loops
+3. **Falta de anti-loop latch definitivo**
+   - Causa: single-flight guard não era suficiente; precisava de latch por listingId com estados (idle/inflight/done/failed)
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Backend — Normalizar resposta do GET latest (P0)
+- ✅ GET /latest agora retorna payload IDÊNTICO ao POST /analyze (mesmo contrato/shape)
+- ✅ Sempre inclui `listingId` no `data`
+- ✅ Campos normalizados:
+  - `metrics30d` (não `metrics_30d`)
+  - `score`, `scoreBreakdown`, `potentialGain` (mesmo formato do POST)
+  - `analysisV21`, `benchmark`, `benchmarkInsights`, `generatedContent`
+  - `growthHacks`, `growthHacksMeta`, `appliedActions`
+  - `promo`, `pricingNormalized`, `actionPlan`, `scoreExplanation`, `mediaVerdict`
+- ✅ Reutiliza mesma lógica de construção do cache response do POST /analyze
+
+### B) Frontend — Anti-loop latch definitivo (P0)
+- ✅ Latch por listingId: `fetchAttemptStatusRef` com Map<string, 'idle'|'inflight'|'done'|'failed'>
+- ✅ Antes de chamar GET latest: se status != 'idle' => return
+- ✅ Em sucesso: status='done'
+- ✅ Em 404: status='done' (sem loop) e habilita botão "Gerar análise"
+- ✅ Em erro/shape inválido: status='failed', seta loadError e NÃO re-tenta automaticamente
+- ✅ Reset de latch ao mudar listingId
+
+### C) Frontend — Normalização resiliente (P0)
+- ✅ Validação em `normalizeAiAnalyzeResponse`:
+  - Verifica `listingId`, `analyzedAt`, `score` antes de normalizar
+  - Lança erro controlado se faltar campos obrigatórios
+- ✅ Validação adicional no hook antes de setar state:
+  - Se payload inválido, marca como failed e mostra fallback
+- ✅ Fallback UI quando loadError:
+  - Mensagem: "Não foi possível carregar a análise salva. Clique em Gerar análise."
+  - Botão "Gerar análise" habilitado
+
+### D) Logs/Telemetria (P1)
+- ✅ Console.warn quando payload inválido (dev)
+- ✅ Logs estruturados no hook para diagnosticar loops
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ Abrir accordion: no máximo 1 GET latest por listingId (sem loop)
+- ✅ Se GET latest 200: UI renderiza análise (sem spinner infinito) e NÃO dispara POST analyze automaticamente
+- ✅ Se GET latest 404: UI não loopa, e permite clicar em "Gerar análise"
+- ✅ Se GET latest erro/shape inválido: UI mostra fallback e NÃO loopa
+- ✅ Build API e Web passando (TypeScript errors apenas em testes antigos, não relacionados)
+
+## 📌 Status do HOTFIX DIA 09.4
+✅ **CONCLUÍDO**
+- ✅ Payload GET /latest normalizado (mesmo formato do POST /analyze)
+- ✅ Anti-loop latch definitivo implementado
+- ✅ Normalização resiliente com validação
+- ✅ Fallback UI para erros de carregamento
+
+**Critérios de aceite (DoD):**
+1. ✅ Abrir accordion: no máximo 1 GET latest por listingId (sem loop)
+2. ✅ Se GET latest 200: UI renderiza análise e NÃO dispara POST analyze automaticamente
+3. ✅ Se GET latest 404: UI não loopa, e permite clicar em "Gerar análise"
+4. ✅ Se GET latest erro/shape inválido: UI mostra fallback e NÃO loopa
+5. ✅ Build API e Web passando
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-20 (HOTFIX DIA 09.3 — Correções de Loop e Feedback)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

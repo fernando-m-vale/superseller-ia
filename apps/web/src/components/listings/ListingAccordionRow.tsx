@@ -214,9 +214,14 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                     <div className="flex flex-col items-center text-center">
                       <AlertCircle className="h-12 w-12 text-destructive mb-4" />
                       <h3 className="text-lg font-semibold mb-2">Erro ao carregar análise</h3>
-                      <p className="text-sm text-muted-foreground mb-4">{aiError}</p>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {/* HOTFIX 09.4: Mensagem específica para erro de carregamento */}
+                        {aiError.includes('não foi possível carregar') || aiError.includes('Formato de resposta inválido')
+                          ? 'Não foi possível carregar a análise salva. Clique em "Gerar análise" para continuar.'
+                          : aiError}
+                      </p>
                       <Button onClick={handleGenerateAnalysis} variant="outline">
-                        Tentar novamente
+                        Gerar análise
                       </Button>
                     </div>
                   </Card>

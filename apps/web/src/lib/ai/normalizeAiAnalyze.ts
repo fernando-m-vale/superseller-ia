@@ -222,10 +222,29 @@ function buildActionPlan(
 
 /**
  * Normaliza resposta completa da API
+ * HOTFIX 09.4: Validação resiliente para garantir campos obrigatórios
  */
 export function normalizeAiAnalyzeResponse(
   response: AIAnalysisResponse
 ): NormalizedAIAnalysisResponse {
+  // HOTFIX 09.4: Validar campos obrigatórios antes de normalizar
+  if (!response.listingId || !response.analyzedAt || response.score === undefined) {
+    const missingFields = []
+    if (!response.listingId) missingFields.push('listingId')
+    if (!response.analyzedAt) missingFields.push('analyzedAt')
+    if (response.score === undefined) missingFields.push('score')
+    
+    console.warn('[NORMALIZE-AI] Missing required fields in response', {
+      missingFields,
+      hasListingId: !!response.listingId,
+      hasAnalyzedAt: !!response.analyzedAt,
+      hasScore: response.score !== undefined,
+    })
+    
+    // Lançar erro controlado para acionar loadError no hook
+    throw new Error(`Resposta da API inválida: campos obrigatórios ausentes (${missingFields.join(', ')})`)
+  }
+
   // Converter seoSuggestions se necessário
   const seoSuggestionsNormalized = response.seoSuggestions 
     ? {

@@ -2,24 +2,36 @@
 
 ## 🔜 Próxima Sessão — Fechamento DIA 09 + Início DIA 10
 
-### Passo 0 — Validar HOTFIX 09.3 (Pré-requisito)
+### Passo 0 — Validar HOTFIX 09.4 (Pré-requisito)
 
-**Status:** ✅ HOTFIX 09.3 implementado
+**Status:** ✅ HOTFIX 09.4 implementado
+
+**Correções aplicadas:**
+- ✅ Payload GET /latest normalizado (mesmo formato do POST /analyze)
+- ✅ Anti-loop latch definitivo por listingId (idle/inflight/done/failed)
+- ✅ Normalização resiliente com validação de campos obrigatórios
+- ✅ Fallback UI para erros de carregamento
+
+**Validação rápida (P0):**
+- [ ] Abrir accordion: no máximo 1 GET latest por listingId (sem loop)
+- [ ] Se GET latest 200: UI renderiza análise e NÃO dispara POST analyze automaticamente
+- [ ] Se GET latest 404: UI não loopa, e permite clicar em "Gerar análise"
+- [ ] Se GET latest erro/shape inválido: UI mostra fallback e NÃO loopa
+- [ ] Build API e Web passando
+
+**Se PASS → Prosseguir para MINI-CHECKLIST HOTFIX 09.1**
+
+---
+
+### Passo 0.1 — Validar HOTFIX 09.3 (Histórico)
+
+**Status:** ✅ HOTFIX 09.3 implementado (pré-requisito do 09.4)
 
 **Correções aplicadas:**
 - ✅ Loop infinito de GET /latest corrigido (single-flight guard + guard ajustado)
 - ✅ Botões feedback 100% clicáveis (onClickCapture no container)
 - ✅ Gate explícito para ml_smart_variations quando variationsCount >= 5
 - ✅ Shape do payload normalizado (GET latest e POST analyze consistentes)
-
-**Validação rápida (P0):**
-- [ ] Abrir accordion: máximo 1 GET latest (sem loop)
-- [ ] UI renderiza análise e hacks sem spinner infinito
-- [ ] Botões disparam POST feedback sempre (Network mostra request)
-- [ ] ml_smart_variations nunca aparece com variationsCount >= 5
-- [ ] Clip/vídeo consistente
-
-**Se PASS → Prosseguir para MINI-CHECKLIST HOTFIX 09.1**
 
 ---
 

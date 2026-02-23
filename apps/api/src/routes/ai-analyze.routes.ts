@@ -2260,29 +2260,360 @@ if (enableAIPing) {
           });
         }
 
-        // Construir resposta no mesmo formato do POST /analyze
+        // HOTFIX 09.4: Construir resposta NO MESMO FORMATO do POST /analyze (cache response)
         const resultJson = latestAnalysis.result_json as any;
+        const cachedResult = {
+          analysis: resultJson.analysis || resultJson.analysisV21,
+          analysisV21: resultJson.analysisV21 || resultJson.analysis,
+          savedRecommendations: resultJson.savedRecommendations || 0,
+        };
         
         // Calcular score para incluir na resposta
         const scoreService = new IAScoreService(tenantId);
         const scoreResult = await scoreService.calculateScore(listingId, periodDays);
 
-        // Construir resposta completa (similar ao cache response do POST)
+        // Gerar actionPlan e scoreExplanation (mesma lógica do cache)
+        const dataQualityForActions: DataQuality = {
+          performanceAvailable: scoreResult.dataQuality.performanceAvailable,
+          visitsCoverage: scoreResult.dataQuality.visitsCoverage,
+          videoStatusKnown: listing.has_video !== null,
+        };
+        const actionPlan = generateActionPlan(
+          scoreResult.score.breakdown,
+          dataQualityForActions,
+          scoreResult.score.potential_gain,
+          {
+            hasClips: listing.has_clips ?? null,
+            picturesCount: listing.pictures_count,
+          },
+          {
+            hasPromotion: listing.has_promotion ?? false,
+            discountPercent: listing.discount_percent,
+          },
+          {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+            revenue: scoreResult.metrics_30d.revenue,
+          }
+        );
+        const scoreExplanation = explainScore(
+          scoreResult.score.breakdown,
+          dataQualityForActions,
+          {
+            hasClips: listing.has_clips ?? null,
+            picturesCount: listing.pictures_count,
+          }
+        );
+
+        // Gerar MediaVerdict
+        const mediaVerdict = getMediaVerdict(listing.has_clips ?? null, listing.pictures_count);
+
+        // Calcular benchmark (mesma lógica do cache)
+        let cacheBenchmarkResult: any = null;
+        if (listing.category) {
+          try {
+            const benchmarkService = new BenchmarkService(tenantId);
+            cacheBenchmarkResult = await benchmarkService.calculateBenchmark(
+              {
+                id: listingId,
+                listingIdExt: listing.listing_id_ext || '',
+                categoryId: listing.category,
+                picturesCount: listing.pictures_count || 0,
+                hasClips: listing.has_clips ?? null,
+                title: listing.title,
+                price: Number(listing.price),
+                hasPromotion: listing.has_promotion ?? false,
+                discountPercent: listing.discount_percent ? Number(listing.discount_percent) : null,
+              },
+              {
+                visits: scoreResult.metrics_30d.visits,
+                orders: scoreResult.metrics_30d.orders,
+                conversionRate: scoreResult.metrics_30d.conversionRate,
+              }
+            );
+          } catch (benchmarkError) {
+            const errorMessage = benchmarkError instanceof Error ? benchmarkError.message : 'Erro desconhecido';
+            cacheBenchmarkResult = {
+              benchmarkSummary: {
+                categoryId: listing.category,
+                sampleSize: 0,
+                computedAt: new Date().toISOString(),
+                confidence: 'unavailable',
+                notes: `Benchmark indisponível: ${errorMessage}`,
+                stats: {
+                  medianPicturesCount: 0,
+                  percentageWithVideo: 0,
+                  medianPrice: 0,
+                  medianTitleLength: 0,
+                  sampleSize: 0,
+                },
+                baselineConversion: {
+                  conversionRate: null,
+                  sampleSize: 0,
+                  totalVisits: 0,
+                  confidence: 'unavailable',
+                },
+              },
+              youWinHere: [],
+              youLoseHere: [],
+              tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+              recommendations: [],
+            };
+          }
+        } else {
+          cacheBenchmarkResult = {
+            benchmarkSummary: {
+              categoryId: null,
+              sampleSize: 0,
+              computedAt: new Date().toISOString(),
+              confidence: 'unavailable',
+              notes: 'Categoria não disponível para este anúncio.',
+              stats: {
+                medianPicturesCount: 0,
+                percentageWithVideo: 0,
+                medianPrice: 0,
+                medianTitleLength: 0,
+                sampleSize: 0,
+              },
+              baselineConversion: {
+                conversionRate: null,
+                sampleSize: 0,
+                totalVisits: 0,
+                confidence: 'unavailable',
+              },
+            },
+            youWinHere: [],
+            youLoseHere: [],
+            tradeoffs: 'Comparação com concorrentes indisponível (categoria não disponível).',
+            recommendations: [],
+          };
+        }
+
+        // Calcular benchmarkInsights
+        const cacheBenchmarkInsights = normalizeBenchmarkInsights(
+          cacheBenchmarkResult,
+          {
+            picturesCount: listing.pictures_count || 0,
+            hasClips: listing.has_clips ?? null,
+            titleLength: listing.title?.length || 0,
+            price: Number(listing.price),
+            hasPromotion: listing.has_promotion ?? false,
+            discountPercent: listing.discount_percent,
+          },
+          {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          {
+            mediaVerdict,
+            seoSuggestions: cachedResult.analysis.seoSuggestions,
+            analysisV21: cachedResult.analysisV21 as Record<string, unknown> | null | undefined,
+          }
+        );
+
+        // Gerar conteúdo acionável
+        const cacheGeneratedContent = generateListingContent(
+          {
+            title: listing.title || '',
+            description: listing.description,
+            picturesCount: listing.pictures_count || 0,
+            hasClips: listing.has_clips ?? null,
+            hasPromotion: listing.has_promotion ?? false,
+            discountPercent: listing.discount_percent,
+            price: Number(listing.price),
+            originalPrice: listing.original_price ? Number(listing.original_price) : null,
+            category: listing.category,
+          },
+          cacheBenchmarkInsights.criticalGaps
+        );
+
+        // Construir resposta completa (MESMO FORMATO do cache response do POST)
         const responseData: any = {
-          analysis: resultJson.analysis || resultJson.analysisV21,
-          analysisV21: resultJson.analysisV21 || resultJson.analysis,
-          score: scoreResult.score,
-          metrics_30d: scoreResult.metrics_30d,
+          listingId, // HOTFIX 09.4: Sempre incluir listingId
+          score: scoreResult.score.final,
+          scoreBreakdown: scoreResult.score.breakdown,
+          potentialGain: scoreResult.score.potential_gain,
+          critique: cachedResult.analysis.critique,
+          growthHacks: cachedResult.analysis.growthHacks || [],
+          seoSuggestions: cachedResult.analysis.seoSuggestions,
+          savedRecommendations: cachedResult.savedRecommendations,
+          analyzedAt: cachedResult.analysis.analyzedAt,
+          model: cachedResult.analysis.model,
+          metrics30d: scoreResult.metrics_30d, // HOTFIX 09.4: metrics30d (não metrics_30d)
           dataQuality: scoreResult.dataQuality,
-          appliedActions: [], // TODO: buscar applied actions se necessário
-          growthHacks: resultJson.growthHacks || [],
-          growthHacksMeta: resultJson.growthHacksMeta || {
+          cacheHit: true,
+          promptVersion: PROMPT_VERSION,
+          schemaVersion: 'analysisV21',
+          actionPlan,
+          scoreExplanation,
+          mediaVerdict,
+          benchmark: cacheBenchmarkResult || {
+            benchmarkSummary: {
+              categoryId: listing.category,
+              sampleSize: 0,
+              computedAt: new Date().toISOString(),
+              confidence: 'unavailable',
+              notes: 'Benchmark indisponível (cache antigo ou erro)',
+              stats: {
+                medianPicturesCount: 0,
+                percentageWithVideo: 0,
+                medianPrice: 0,
+                medianTitleLength: 0,
+                sampleSize: 0,
+              },
+              baselineConversion: {
+                conversionRate: null,
+                sampleSize: 0,
+                totalVisits: 0,
+                confidence: 'unavailable',
+              },
+            },
+            youWinHere: [],
+            youLoseHere: [],
+            tradeoffs: 'Comparação com concorrentes indisponível no momento.',
+            recommendations: [],
+          },
+        };
+
+        // Adicionar benchmarkInsights e generatedContent
+        responseData.benchmarkInsights = cacheBenchmarkInsights;
+        responseData.generatedContent = cacheGeneratedContent;
+
+        // Normalizar preços
+        let cacheResponseOriginalPriceForDisplay: number | null = null;
+        if (listing.original_price) {
+          cacheResponseOriginalPriceForDisplay = Number(listing.original_price);
+        }
+        let cacheResponseFinalPriceForDisplay: number = Number(listing.price);
+        if (listing.has_promotion && listing.price_final) {
+          cacheResponseFinalPriceForDisplay = Number(listing.price_final);
+        }
+
+        // Calcular promoText
+        const cacheResponsePromoText = buildPromoText({
+          hasPromotion: listing.has_promotion ?? false,
+          originalPrice: cacheResponseOriginalPriceForDisplay,
+          finalPrice: cacheResponseFinalPriceForDisplay,
+        });
+
+        // Sanitizar generatedContent
+        if (cacheGeneratedContent) {
+          if (cacheGeneratedContent.seoDescription?.long) {
+            cacheGeneratedContent.seoDescription.long = removeEmojis(cacheGeneratedContent.seoDescription.long);
+            cacheGeneratedContent.seoDescription.long = sanitizePromoText(
+              cacheGeneratedContent.seoDescription.long,
+              cacheResponsePromoText
+            );
+          }
+          if (cacheGeneratedContent.titles) {
+            cacheGeneratedContent.titles = cacheGeneratedContent.titles.map(title => ({
+              ...title,
+              text: removePricesFromTitle(title.text),
+            }));
+          }
+        }
+
+        // Promo estruturado
+        const cacheResponsePromoCheckedAt = listing.promotion_checked_at?.toISOString() 
+          || listing.updated_at?.toISOString() 
+          || null;
+        responseData.promo = {
+          hasPromotion: listing.has_promotion ?? false,
+          originalPrice: listing.original_price ? Number(listing.original_price) : null,
+          finalPrice: listing.price_final ? Number(listing.price_final) : null,
+          discountPercent: listing.discount_percent,
+          promoText: cacheResponsePromoText,
+          source: 'listing_db_or_ml_prices',
+          checkedAt: cacheResponsePromoCheckedAt,
+        };
+
+        // PricingNormalized
+        responseData.pricingNormalized = {
+          originalPriceForDisplay: cacheResponseOriginalPriceForDisplay ?? null,
+          finalPriceForDisplay: cacheResponseFinalPriceForDisplay,
+          hasPromotion: listing.has_promotion ?? false,
+        };
+
+        // Buscar appliedActions filtrados por data da análise
+        const appliedActionService = new AppliedActionService();
+        const cacheFilteredActions = await appliedActionService.getAppliedActions(
+          tenantId, 
+          listingId,
+          latestAnalysis.created_at
+        );
+        responseData.appliedActions = cacheFilteredActions.map((action) => ({
+          actionType: action.actionType,
+          appliedAt: action.appliedAt.toISOString(),
+        }));
+
+        // Gerar hacks contextualizados via HackEngine
+        try {
+          const cacheSignals = buildSignals({
+            listing,
+            pricing: {
+              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent ?? null,
+            },
+            shipping: {
+              mode: null,
+              freeShipping: false,
+              fullEligible: null,
+            },
+            metrics30d: {
+              visits: scoreResult.metrics_30d.visits,
+              orders: scoreResult.metrics_30d.orders,
+              revenue: scoreResult.metrics_30d.revenue,
+              conversionRate: scoreResult.metrics_30d.conversionRate,
+            },
+            benchmark: cacheBenchmarkResult?.benchmarkSummary?.stats ? {
+              medianPrice: cacheBenchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
+              p25Price: null,
+              p75Price: null,
+            } : undefined,
+          });
+
+          const cacheHackHistory = await getHackHistory(tenantId, listingId);
+          const cacheHackEngineResult = generateHacks({
+            version: 'v1',
+            marketplace: 'mercadolivre',
+            tenantId,
+            listingId,
+            listingIdExt: listing.listing_id_ext,
+            signals: cacheSignals,
+            history: cacheHackHistory,
+            nowUtc: new Date(),
+          });
+
+          responseData.growthHacks = cacheHackEngineResult.hacks;
+          responseData.growthHacksMeta = cacheHackEngineResult.meta;
+        } catch (hackError) {
+          request.log.warn({
+            listingId,
+            tenantId,
+            error: hackError instanceof Error ? hackError.message : 'Erro desconhecido',
+          }, 'Erro ao gerar hacks no GET latest (continuando sem hacks)');
+          
+          responseData.growthHacks = [];
+          responseData.growthHacksMeta = {
             rulesEvaluated: 0,
             rulesTriggered: 0,
             skippedBecauseOfHistory: 0,
             skippedBecauseOfRequirements: 0,
-          },
-        };
+          };
+        }
+
+        // Incluir Expert se disponível
+        if (cachedResult.analysisV21) {
+          responseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
+          if (responseData.analysisV21?.meta) {
+            responseData.analysisV21.meta.prompt_version = PROMPT_VERSION as any;
+            responseData.analysisV21.meta.version = PROMPT_VERSION as any;
+          }
+        }
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
@@ -2290,12 +2621,6 @@ if (enableAIPing) {
         return reply.status(200).send({
           message: 'Análise encontrada (fetch-only)',
           data: responseData,
-          meta: {
-            fetchOnly: true,
-            cacheHit: true,
-            analyzedAt: latestAnalysis.created_at.toISOString(),
-            ageDays: Math.floor(analysisAge / (24 * 60 * 60 * 1000)),
-          },
         });
       } catch (error) {
         const { listingId } = (request.params as { listingId: string }) || {};
