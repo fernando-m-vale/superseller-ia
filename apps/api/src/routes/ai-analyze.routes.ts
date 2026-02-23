@@ -34,6 +34,53 @@ import { getHackHistory } from '../services/ListingHacksService';
 
 const prisma = new PrismaClient();
 
+// HOTFIX 09.5: Resolver breadcrumb textual da categoria (nome + path), evitando exibir apenas MLBxxxx.
+// Usa endpoint público do Mercado Livre (sem auth) + cache in-memory por categoria para reduzir latência.
+type MlCategoryApiResponse = {
+  id: string;
+  name: string;
+  path_from_root?: Array<{ id: string; name: string }>;
+};
+
+const mlCategoryPathCache = new Map<string, { path: string[]; fetchedAtMs: number }>();
+const ML_CATEGORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+async function getMlCategoryPathNames(categoryId: string | null | undefined): Promise<string[] | null> {
+  if (!categoryId || typeof categoryId !== 'string') return null;
+  const trimmed = categoryId.trim();
+  if (!trimmed) return null;
+
+  const cached = mlCategoryPathCache.get(trimmed);
+  if (cached && Date.now() - cached.fetchedAtMs < ML_CATEGORY_CACHE_TTL_MS) {
+    return cached.path;
+  }
+
+  try {
+    const res = await fetch(`https://api.mercadolibre.com/categories/${encodeURIComponent(trimmed)}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const json = (await res.json()) as MlCategoryApiResponse;
+    const path = Array.isArray(json.path_from_root)
+      ? json.path_from_root.map((p) => p.name).filter(Boolean)
+      : json.name
+        ? [json.name]
+        : [];
+
+    if (path.length === 0) return null;
+
+    mlCategoryPathCache.set(trimmed, { path, fetchedAtMs: Date.now() });
+    return path;
+  } catch {
+    return null;
+  }
+}
+
 interface RequestWithAuth extends FastifyRequest {
   userId?: string;
   tenantId?: string;
@@ -1340,9 +1387,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
           // DIA 09: Gerar hacks contextualizados via HackEngine
           try {
+            const categoryPathNames = await getMlCategoryPathNames(listing.category);
             // Construir signals
             const signals = buildSignals({
               listing,
+              categoryPath: categoryPathNames,
               pricing: {
                 originalPrice: listing.original_price ? Number(listing.original_price) : null,
                 promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
@@ -1364,6 +1413,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 medianPrice: benchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
                 p25Price: null, // TODO: extrair de benchmark se disponível
                 p75Price: null, // TODO: extrair de benchmark se disponível
+                baselineConversionRate: benchmarkResult.benchmarkSummary.baselineConversion?.conversionRate ?? null,
+                baselineConversionConfidence: benchmarkResult.benchmarkSummary.baselineConversion?.confidence ?? null,
+                baselineSampleSize: benchmarkResult.benchmarkSummary.baselineConversion?.sampleSize ?? null,
               } : undefined,
             });
 
@@ -1908,9 +1960,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         // DIA 09: Gerar hacks contextualizados via HackEngine (cache response)
         try {
+          const categoryPathNames = await getMlCategoryPathNames(listing.category);
           // Construir signals
           const cacheSignals = buildSignals({
             listing,
+            categoryPath: categoryPathNames,
             pricing: {
               originalPrice: listing.original_price ? Number(listing.original_price) : null,
               promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
@@ -1932,6 +1986,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               medianPrice: cacheBenchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
               p25Price: null, // TODO: extrair de benchmark se disponível
               p75Price: null, // TODO: extrair de benchmark se disponível
+              baselineConversionRate: cacheBenchmarkResult.benchmarkSummary.baselineConversion?.conversionRate ?? null,
+              baselineConversionConfidence: cacheBenchmarkResult.benchmarkSummary.baselineConversion?.confidence ?? null,
+              baselineSampleSize: cacheBenchmarkResult.benchmarkSummary.baselineConversion?.sampleSize ?? null,
             } : undefined,
           });
 
@@ -2550,8 +2607,10 @@ if (enableAIPing) {
 
         // Gerar hacks contextualizados via HackEngine
         try {
+          const categoryPathNames = await getMlCategoryPathNames(listing.category);
           const cacheSignals = buildSignals({
             listing,
+            categoryPath: categoryPathNames,
             pricing: {
               originalPrice: listing.original_price ? Number(listing.original_price) : null,
               promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
@@ -2573,6 +2632,9 @@ if (enableAIPing) {
               medianPrice: cacheBenchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
               p25Price: null,
               p75Price: null,
+              baselineConversionRate: cacheBenchmarkResult.benchmarkSummary.baselineConversion?.conversionRate ?? null,
+              baselineConversionConfidence: cacheBenchmarkResult.benchmarkSummary.baselineConversion?.confidence ?? null,
+              baselineSampleSize: cacheBenchmarkResult.benchmarkSummary.baselineConversion?.sampleSize ?? null,
             } : undefined,
           });
 

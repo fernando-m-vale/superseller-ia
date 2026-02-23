@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
@@ -34,6 +34,7 @@ interface AIAnalysisApiResponse {
     confidence: number
     confidenceLevel: 'low' | 'medium' | 'high'
     evidence: string[]
+    suggestedActionUrl?: string | null
   }>
   growthHacksMeta?: {
     rulesEvaluated: number
@@ -190,6 +191,7 @@ export interface AIAnalysisResponse {
     confidence: number
     confidenceLevel: 'low' | 'medium' | 'high'
     evidence: string[]
+    suggestedActionUrl?: string | null
   }>
   growthHacksMeta?: {
     rulesEvaluated: number
@@ -392,6 +394,13 @@ export function useAIAnalyze(listingId: string | null) {
     cacheHit: undefined,
     message: undefined,
   })
+
+  // HOTFIX 09.5: refs para evitar dependência direta de `state` dentro de callbacks
+  // Isso evita recriar funções e re-disparar effects (ex: fetchExisting) sem necessidade.
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   // HOTFIX 09.3: Single-flight guard para evitar múltiplas chamadas simultâneas
   const isFetchingExistingRef = useRef<boolean>(false)
@@ -657,9 +666,9 @@ export function useAIAnalyze(listingId: string | null) {
    * HOTFIX 09.3: Single-flight guard para evitar múltiplas chamadas simultâneas
    * HOTFIX 09.4: Anti-loop latch definitivo por listingId
    */
-  const fetchExisting = async (): Promise<void> => {
+  const fetchExisting = useCallback(async (): Promise<void> => {
     if (!listingId) return
-    if (state.isLoading) return
+    if (stateRef.current.isLoading) return
 
     // HOTFIX 09.4: Anti-loop latch - verificar status por listingId
     const currentStatus = fetchAttemptStatusRef.current.get(listingId) || 'idle'
@@ -678,7 +687,7 @@ export function useAIAnalyze(listingId: string | null) {
     }
 
     // Se já temos dados em memória, não buscar novamente
-    if (state.data?.analysisV21) {
+    if (stateRef.current.data?.analysisV21) {
       console.log('[AI-ANALYZE] Using cached data in memory', { listingId })
       fetchAttemptStatusRef.current.set(listingId, 'done')
       return
@@ -812,103 +821,23 @@ export function useAIAnalyze(listingId: string | null) {
         return
       }
 
-      // Se GET latest falhou por outro motivo, tentar POST como fallback (comportamento antigo)
-      console.warn('[AI-ANALYZE] GET latest failed, falling back to POST', {
+      // HOTFIX 09.5: Stop definitivo no analyze duplo
+      // Não fazer POST /analyze automaticamente aqui.
+      // O usuário deve clicar explicitamente em "Gerar análise" / "Regenerar análise".
+      console.warn('[AI-ANALYZE] GET latest failed (no automatic POST fallback)', {
         listingId,
         status: latestResponse.status,
       })
 
-      // Fallback: usar POST sem forceRefresh (que retorna cache se existir)
-      const response = await fetch(`${apiUrl}/ai/analyze/${listingId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      })
-
-      if (!response.ok) {
-        // Se não existir análise, não é erro - apenas não temos dados
-        if (response.status === 404) {
-          setState(prev => ({ ...prev, isLoading: false, data: null }))
-          // HOTFIX 09.4: Marcar como done após 404
-          fetchAttemptStatusRef.current.set(listingId, 'done')
-          isFetchingExistingRef.current = false
-          return
-        }
-        // HOTFIX 09.4: Marcar como failed em caso de erro
-        fetchAttemptStatusRef.current.set(listingId, 'failed')
-        isFetchingExistingRef.current = false
-        throw new Error(`Erro ao buscar análise: ${response.status}`)
-      }
-
-      const result = await response.json()
-      
-      // Adaptar resposta da API
-      const adaptedData = adaptAIAnalysisResponse(result.data as AIAnalysisApiResponse)
-      
-      // Ler analysisV21
-      const analysisV21 = result.data?.analysisV21 ?? null
-      
-      if (analysisV21) {
-        adaptedData.analysisV21 = analysisV21 as AIAnalysisResultV21
-      }
-
-      // Ler benchmark
-      const benchmark = result.data?.benchmark ?? null
-      if (benchmark) {
-        adaptedData.benchmark = benchmark
-      }
-
-      // Ler appliedActions (Dia 06)
-      const appliedActions = result.data?.appliedActions ?? []
-      if (appliedActions) {
-        adaptedData.appliedActions = appliedActions
-      }
-
-      // Ler growthHacks (DIA 09)
-      const growthHacks = result.data?.growthHacks ?? []
-      if (growthHacks) {
-        adaptedData.growthHacks = growthHacks
-      }
-      const growthHacksMeta = result.data?.growthHacksMeta
-      if (growthHacksMeta) {
-        adaptedData.growthHacksMeta = growthHacksMeta
-      }
-
-      // Ler benchmarkInsights e generatedContent (DIA 05)
-      const benchmarkInsights = result.data?.benchmarkInsights ?? null
-      if (benchmarkInsights) {
-        adaptedData.benchmarkInsights = benchmarkInsights
-      }
-
-      const generatedContent = result.data?.generatedContent ?? null
-      if (generatedContent) {
-        adaptedData.generatedContent = generatedContent
-      }
-      
-      // Normalizar resposta
-      const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
-      const normalizedData = normalizeAiAnalyzeResponse(adaptedData)
-      
-      // Extrair metadados
-      const cacheHit = result.data?.cacheHit 
-        ?? result.cacheHit 
-        ?? (result.message && result.message.includes('(cache)'))
-        ?? false
-      
-      const analyzedAt = normalizedData.analysisV21?.meta?.analyzedAt || analysisV21?.meta?.analyzed_at
-      const message = result.message ?? result.data?.message
-      
-      setState({
-        data: normalizedData,
+      fetchAttemptStatusRef.current.set(listingId, 'failed')
+      isFetchingExistingRef.current = false
+      setState(prev => ({
+        ...prev,
         isLoading: false,
-        error: null,
-        analyzedAt,
-        cacheHit: Boolean(cacheHit),
-        message,
-      })
+        error: 'Não foi possível carregar a análise salva. Clique em "Gerar análise" para continuar.',
+        data: null,
+      }))
+      return
     } catch (error) {
       console.error('[AI-ANALYZE] Error fetching existing analysis', { listingId, error })
       // HOTFIX 09.4: Marcar como failed e não re-tentar automaticamente
@@ -921,7 +850,7 @@ export function useAIAnalyze(listingId: string | null) {
         data: null,
       }))
     }
-  }
+  }, [listingId])
 
   return {
     ...state,

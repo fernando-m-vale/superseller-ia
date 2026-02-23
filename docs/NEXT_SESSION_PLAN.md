@@ -2,36 +2,38 @@
 
 ## 🔜 Próxima Sessão — Fechamento DIA 09 + Início DIA 10
 
-### Passo 0 — Validar HOTFIX 09.4 (Pré-requisito)
+### Passo 0 — Validar HOTFIX 09.5 (Pré-requisito)
 
-**Status:** ✅ HOTFIX 09.4 implementado
+**Status:** ✅ HOTFIX 09.5 implementado
 
 **Correções aplicadas:**
-- ✅ Payload GET /latest normalizado (mesmo formato do POST /analyze)
-- ✅ Anti-loop latch definitivo por listingId (idle/inflight/done/failed)
-- ✅ Normalização resiliente com validação de campos obrigatórios
-- ✅ Fallback UI para erros de carregamento
+- ✅ Botões dos hacks corrigidos (não ficam `disabled` por `undefined`)
+- ✅ Stop definitivo no analyze duplo (sem POST /analyze automático; fetchExisting memoizado)
+- ✅ Hack categoria mais acionável (breadcrumb textual + evidência com baseline de conversão quando disponível)
+- ✅ Tri-state `hasClips` preservado em signals (true/false/null)
+- ✅ `suggestedActionUrl?` nos hacks + CTA “Abrir no Mercado Livre” quando disponível
 
 **Validação rápida (P0):**
-- [ ] Abrir accordion: no máximo 1 GET latest por listingId (sem loop)
-- [ ] Se GET latest 200: UI renderiza análise e NÃO dispara POST analyze automaticamente
-- [ ] Se GET latest 404: UI não loopa, e permite clicar em "Gerar análise"
-- [ ] Se GET latest erro/shape inválido: UI mostra fallback e NÃO loopa
+- [ ] Abrir accordion → no máximo 1 GET latest por listingId
+- [ ] Nenhum POST /analyze automático (somente via botão)
+- [ ] Botões hack: 1 clique → 1 POST feedback (Network 200)
+- [ ] Hack categoria mostra breadcrumb (não apenas MLBxxxx)
+- [ ] Clip não é sugerido quando `hasClips === true`
 - [ ] Build API e Web passando
 
 **Se PASS → Prosseguir para MINI-CHECKLIST HOTFIX 09.1**
 
 ---
 
-### Passo 0.1 — Validar HOTFIX 09.3 (Histórico)
+### Passo 0.1 — Validar HOTFIX 09.4 (Histórico)
 
-**Status:** ✅ HOTFIX 09.3 implementado (pré-requisito do 09.4)
+**Status:** ✅ HOTFIX 09.4 implementado (pré-requisito do 09.5)
 
 **Correções aplicadas:**
-- ✅ Loop infinito de GET /latest corrigido (single-flight guard + guard ajustado)
-- ✅ Botões feedback 100% clicáveis (onClickCapture no container)
-- ✅ Gate explícito para ml_smart_variations quando variationsCount >= 5
-- ✅ Shape do payload normalizado (GET latest e POST analyze consistentes)
+- ✅ Payload GET /latest normalizado (mesmo formato do POST /analyze)
+- ✅ Anti-loop latch definitivo por listingId (idle/inflight/done/failed)
+- ✅ Normalização resiliente com validação de campos obrigatórios
+- ✅ Fallback UI para erros de carregamento
 
 ---
 

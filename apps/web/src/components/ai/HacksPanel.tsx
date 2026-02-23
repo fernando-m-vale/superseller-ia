@@ -1,15 +1,12 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Zap, CheckCircle2, XCircle, TrendingUp, AlertCircle, Info } from 'lucide-react'
+import { Zap } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
+import { HackCardUX2, type HackEvidenceItem, type HackRecommendation, type HackAction } from '@/components/hacks/HackCardUX2'
 
 export interface HackSuggestion {
   id: string
@@ -20,6 +17,7 @@ export interface HackSuggestion {
   confidence: number
   confidenceLevel: 'low' | 'medium' | 'high'
   evidence: string[]
+  suggestedActionUrl?: string | null
 }
 
 export interface HacksPanelProps {
@@ -35,6 +33,109 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
 
   if (!hacks || hacks.length === 0) {
     return null
+  }
+
+  /**
+   * Transforma evidence string[] em HackEvidenceItem[]
+   * Extrai key, label e value de strings como "Categoria atual: Moda > Meias"
+   * Melhora formatação de valores numéricos e percentuais
+   */
+  const parseEvidence = (evidenceStrings: string[]): HackEvidenceItem[] => {
+    return evidenceStrings.map((evidence, idx) => {
+      // Tentar extrair label: value
+      const colonIndex = evidence.indexOf(':')
+      if (colonIndex > 0) {
+        const label = evidence.substring(0, colonIndex).trim()
+        const value = evidence.substring(colonIndex + 1).trim()
+        let formatted = value
+        
+        // Melhorar formatação de valores numéricos
+        // Ex: "Visitas (30d): 150" -> "150"
+        // Ex: "Conversão atual: 2.50%" -> "2.50%"
+        // Ex: "Preço atual: R$ 99.90" -> "R$ 99.90"
+        if (value.match(/^\d+$/)) {
+          // Número inteiro simples
+          formatted = parseInt(value, 10).toLocaleString('pt-BR')
+        } else if (value.match(/^\d+\.\d+%$/)) {
+          // Percentual
+          formatted = value
+        } else if (value.match(/R\$\s*\d+/)) {
+          // Preço
+          formatted = value
+        }
+        
+        return {
+          key: `evidence-${idx}`,
+          label,
+          value,
+          formatted,
+        }
+      }
+      // Fallback: usar string completa como value
+      return {
+        key: `evidence-${idx}`,
+        label: 'Evidência',
+        value: evidence,
+        formatted: evidence,
+      }
+    })
+  }
+
+  /**
+   * Extrai diagnóstico e recomendação do hack
+   */
+  const extractDiagnosisAndRecommendation = (hack: HackSuggestion): {
+    diagnosis?: string
+    recommendation: HackRecommendation
+  } => {
+    // Para hacks de categoria, melhorar a recomendação
+    if (hack.id === 'ml_category_adjustment') {
+      const categoryEvidence = hack.evidence.find(e => e.includes('Categoria atual:'))
+      const categoryValue = categoryEvidence?.split(':')[1]?.trim() || ''
+      
+      // Verificar se há sinais fortes (conversão baixa vs baseline)
+      const conversionEvidence = hack.evidence.find(e => e.includes('Conversão atual:'))
+      const baselineEvidence = hack.evidence.find(e => e.includes('Baseline'))
+      const hasStrongSignals = conversionEvidence && baselineEvidence
+      
+      // Extrair valores de conversão se disponíveis
+      let conversionText = ''
+      if (conversionEvidence && baselineEvidence) {
+        const convValue = conversionEvidence.split(':')[1]?.trim() || ''
+        const baselineValue = baselineEvidence.split(':')[1]?.trim() || ''
+        conversionText = `Conversão atual: ${convValue} vs Baseline: ${baselineValue}`
+      }
+      
+      // Determinar recomendação baseada em sinais
+      const recommendationText = hasStrongSignals
+        ? 'A conversão do anúncio está significativamente abaixo do baseline da categoria. Recomendamos revisar se a categoria está na subcategoria mais específica possível.'
+        : 'Recomendamos verificar se a categoria está na subcategoria mais específica possível para melhorar a relevância nas buscas.'
+      
+      // Se categoryValue contém "não resolvida" ou apenas ID, sugerir verificação
+      const needsVerification = categoryValue.includes('não resolvida') || categoryValue.match(/^MLB\d+$/)
+      
+      return {
+        diagnosis: hack.summary,
+        recommendation: {
+          text: recommendationText,
+          suggestion: categoryValue 
+            ? (needsVerification 
+                ? `Categoria atual: ${categoryValue} (clique para revisar no Mercado Livre)`
+                : `Categoria atual: ${categoryValue}`)
+            : undefined,
+          note: conversionText || 'Uma categoria mais específica pode aumentar a relevância e conversão do anúncio.',
+        },
+      }
+    }
+    
+    // Para outros hacks, usar summary como recomendação
+    return {
+      recommendation: {
+        text: hack.summary,
+        suggestion: hack.why && hack.why.length > 0 ? hack.why[0] : undefined,
+        note: hack.why && hack.why.length > 1 ? hack.why.slice(1).join(' ') : undefined,
+      },
+    }
   }
 
   const handleFeedback = async (hackId: string, status: 'confirmed' | 'dismissed') => {
@@ -88,25 +189,44 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
     }
   }
 
-  const getImpactColor = (impact: 'low' | 'medium' | 'high') => {
-    switch (impact) {
-      case 'high':
-        return 'bg-red-100 text-red-800 border-red-300'
-      case 'medium':
-        return 'bg-orange-100 text-orange-800 border-orange-300'
-      case 'low':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+  /**
+   * Transforma hack em props do HackCardUX2
+   */
+  const transformHackToCardProps = (hack: HackSuggestion, index: number) => {
+    const status: 'suggested' | 'confirmed' | 'dismissed' = 
+      feedbackStatus[hack.id] === 'confirmed' ? 'confirmed'
+      : feedbackStatus[hack.id] === 'dismissed' ? 'dismissed'
+      : 'suggested'
+    
+    const evidenceItems = parseEvidence(hack.evidence || [])
+    const { diagnosis, recommendation } = extractDiagnosisAndRecommendation(hack)
+    
+    // Ações (CTAs)
+    const actions: HackAction[] = []
+    if (hack.suggestedActionUrl) {
+      actions.push({
+        label: 'Abrir no Mercado Livre',
+        url: hack.suggestedActionUrl,
+        variant: 'outline',
+      })
     }
-  }
-
-  const getConfidenceColor = (level: 'low' | 'medium' | 'high') => {
-    switch (level) {
-      case 'high':
-        return 'bg-green-100 text-green-800 border-green-300'
-      case 'medium':
-        return 'bg-blue-100 text-blue-800 border-blue-300'
-      case 'low':
-        return 'bg-gray-100 text-gray-800 border-gray-300'
+    
+    return {
+      title: hack.title,
+      summary: hack.summary,
+      impact: hack.impact,
+      confidence: hack.confidence,
+      confidenceLevel: hack.confidenceLevel,
+      evidence: evidenceItems,
+      diagnosis,
+      recommendation,
+      requires: undefined, // TODO: extrair de blocking se disponível
+      status,
+      onConfirm: () => handleFeedback(hack.id, 'confirmed'),
+      onDismiss: () => handleFeedback(hack.id, 'dismissed'),
+      actions,
+      priorityRank: index + 1,
+      isLoading: isSubmitting[hack.id] || false,
     }
   }
 
@@ -121,198 +241,12 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {hacks.map((hack) => {
-          const status = feedbackStatus[hack.id]
-          const isDisabled = status !== null || isSubmitting[hack.id]
-
-          return (
-            <Card 
-              key={hack.id} 
-              className={`bg-gradient-to-r from-primary/5 to-primary/10 border-l-4 ${
-                status === 'confirmed' 
-                  ? 'border-l-green-500 opacity-60' 
-                  : status === 'dismissed'
-                  ? 'border-l-gray-400 opacity-60'
-                  : 'border-l-primary'
-              }`}
-            >
-              <CardContent className="pt-4">
-                <div className="space-y-4">
-                  {/* Header com título e badges */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-base text-foreground mb-2">{hack.title}</h4>
-                      <p className="text-sm text-muted-foreground mb-3">{hack.summary}</p>
-                    </div>
-                    <div className="flex flex-col gap-2 items-end">
-                      <Badge className={getImpactColor(hack.impact)}>
-                        <TrendingUp className="h-3 w-3 mr-1" />
-                        Impacto: {hack.impact === 'high' ? 'Alto' : hack.impact === 'medium' ? 'Médio' : 'Baixo'}
-                      </Badge>
-                      <div className="flex items-center gap-1">
-                        <Badge className={getConfidenceColor(hack.confidenceLevel)}>
-                          {hack.confidence}% {hack.confidenceLevel === 'high' ? 'Alta' : hack.confidenceLevel === 'medium' ? 'Média' : 'Baixa'}
-                        </Badge>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex items-center justify-center rounded-full p-1 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary"
-                                aria-label="Informações sobre Confidence"
-                              >
-                                <Info className="h-3 w-3 text-muted-foreground" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs">
-                              <div className="space-y-2">
-                                <p className="font-semibold">Confidence (Confiança)</p>
-                                <p className="text-sm">
-                                  A confiança do sistema na recomendação, baseada nos dados do anúncio (visitas, conversão, preço, mídia etc.).
-                                </p>
-                                <div className="text-xs space-y-1 pt-2 border-t">
-                                  <p><strong>Alta (≥70%):</strong> Recomendação muito confiável</p>
-                                  <p><strong>Média (40-69%):</strong> Recomendação moderadamente confiável</p>
-                                  <p><strong>Baixa (0-39%):</strong> Recomendação com baixa confiança</p>
-                                </div>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Por que aplicar */}
-                  {hack.why && hack.why.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <AlertCircle className="h-4 w-4 text-primary" />
-                        Por que aplicar:
-                      </div>
-                      <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1 pl-4">
-                        {hack.why.map((reason, idx) => (
-                          <li key={idx}>{reason}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Evidências */}
-                  {hack.evidence && hack.evidence.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-sm font-semibold text-foreground">Evidências:</div>
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        {hack.evidence.map((evidence, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            <div className="w-1 h-1 rounded-full bg-primary" />
-                            {evidence}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  {/* Botões de ação */}
-                  {/* HOTFIX 09.3: onClickCapture para evitar que accordion capture clique */}
-                  <div 
-                    className="flex gap-2"
-                    onClickCapture={(e) => {
-                      e.stopPropagation()
-                    }}
-                    onPointerDownCapture={(e) => {
-                      e.stopPropagation()
-                    }}
-                    onMouseDownCapture={(e) => {
-                      e.stopPropagation()
-                    }}
-                  >
-                    {status === 'confirmed' ? (
-                      <div className="flex items-center gap-2 text-sm text-green-600">
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Implementado</span>
-                      </div>
-                    ) : status === 'dismissed' ? (
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <XCircle className="h-4 w-4" />
-                        <span>Não se aplica</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onPointerDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleFeedback(hack.id, 'confirmed')
-                          }}
-                          disabled={isDisabled}
-                          className="flex-1 relative z-20 pointer-events-auto"
-                          type="button"
-                        >
-                          {isSubmitting[hack.id] ? (
-                            <>
-                              <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              Processando...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4 mr-2" />
-                              Confirmar implementação
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onPointerDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleFeedback(hack.id, 'dismissed')
-                          }}
-                          disabled={isDisabled}
-                          className="flex-1 relative z-20 pointer-events-auto"
-                          type="button"
-                        >
-                          {isSubmitting[hack.id] ? (
-                            <>
-                              <div className="h-4 w-4 mr-2 border-2 border-gray-600 border-t-transparent rounded-full animate-spin" />
-                              Processando...
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="h-4 w-4 mr-2" />
-                              Não se aplica
-                            </>
-                          )}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+        {hacks.map((hack, index) => (
+          <HackCardUX2
+            key={hack.id}
+            {...transformHackToCardProps(hack, index)}
+          />
+        ))}
       </CardContent>
     </Card>
   )

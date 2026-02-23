@@ -1,3 +1,121 @@
+# DAILY EXECUTION LOG — 2026-02-23 (HOTFIX DIA 09.5 — UX 2.0 Redesign dos Cards)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Redesign completo dos cards de Hacks (UX 2.0) com hierarquia visual forte e melhor acionabilidade**
+
+## 📌 Problemas enfrentados (antes)
+1. **Cards de hacks com CTA fraco e pouca clareza**
+   - Causa: layout antigo não destacava impacto, evidências eram listas simples, recomendação não era objetiva
+2. **Hack de categoria mostrava apenas código (MLBxxxx)**
+   - Causa: não exibia breadcrumb textual (categoryPath) quando disponível
+3. **Falta de Opportunity Score**
+   - Causa: não havia métrica combinada de confidence + impacto para priorização visual
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Frontend — Componente HackCardUX2 (P0)
+- ✅ Criado `apps/web/src/components/hacks/HackCardUX2.tsx`
+- ✅ Hierarquia visual:
+  1. Impacto (badge forte)
+  2. Opportunity Score (X/100) — calculado como `(confidence * 0.6) + (impactWeight * 0.4)`
+  3. Confidence (badge discreto + tooltip)
+  4. Evidências em grid (até 6 itens, responsivo)
+  5. Diagnóstico (caixa destacada)
+  6. Recomendação objetiva (caixa com borda primária)
+  7. CTAs com ação direta (botões com stopPropagation)
+- ✅ Status badges (Sugerido/Confirmado/Ignorado)
+- ✅ Loading states
+
+### B) Frontend — Substituição da UI atual (P0)
+- ✅ `HacksPanel.tsx` atualizado para usar `HackCardUX2`
+- ✅ Transformação de `evidence: string[]` → `HackEvidenceItem[]` com parsing inteligente
+- ✅ Extração de diagnóstico e recomendação do hack
+- ✅ Botões funcionam sempre (sem conflito com Accordion)
+
+### C) Frontend — Melhorias no Hack de Categoria (P1)
+- ✅ Exibição de `categoryPath` (breadcrumb) quando disponível
+- ✅ Fallback para `categoryId` com nota "clique para revisar no ML"
+- ✅ Recomendação não afirma "incorreta" sem evidência forte
+- ✅ Comparação de conversão (atual vs baseline) quando disponível
+
+### D) Frontend — Opportunity Score (P1)
+- ✅ Badge "Opportunity X/100" no header do card
+- ✅ Cálculo no frontend: `(confidence * 0.6) + (impactWeight * 0.4)`
+- ✅ Impact weights: high=100, medium=60, low=30
+
+### E) Consistência Clip vs Vídeo (P1)
+- ✅ Garantido uso de "clip" (não "vídeo") na UI
+- ✅ Tri-state `hasClips` respeitado (true → não sugerir)
+
+## 📝 Documentação
+- ✅ Atualizado `docs/HACK_ENGINE_CONTRACT.md` com seção "UX 2.0 — Padrão do Card"
+- ✅ Documentada hierarquia visual, campos exibidos e melhorias específicas
+
+## ✅ Critérios de aceite (DoD)
+- ✅ Cards novos aparecem com layout limpo e consistente
+- ✅ Botões funcionam sempre dentro do accordion
+- ✅ Tooltip de confidence aparece ao hover/focus
+- ✅ Copy do hack de categoria não induz erro (sem dizer "incorreta" sem evidência)
+- ✅ Build API/Web passando
+
+---
+
+# DAILY EXECUTION LOG — 2026-02-23 (HOTFIX DIA 09.5 — UX + Qualidade Estratégica dos Hacks)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Elevar qualidade/acionabilidade dos Hacks ML + corrigir UX crítica (botões não clicáveis e analyze duplo).**
+
+## 📌 Problemas enfrentados (antes)
+1. **Botões dos hacks não clicáveis**
+   - Causa: bug de UX no `HacksPanel` → `status` ficava `undefined` e a checagem `status !== null` deixava todos os botões `disabled`
+2. **Fluxo duplo de analyze**
+   - Causa: `fetchExisting` não memoizado + fallback automático para POST /analyze em caso de erro do GET latest
+3. **Hack de categoria fraco (pouco acionável)**
+   - Causa: evidências genéricas e exibição de categoria apenas por ID (MLBxxxx), sem breadcrumb textual e sem comparação com baseline
+4. **Clip/vídeo sugerido incorretamente em alguns fluxos**
+   - Causa: tri-state `hasClips` não era preservado no contract de signals (null virava undefined)
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Frontend — Botões 100% clicáveis (P0)
+- ✅ Corrigido bug de `disabled` no `HacksPanel` (undefined → null)
+- ✅ Garantido `type="button"` e `pointer-events`/`z-index` nos botões
+- ✅ 1 clique → 1 POST `/listings/:listingId/hacks/:hackId/feedback`
+
+### B) Frontend — Stop definitivo no analyze duplo (P0)
+- ✅ `fetchExisting` memoizado com `useCallback`
+- ✅ Removido fallback automático para POST /analyze (POST só via ação explícita: “Gerar análise/Regenerar”)
+- ✅ Mantido anti-loop latch por listingId (idle/inflight/done/failed)
+
+### C) Backend + Frontend — Hack de Categoria mais acionável (P0)
+- ✅ Backend resolve breadcrumb textual da categoria via API pública do ML (cache in-memory 24h)
+- ✅ SignalsBuilder aceita `categoryPath` (breadcrumb) e preserva tri-state `hasClips`
+- ✅ Hack `ml_category_adjustment` agora inclui evidências concretas:
+  - Categoria atual como breadcrumb (ex: “Moda Infantil > Meias > 3D”)
+  - Conversão do anúncio vs baseline da categoria (quando disponível)
+
+### D) UX — Hacks mais acionáveis (P1)
+- ✅ `suggestedActionUrl?` adicionado aos hacks e CTA “Abrir no Mercado Livre” no card quando disponível
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ Unit tests (vitest) executados e passando:
+  - SignalsBuilder: tri-state `hasClips` (true/false/null)
+  - HackEngine: categoria com breadcrumb + baseline + suggestedActionUrl
+- ✅ Typecheck do API passando (`pnpm tsc --noEmit`)
+
+## ✅ DoD 09.5 — PASS
+- ✅ Abrir accordion → no máximo 1 GET latest por listingId
+- ✅ Nenhum POST /analyze automático
+- ✅ Botões hack clicáveis e funcionais
+- ✅ Hack categoria mostra nome/breadcrumb (não apenas código)
+- ✅ Tri-state de clip respeitado em signals (base para decisões determinísticas)
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-20 (HOTFIX DIA 09.4 — Normalização de Payload e Anti-Loop)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO

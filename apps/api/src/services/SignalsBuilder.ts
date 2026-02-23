@@ -28,7 +28,8 @@ export interface ListingSignals {
 
   picturesCount?: number;
   hasVideo?: boolean;
-  hasClips?: boolean;
+  // Tri-state (HOTFIX 09.5): true (tem), false (não tem), null (não detectável via API)
+  hasClips?: boolean | null;
 
   variationsCount?: number;
   hasVariations?: boolean;
@@ -45,6 +46,9 @@ export interface ListingSignals {
     medianPrice?: number | null;
     p25Price?: number | null;
     p75Price?: number | null;
+    baselineConversionRate?: number | null;
+    baselineConversionConfidence?: 'high' | 'medium' | 'low' | 'unavailable' | null;
+    baselineSampleSize?: number | null;
   };
 
   debug?: Record<string, unknown>;
@@ -52,6 +56,8 @@ export interface ListingSignals {
 
 export interface SignalsBuilderInput {
   listing: Listing;
+  // HOTFIX 09.5: permitir injetar breadcrumb/nome da categoria (ex: via cache/API ML no handler)
+  categoryPath?: string[] | null;
   pricing?: {
     originalPrice?: number | null;
     promotionalPrice?: number | null;
@@ -73,6 +79,9 @@ export interface SignalsBuilderInput {
     medianPrice?: number | null;
     p25Price?: number | null;
     p75Price?: number | null;
+    baselineConversionRate?: number | null;
+    baselineConversionConfidence?: 'high' | 'medium' | 'low' | 'unavailable' | null;
+    baselineSampleSize?: number | null;
   };
 }
 
@@ -128,7 +137,7 @@ function parseShippingMode(mode?: string | null): 'full' | 'flex' | 'me2' | 'unk
  * Constrói signals determinísticos a partir de um listing e dados relacionados.
  */
 export function buildSignals(input: SignalsBuilderInput): ListingSignals {
-  const { listing, pricing, shipping, metrics30d, benchmark } = input;
+  const { listing, pricing, shipping, metrics30d, benchmark, categoryPath: categoryPathOverride } = input;
   
   // Status
   let status: 'active' | 'paused' | 'closed' | 'unknown' = 'unknown';
@@ -138,7 +147,9 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   
   // Category
   const categoryId = listing.category || undefined;
-  const categoryPath = categoryId ? categoryId.split('/').filter(Boolean) : undefined;
+  // HOTFIX 09.5: categoryPath deve ser breadcrumb textual (ex: Moda > Meias > 3D).
+  // Não inferir a partir do categoryId (MLBxxxx). Se existir override (via handler), usar.
+  const categoryPath = categoryPathOverride ?? undefined;
   
   // Pricing
   const price = Number(listing.price);
@@ -181,6 +192,9 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
     medianPrice: benchmark.medianPrice ?? null,
     p25Price: benchmark.p25Price ?? null,
     p75Price: benchmark.p75Price ?? null,
+    baselineConversionRate: benchmark.baselineConversionRate ?? null,
+    baselineConversionConfidence: benchmark.baselineConversionConfidence ?? null,
+    baselineSampleSize: benchmark.baselineSampleSize ?? null,
   } : undefined;
   
   return {
@@ -204,7 +218,7 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
     
     picturesCount,
     hasVideo,
-    hasClips: hasClips ?? undefined,
+    hasClips,
     
     variationsCount: variationsCount ?? undefined,
     hasVariations,

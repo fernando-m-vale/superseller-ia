@@ -25,6 +25,28 @@ export interface HackSuggestion {
   confidence: number; // 0-100
   confidenceLevel: ConfidenceLevel;
   evidence: string[];
+  // HOTFIX 09.5: CTA opcional para tornar o hack acionável
+  suggestedActionUrl?: string | null;
+}
+
+function normalizeMlbId(listingIdExt?: string): string | null {
+  if (!listingIdExt || !listingIdExt.trim()) return null;
+  const cleaned = listingIdExt.trim().replace(/-/g, '');
+  const digitMatches = cleaned.match(/\d{6,}/g);
+  if (!digitMatches || digitMatches.length === 0) {
+    const anyDigits = cleaned.match(/\d+/g);
+    if (anyDigits && anyDigits.length > 0) {
+      return anyDigits.reduce((max, current) => (current.length > max.length ? current : max));
+    }
+    return null;
+  }
+  return digitMatches.reduce((max, current) => (current.length > max.length ? current : max));
+}
+
+function buildMercadoLivreEditUrl(listingIdExt?: string): string | null {
+  const normalizedId = normalizeMlbId(listingIdExt);
+  if (!normalizedId) return null;
+  return `https://www.mercadolivre.com.br/anuncios/MLB${normalizedId}/modificar/bomni`;
 }
 
 export interface HackEngineMeta {
@@ -294,6 +316,22 @@ function evaluateMlCategoryAdjustment(signals: ListingSignals): { score: number;
   ) {
     score += 10;
   }
+
+  // HOTFIX 09.5: Se benchmark (baselineConversion) disponível, calibrar com diferença significativa (>30%)
+  const listingCR = signals.metrics30d?.conversionRate ?? null;
+  const benchmarkCR = signals.benchmark?.baselineConversionRate ?? null;
+  if (
+    listingCR !== null &&
+    benchmarkCR !== null &&
+    benchmarkCR > 0 &&
+    (signals.metrics30d?.visits ?? 0) >= 200
+  ) {
+    const ratio = listingCR / benchmarkCR;
+    // Se conversão do anúncio está >30% abaixo do baseline da categoria, reforçar sugestão de revisão da categoria
+    if (ratio < 0.7) score += 25;
+    // Se conversão está acima do baseline, reduzir motivação
+    if (ratio >= 1.0) score -= 10;
+  }
   
   // Pontuação negativa
   if ((signals.metrics30d?.orders ?? 0) >= 10) score -= 20;
@@ -379,6 +417,7 @@ function evaluateMlPsychologicalPricing(signals: ListingSignals): { score: numbe
  */
 export function generateHacks(input: HackEngineInput): HackEngineOutput {
   const { signals, history, listingId, nowUtc } = input;
+  const suggestedEditUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   
   const hacks: HackSuggestion[] = [];
   let rulesEvaluated = 0;
@@ -409,6 +448,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
           `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
         ],
+        suggestedActionUrl: suggestedEditUrl,
       });
     } else if (result.shouldOmit) {
       skippedBecauseOfRequirements++;
@@ -441,6 +481,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
           `Preço atual: R$ ${signals.price.toFixed(2)}`,
         ],
+        suggestedActionUrl: suggestedEditUrl,
       });
     } else if (result.shouldOmit) {
       skippedBecauseOfRequirements++;
@@ -472,6 +513,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
           `Imagens: ${signals.picturesCount ?? 0}`,
         ],
+        suggestedActionUrl: suggestedEditUrl,
       });
     } else if (result.shouldOmit) {
       skippedBecauseOfRequirements++;
@@ -486,23 +528,46 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
     const result = evaluateMlCategoryAdjustment(signals);
     if (result.score > 0) {
       rulesTriggered++;
+      const listingCR = signals.metrics30d?.conversionRate ?? null;
+      const benchmarkCR = signals.benchmark?.baselineConversionRate ?? null;
+      const hasBenchmarkCR = benchmarkCR !== null && benchmarkCR !== undefined && benchmarkCR > 0;
+      const categoryText =
+        signals.categoryPath && signals.categoryPath.length > 0
+          ? signals.categoryPath.join(' > ')
+          : signals.categoryId
+            ? `Categoria não resolvida (ID: ${signals.categoryId})`
+            : 'Não definida';
+
       hacks.push({
         id: 'ml_category_adjustment',
-        title: 'Ajustar Categoria',
-        summary: 'A categoria correta é fundamental para que o anúncio apareça nas buscas certas.',
-        why: [
-          'Categoria incorreta reduz visibilidade nas buscas',
-          'Pode afetar negativamente o algoritmo de ranking',
-          'Clientes não encontram o produto nas categorias esperadas',
-        ],
+        title: hasBenchmarkCR ? 'Revisar Categoria (baseado em conversão)' : 'Verificar Categoria Específica',
+        summary: hasBenchmarkCR
+          ? 'A conversão do anúncio está descolada do baseline da categoria. Vale revisar se a categoria está específica e correta.'
+          : 'Sem benchmark suficiente para afirmar erro. Vale validar se a categoria está específica e correta.',
+        why: (() => {
+          const reasons: string[] = [
+            'Categoria influencia buscas, filtros e público que encontra o anúncio',
+            'Uma categoria muito genérica pode reduzir relevância e conversão',
+          ];
+          if (hasBenchmarkCR && listingCR !== null && listingCR !== undefined) {
+            const deltaPct = Math.round(((benchmarkCR! - listingCR) / benchmarkCR!) * 100);
+            if (deltaPct >= 30) reasons.push(`Sua conversão está ~${deltaPct}% abaixo do baseline da categoria`);
+          } else {
+            reasons.push('Sem baseline de conversão disponível para comparar (ação preventiva)');
+          }
+          return reasons;
+        })(),
         impact: 'medium',
         confidence: result.score,
         confidenceLevel: getConfidenceLevel(result.score),
         evidence: [
-          `Categoria atual: ${signals.categoryId || 'Não definida'}`,
+          `Categoria atual: ${categoryText}`,
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
           `Pedidos (30d): ${signals.metrics30d?.orders ?? 0}`,
+          ...(listingCR !== null && listingCR !== undefined ? [`Conversão atual: ${listingCR.toFixed(2)}%`] : []),
+          ...(hasBenchmarkCR ? [`Baseline (categoria): ${(benchmarkCR as number).toFixed(2)}%`] : []),
         ],
+        suggestedActionUrl: suggestedEditUrl,
       });
     } else {
       skippedBecauseOfRequirements++;
@@ -535,6 +600,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
           `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
         ],
+        suggestedActionUrl: suggestedEditUrl,
       });
     } else if (result.shouldOmit) {
       skippedBecauseOfRequirements++;

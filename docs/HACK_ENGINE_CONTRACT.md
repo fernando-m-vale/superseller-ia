@@ -105,6 +105,8 @@ interface HackSuggestion {
   confidence: number; // 0-100
   confidenceLevel: ConfidenceLevel;
   evidence: string[];
+  // HOTFIX 09.5: CTA opcional para tornar o hack acionável no painel
+  suggestedActionUrl?: string | null;
 }
 
 interface HackEngineMeta {
@@ -123,6 +125,65 @@ type HackId =
 
 type ConfidenceLevel = 'low' | 'medium' | 'high';
 ```
+
+---
+
+## 🎨 UX 2.0 — Padrão do Card
+
+**Data:** HOTFIX DIA 09.5 (UX + Qualidade Estratégica)
+
+### Hierarquia Visual
+
+Os hacks são exibidos em cards de decisão com hierarquia visual forte:
+
+1. **Impacto (forte)** — Badge destacado com cor por nível (Alto/Médio/Baixo)
+2. **Confiança (discreta + tooltip)** — Badge suave com ícone de informação explicativa
+3. **Opportunity Score** — Badge "Opportunity X/100" calculado como `(confidence * 0.6) + (impactWeight * 0.4)`
+4. **Evidências em mini dashboard (grid)** — Até 6 itens em grid responsivo (2 colunas mobile, 3 desktop)
+5. **Diagnóstico** — Caixa destacada com ícone de alerta
+6. **Recomendação objetiva** — Caixa com borda primária contendo:
+   - Texto principal da recomendação
+   - Sugestão (opcional, em caixa aninhada)
+   - Nota (opcional, em itálico)
+7. **CTAs com ação direta** — Botões com stopPropagation para evitar conflito com Accordion
+
+### Campos Exibidos
+
+#### Header
+- Título do hack
+- Badge de prioridade (#1, #2, etc.) — opcional
+- Badge de Impacto (Alto/Médio/Baixo)
+- Badge de Opportunity Score (X/100)
+- Badge de Confidence (X% Alta/Média/Baixa) + tooltip
+
+#### Diagnóstico
+- Texto explicativo do problema/oportunidade (opcional)
+
+#### Evidências (Grid)
+- Até 6 itens em formato `{ label, formatted }`
+- Grid responsivo: 2 colunas (mobile) / 3 colunas (desktop)
+- Cada item em card com borda
+
+#### Recomendação
+- Texto principal (obrigatório)
+- Sugestão (opcional, em caixa aninhada)
+- Nota (opcional, em itálico)
+
+#### CTAs
+- Ações externas (links para Mercado Livre) — opcional
+- Botão "Confirmar implementação" (primário)
+- Botão "Não se aplica" (outline)
+
+### Melhorias Específicas
+
+#### Hack de Categoria (ml_category_adjustment)
+- **Exibição:** Mostra `categoryPath` (breadcrumb) quando disponível, caso contrário mostra `categoryId` com nota "clique para revisar no ML"
+- **Recomendação:** Não afirma "incorreta" sem evidência forte; usa "verificar se está na subcategoria mais específica"
+- **Evidências:** Inclui comparação de conversão (atual vs baseline) quando disponível
+
+#### Consistência Clip vs Vídeo
+- Sempre usar "clip" (não "vídeo") na UI
+- Não sugerir adicionar clip quando `hasClips === true`
 
 ---
 
@@ -276,9 +337,13 @@ A confidence é calculada através de pontuação determinística baseada em sig
 
 **ID:** `ml_category_adjustment`
 
-**Título:** "Ajustar Categoria"
+**Título (HOTFIX 09.5):** pode variar conforme evidências
+- Com baseline de conversão disponível: "Revisar Categoria (baseado em conversão)"
+- Sem baseline: "Verificar Categoria Específica" (não afirma erro)
 
-**Resumo:** A categoria correta é fundamental para que o anúncio apareça nas buscas certas.
+**Resumo (HOTFIX 09.5):**
+- Com baseline: compara conversão do anúncio vs baseline da categoria e sugere revisão quando há descolamento relevante
+- Sem baseline: recomenda validação manual (sem afirmar que está errada)
 
 **Impact:** `medium`
 
@@ -298,9 +363,11 @@ A confidence é calculada através de pontuação determinística baseada em sig
 | visits < 100 | -15 |
 
 **Evidências:**
-- Categoria atual
+- Categoria atual (breadcrumb textual quando disponível; evita exibir apenas MLBxxxx)
 - Visitas (30d)
 - Pedidos (30d)
+- (quando disponível) Conversão atual (%)
+- (quando disponível) Baseline de conversão da categoria (%)
 
 ---
 
@@ -766,11 +833,17 @@ expect(isHackInCooldown(history, 'ml_full_shipping', nowUtc)).toBe(true);
 **Comportamento:**
 - Busca última análise do listing ordenada por `created_at DESC`
 - Não chama OpenAI (fetch-only)
-- Retorna payload idêntico ao POST analyze mas com `meta.fetchOnly=true`
+- **HOTFIX 09.4:** Retorna payload IDÊNTICO ao POST /analyze (mesmo contrato/shape)
+  - Sempre inclui `listingId` no `data`
+  - Campos normalizados: `metrics30d` (não `metrics_30d`), `score`, `scoreBreakdown`, `potentialGain`
+  - Inclui todos os campos: `analysisV21`, `benchmark`, `benchmarkInsights`, `generatedContent`, `growthHacks`, `growthHacksMeta`, `appliedActions`, `promo`, `pricingNormalized`, `actionPlan`, `scoreExplanation`, `mediaVerdict`
 - **Validação:** Se `analyzedAt < now-7d` => retorna 404
 
 **Uso no frontend:**
 - `fetchExisting()` agora usa GET latest primeiro
+- **HOTFIX 09.4:** Anti-loop latch definitivo por listingId (idle/inflight/done/failed)
+- **HOTFIX 09.4:** Normalização resiliente com validação de campos obrigatórios (listingId, analyzedAt, score)
+- **HOTFIX 09.4:** Fallback UI quando erro/shape inválido (não loopa)
 - Se encontrar análise recente: renderiza e NÃO dispara POST analyze
 - Se não encontrar: permite que usuário clique em "Gerar análise"
 - Botão "Regenerar" continua usando POST com `forceRefresh=true`

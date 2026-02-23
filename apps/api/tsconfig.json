@@ -13,5 +13,10 @@
 "@superseller/ai/prompts/*": ["../../packages/ai/dist/prompts/*"]
 }
 },
-"include": ["src"]
+"include": ["src"],
+"exclude": [
+  "src/**/__tests__/**",
+  "src/**/*.test.ts",
+  "src/**/*.spec.ts"
+]
 }
