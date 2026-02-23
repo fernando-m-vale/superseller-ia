@@ -2,24 +2,36 @@
 
 ## 🔜 Próxima Sessão — Fechamento DIA 09 + Início DIA 10
 
-### Passo 0 — Validar HOTFIX 09.2 (Pré-requisito)
+### Passo 0 — Validar HOTFIX 09.3 (Pré-requisito)
 
-**Status:** ✅ HOTFIX 09.2 implementado
+**Status:** ✅ HOTFIX 09.3 implementado
+
+**Correções aplicadas:**
+- ✅ Loop infinito de GET /latest corrigido (single-flight guard + guard ajustado)
+- ✅ Botões feedback 100% clicáveis (onClickCapture no container)
+- ✅ Gate explícito para ml_smart_variations quando variationsCount >= 5
+- ✅ Shape do payload normalizado (GET latest e POST analyze consistentes)
+
+**Validação rápida (P0):**
+- [ ] Abrir accordion: máximo 1 GET latest (sem loop)
+- [ ] UI renderiza análise e hacks sem spinner infinito
+- [ ] Botões disparam POST feedback sempre (Network mostra request)
+- [ ] ml_smart_variations nunca aparece com variationsCount >= 5
+- [ ] Clip/vídeo consistente
+
+**Se PASS → Prosseguir para MINI-CHECKLIST HOTFIX 09.1**
+
+---
+
+### Passo 0.1 — Validar HOTFIX 09.2 (Histórico)
+
+**Status:** ✅ HOTFIX 09.2 implementado (pré-requisito do 09.3)
 
 **Correções aplicadas:**
 - ✅ variations_count persistido no DB via sync ML
 - ✅ SignalsBuilder usa listing.variations_count (fonte de verdade)
-- ✅ Botões feedback corrigidos (onPointerDown/onMouseDown + z-index)
 - ✅ Endpoint GET /latest criado (não dispara análise ao abrir accordion)
 - ✅ Frontend atualizado para usar GET latest primeiro
-
-**Validação rápida:**
-- [ ] Listing com 11+ variações: hack "ml_smart_variations" NÃO aparece
-- [ ] Botões feedback clicáveis e funcionando
-- [ ] Abrir accordion de listing analisado <7 dias: NÃO dispara POST analyze
-- [ ] GET /latest retorna análise recente sem chamar OpenAI
-
-**Se PASS → Prosseguir para MINI-CHECKLIST HOTFIX 09.1**
 
 ---
 

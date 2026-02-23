@@ -85,9 +85,13 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
     fetchExisting,
   } = useAIAnalyze(isExpanded ? listing.id : null)
 
-  // Buscar análise existente quando expandir
+  // HOTFIX 09.3: Buscar análise existente quando expandir (guard melhorado)
   useEffect(() => {
-    if (isExpanded && !aiAnalysis?.analysisV21 && !aiLoading) {
+    // Só buscar se:
+    // 1. Accordion está expandido
+    // 2. Não temos dados ainda (aiAnalysis é null ou não tem analysisV21)
+    // 3. Não está carregando
+    if (isExpanded && !aiAnalysis && !aiLoading) {
       fetchExisting()
     }
   }, [isExpanded, aiAnalysis, aiLoading, fetchExisting])

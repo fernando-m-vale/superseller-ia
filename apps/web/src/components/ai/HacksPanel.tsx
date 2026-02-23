@@ -216,7 +216,19 @@ export function HacksPanel({ hacks, listingId, onFeedback }: HacksPanelProps) {
                   <Separator />
 
                   {/* Botões de ação */}
-                  <div className="flex gap-2">
+                  {/* HOTFIX 09.3: onClickCapture para evitar que accordion capture clique */}
+                  <div 
+                    className="flex gap-2"
+                    onClickCapture={(e) => {
+                      e.stopPropagation()
+                    }}
+                    onPointerDownCapture={(e) => {
+                      e.stopPropagation()
+                    }}
+                    onMouseDownCapture={(e) => {
+                      e.stopPropagation()
+                    }}
+                  >
                     {status === 'confirmed' ? (
                       <div className="flex items-center gap-2 text-sm text-green-600">
                         <CheckCircle2 className="h-4 w-4" />

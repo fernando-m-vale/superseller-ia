@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
@@ -393,6 +393,9 @@ export function useAIAnalyze(listingId: string | null) {
     message: undefined,
   })
 
+  // HOTFIX 09.3: Single-flight guard para evitar múltiplas chamadas simultâneas
+  const isFetchingExistingRef = useRef<boolean>(false)
+
   // Resetar COMPLETAMENTE o state quando listingId mudar
   // Isso evita misturar dados entre anúncios diferentes
   useEffect(() => {
@@ -404,6 +407,8 @@ export function useAIAnalyze(listingId: string | null) {
       cacheHit: undefined,
       message: undefined,
     })
+    // Resetar guard ao mudar listingId
+    isFetchingExistingRef.current = false
   }, [listingId])
 
   const analyze = async (forceRefresh: boolean = false): Promise<void> => {
@@ -643,10 +648,17 @@ export function useAIAnalyze(listingId: string | null) {
   /**
    * Busca análise existente sem regenerar (para exibição ao expandir accordion)
    * HOTFIX 09.2: Usa GET /latest primeiro para evitar regeneração desnecessária
+   * HOTFIX 09.3: Single-flight guard para evitar múltiplas chamadas simultâneas
    */
   const fetchExisting = async (): Promise<void> => {
     if (!listingId) return
     if (state.isLoading) return
+
+    // HOTFIX 09.3: Single-flight guard - se já está buscando, retornar
+    if (isFetchingExistingRef.current) {
+      console.log('[AI-ANALYZE] Already fetching, skipping duplicate request', { listingId })
+      return
+    }
 
     // Se já temos dados em memória, não buscar novamente
     if (state.data?.analysisV21) {
@@ -654,6 +666,8 @@ export function useAIAnalyze(listingId: string | null) {
       return
     }
 
+    // Marcar como buscando
+    isFetchingExistingRef.current = true
     console.log('[AI-ANALYZE] Fetching existing analysis (GET latest)', { listingId })
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
@@ -714,6 +728,17 @@ export function useAIAnalyze(listingId: string | null) {
         if (growthHacksMeta) {
           adaptedData.growthHacksMeta = growthHacksMeta
         }
+
+        // Ler benchmarkInsights e generatedContent (DIA 05)
+        const benchmarkInsights = latestResult.data?.benchmarkInsights ?? null
+        if (benchmarkInsights) {
+          adaptedData.benchmarkInsights = benchmarkInsights
+        }
+
+        const generatedContent = latestResult.data?.generatedContent ?? null
+        if (generatedContent) {
+          adaptedData.generatedContent = generatedContent
+        }
         
         // Normalizar resposta
         const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
@@ -732,6 +757,8 @@ export function useAIAnalyze(listingId: string | null) {
           cacheHit: Boolean(cacheHit),
           message,
         })
+        // Resetar guard após sucesso
+        isFetchingExistingRef.current = false
         return // Sucesso: análise encontrada via GET latest
       }
 
@@ -739,6 +766,8 @@ export function useAIAnalyze(listingId: string | null) {
       if (latestResponse.status === 404) {
         console.log('[AI-ANALYZE] No recent analysis found (GET latest returned 404)', { listingId })
         setState(prev => ({ ...prev, isLoading: false, data: null }))
+        // Resetar guard após 404
+        isFetchingExistingRef.current = false
         return
       }
 
@@ -762,8 +791,12 @@ export function useAIAnalyze(listingId: string | null) {
         // Se não existir análise, não é erro - apenas não temos dados
         if (response.status === 404) {
           setState(prev => ({ ...prev, isLoading: false, data: null }))
+          // Resetar guard após 404
+          isFetchingExistingRef.current = false
           return
         }
+        // Resetar guard em caso de erro
+        isFetchingExistingRef.current = false
         throw new Error(`Erro ao buscar análise: ${response.status}`)
       }
 
@@ -789,6 +822,27 @@ export function useAIAnalyze(listingId: string | null) {
       const appliedActions = result.data?.appliedActions ?? []
       if (appliedActions) {
         adaptedData.appliedActions = appliedActions
+      }
+
+      // Ler growthHacks (DIA 09)
+      const growthHacks = result.data?.growthHacks ?? []
+      if (growthHacks) {
+        adaptedData.growthHacks = growthHacks
+      }
+      const growthHacksMeta = result.data?.growthHacksMeta
+      if (growthHacksMeta) {
+        adaptedData.growthHacksMeta = growthHacksMeta
+      }
+
+      // Ler benchmarkInsights e generatedContent (DIA 05)
+      const benchmarkInsights = result.data?.benchmarkInsights ?? null
+      if (benchmarkInsights) {
+        adaptedData.benchmarkInsights = benchmarkInsights
+      }
+
+      const generatedContent = result.data?.generatedContent ?? null
+      if (generatedContent) {
+        adaptedData.generatedContent = generatedContent
       }
       
       // Normalizar resposta
@@ -820,6 +874,8 @@ export function useAIAnalyze(listingId: string | null) {
         error: error instanceof Error ? error.message : 'Erro ao buscar análise',
         data: null,
       }))
+      // HOTFIX 09.3: Resetar guard em caso de erro
+      isFetchingExistingRef.current = false
     }
   }
 

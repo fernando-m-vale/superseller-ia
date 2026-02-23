@@ -212,6 +212,9 @@ function evaluateMlBundleKit(signals: ListingSignals): { score: number; shouldOm
 /**
  * Hack 3: ml_smart_variations
  * 
+ * Gate:
+ * - variationsCount >= 5 → omitir completamente
+ * 
  * Pontuação:
  * +25 visits ≥ 200
  * +20 CR < 2%
@@ -220,11 +223,15 @@ function evaluateMlBundleKit(signals: ListingSignals): { score: number; shouldOm
  * +10 categoryId presente
  * +10 qty ≥ 5
  * 
- * -25 variationsCount ≥ 5
  * -15 picturesCount < 4
  * -15 visits < 80
  */
-function evaluateMlSmartVariations(signals: ListingSignals): number {
+function evaluateMlSmartVariations(signals: ListingSignals): { score: number; shouldOmit: boolean } {
+  // HOTFIX 09.3: Gate explícito - omitir se variationsCount >= 5
+  if ((signals.variationsCount ?? 0) >= 5) {
+    return { score: 0, shouldOmit: true };
+  }
+  
   let score = 0;
   
   // Pontuação positiva
@@ -236,14 +243,13 @@ function evaluateMlSmartVariations(signals: ListingSignals): number {
   if ((signals.availableQuantity ?? 0) >= 5) score += 10;
   
   // Pontuação negativa
-  if ((signals.variationsCount ?? 0) >= 5) score -= 25;
   if ((signals.picturesCount ?? 0) < 4) score -= 15;
   if ((signals.metrics30d?.visits ?? 0) < 80) score -= 15;
   
   // Normalizar para 0-100
   score = Math.max(0, Math.min(100, score));
   
-  return score;
+  return { score, shouldOmit: false };
 }
 
 /**
@@ -446,8 +452,8 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
   // Hack 3: ml_smart_variations
   rulesEvaluated++;
   if (!isHackConfirmed(history, 'ml_smart_variations') && !isHackInCooldown(history, 'ml_smart_variations', nowUtc)) {
-    const score = evaluateMlSmartVariations(signals);
-    if (score > 0) {
+    const result = evaluateMlSmartVariations(signals);
+    if (!result.shouldOmit && result.score > 0) {
       rulesTriggered++;
       hacks.push({
         id: 'ml_smart_variations',
@@ -459,15 +465,15 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           'Melhoram a experiência de compra',
         ],
         impact: 'medium',
-        confidence: score,
-        confidenceLevel: getConfidenceLevel(score),
+        confidence: result.score,
+        confidenceLevel: getConfidenceLevel(result.score),
         evidence: [
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
           `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
           `Imagens: ${signals.picturesCount ?? 0}`,
         ],
       });
-    } else {
+    } else if (result.shouldOmit) {
       skippedBecauseOfRequirements++;
     }
   } else {

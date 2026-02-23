@@ -1,3 +1,72 @@
+# DAILY EXECUTION LOG — 2026-02-20 (HOTFIX DIA 09.3 — Correções de Loop e Feedback)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Correções críticas após HOTFIX 09.2: loop infinito de requests, botões feedback ainda falhando, hack de variações aparecendo indevidamente**
+
+## 📌 Problemas enfrentados (antes)
+1. **Loop infinito de GET /latest ao abrir accordion**
+   - Causa: guard checava `!aiAnalysis?.analysisV21` mas o shape estava diferente; falta de single-flight guard no hook
+2. **Botões feedback ainda falhando em alguns casos**
+   - Causa: accordion trigger capturava eventos antes dos handlers dos botões; falta de onClickCapture no container
+3. **Hack ml_smart_variations aparecendo mesmo com variationsCount >= 5**
+   - Causa: regra só tinha pontuação negativa (-25), mas score ainda podia ser positivo; falta de gate explícito para omitir
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) Frontend — Corrigir loop de fetchExisting (P0)
+- ✅ Single-flight guard adicionado: `useRef<boolean>` (isFetchingExistingRef) no hook useAIAnalyze
+- ✅ Guard resetado em todos os casos: sucesso, 404, erro
+- ✅ Guard no ListingAccordionRow ajustado: checa `!aiAnalysis` (não `!aiAnalysis?.analysisV21`)
+- ✅ useEffect com dependências corretas para evitar re-renders desnecessários
+
+### B) Frontend — Normalizar shape do payload (P0)
+- ✅ GET latest e POST analyze agora normalizam os mesmos campos:
+  - analysisV21, benchmark, appliedActions, growthHacks, growthHacksMeta
+  - benchmarkInsights, generatedContent
+- ✅ Normalização consistente via `normalizeAiAnalyzeResponse` em ambos os fluxos
+
+### C) Frontend — Botões feedback 100% clicáveis (P0)
+- ✅ Container dos botões com `onClickCapture`, `onPointerDownCapture`, `onMouseDownCapture` com `stopPropagation()`
+- ✅ Botões mantêm handlers individuais (onPointerDown, onMouseDown, onClick)
+- ✅ z-index e pointer-events mantidos: `relative z-20 pointer-events-auto`
+
+### D) Backend — Variações >=5 não sugere hack (P0)
+- ✅ Gate explícito adicionado em `evaluateMlSmartVariations`:
+  - Se `variationsCount >= 5` → retorna `{ score: 0, shouldOmit: true }`
+- ✅ Hack engine atualizado: verifica `result.shouldOmit` antes de adicionar hack
+- ✅ Regra de pontuação negativa removida (substituída por gate)
+
+### E) Clip vs Vídeo (P1)
+- ✅ Tri-state já respeitado: `media-verdict.ts` implementa corretamente
+  - true => não sugerir (canSuggestClip = false)
+  - false => sugerir (canSuggestClip = true)
+  - null => mensagem condicional (canSuggestClip = false)
+
+## 🧪 Evidências / Testes executados (após)
+- ✅ Abrir accordion: máximo 1 GET latest (sem loop)
+- ✅ UI renderiza análise e hacks sem spinner infinito
+- ✅ Botões disparam POST feedback sempre (Network mostra request)
+- ✅ ml_smart_variations nunca aparece com variationsCount >= 5
+- ✅ Clip/vídeo consistente (textos padronizados)
+
+## 📌 Status do HOTFIX DIA 09.3
+✅ **CONCLUÍDO**
+- ✅ Loop de requests corrigido
+- ✅ Botões feedback 100% funcionais
+- ✅ Gate de variações implementado
+- ✅ Shape do payload normalizado
+
+**Critérios de aceite (DoD):**
+1. ✅ Abrir accordion: 1 GET latest e para
+2. ✅ UI renderiza análise e hacks sem spinner infinito
+3. ✅ Botões disparam POST feedback sempre
+4. ✅ ml_smart_variations nunca aparece com variationsCount >= 5
+5. ✅ Clip/vídeo consistente
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-20 (HOTFIX DIA 09.2 — Correções Críticas)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO
