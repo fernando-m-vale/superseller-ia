@@ -92,7 +92,10 @@
 - ✅ Mantido anti-loop latch por listingId (idle/inflight/done/failed)
 
 ### C) Backend + Frontend — Hack de Categoria mais acionável (P0)
-- ✅ Backend resolve breadcrumb textual da categoria via API pública do ML (cache in-memory 24h)
+- ✅ **Backend resolve breadcrumb textual da categoria via API pública do ML (cache in-memory 24h)**
+  - Criado `CategoryBreadcrumbService` com cache singleton (TTL 24h)
+  - Integrado em todos os pontos onde `buildSignals` é chamado (POST /analyze, cache response, GET /latest)
+  - Fallback gracioso se API do ML falhar (não bloqueia análise)
 - ✅ SignalsBuilder aceita `categoryPath` (breadcrumb) e preserva tri-state `hasClips`
 - ✅ Hack `ml_category_adjustment` agora inclui evidências concretas:
   - Categoria atual como breadcrumb (ex: “Moda Infantil > Meias > 3D”)

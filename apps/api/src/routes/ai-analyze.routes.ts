@@ -31,54 +31,16 @@ import type { AIAnalysisResultExpert } from '../types/ai-analysis-expert';
 import { buildSignals } from '../services/SignalsBuilder';
 import { generateHacks } from '../services/HackEngine';
 import { getHackHistory } from '../services/ListingHacksService';
+import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 
 const prisma = new PrismaClient();
 
 // HOTFIX 09.5: Resolver breadcrumb textual da categoria (nome + path), evitando exibir apenas MLBxxxx.
 // Usa endpoint público do Mercado Livre (sem auth) + cache in-memory por categoria para reduzir latência.
-type MlCategoryApiResponse = {
-  id: string;
-  name: string;
-  path_from_root?: Array<{ id: string; name: string }>;
-};
-
-const mlCategoryPathCache = new Map<string, { path: string[]; fetchedAtMs: number }>();
-const ML_CATEGORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
-
+// HOTFIX 09.5: Usar serviço centralizado CategoryBreadcrumbService com cache in-memory 24h
+// A função getMlCategoryPathNames agora delega para getCategoryBreadcrumb
 async function getMlCategoryPathNames(categoryId: string | null | undefined): Promise<string[] | null> {
-  if (!categoryId || typeof categoryId !== 'string') return null;
-  const trimmed = categoryId.trim();
-  if (!trimmed) return null;
-
-  const cached = mlCategoryPathCache.get(trimmed);
-  if (cached && Date.now() - cached.fetchedAtMs < ML_CATEGORY_CACHE_TTL_MS) {
-    return cached.path;
-  }
-
-  try {
-    const res = await fetch(`https://api.mercadolibre.com/categories/${encodeURIComponent(trimmed)}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!res.ok) {
-      return null;
-    }
-
-    const json = (await res.json()) as MlCategoryApiResponse;
-    const path = Array.isArray(json.path_from_root)
-      ? json.path_from_root.map((p) => p.name).filter(Boolean)
-      : json.name
-        ? [json.name]
-        : [];
-
-    if (path.length === 0) return null;
-
-    mlCategoryPathCache.set(trimmed, { path, fetchedAtMs: Date.now() });
-    return path;
-  } catch {
-    return null;
-  }
+  return getCategoryBreadcrumb(categoryId);
 }
 
 interface RequestWithAuth extends FastifyRequest {
