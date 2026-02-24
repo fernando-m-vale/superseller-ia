@@ -597,13 +597,13 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
 
   // GET /api/v1/listings/:listingId/hacks/feedback
   // HOTFIX 09.7: Buscar histórico de feedback dos hacks
-  app.get(
+  app.get<{ Params: { listingId: string } }>(
     '/:listingId/hacks/feedback',
     { preHandler: authGuard },
     async (req, reply) => {
       try {
         const tenantId = req.tenantId;
-        const { listingId } = req.params as { listingId: string };
+        const { listingId } = req.params;
 
         if (!tenantId) {
           return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
@@ -633,7 +633,8 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           data: history,
         });
       } catch (error) {
-        app.log.error({ error, listingId: req.params?.listingId, tenantId: req.tenantId }, 'Error fetching hack feedback history');
+        const listingIdForLog = req.params?.listingId || 'unknown';
+        app.log.error({ error, listingId: listingIdForLog, tenantId: req.tenantId }, 'Error fetching hack feedback history');
         return reply.status(500).send({ 
           error: 'Failed to fetch feedback history',
           message: 'Erro interno ao buscar histórico de feedback'

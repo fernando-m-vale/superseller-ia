@@ -150,6 +150,8 @@ interface ListingAIAnalysisPanelProps {
     confidence: number
     confidenceLevel: 'low' | 'medium' | 'high'
     evidence: string[]
+    suggestedActionUrl?: string | null
+    categoryId?: string | null
   }>
   growthHacksMeta?: {
     rulesEvaluated: number
@@ -827,9 +829,18 @@ export function ListingAIAnalysisPanel({
       )}
 
       {/* 📋 PLANO DE EXECUÇÃO — CHECKLIST COM STATUS (DIA 06.1) */}
-      {analysisV21.finalActionPlan && analysisV21.finalActionPlan.length > 0 && (
+      {(analysisV21.finalActionPlan && analysisV21.finalActionPlan.length > 0) || (growthHacks && growthHacks.length > 0) ? (
         <ActionPlanChecklist
-          items={analysisV21.finalActionPlan.slice(0, 8).map((action, idx) => {
+          items={[
+            // HOTFIX 09.8: Incluir hacks ML no plano de execução
+            ...(growthHacks && growthHacks.length > 0 ? growthHacks.slice(0, 5).map((hack) => ({
+              id: `hack-${hack.id}`,
+              title: hack.title,
+              actionType: null, // Hacks ML não são executáveis via apply-action
+              mlDeeplink: hack.suggestedActionUrl || editUrl || undefined,
+            })) : []),
+            // Ações do finalActionPlan
+            ...(analysisV21.finalActionPlan ? analysisV21.finalActionPlan.slice(0, 8).map((action, idx) => {
             // Mapear ações para actionTypes baseado no conteúdo
             let actionType: ActionType | null = null
             let sectionId: string | undefined
@@ -859,7 +870,8 @@ export function ListingAIAnalysisPanel({
               sectionId,
               mlDeeplink: editUrl || undefined,
             }
-          })}
+          }) : []),
+          ].filter(Boolean)}
           appliedActions={localAppliedActions}
           onApplyAction={(actionType, before, after) => {
             handleOpenApplyModal(actionType, before, after)
@@ -889,7 +901,7 @@ export function ListingAIAnalysisPanel({
           }}
           editUrl={editUrl}
         />
-      )}
+      ) : null}
 
       {/* 🎯 RESULTADO ESPERADO — DESTAQUE VISUAL */}
       <Card className="border-2 border-green-500/20 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10">

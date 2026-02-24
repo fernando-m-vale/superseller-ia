@@ -118,24 +118,39 @@ export function sanitizePromoText(
     });
   }
 
-  // Se tem promoText, substituir qualquer padrão de promoção pelo texto correto
+  // HOTFIX 09.8: Se tem promoText, substituir qualquer padrão de promoção pelo texto correto
   // Padrões a substituir:
-  // - "de R$ X por R$ Y"
+  // - "de R$ X por R$ Y" (qualquer variação)
   // - "por R$ X" (quando promoText tem "de ... por ...")
+  // IMPORTANTE: Remover TODAS as ocorrências antes de substituir para evitar duplicação
   
   let sanitized = text;
 
-  // Substituir padrão "de R$ X por R$ Y" pelo promoText
+  // HOTFIX 09.8: Remover TODAS as ocorrências de "de R$ X por R$ Y" primeiro (incluindo duplicatas)
   const dePorPattern = /de\s+R\$\s*[\d.,]+\s+por\s+R\$\s*[\d.,]+/gi;
-  sanitized = sanitized.replace(dePorPattern, promoText);
-
-  // Se promoText começa com "de", também substituir "por R$ X" isolado
+  sanitized = sanitized.replace(dePorPattern, '').trim();
+  
+  // HOTFIX 09.8: Remover "por R$ X" isolado se promoText começa com "de"
   if (promoText.startsWith('de ')) {
     const porPattern = /por\s+R\$\s*[\d.,]+/gi;
-    sanitized = sanitized.replace(porPattern, promoText);
+    sanitized = sanitized.replace(porPattern, '').trim();
+  }
+  
+  // HOTFIX 09.8: Limpar espaços múltiplos e adicionar promoText uma única vez
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  
+  // HOTFIX 09.8: Adicionar promoText apenas uma vez, no final ou onde faz sentido
+  // Se o texto já contém promoText, não adicionar novamente
+  if (!sanitized.includes(promoText)) {
+    // Adicionar promoText de forma inteligente
+    if (sanitized.length > 0) {
+      sanitized = `${sanitized} ${promoText}`;
+    } else {
+      sanitized = promoText;
+    }
   }
 
-  return sanitized;
+  return sanitized.trim();
 }
 
 /**

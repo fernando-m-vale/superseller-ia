@@ -19,6 +19,8 @@ export interface HackSuggestion {
   confidenceLevel: 'low' | 'medium' | 'high'
   evidence: string[]
   suggestedActionUrl?: string | null
+  // HOTFIX 09.8: categoryId para botão "Ver categoria"
+  categoryId?: string | null
 }
 
 export interface HacksPanelProps {
@@ -41,35 +43,45 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
   // HOTFIX 09.7: Carregar histórico de feedback ao montar componente
   useEffect(() => {
     const loadFeedbackHistory = async () => {
+      if (!listingId) return
+      
       try {
-        // O histórico já vem nos hacks (via growthHacksMeta ou podemos buscar separadamente)
-        // Por enquanto, vamos inferir do próprio payload de hacks que vem do backend
-        // Se o hack não aparece, significa que foi confirmado/dismissed
-        // Mas precisamos buscar explicitamente o histórico para mostrar status nos cards
-        
         const apiBaseUrl = getApiBaseUrl()
         const token = getAccessToken()
         
-        if (!token || !listingId) return
+        if (!token) return
         
-        // Buscar histórico via endpoint de hacks (se existir) ou inferir dos hacks recebidos
-        // Por enquanto, vamos usar uma abordagem: se o hack está na lista, é 'suggested'
-        // Se não está mas deveria estar (baseado em signals), foi confirmado/dismissed
-        // Mas isso requer lógica complexa. Vamos buscar explicitamente.
+        const response = await fetch(`${apiBaseUrl}/api/v1/listings/${listingId}/hacks/feedback`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
         
-        // HOTFIX 09.7: Por enquanto, vamos carregar histórico quando hacks mudarem
-        // O backend já filtra hacks confirmados/dismissed, então não aparecem na lista
-        // Mas precisamos de um endpoint para buscar histórico de feedback
-        
-        // Solução temporária: vamos assumir que se o hack está na lista, é 'suggested'
-        // E vamos buscar histórico após feedback ser salvo
+        if (response.ok) {
+          const result = await response.json()
+          const history = result.data || []
+          
+          // Mapear histórico para feedbackStatus
+          const statusMap: Record<string, 'confirmed' | 'dismissed' | null> = {}
+          history.forEach((item: { hackId: string; status: 'confirmed' | 'dismissed' }) => {
+            statusMap[item.hackId] = item.status
+          })
+          
+          setFeedbackStatus(statusMap)
+          
+          console.log('[HACKS-PANEL] Histórico de feedback carregado', {
+            listingId,
+            count: history.length,
+            hackIds: Object.keys(statusMap),
+          })
+        }
       } catch (error) {
-        console.warn('[HACKS-PANEL] Erro ao carregar histórico de feedback:', error)
+        console.warn('[HACKS-PANEL] Erro ao carregar histórico de feedback (não crítico):', error)
       }
     }
     
     loadFeedbackHistory()
-  }, [listingId, hacks])
+  }, [listingId])
 
   if (!hacks || hacks.length === 0) {
     return null
@@ -109,23 +121,19 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
     return a.id.localeCompare(b.id)
   })
 
-  // Separar em Top 3 e outros
-  const top3Hacks = sortedHacks.filter((h) => {
+  // HOTFIX 09.8: Separar em "Oportunidades" (não aplicadas) e "Já aplicados"
+  const opportunityHacks = sortedHacks.filter((h) => {
     const status = feedbackStatus[h.id] === 'confirmed' ? 'confirmed'
       : feedbackStatus[h.id] === 'dismissed' ? 'dismissed'
       : 'suggested'
     return status === 'suggested'
-  }).slice(0, 3)
-
-  const otherHacks = sortedHacks.filter((h) => {
-    const status = feedbackStatus[h.id] === 'confirmed' ? 'confirmed'
-      : feedbackStatus[h.id] === 'dismissed' ? 'dismissed'
-      : 'suggested'
-    return status === 'suggested' && !top3Hacks.includes(h)
   })
-
+  
   const confirmedHacks = sortedHacks.filter((h) => feedbackStatus[h.id] === 'confirmed')
-  // dismissedHacks não são exibidos (backend já filtra por cooldown, mas se vierem, não renderizamos)
+  
+  // Separar oportunidades em Top 3 e outros
+  const top3Hacks = opportunityHacks.slice(0, 3)
+  const otherHacks = opportunityHacks.slice(3)
 
   /**
    * Transforma evidence string[] em HackEvidenceItem[]
@@ -318,6 +326,15 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
         label: 'Abrir no Mercado Livre',
         url: hack.suggestedActionUrl,
         variant: 'outline',
+      })
+    }
+    // HOTFIX 09.8: Adicionar botão "Ver categoria" para hack de categoria
+    if (hack.id === 'ml_category_adjustment' && hack.categoryId) {
+      const categoryUrl = `https://lista.mercadolivre.com.br/c/${hack.categoryId}`
+      actions.push({
+        label: 'Ver categoria no Mercado Livre',
+        url: categoryUrl,
+        variant: 'secondary',
       })
     }
     

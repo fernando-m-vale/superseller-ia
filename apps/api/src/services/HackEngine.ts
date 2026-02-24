@@ -27,6 +27,8 @@ export interface HackSuggestion {
   evidence: string[];
   // HOTFIX 09.5: CTA opcional para tornar o hack acionável
   suggestedActionUrl?: string | null;
+  // HOTFIX 09.8: categoryId para botão "Ver categoria"
+  categoryId?: string | null;
 }
 
 function normalizeMlbId(listingIdExt?: string): string | null {
@@ -568,6 +570,8 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           ...(hasBenchmarkCR ? [`Baseline (categoria): ${(benchmarkCR as number).toFixed(2)}%`] : []),
         ],
         suggestedActionUrl: suggestedEditUrl,
+        // HOTFIX 09.8: Incluir categoryId para botão "Ver categoria"
+        categoryId: signals.categoryId || null,
       });
     } else {
       skippedBecauseOfRequirements++;
