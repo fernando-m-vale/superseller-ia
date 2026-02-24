@@ -874,9 +874,64 @@ expect(isHackInCooldown(history, 'ml_full_shipping', nowUtc)).toBe(true);
 
 ---
 
-**Versão:** 1.1 (HOTFIX 09.2)  
-**Data:** 2026-02-20  
-**Status:** ✅ Implementado
+**Versão:** 1.2 (HOTFIX 09.5 + 09.6)  
+**Data:** 2026-02-XX  
+**Status:** ✅ Implementado (validação PROD pendente)
+
+---
+
+## 🔧 Operational Notes
+
+### Category Breadcrumb Service
+
+**Cache:** TTL de 24h (in-memory singleton)
+
+**Degradação graciosa:**
+- Se API ML (`GET /categories/{id}`) falhar (timeout, 404, 500, etc):
+  - Sistema continua sem breadcrumb (não bloqueia análise)
+  - Log de warning registrado
+  - Hack de categoria ainda pode ser sugerido, mas sem breadcrumb textual
+  - Evidência exibirá `categoryId` (ex: "MLB1234") ou mensagem clara
+
+**Como verificar se cache está funcionando:**
+- Logs: `[CATEGORY-BREADCRUMB]` prefix
+- Stats: `getCategoryBreadcrumbCacheStats()` (helper disponível para debug)
+
+**Limpeza de cache:**
+- Cache expira automaticamente após 24h
+- Função `clearCategoryBreadcrumbCache()` disponível para testes/limpeza manual
+
+### ML API Rate Limits
+
+**Benchmark Service:**
+- Se API ML retornar 403 (rate limit ou token expirado):
+  - Benchmark fica opcional (não bloqueia análise)
+  - Hack de categoria pode ser sugerido sem comparação de conversão
+  - Mensagem: "Sem baseline suficiente para afirmar erro. Vale validar se a categoria está específica e correta."
+
+**Category Breadcrumb:**
+- Se API ML retornar 403 ou timeout:
+  - Breadcrumb não é resolvido (não bloqueia análise)
+  - Hack de categoria ainda pode ser sugerido, mas sem breadcrumb textual
+
+### Frontend — Opportunity Score
+
+**Cálculo:** Executado no frontend (não no backend)
+
+**Dependências:**
+- `metrics30d` deve ser passado para `HacksPanel` via props
+- Se `metrics30d` não estiver disponível, Gap Score será baixo (mas não quebra)
+
+**Fallback:**
+- Se `opportunityScore` não vier calculado, `HackCardUX2` usa fallback simples:
+  - `Math.round(confidence * 0.6 + (impact === 'high' ? 90 : impact === 'medium' ? 65 : 35) * 0.4)`
+  - Não ideal, mas evita erro de renderização
+
+---
+
+**Versão:** 1.2 (HOTFIX 09.5 + 09.6)  
+**Data:** 2026-02-XX  
+**Status:** ✅ Implementado (validação PROD pendente)
 
 ---
 

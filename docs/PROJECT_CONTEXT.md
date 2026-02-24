@@ -74,11 +74,11 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
   - ✅ Benchmark → Action Engine → Conteúdo Gerado — **CONCLUÍDO (Dia 5)**
 - 🚀 Próxima fase: Execução Assistida + Jobs Automáticos + Hacks ML Contextuais (Dia 06-10)
 
-## 🧠 Estado atual do produto (2026-02-19 — Pós-HOTFIX DIA 09.1)
+## 🧠 Estado atual do produto (2026-02-XX — Pós-HOTFIX DIA 09.5 + 09.6)
 
-**Dia atual do projeto:** DIA 09 + HOTFIX 09.1 concluídos (validação final pendente)  
-**Fase ativa:** Aguardando validação final do HOTFIX 09.1 → Início DIA 10  
-**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, execução assistida funcional, robustez de mídia/preço, sincronização automática multi-tenant, HackEngine v1 com feedback persistente
+**Dia atual do projeto:** DIA 09 + HOTFIX 09.5 + 09.6 implementados (validação PROD pendente)  
+**Fase ativa:** Aguardando validação final em PROD → Fechamento DIA 09 → Início DIA 10  
+**Status:** Produto entrega valor prático imediato — diagnóstico, priorização inteligente (Top 3), conteúdo gerado contextual, promo confiável, execução assistida funcional, robustez de mídia/preço, sincronização automática multi-tenant, HackEngine v1 com feedback persistente, UX 2.0 dos cards, Opportunity Score + Prioridade
 
 - **SuperSeller IA agora possui:**
   - ✅ **Diagnóstico:** Análise profunda de anúncio com IA especialista
@@ -98,6 +98,12 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - **Dia 7 concluído:** Cadastro Manual + Anúncios sem Venda
   - **Backend:** Endpoint POST /api/v1/listings/import, validação de MLB ID, sync inicial automático
   - **Frontend:** Botão "Adicionar anúncio", modal de import, tratamento de anúncios sem métricas
+
+- **Dia 9 concluído (implementações):** HackEngine v1 + Feedback + UX 2.0 + Opportunity Score
+  - **Backend:** SignalsBuilder, HackEngine v1 (5 hacks determinísticos), ListingHacksService (feedback persistente), CategoryBreadcrumbService (cache 24h)
+  - **Frontend:** HackCardUX2 (UX 2.0), HacksPanel (ordenação + Top 3), Opportunity Score helper (cálculo determinístico)
+  - **Hotfixes:** 09.1 (signals variations + full gate + feedback ui), 09.2 (variations_count DB + fetch-latest), 09.3 (loop fix), 09.4 (payload normalization), 09.5 (UX 2.0 + categoria acionável), 09.6 (Opportunity Score + prioridade)
+  - **Status:** Implementações concluídas, validação PROD pendente (ver `docs/RUNBOOK_VALIDATION_DAY09.md`)
   - **Score Engine:** Proteção contra divisão por zero, performanceScore = 0 quando sem dados
 
 - **Dia 8 concluído:** Jobs Automáticos Multi-tenant

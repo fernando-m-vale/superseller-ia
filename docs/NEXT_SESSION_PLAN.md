@@ -1,8 +1,44 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
-## 🔜 Próxima Sessão — Fechamento DIA 09 + Início DIA 10
+## 🔜 Próxima Sessão — Validação PROD DIA 09 + Fechamento + Início DIA 10
 
-### Passo 0 — Validar HOTFIX 09.5 (Pré-requisito)
+### Passo 0 — Executar MINI-CHECKLIST PROD — DIA 09 (10-15 min)
+
+**Objetivo:** Validar que todas as correções dos HOTFIX 09.5 e 09.6 estão funcionando corretamente em produção antes de declarar DIA 09 oficialmente fechado.
+
+**Runbook:** `docs/RUNBOOK_VALIDATION_DAY09.md`
+
+**Checklist (10 itens):**
+1. [ ] Accordion abre: no máximo 1 GET latest (sem loop)
+2. [ ] Não existe POST analyze automático ao abrir
+3. [ ] POST analyze só via botão "Regenerar análise"
+4. [ ] Hacks: botões clicáveis e 1 click = 1 request de feedback
+5. [ ] Persistência: após reload, status confirmado/dismissed persiste
+6. [ ] ml_smart_variations omitido se variationsCount >= 5
+7. [ ] Full omitido quando shippingMode unknown e isFullEligible != true
+8. [ ] Clip tri-state: se hasClips true, não sugerir clip/vídeo
+9. [ ] Categoria: exibe breadcrumb (quando disponível) ou fallback claro
+10. [ ] Opportunity Score: aparece, ordena, e Top 3 exibido
+
+**Comandos/Rotas para Validar:**
+- `GET /api/v1/ai/analyze/:listingId/latest?periodDays=30` (Network tab)
+- `POST /api/v1/ai/analyze/:listingId?forceRefresh=false` (apenas via botão "Regenerar análise")
+- `POST /api/v1/listings/:listingId/hacks/:hackId/feedback` (Network tab)
+
+**Evidence Capture:**
+- Screenshots do Network tab (GET latest, POST analyze, POST feedback)
+- Payloads JSON (salvar 1 de cada tipo)
+- Screenshots da UI (hacks ordenados, Top 3, breadcrumb categoria, badges)
+- SQL queries confirmando condições (variations_count, shipping_mode, has_clips)
+
+**Critério de PASS:** Todos os 10 itens devem passar.
+
+**Se PASS → Declarar "DIA 09 CLOSED" e prosseguir para Passo 1.**  
+**Se FAIL → Investigar, corrigir, re-validar.**
+
+---
+
+### Passo 0.1 — Validar HOTFIX 09.5 (Histórico — já implementado)
 
 **Status:** ✅ HOTFIX 09.5 implementado
 
@@ -49,48 +85,21 @@
 
 ---
 
-### Passo 1 — Executar MINI-CHECKLIST HOTFIX 09.1
+### Passo 1 — Declarar DIA 09 CLOSED (após validação)
 
-**Objetivo:** Validar que todas as correções do HOTFIX DIA 09.1 estão funcionando corretamente em ambiente de produção/staging antes de declarar DIA 09 oficialmente fechado.
+**Após Passo 0 (checklist) passar:**
 
-#### Checklist de Validação:
+1. Atualizar `docs/DAILY_EXECUTION_LOG.md`:
+   - Marcar "DIA 09 CLOSED"
+   - Registrar evidence capturada
+   - Listar itens validados
 
-1. **✅ Validar variações não sugeridas indevidamente**
-   - [ ] Abrir anúncio com 11+ variações
-   - [ ] Verificar que hack "ml_smart_variations" NÃO aparece
-   - [ ] Confirmar que `variationsCount` está sendo extraído corretamente
+2. Atualizar `docs/NEXT_SESSION_PLAN.md`:
+   - Marcar "DIA 09 CLOSED"
+   - Remover checklist de validação (movido para runbook)
 
-2. **✅ Validar Full omitido quando unknown**
-   - [ ] Abrir anúncio com `shippingMode='unknown'` e `isFullEligible != true`
-   - [ ] Verificar que hack "ml_full_shipping" NÃO aparece
-   - [ ] Confirmar que gate está funcionando corretamente
-
-3. **✅ Validar botões feedback**
-   - [ ] Clicar em "Confirmar implementação" em um hack
-   - [ ] Verificar que request é enviado (Network tab)
-   - [ ] Confirmar que toast de sucesso aparece
-   - [ ] Verificar que badge "Implementado" aparece
-   - [ ] Repetir para "Não se aplica"
-
-4. **✅ Validar persistência após reload**
-   - [ ] Confirmar um hack como "Implementado"
-   - [ ] Recarregar a página (F5)
-   - [ ] Verificar que badge "Implementado" continua aparecendo
-   - [ ] Confirmar que botões não aparecem mais
-
-5. **✅ Validar tooltip Confidence**
-   - [ ] Passar mouse sobre ícone "i" ao lado do badge de Confidence
-   - [ ] Verificar que tooltip aparece com explicação
-   - [ ] Confirmar que bandas (Alta/Média/Baixa) estão visíveis
-
-6. **✅ Validar texto clip**
-   - [ ] Verificar mensagens relacionadas a mídia/vídeo
-   - [ ] Confirmar que termo "clip" é usado consistentemente
-   - [ ] Verificar que não há menções a "vídeo" indevidas
-
-**Critério de PASS:** Todos os itens acima devem passar. Se algum item falhar, investigar e corrigir antes de declarar DIA 09 fechado.
-
-**Se PASS → Declarar DIA 09 oficialmente fechado e prosseguir para DIA 10.**
+3. Commit (se necessário):
+   - `docs: day 09 closed (prod validation passed)`
 
 ---
 
