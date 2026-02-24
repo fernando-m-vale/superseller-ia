@@ -59,6 +59,37 @@ describe('HackEngine - ml_psychological_pricing (HOTFIX 09.9)', () => {
     expect(hack).toBeUndefined();
   });
 
+  it('não deve "persistir" sugestão antiga quando a regra deixa de ativar (simulação)', () => {
+    const inputSuggest: HackEngineInput = {
+      ...baseInput,
+      signals: {
+        status: 'active',
+        price: 66.93, // ativa
+        hasPromotion: false,
+        currency: 'BRL',
+        metrics30d: {
+          visits: 300,
+          orders: 10,
+          conversionRate: 0.02,
+        },
+      },
+    };
+
+    const first = generateHacks(inputSuggest);
+    expect(first.hacks.some(h => h.id === 'ml_psychological_pricing')).toBe(true);
+
+    const inputBlocked: HackEngineInput = {
+      ...inputSuggest,
+      signals: {
+        ...inputSuggest.signals,
+        price: 66.90, // bloqueia
+      },
+    };
+
+    const second = generateHacks(inputBlocked);
+    expect(second.hacks.some(h => h.id === 'ml_psychological_pricing')).toBe(false);
+  });
+
   it('deve sugerir quando preço termina em .93 (não é .90 ou .99)', () => {
     const input: HackEngineInput = {
       ...baseInput,

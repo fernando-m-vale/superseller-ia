@@ -21,6 +21,8 @@ export interface HackSuggestion {
   suggestedActionUrl?: string | null
   // HOTFIX 09.8: categoryId para botão "Ver categoria"
   categoryId?: string | null
+  // HOTFIX 09.10: Permalink oficial da categoria (ao invés de inventar URL)
+  categoryPermalink?: string | null
 }
 
 export interface HacksPanelProps {
@@ -328,29 +330,21 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
         variant: 'outline',
       })
     }
-    // HOTFIX 09.9: Adicionar botão "Ver categoria" para hack de categoria (com sanitização)
-    if (hack.id === 'ml_category_adjustment' && hack.categoryId) {
-      // HOTFIX 09.9: Sanitizar categoryId antes de usar na URL
-      const sanitizedCategoryId = hack.categoryId.trim().replace(/\s+/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-      // Garantir formato MLBXXXXX
-      const finalCategoryId = sanitizedCategoryId.startsWith('MLB') 
-        ? sanitizedCategoryId 
-        : `MLB${sanitizedCategoryId.replace(/\D/g, '')}`
-      
-      // Validar formato antes de criar URL
-      if (/^MLB\d{6,}$/.test(finalCategoryId)) {
-        const categoryUrl = `https://lista.mercadolivre.com.br/c/${finalCategoryId}`
-        actions.push({
-          label: 'Ver categoria no Mercado Livre',
-          url: categoryUrl,
-          variant: 'secondary',
-        })
-      } else {
-        console.warn('[HACKS-PANEL] categoryId inválido após sanitização', {
-          original: hack.categoryId,
-          sanitized: finalCategoryId,
-        })
-      }
+    // HOTFIX 09.10: Adicionar botão "Ver categoria" usando permalink oficial
+    if (hack.id === 'ml_category_adjustment' && hack.categoryPermalink) {
+      // Usar permalink oficial do ML (não inventar URL)
+      actions.push({
+        label: 'Ver categoria no Mercado Livre',
+        url: hack.categoryPermalink,
+        variant: 'secondary',
+      })
+    } else if (hack.id === 'ml_category_adjustment' && hack.categoryId) {
+      // Fallback: se não houver permalink, não renderizar botão (ou renderizar disabled)
+      // HOTFIX 09.10: Não inventar URL, apenas logar que permalink não está disponível
+      console.warn('[HACKS-PANEL] categoryPermalink não disponível para hack de categoria', {
+        hackId: hack.id,
+        categoryId: hack.categoryId,
+      })
     }
     
     return {

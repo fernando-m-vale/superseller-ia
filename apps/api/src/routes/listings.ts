@@ -643,5 +643,108 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
+  // HOTFIX 09.10: GET /api/v1/listings/:listingId/media-debug
+  // Endpoint de debug para vídeo/clip (somente com header x-debug: 1)
+  app.get<{ Params: { listingId: string } }>(
+    '/:listingId/media-debug',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      // HOTFIX 09.10: Verificar header x-debug
+      const debugHeader = req.headers['x-debug'];
+      if (debugHeader !== '1') {
+        return reply.status(403).send({
+          error: 'Forbidden',
+          message: 'Este endpoint requer header x-debug: 1',
+        });
+      }
+
+      try {
+        const tenantId = req.tenantId;
+        const { listingId } = req.params;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        // Buscar listing
+        const listing = await prisma.listing.findFirst({
+          where: {
+            id: listingId,
+            tenant_id: tenantId,
+          },
+          select: {
+            id: true,
+            listing_id_ext: true,
+            title: true,
+            pictures_count: true,
+            has_video: true,
+            has_clips: true,
+            // HOTFIX 09.10: Campos relacionados a mídia (sem dados sensíveis)
+            pictures_json: true, // Pode conter informações sobre vídeo/clip
+            updated_at: true,
+            created_at: true,
+          },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({
+            error: 'Listing not found',
+            message: 'Anúncio não encontrado',
+          });
+        }
+
+        // HOTFIX 09.10: Construir resposta de debug
+        const debugInfo: Record<string, unknown> = {
+          listingId: listing.id,
+          listingIdExt: listing.listing_id_ext,
+          // Campos persistidos no DB
+          db: {
+            pictures_count: listing.pictures_count,
+            has_video: listing.has_video,
+            has_clips: listing.has_clips,
+            updated_at: listing.updated_at?.toISOString(),
+            created_at: listing.created_at?.toISOString(),
+          },
+          // HOTFIX 09.10: hasClips final (tri-state preservado)
+          hasClipsFinal: listing.has_clips ?? null,
+          hasClipsType: typeof listing.has_clips,
+        };
+
+        // HOTFIX 09.10: Extrair informações do pictures_json se disponível (sem dados sensíveis)
+        if (listing.pictures_json) {
+          try {
+            const picturesData = typeof listing.pictures_json === 'string'
+              ? JSON.parse(listing.pictures_json)
+              : listing.pictures_json;
+            
+            if (Array.isArray(picturesData)) {
+              debugInfo.pictures_json_info = {
+                count: picturesData.length,
+                // Não incluir URLs completas (dados sensíveis), apenas metadados
+                hasVideoField: picturesData.some((p: any) => p.video_id || p.video_url || p.type === 'video'),
+                hasClipField: picturesData.some((p: any) => p.clip_id || p.clip_url || p.type === 'clip'),
+              };
+            }
+          } catch (e) {
+            debugInfo.pictures_json_error = 'Failed to parse pictures_json';
+          }
+        }
+
+        return reply.status(200).send({
+          message: 'Debug info retornado com sucesso',
+          data: debugInfo,
+        });
+      } catch (error) {
+        const { listingId } = (req.params as { listingId: string }) || {};
+        const tenantIdForLog = req.tenantId;
+        app.log.error({ error, listingId, tenantId: tenantIdForLog }, 'Error fetching media debug info');
+        return reply.status(500).send({
+          error: 'Failed to fetch debug info',
+          message: 'Erro interno ao buscar informações de debug',
+        });
+      }
+    }
+  );
+
   done();
 };

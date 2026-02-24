@@ -34,7 +34,7 @@ describe('MediaVerdict', () => {
       expect(verdict.hasClipDetected).toBe(null);
       expect(verdict.canSuggestClip).toBe(false);
       expect(verdict.message).toContain('Não foi possível confirmar');
-      expect(verdict.message).toContain('valide no painel');
+      expect(verdict.message).toContain('Valide no painel');
       expect(verdict.shortMessage).toBe('Não detectável via API');
     });
 

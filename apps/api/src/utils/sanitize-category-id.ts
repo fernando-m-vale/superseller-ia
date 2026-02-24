@@ -19,15 +19,22 @@ export function sanitizeCategoryId(categoryId: string | null | undefined): strin
   // Remover caracteres não alfanuméricos (exceto MLB no início)
   sanitized = sanitized.replace(/[^A-Z0-9]/g, '');
 
-  // Se não começa com MLB, adicionar prefixo
-  if (!sanitized.startsWith('MLB')) {
-    // Extrair apenas números
-    const numbers = sanitized.replace(/\D/g, '');
-    if (numbers.length === 0) {
-      return null;
-    }
-    sanitized = `MLB${numbers}`;
+  // Extrair dígitos e normalizar: sempre retornar MLB + dígitos (ignorar sufixos como "C")
+  // Casos aceitos: "MLB271066", "mlb271066 c", "271066"
+  let numbers = '';
+  if (sanitized.startsWith('MLB')) {
+    const match = sanitized.match(/^MLB(\d+)/);
+    numbers = match?.[1] || '';
+  } else {
+    const match = sanitized.match(/(\d+)/);
+    numbers = match?.[1] || '';
   }
+
+  if (!numbers) {
+    return null;
+  }
+
+  sanitized = `MLB${numbers}`;
 
   // Validar formato: MLB seguido de 6+ dígitos
   const categoryIdPattern = /^MLB\d{6,}$/;

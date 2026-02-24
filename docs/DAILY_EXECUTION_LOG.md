@@ -60,6 +60,91 @@ Após HOTFIX 09.8, validação mostrou 4 problemas críticos:
 
 ---
 
+# DAILY EXECUTION LOG — 2026-02-24 (HOTFIX DIA 09.10 — Categoria permalink + Preço psicológico “fantasma” + Debug Clip)
+
+## ✅ STATUS: CONCLUÍDO (aguardando validação em PROD)
+
+## 🎯 Foco do hotfix
+- **Categoria**: parar de “inventar URL” e usar **permalink oficial** do Mercado Livre.
+- **Preço psicológico**: eliminar inconsistência e evitar “hack fantasma” (garantir determinismo e persistência coerente).
+- **Clip/Vídeo**: instrumentação mínima para explicar divergências **ML → DB → UI** (sem alterar UX agora).
+
+## 🔧 Implementações
+
+### A) P0 — Categoria: permalink oficial do ML
+- ✅ `CategoryBreadcrumbService` passou a retornar `{ breadcrumb, permalink }`
+- ✅ `POST /ai/analyze` e `GET /ai/analyze/:listingId/latest` passam `categoryPermalink` para o `HackEngine`
+- ✅ Hack `ml_category_adjustment` inclui `categoryPermalink` no `HackSuggestion` e usa como `suggestedActionUrl` quando disponível
+
+### B) P0 — Preço psicológico: determinismo + “não persistir fantasma”
+- ✅ `HackEngine.evaluateMlPsychologicalPricing` usa **preço efetivo** (`promotionalPrice` quando existir e for diferente)
+- ✅ Gate determinístico por centavos: **bloquear se termina em `.90` ou `.99`**
+- ✅ `evaluateMlPsychologicalPricing` agora retorna `debug` e `shouldOmit` coerentes (inclusive quando `score === 0`)
+- ✅ `ai-analyze.routes.ts`: ao salvar cache (`listingAIAnalysis.result_json`), sobrescreve `analysis.growthHacks` com o resultado do **HackEngine** (quando disponível) + salva `growthHacksMeta` — evita inconsistência do JSON salvo vs UI
+- ✅ Teste unitário: simula “hack aparece e depois some” quando preço muda para `.90`
+
+### C) P0 — Clip/Vídeo: debug mínimo (sem dados sensíveis)
+- ✅ `SignalsBuilder` preserva tri-state `hasClips: true | false | null` e agora loga também `pictures_json_info` (count + flags) quando `DEBUG_MEDIA=1` (sem URLs)
+- ✅ Endpoint interno de debug (com `x-debug: 1`): `GET /api/v1/listings/:listingId/media-debug`
+
+### D) Qualidade: testes determinísticos no CI
+- ✅ Testes que dependem de DB real/seeding agora ficam `skip` por padrão (habilitar com `RUN_DB_TESTS=1`)
+- ✅ `ai-recommendations.test.ts` alterado para import dinâmico (evita crash do `tfjs-node` no Windows quando skipado)
+- ✅ `promo-text`: normalização de NBSP do Intl + regex para remover duplicação “de R$ X de R$ X por R$ Y”
+- ✅ `sanitizeCategoryId`: ignorar sufixos (ex: “mlb271066 c” → “MLB271066”)
+
+## ✅ Checklist rápido de validação (PROD)
+- [ ] **Categoria**: botão “Ver categoria no Mercado Livre” abre a página correta (permalink oficial), nunca abre busca
+- [ ] **Preço psicológico**: anúncio com preço final `xx,90` ou `xx,99` **não** mostra o hack
+- [ ] **Preço psicológico**: anúncio com preço final diferente de `.90/.99` pode sugerir hack (quando aplicável)
+- [ ] **Debug Clip**: `GET /api/v1/listings/:listingId/media-debug` com header `x-debug: 1` retorna `hasClipsFinal` + `pictures_json_info`
+- [ ] Build/API: `pnpm --filter @superseller/api build`
+- [ ] Tests/API: `pnpm --filter @superseller/api test`
+
+## 🔎 Evidence capture (para investigação Clip)
+
+### Query 1 — Campos de mídia do listing
+```sql
+select
+  id,
+  tenant_id,
+  listing_id_ext,
+  title,
+  pictures_count,
+  has_video,
+  has_clips,
+  updated_at,
+  created_at
+from listing
+where tenant_id = '{TENANT_ID}' and id = '{LISTING_UUID}';
+```
+
+### Query 2 — Última análise salva (cache)
+```sql
+select
+  id,
+  tenant_id,
+  listing_id,
+  period_days,
+  fingerprint,
+  created_at,
+  updated_at
+from listing_ai_analysis
+where tenant_id = '{TENANT_ID}' and listing_id = '{LISTING_UUID}' and period_days = 30
+order by created_at desc
+limit 5;
+```
+
+## 📝 Arquivos principais tocados
+- `apps/api/src/services/CategoryBreadcrumbService.ts`
+- `apps/api/src/routes/ai-analyze.routes.ts`
+- `apps/api/src/services/HackEngine.ts`
+- `apps/api/src/services/SignalsBuilder.ts`
+- `apps/api/src/routes/listings.ts` (endpoint `media-debug`)
+- `apps/api/src/utils/promo-text.ts`
+- `apps/api/src/utils/sanitize-category-id.ts`
+- `apps/api/src/services/__tests__/HackEngine.psychological-pricing.test.ts`
+
 # DAILY EXECUTION LOG — 2026-02-XX (Sessão de Encerramento — HOTFIX 09.5 + 09.6)
 
 ## ✅ STATUS: IMPLEMENTAÇÕES CONCLUÍDAS — VALIDAÇÃO PROD PENDENTE

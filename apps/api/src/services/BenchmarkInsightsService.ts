@@ -81,7 +81,7 @@ export function normalizeBenchmarkInsights(
   if (!benchmarkResult || benchmarkResult.benchmarkSummary.confidence === 'unavailable' || benchmarkResult.benchmarkSummary.sampleSize === 0) {
     const fallbackGaps = generateFallbackGaps(listing, metrics30d, fallbackData);
     return {
-      confidence: 'low', // Mudado de 'unavailable' para 'low' quando há fallback
+      confidence: 'unavailable',
       wins: [],
       losses: [],
       criticalGaps: fallbackGaps,

@@ -456,58 +456,15 @@ export class BenchmarkService {
       const { competitors, error: fetchError } = await this.fetchCompetitors(listing.categoryId, listing.listingIdExt);
 
       if (competitors.length === 0) {
-        // Se não houver concorrentes, retornar objeto com confidence="unavailable" e _debug
-        let notes = 'Não foi possível buscar concorrentes da categoria.';
+        // Sem concorrentes = benchmark indisponível
+        // Retornar null para permitir fallback pelo chamador.
+        // (Os endpoints já têm fallback para nunca devolver benchmark null ao frontend.)
         if (fetchError) {
-          if (fetchError.stage === 'ml-search-rate-limited') {
-            notes = 'ML search retornou 429 (rate limit). Tente novamente em alguns instantes.';
-          } else if (fetchError.stage === 'ml-search-timeout') {
-            notes = 'Timeout ao buscar concorrentes (7s). API do ML pode estar lenta.';
-          } else if (fetchError.stage === 'ml-search-forbidden') {
-            notes = 'Benchmark indisponível no momento (Mercado Livre retornou 403).';
-          } else if (fetchError.statusCode) {
-            notes = `ML search retornou ${fetchError.statusCode}: ${fetchError.message}`;
-          } else {
-            notes = `Erro ao buscar concorrentes: ${fetchError.message}`;
-          }
+          console.warn(
+            `[BENCHMARK] Sem concorrentes para categoryId=${listing.categoryId} (stage=${fetchError.stage}, status=${fetchError.statusCode ?? 'n/a'}): ${fetchError.message}`
+          );
         }
-        
-        return {
-          benchmarkSummary: {
-            categoryId: listing.categoryId,
-            sampleSize: 0,
-            computedAt: new Date().toISOString(),
-            confidence: 'unavailable',
-            notes,
-            stats: {
-              medianPicturesCount: 0,
-              percentageWithVideo: 0,
-              medianPrice: 0,
-              medianTitleLength: 0,
-              sampleSize: 0,
-            },
-            baselineConversion: {
-              conversionRate: null,
-              sampleSize: 0,
-              totalVisits: 0,
-              confidence: 'unavailable',
-            },
-          },
-          youWinHere: [],
-          youLoseHere: [],
-          tradeoffs: 'Comparação com concorrentes indisponível no momento.',
-          recommendations: [],
-          _debug: fetchError ? {
-            stage: fetchError.stage,
-            error: fetchError.message,
-            categoryId: listing.categoryId,
-            statusCode: fetchError.statusCode,
-          } : {
-            stage: 'ml-search-empty',
-            error: 'Nenhum concorrente encontrado',
-            categoryId: listing.categoryId,
-          },
-        };
+        return null;
       }
 
       // 2. Calcular estatísticas

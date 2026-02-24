@@ -15,12 +15,15 @@ export function formatMoneyBRL(value: number | null | undefined): string {
     return 'R$ 0,00';
   }
   
+  // Intl pode retornar NBSP (U+00A0) entre "R$" e o número; normalizar para espaço comum
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value);
+  })
+    .format(value)
+    .replace(/\u00A0/g, ' ');
 }
 
 /**
@@ -125,6 +128,13 @@ export function sanitizePromoText(
   // IMPORTANTE: Remover TODAS as ocorrências antes de substituir para evitar duplicação
   
   let sanitized = text;
+
+  // HOTFIX 09.8/09.10: Normalizar duplicação específica:
+  // "de R$ X de R$ X por R$ Y" -> "de R$ X por R$ Y"
+  sanitized = sanitized.replace(
+    /de\s+R\$\s*([\d.,]+)\s+de\s+R\$\s*\1\s+por\s+R\$\s*([\d.,]+)/gi,
+    'de R$ $1 por R$ $2'
+  );
 
   // HOTFIX 09.8: Remover TODAS as ocorrências de "de R$ X por R$ Y" primeiro (incluindo duplicatas)
   const dePorPattern = /de\s+R\$\s*[\d.,]+\s+por\s+R\$\s*[\d.,]+/gi;

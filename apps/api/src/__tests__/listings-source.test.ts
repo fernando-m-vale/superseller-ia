@@ -3,7 +3,9 @@ import { PrismaClient, Marketplace, ListingStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-describe('Listings Source and Discovery Blocked Fields', () => {
+const describeDb = process.env.RUN_DB_TESTS === '1' ? describe : describe.skip;
+
+describeDb('Listings Source and Discovery Blocked Fields', () => {
   let testTenantId: string;
 
   beforeEach(async () => {

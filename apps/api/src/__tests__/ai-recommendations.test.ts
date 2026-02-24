@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
 import { tenantPlugin } from '../plugins/tenant';
-import { aiRoutes } from '../routes/ai';
 
-describe('AI Recommendations API', () => {
+const describeDb = process.env.RUN_DB_TESTS === '1' ? describe : describe.skip;
+
+describeDb('AI Recommendations API', () => {
   let app: FastifyInstance;
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
     app.register(tenantPlugin);
+    // Import dinâmico para evitar carregar dependências nativas (tfjs-node) quando testes de DB estão desabilitados
+    const { aiRoutes } = await import('../routes/ai');
     app.register(aiRoutes, { prefix: '/api/v1' });
     await app.ready();
   });

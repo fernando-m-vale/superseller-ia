@@ -3,7 +3,9 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-describe('Metrics Summary Logic', () => {
+const describeDb = process.env.RUN_DB_TESTS === '1' ? describe : describe.skip;
+
+describeDb('Metrics Summary Logic', () => {
   beforeAll(async () => {
     const tenantCount = await prisma.tenant.count();
     if (tenantCount === 0) {

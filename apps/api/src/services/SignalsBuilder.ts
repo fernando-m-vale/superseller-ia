@@ -15,6 +15,8 @@ export interface ListingSignals {
 
   price: number;
   originalPrice?: number | null;
+  // HOTFIX 09.10: Preço promocional (preço efetivo atual)
+  promotionalPrice?: number | null;
   hasPromotion: boolean;
   discountPercent?: number | null;
   currency: 'BRL';
@@ -154,6 +156,8 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   // Pricing
   const price = Number(listing.price);
   const originalPrice = pricing?.originalPrice ?? listing.original_price ? Number(listing.original_price) : null;
+  // HOTFIX 09.10: Preço promocional (preço efetivo atual, com promoção se aplicável)
+  const promotionalPrice = pricing?.promotionalPrice ?? (listing.has_promotion && listing.price_final ? Number(listing.price_final) : null);
   const hasPromotion = pricing?.hasPromotion ?? listing.has_promotion ?? false;
   const discountPercent = pricing?.discountPercent ?? listing.discount_percent ?? null;
   
@@ -173,14 +177,42 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   // true = tem clip confirmado, false = confirmado que não tem, null = não detectável via API
   const hasClips = listing.has_clips ?? null;
   
-  // Log temporário para validação (HOTFIX 09.7)
-  if (process.env.NODE_ENV === 'development' || process.env.LOG_SIGNALS === 'true') {
+  // HOTFIX 09.10: Log temporário para validação (hasClips + debug vídeo/clip)
+  if (process.env.NODE_ENV === 'development' || process.env.LOG_SIGNALS === 'true' || process.env.DEBUG_MEDIA === '1') {
+    let picturesJsonInfo: Record<string, unknown> | null = null;
+    let picturesJsonParseError: string | null = null;
+    if (listing.pictures_json) {
+      try {
+        const raw = typeof listing.pictures_json === 'string' ? JSON.parse(listing.pictures_json) : listing.pictures_json;
+        if (Array.isArray(raw)) {
+          picturesJsonInfo = {
+            count: raw.length,
+            hasVideoField: raw.some((p: any) => Boolean(p?.video_id || p?.video_url || p?.type === 'video')),
+            hasClipField: raw.some((p: any) => Boolean(p?.clip_id || p?.clip_url || p?.type === 'clip')),
+          };
+        } else {
+          picturesJsonInfo = {
+            type: typeof raw,
+            isArray: false,
+          };
+        }
+      } catch (e) {
+        picturesJsonParseError = 'Failed to parse pictures_json';
+      }
+    }
+
     console.log('[SIGNALS-BUILDER] hasClips tri-state:', {
       listingId: listing.id,
       listingIdExt: listing.listing_id_ext,
       hasClipsRaw: listing.has_clips,
       hasClipsFinal: hasClips,
       type: typeof hasClips,
+      hasVideo: listing.has_video,
+      picturesCount: listing.pictures_count,
+      // HOTFIX 09.10: Informações do payload ML (se disponível em pictures_json)
+      picturesJsonType: listing.pictures_json ? typeof listing.pictures_json : 'null',
+      picturesJsonInfo,
+      picturesJsonParseError,
     });
   }
   
@@ -218,6 +250,7 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
     
     price,
     originalPrice,
+    promotionalPrice, // HOTFIX 09.10: Preço promocional
     hasPromotion,
     discountPercent,
     currency: 'BRL',

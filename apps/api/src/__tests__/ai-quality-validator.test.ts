@@ -36,7 +36,7 @@ describe('AI Quality Validator', () => {
     });
 
     it('deve conter estrutura obrigatória (emojis e seções)', () => {
-      const structuredText = `
+      const base = `
 Linha inicial SEO com keyword principal.
 
 ⭐ Destaques
@@ -58,6 +58,8 @@ Dica prática.
 
 👉 Garanta já!
 `.trim();
+
+      const structuredText = (base + '\n' + 'A'.repeat(Math.max(0, 900 - base.length))).trim();
 
       expect(structuredText).toContain('⭐');
       expect(structuredText).toContain('📏');
@@ -144,7 +146,7 @@ Dica prática.
       const mockAnalysis: Partial<AIAnalysisResultExpert> = {
         price_fix: {
           diagnostic: 'Preço pode ser otimizado',
-          action: 'Considere criar uma promoção', // Não menciona 60 ou 32
+          action: 'Considere ajustar o preço', // Não menciona 60 ou 32
         },
       };
 

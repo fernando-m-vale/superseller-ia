@@ -37,10 +37,13 @@ const prisma = new PrismaClient();
 
 // HOTFIX 09.5: Resolver breadcrumb textual da categoria (nome + path), evitando exibir apenas MLBxxxx.
 // Usa endpoint público do Mercado Livre (sem auth) + cache in-memory por categoria para reduzir latência.
-// HOTFIX 09.5: Usar serviço centralizado CategoryBreadcrumbService com cache in-memory 24h
-// A função getMlCategoryPathNames agora delega para getCategoryBreadcrumb
-async function getMlCategoryPathNames(categoryId: string | null | undefined): Promise<string[] | null> {
-  return getCategoryBreadcrumb(categoryId);
+// HOTFIX 09.10: Retornar breadcrumb e permalink da categoria
+async function getMlCategoryPathNames(categoryId: string | null | undefined): Promise<{ breadcrumb: string[] | null; permalink: string | null }> {
+  const result = await getCategoryBreadcrumb(categoryId);
+  if (!result) {
+    return { breadcrumb: null, permalink: null };
+  }
+  return { breadcrumb: result.breadcrumb, permalink: result.permalink };
 }
 
 interface RequestWithAuth extends FastifyRequest {
@@ -937,17 +940,87 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
           // Step 6: Save to cache (incluindo V2.1 e benchmark) - DEPOIS do cálculo do benchmark
           try {
+            // DIA 09 / HOTFIX 09.10: Persistir hacks do HackEngine no cache (evitar "hacks fantasma" do LLM)
+            // Regra: sempre sobrescrever growthHacks do cache com o resultado determinístico atual.
+            let hackEngineHacksForCache: unknown[] | null = null;
+            let hackEngineHacksMetaForCache: Record<string, unknown> | null = null;
+            try {
+              const categoryInfo = await getMlCategoryPathNames(listing.category);
+              const signals = buildSignals({
+                listing,
+                categoryPath: categoryInfo.breadcrumb,
+                pricing: {
+                  originalPrice: listing.original_price ? Number(listing.original_price) : null,
+                  promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+                  hasPromotion: listing.has_promotion ?? false,
+                  discountPercent: listing.discount_percent ?? null,
+                },
+                shipping: {
+                  mode: null,
+                  freeShipping: false,
+                  fullEligible: null,
+                },
+                metrics30d: {
+                  visits: result.score.metrics_30d.visits,
+                  orders: result.score.metrics_30d.orders,
+                  revenue: result.score.metrics_30d.revenue,
+                  conversionRate: result.score.metrics_30d.conversionRate,
+                },
+                benchmark: benchmarkResult?.benchmarkSummary?.stats
+                  ? {
+                      medianPrice: benchmarkResult.benchmarkSummary.stats.medianPrice ?? null,
+                      p25Price: null,
+                      p75Price: null,
+                      baselineConversionRate: benchmarkResult.benchmarkSummary.baselineConversion?.conversionRate ?? null,
+                      baselineConversionConfidence: benchmarkResult.benchmarkSummary.baselineConversion?.confidence ?? null,
+                      baselineSampleSize: benchmarkResult.benchmarkSummary.baselineConversion?.sampleSize ?? null,
+                    }
+                  : undefined,
+              });
+
+              const hackHistory = await getHackHistory(tenantId, listingId);
+              const hackEngineResult = generateHacks({
+                version: 'v1',
+                marketplace: 'mercadolivre',
+                tenantId,
+                listingId,
+                listingIdExt: listing.listing_id_ext,
+                signals,
+                history: hackHistory,
+                nowUtc: new Date(),
+                categoryPermalink: categoryInfo.permalink,
+              });
+
+              hackEngineHacksForCache = hackEngineResult.hacks as unknown[];
+              hackEngineHacksMetaForCache = hackEngineResult.meta as unknown as Record<string, unknown>;
+            } catch (hackPersistErr) {
+              request.log.warn(
+                {
+                  requestId,
+                  tenantId,
+                  listingId,
+                  err: hackPersistErr,
+                },
+                'Failed to compute HackEngine hacks for cache persistence (continuing)'
+              );
+            }
+
             const cachePayload: any = {
               analysis: {
                 score: result.analysis.score,
                 critique: result.analysis.critique,
-                growthHacks: result.analysis.growthHacks,
+                // Persistir hacks determinísticos (HackEngine) quando disponíveis; fallback = LLM
+                growthHacks: hackEngineHacksForCache ?? result.analysis.growthHacks,
                 seoSuggestions: result.analysis.seoSuggestions,
                 analyzedAt: result.analysis.analyzedAt,
                 model: result.analysis.model,
               },
               savedRecommendations: result.savedRecommendations,
             };
+
+            if (hackEngineHacksMetaForCache) {
+              cachePayload.growthHacksMeta = hackEngineHacksMetaForCache;
+            }
 
             // Sempre incluir Expert se disponível (obrigatório)
             if (analysisV21) {
@@ -1349,14 +1422,15 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
           // DIA 09: Gerar hacks contextualizados via HackEngine
           try {
-            const categoryPathNames = await getMlCategoryPathNames(listing.category);
+            const categoryInfo = await getMlCategoryPathNames(listing.category);
             // Construir signals
             const signals = buildSignals({
               listing,
-              categoryPath: categoryPathNames,
+              categoryPath: categoryInfo.breadcrumb,
               pricing: {
                 originalPrice: listing.original_price ? Number(listing.original_price) : null,
-                promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+                // HOTFIX 09.10: Preço promocional (preço efetivo atual)
+                promotionalPrice: listing.has_promotion && listing.price_final ? Number(listing.price_final) : (listing.has_promotion ? Number(listing.price) : null),
                 hasPromotion: listing.has_promotion ?? false,
                 discountPercent: listing.discount_percent ?? null,
               },
@@ -1394,6 +1468,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               signals,
               history: hackHistory,
               nowUtc: new Date(),
+              // HOTFIX 09.10: Passar permalink oficial da categoria
+              categoryPermalink: categoryInfo.permalink,
             });
 
             // Adicionar hacks ao response
@@ -1922,11 +1998,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         // DIA 09: Gerar hacks contextualizados via HackEngine (cache response)
         try {
-          const categoryPathNames = await getMlCategoryPathNames(listing.category);
+          const categoryInfo = await getMlCategoryPathNames(listing.category);
           // Construir signals
           const cacheSignals = buildSignals({
             listing,
-            categoryPath: categoryPathNames,
+            categoryPath: categoryInfo.breadcrumb,
             pricing: {
               originalPrice: listing.original_price ? Number(listing.original_price) : null,
               promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
@@ -1967,6 +2043,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             signals: cacheSignals,
             history: cacheHackHistory,
             nowUtc: new Date(),
+            // HOTFIX 09.10: Passar permalink oficial da categoria
+            categoryPermalink: categoryInfo.permalink,
           });
 
           // Adicionar hacks ao cache response
@@ -2569,10 +2647,10 @@ if (enableAIPing) {
 
         // Gerar hacks contextualizados via HackEngine
         try {
-          const categoryPathNames = await getMlCategoryPathNames(listing.category);
+          const categoryInfo = await getMlCategoryPathNames(listing.category);
           const cacheSignals = buildSignals({
             listing,
-            categoryPath: categoryPathNames,
+            categoryPath: categoryInfo.breadcrumb,
             pricing: {
               originalPrice: listing.original_price ? Number(listing.original_price) : null,
               promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
@@ -2610,6 +2688,8 @@ if (enableAIPing) {
             signals: cacheSignals,
             history: cacheHackHistory,
             nowUtc: new Date(),
+            // HOTFIX 09.10: Passar permalink oficial da categoria
+            categoryPermalink: categoryInfo.permalink,
           });
 
           responseData.growthHacks = cacheHackEngineResult.hacks;

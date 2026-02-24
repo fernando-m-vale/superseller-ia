@@ -29,6 +29,8 @@ export interface HackSuggestion {
   suggestedActionUrl?: string | null;
   // HOTFIX 09.8: categoryId para botão "Ver categoria"
   categoryId?: string | null;
+  // HOTFIX 09.10: Permalink oficial da categoria (ao invés de inventar URL)
+  categoryPermalink?: string | null;
 }
 
 function normalizeMlbId(listingIdExt?: string): string | null {
@@ -71,6 +73,8 @@ export interface HackEngineInput {
     dismissedAt?: Date | null;
   }>;
   nowUtc: Date;
+  // HOTFIX 09.10: Permalink oficial da categoria
+  categoryPermalink?: string | null;
 }
 
 export interface HackEngineOutput {
@@ -355,7 +359,7 @@ function evaluateMlCategoryAdjustment(signals: ListingSignals): { score: number;
  * 
  * Gate:
  * - price < 20 → omit
- * - já termina .90/.99/.89 → omit
+ * - já termina .90/.99 → omit
  * 
  * Pontuação:
  * +25 visits ≥ 300
@@ -368,24 +372,65 @@ function evaluateMlCategoryAdjustment(signals: ListingSignals): { score: number;
  * -15 orders ≥ 15
  * -15 visits < 120
  */
-function evaluateMlPsychologicalPricing(signals: ListingSignals): { score: number; shouldOmit: boolean } {
+function evaluateMlPsychologicalPricing(
+  signals: ListingSignals,
+  listingId: string
+): {
+  score: number;
+  shouldOmit: boolean;
+  debug?: {
+    currentPriceUsed: number;
+    cents: number;
+    hasPromotion: boolean;
+    decision: string;
+    reason: string;
+  };
+} {
+  // HOTFIX 09.10: Usar preço efetivo atual (com promoção se aplicável)
+  // Preferir promotionalPrice se disponível e diferente de price, senão usar price
+  const currentPriceUsed = signals.promotionalPrice && signals.promotionalPrice !== signals.price
+    ? signals.promotionalPrice
+    : signals.price;
+  
   // Gate: price < 20 → omit
-  if (signals.price < 20) {
-    return { score: 0, shouldOmit: true };
+  if (currentPriceUsed < 20) {
+    const debug = {
+      currentPriceUsed,
+      cents: 0,
+      hasPromotion: signals.hasPromotion || false,
+      decision: 'blocked',
+      reason: 'price < 20',
+    };
+    // HOTFIX 09.10: Log temporário para debug
+    if (process.env.DEBUG_PSYCHOLOGICAL_PRICING === '1' || process.env.NODE_ENV === 'development') {
+      console.log('[HACK-ENGINE] ml_psychological_pricing BLOCKED', { listingId, ...debug });
+    }
+    return { score: 0, shouldOmit: true, debug };
   }
   
-  // HOTFIX 09.9: Gate: já termina .90/.99 → omit (trabalhar com centavos como inteiro)
-  // Converter preço para centavos (ex: 66.90 → 6690)
-  const priceInCents = Math.round(signals.price * 100);
+  // HOTFIX 09.10: Gate: já termina .90/.99 → omit (trabalhar com centavos como inteiro)
+  // Converter preço para centavos de forma segura (evitar problemas de float)
+  // Usar string para evitar problemas de precisão: ex: 66.90 → "66.90" → 6690 centavos
+  const priceStr = currentPriceUsed.toFixed(2);
+  const priceInCents = Math.round(parseFloat(priceStr) * 100);
   const cents = priceInCents % 100; // Últimos 2 dígitos (centavos)
   
   // Se termina em 90 ou 99 centavos, não sugerir
   if (cents === 90 || cents === 99) {
-    return { score: 0, shouldOmit: true };
+    const debug = {
+      currentPriceUsed,
+      cents,
+      hasPromotion: signals.hasPromotion || false,
+      decision: 'blocked',
+      reason: `cents === ${cents} (já termina em .90 ou .99)`,
+    };
+    // HOTFIX 09.10: Log temporário para debug
+    if (process.env.DEBUG_PSYCHOLOGICAL_PRICING === '1' || process.env.NODE_ENV === 'development') {
+      console.log('[HACK-ENGINE] ml_psychological_pricing BLOCKED', { listingId, ...debug });
+    }
+    return { score: 0, shouldOmit: true, debug };
   }
   
-  // Para usar na pontuação, converter de volta para string
-  const priceStr = signals.price.toFixed(2);
   const centsStr = priceStr.slice(-2);
   
   let score = 0;
@@ -418,14 +463,26 @@ function evaluateMlPsychologicalPricing(signals: ListingSignals): { score: numbe
   // Normalizar para 0-100
   score = Math.max(0, Math.min(100, score));
   
-  return { score, shouldOmit: false };
+  const debug = {
+    currentPriceUsed,
+    cents,
+    hasPromotion: signals.hasPromotion || false,
+    decision: score > 0 ? 'suggested' : 'blocked',
+    reason: score > 0 ? 'score > 0' : 'score === 0 (sem sinais suficientes)',
+  };
+  // HOTFIX 09.10: Log temporário para debug
+  if (process.env.DEBUG_PSYCHOLOGICAL_PRICING === '1' || process.env.NODE_ENV === 'development') {
+    console.log(`[HACK-ENGINE] ml_psychological_pricing ${score > 0 ? 'SUGGESTED' : 'BLOCKED'}`, { listingId, ...debug });
+  }
+  
+  return { score, shouldOmit: score === 0, debug };
 }
 
 /**
  * Gera hacks baseados em signals
  */
 export function generateHacks(input: HackEngineInput): HackEngineOutput {
-  const { signals, history, listingId, nowUtc } = input;
+  const { signals, history, listingId, nowUtc, categoryPermalink } = input;
   const suggestedEditUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   
   const hacks: HackSuggestion[] = [];
@@ -579,6 +636,8 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
         suggestedActionUrl: suggestedEditUrl,
         // HOTFIX 09.8: Incluir categoryId para botão "Ver categoria"
         categoryId: signals.categoryId || null,
+        // HOTFIX 09.10: Incluir permalink oficial da categoria
+        categoryPermalink: categoryPermalink || null,
       });
     } else {
       skippedBecauseOfRequirements++;
@@ -590,7 +649,8 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
   // Hack 5: ml_psychological_pricing
   rulesEvaluated++;
   if (!isHackConfirmed(history, 'ml_psychological_pricing') && !isHackInCooldown(history, 'ml_psychological_pricing', nowUtc)) {
-    const result = evaluateMlPsychologicalPricing(signals);
+    // HOTFIX 09.10: Passar listingId para debug
+    const result = evaluateMlPsychologicalPricing(signals, listingId);
     if (!result.shouldOmit && result.score > 0) {
       rulesTriggered++;
       const impact = result.score >= 70 ? 'medium' : 'low';

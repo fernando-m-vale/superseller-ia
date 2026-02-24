@@ -4,7 +4,9 @@ import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService
 
 const prisma = new PrismaClient();
 
-describe('Visits Backfill Granular', () => {
+const describeDb = process.env.RUN_DB_TESTS === '1' ? describe : describe.skip;
+
+describeDb('Visits Backfill Granular', () => {
   let testTenantId: string;
   let testListingIds: string[] = [];
 
