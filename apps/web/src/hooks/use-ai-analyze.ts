@@ -588,9 +588,36 @@ export function useAIAnalyze(listingId: string | null) {
         })
       }
       
+      // HOTFIX 09.9: Ler growthHacks do POST /analyze (garantir que aparecem na primeira análise)
+      const growthHacks = result.data?.growthHacks ?? []
+      if (growthHacks && growthHacks.length > 0) {
+        adaptedData.growthHacks = growthHacks
+        console.log('[AI-ANALYZE] GrowthHacks found in POST response', {
+          listingId,
+          count: growthHacks.length,
+          hackIds: growthHacks.map((h: { id: string }) => h.id),
+        })
+      }
+      const growthHacksMeta = result.data?.growthHacksMeta
+      if (growthHacksMeta) {
+        adaptedData.growthHacksMeta = growthHacksMeta
+        console.log('[AI-ANALYZE] GrowthHacksMeta found', {
+          listingId,
+          rulesTriggered: growthHacksMeta.rulesTriggered,
+        })
+      }
+      
       // Normalizar resposta (snake_case → camelCase)
       const { normalizeAiAnalyzeResponse } = await import('@/lib/ai/normalizeAiAnalyze')
       const normalizedData = normalizeAiAnalyzeResponse(adaptedData)
+      
+      // HOTFIX 09.9: Log de confirmação de growthHacks após normalização
+      if (normalizedData.growthHacks && normalizedData.growthHacks.length > 0) {
+        console.log('[AI-ANALYZE] GrowthHacks após normalização', {
+          listingId,
+          count: normalizedData.growthHacks.length,
+        })
+      }
       
       // Extrair metadados para UX de cache
       // cacheHit pode estar em result.data.cacheHit ou result.cacheHit

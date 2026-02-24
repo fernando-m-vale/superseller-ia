@@ -374,12 +374,19 @@ function evaluateMlPsychologicalPricing(signals: ListingSignals): { score: numbe
     return { score: 0, shouldOmit: true };
   }
   
-  // Gate: já termina .90/.99/.89 → omit
-  const priceStr = signals.price.toFixed(2);
-  const cents = priceStr.slice(-2);
-  if (cents === '90' || cents === '99' || cents === '89') {
+  // HOTFIX 09.9: Gate: já termina .90/.99 → omit (trabalhar com centavos como inteiro)
+  // Converter preço para centavos (ex: 66.90 → 6690)
+  const priceInCents = Math.round(signals.price * 100);
+  const cents = priceInCents % 100; // Últimos 2 dígitos (centavos)
+  
+  // Se termina em 90 ou 99 centavos, não sugerir
+  if (cents === 90 || cents === 99) {
     return { score: 0, shouldOmit: true };
   }
+  
+  // Para usar na pontuação, converter de volta para string
+  const priceStr = signals.price.toFixed(2);
+  const centsStr = priceStr.slice(-2);
   
   let score = 0;
   
@@ -387,8 +394,8 @@ function evaluateMlPsychologicalPricing(signals: ListingSignals): { score: numbe
   if ((signals.metrics30d?.visits ?? 0) >= 300) score += 25;
   if ((signals.metrics30d?.conversionRate ?? 100) < 2) score += 20;
   
-  // Preço redondo (.00/.50)
-  if (cents === '00' || cents === '50') score += 15;
+  // Preço redondo (.00/.50) - usar cents (number) para comparação
+  if (cents === 0 || cents === 50) score += 15;
   
   // Benchmark median e price até 10% acima
   if (

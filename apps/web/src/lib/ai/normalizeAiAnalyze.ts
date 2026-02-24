@@ -271,6 +271,9 @@ export function normalizeAiAnalyzeResponse(
     promo: response.promo,
     pricingNormalized: response.pricingNormalized,
     appliedActions: response.appliedActions,
+    // HOTFIX 09.9: Propagar growthHacks e growthHacksMeta (DIA 09)
+    growthHacks: response.growthHacks,
+    growthHacksMeta: response.growthHacksMeta,
   }
 
   // Construir actionPlan a partir de analysisV21

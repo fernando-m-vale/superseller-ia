@@ -328,14 +328,29 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
         variant: 'outline',
       })
     }
-    // HOTFIX 09.8: Adicionar botão "Ver categoria" para hack de categoria
+    // HOTFIX 09.9: Adicionar botão "Ver categoria" para hack de categoria (com sanitização)
     if (hack.id === 'ml_category_adjustment' && hack.categoryId) {
-      const categoryUrl = `https://lista.mercadolivre.com.br/c/${hack.categoryId}`
-      actions.push({
-        label: 'Ver categoria no Mercado Livre',
-        url: categoryUrl,
-        variant: 'secondary',
-      })
+      // HOTFIX 09.9: Sanitizar categoryId antes de usar na URL
+      const sanitizedCategoryId = hack.categoryId.trim().replace(/\s+/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+      // Garantir formato MLBXXXXX
+      const finalCategoryId = sanitizedCategoryId.startsWith('MLB') 
+        ? sanitizedCategoryId 
+        : `MLB${sanitizedCategoryId.replace(/\D/g, '')}`
+      
+      // Validar formato antes de criar URL
+      if (/^MLB\d{6,}$/.test(finalCategoryId)) {
+        const categoryUrl = `https://lista.mercadolivre.com.br/c/${finalCategoryId}`
+        actions.push({
+          label: 'Ver categoria no Mercado Livre',
+          url: categoryUrl,
+          variant: 'secondary',
+        })
+      } else {
+        console.warn('[HACKS-PANEL] categoryId inválido após sanitização', {
+          original: hack.categoryId,
+          sanitized: finalCategoryId,
+        })
+      }
     }
     
     return {
