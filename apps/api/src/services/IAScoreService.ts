@@ -265,11 +265,11 @@ export class IAScoreService {
    * Regras:
    * - pictures_count >= 3: 10 pontos (parcial)
    * - pictures_count >= 6: 10 pontos (ideal)
-   * - has_video = true: 10 pontos
+   * - has_clips = true: 10 pontos (FONTE DE VERDADE: no ML, clip = vídeo)
    */
   private calculateMidiaScore(listing: {
     pictures_count: number | null;
-    has_video: boolean | null;
+    has_clips: boolean | null;
   }): number {
     let score = 0;
 
@@ -282,8 +282,8 @@ export class IAScoreService {
       score += 5; // Parcial
     }
 
-    // Vídeo
-    if (listing.has_video === true) {
+    // Clip (vídeo) — usar has_clips como fonte de verdade
+    if (listing.has_clips === true) {
       score += 10;
     }
 
@@ -392,7 +392,7 @@ export class IAScoreService {
     breakdown: IAScoreBreakdown,
     listing: {
       pictures_count: number | null;
-      has_video: boolean | null;
+      has_clips: boolean | null;
     }
   ): IAScorePotentialGain {
     const gain: IAScorePotentialGain = {};
@@ -407,7 +407,7 @@ export class IAScoreService {
         gain.midia = '+10';
       }
     }
-    if (listing.has_video !== true) {
+    if (listing.has_clips !== true) {
       gain.midia = gain.midia ? `${gain.midia} (+10 vídeo)` : '+10';
     }
 
