@@ -132,7 +132,7 @@ export const aiDebugRoutes: FastifyPluginCallback = (app, _, done) => {
             categoryId: listing.category || undefined,
             picturesCount: listing.pictures_count || undefined,
             picturesUrlsSample: picturesUrlsSample.length > 0 ? picturesUrlsSample : undefined,
-            hasClips: listing.has_video,
+            hasClips: listing.has_clips,
           },
 
           pricing: {
