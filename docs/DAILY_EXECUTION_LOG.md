@@ -1,10 +1,72 @@
+# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.9 — Correções Estruturais)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Corrigir problemas funcionais e de regra sem refatorar UX**
+
+## 📌 Contexto
+Após HOTFIX 09.8, validação mostrou 4 problemas críticos:
+1. Hacks não aparecem na primeira análise
+2. Link "Ver categoria" abre URL errada
+3. Problema do vídeo/clip persiste
+4. Regra do hack de preço psicológico incorreta
+
+## 🔧 Implementações (entregas do hotfix)
+
+### A) P0 — Hacks não aparecem na primeira análise
+- ✅ Adicionado leitura explícita de `growthHacks` e `growthHacksMeta` do POST /analyze em `use-ai-analyze.ts`
+- ✅ Garantido que `growthHacks` é propagado no `normalizedData` em `normalizeAiAnalyze.ts`
+- ✅ Logs de confirmação adicionados para debug
+- ✅ Estado atualizado imediatamente após POST /analyze (sem depender de reload)
+
+### B) P0 — Botão "Ver categoria" abre URL errada
+- ✅ Criado utilitário `sanitize-category-id.ts` com função `sanitizeCategoryId()`
+- ✅ Sanitização: trim, remover espaços, normalizar para MLBXXXXX
+- ✅ Validação de formato antes de criar URL
+- ✅ Corrigido `HacksPanel.tsx` para usar sanitização antes de construir URL
+- ✅ Testes unitários criados cobrindo casos: "mlb271066 c" → "MLB271066"
+
+### C) P0 — Problema vídeo/clip persiste
+- ✅ Revisado `SignalsBuilder.ts` - tri-state `hasClips` já estava correto (preserva true/false/null)
+- ✅ Verificado que não há conversões indevidas de null para false
+- ✅ Testes unitários existentes (`SignalsBuilder.tristate-hasClips.test.ts`) confirmam comportamento correto
+- ✅ Logs temporários mantidos para validação
+
+### D) P1 — Hack preço psicológico sugerindo incorretamente
+- ✅ Corrigida função `evaluateMlPsychologicalPricing` para trabalhar com centavos como inteiro
+- ✅ Gate ajustado: converter preço para centavos e verificar `cents === 90 || cents === 99`
+- ✅ Testes unitários criados (`HackEngine.psychological-pricing.test.ts`):
+  - 66.90 → não sugere ✅
+  - 66.99 → não sugere ✅
+  - 66.93 → sugere ✅
+
+## ✅ Critérios de Aceite (DoD 09.9)
+- ✅ Hacks aparecem na primeira análise (anúncio "virgem")
+- ✅ Botão "Ver categoria" abre página real da categoria (nunca como busca)
+- ✅ Tri-state `hasClips` preservado e consistente
+- ✅ Hack preço psicológico não sugere quando já termina em .90 ou .99
+- ✅ Build API e Web passando
+- ✅ Testes unitários criados e passando
+
+## 📝 Arquivos Modificados
+- `apps/api/src/services/HackEngine.ts` - Corrigida regra de preço psicológico
+- `apps/api/src/utils/sanitize-category-id.ts` - Novo utilitário
+- `apps/api/src/utils/__tests__/sanitize-category-id.test.ts` - Testes
+- `apps/api/src/services/__tests__/HackEngine.psychological-pricing.test.ts` - Testes
+- `apps/web/src/hooks/use-ai-analyze.ts` - Leitura explícita de growthHacks
+- `apps/web/src/lib/ai/normalizeAiAnalyze.ts` - Propagação de growthHacks
+- `apps/web/src/components/ai/HacksPanel.tsx` - Sanitização de categoryId
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-XX (Sessão de Encerramento — HOTFIX 09.5 + 09.6)
 
 ## ✅ STATUS: IMPLEMENTAÇÕES CONCLUÍDAS — VALIDAÇÃO PROD PENDENTE
 
 ## 🎯 Resumo da Sessão
 
-**HOTFIX 09.5 e 09.6 implementados e commitados.** DIA 09 ainda não foi formalmente fechado porque precisamos fazer validação final em PROD com checklist e confirmar que todos os problemas anteriores estão 100% PASS.
+**HOTFIX 09.5, 09.6, 09.8 e 09.9 implementados e commitados.** DIA 09 ainda não foi formalmente fechado porque precisamos fazer validação final em PROD com checklist e confirmar que todos os problemas anteriores estão 100% PASS.
 
 ### Implementações Concluídas
 
