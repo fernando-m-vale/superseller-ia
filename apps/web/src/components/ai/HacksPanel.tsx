@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast'
 import { getApiBaseUrl } from '@/lib/api'
 import { getAccessToken } from '@/lib/auth'
 import { HackCardUX2, type HackEvidenceItem, type HackRecommendation, type HackAction } from '@/components/hacks/HackCardUX2'
-import { computeOpportunityScore, getOpportunityLabel, getOpportunityBadgeVariant } from '@/lib/hacks/opportunityScore'
+import { computeOpportunityScore } from '@/lib/hacks/opportunityScore'
 
 export interface HackSuggestion {
   id: string
@@ -92,7 +92,7 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
   })
 
   const confirmedHacks = sortedHacks.filter((h) => feedbackStatus[h.id] === 'confirmed')
-  const dismissedHacks = sortedHacks.filter((h) => feedbackStatus[h.id] === 'dismissed')
+  // dismissedHacks não são exibidos (backend já filtra por cooldown, mas se vierem, não renderizamos)
 
   /**
    * Transforma evidence string[] em HackEvidenceItem[]
