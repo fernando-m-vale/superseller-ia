@@ -603,6 +603,14 @@ export function useAIAnalyze(listingId: string | null) {
       const analyzedAt = normalizedData.analysisV21?.meta?.analyzedAt || analysisV21?.meta?.analyzed_at
       const message = result.message ?? result.data?.message
       
+      // HOTFIX 09.7: Log de confirmação do analyzedAt
+      console.log('[AI-ANALYZE] Análise concluída', {
+        listingId,
+        analyzedAt,
+        cacheHit: Boolean(cacheHit),
+        timestamp: new Date().toISOString(),
+      })
+      
       setState({
         data: normalizedData,
         isLoading: false,
@@ -611,6 +619,17 @@ export function useAIAnalyze(listingId: string | null) {
         cacheHit: Boolean(cacheHit),
         message,
       })
+      
+      // HOTFIX 09.7: Disparar evento customizado para atualizar listing.latestAnalysisAt
+      // O componente pai (ListingAccordionRow) pode escutar este evento
+      if (typeof window !== 'undefined' && analyzedAt) {
+        window.dispatchEvent(new CustomEvent('ai-analysis-updated', {
+          detail: {
+            listingId,
+            analyzedAt,
+          },
+        }))
+      }
     } catch (error) {
       // Log erro sem detalhes sensíveis
       const errorWithStatus = error as ErrorWithStatusCode
@@ -854,6 +873,7 @@ export function useAIAnalyze(listingId: string | null) {
 
   return {
     ...state,
+    analyzedAt: state.analyzedAt, // HOTFIX 09.7: Expor analyzedAt explicitamente
     analyze,
     triggerAIAnalysis,
     fetchExisting,

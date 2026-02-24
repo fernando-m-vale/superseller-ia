@@ -69,10 +69,11 @@ export function useAutoSync() {
         return { started: false, reason: 'cooldown' as const };
       }
 
-      const debug = process.env.NEXT_PUBLIC_DEBUG_SYNC === '1' || process.env.NODE_ENV === 'development';
-      if (debug) {
-        console.log('[AUTO_SYNC] Disparando auto-sync...', { timestamp: new Date().toISOString() });
-      }
+      // HOTFIX 09.7: Log sempre (não apenas em debug) para validação
+      console.log('[AUTO_SYNC] Disparando auto-sync...', { 
+        timestamp: new Date().toISOString(),
+        sessionKey: getAutoSyncKey(),
+      });
 
       const response = await fetch(`${apiUrl}/sync/tenant/auto`, {
         method: 'POST',
@@ -93,9 +94,18 @@ export function useAutoSync() {
         firedRef.current = true;
         markAutoSyncFired();
         
-        if (debug) {
-          console.log('[AUTO_SYNC] Auto-sync iniciado com sucesso', { jobId: data.jobId });
-        }
+        // HOTFIX 09.7: Log sempre (não apenas em debug) para validação
+        console.log('[AUTO_SYNC] Auto-sync iniciado com sucesso', { 
+          jobId: data.jobId,
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        // HOTFIX 09.7: Log quando não iniciou (cooldown/running)
+        console.log('[AUTO_SYNC] Auto-sync não iniciado', {
+          reason: data.reason,
+          retryAfterSeconds: data.retryAfterSeconds,
+          timestamp: new Date().toISOString(),
+        });
       }
       
       return data;

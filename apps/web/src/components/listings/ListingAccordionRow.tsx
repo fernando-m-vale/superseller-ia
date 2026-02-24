@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronDown, Loader2, Sparkles, AlertCircle } from 'lucide-react'
 import { TableRow, TableCell } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -83,7 +83,36 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
     error: aiError,
     triggerAIAnalysis,
     fetchExisting,
+    analyzedAt: aiAnalyzedAt,
   } = useAIAnalyze(isExpanded ? listing.id : null)
+  
+  // HOTFIX 09.7: Estado local para latestAnalysisAt (atualizado após POST /analyze)
+  const [localLatestAnalysisAt, setLocalLatestAnalysisAt] = useState<string | null | undefined>(listing.latestAnalysisAt)
+
+  // HOTFIX 09.7: Escutar evento de atualização de análise
+  useEffect(() => {
+    const handleAnalysisUpdated = (event: CustomEvent<{ listingId: string; analyzedAt: string }>) => {
+      if (event.detail.listingId === listing.id) {
+        setLocalLatestAnalysisAt(event.detail.analyzedAt)
+        console.log('[LISTING-ROW] latestAnalysisAt atualizado localmente', {
+          listingId: listing.id,
+          analyzedAt: event.detail.analyzedAt,
+        })
+      }
+    }
+    
+    window.addEventListener('ai-analysis-updated', handleAnalysisUpdated as EventListener)
+    return () => {
+      window.removeEventListener('ai-analysis-updated', handleAnalysisUpdated as EventListener)
+    }
+  }, [listing.id])
+  
+  // HOTFIX 09.7: Atualizar localLatestAnalysisAt quando aiAnalyzedAt mudar (após POST /analyze)
+  useEffect(() => {
+    if (aiAnalyzedAt) {
+      setLocalLatestAnalysisAt(aiAnalyzedAt)
+    }
+  }, [aiAnalyzedAt])
 
   // HOTFIX 09.3: Buscar análise existente quando expandir (guard melhorado)
   useEffect(() => {
@@ -96,9 +125,13 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
     }
   }, [isExpanded, aiAnalysis, aiLoading, fetchExisting])
 
+  // HOTFIX 09.7: Usar localLatestAnalysisAt se disponível, senão usar listing.latestAnalysisAt
+  // Isso garante que a label "Atualizada em" seja atualizada imediatamente após POST /analyze
+  const effectiveLatestAnalysisAt = localLatestAnalysisAt ?? listing.latestAnalysisAt
+  
   // Usar status do listing (backend) ao invés de estado local
   // Isso garante que o badge seja correto mesmo quando o accordion está fechado
-  const analysisStatus = getAnalysisStatus(listing.analysisStatus, listing.latestAnalysisAt)
+  const analysisStatus = getAnalysisStatus(listing.analysisStatus, effectiveLatestAnalysisAt)
 
   // Preços com fallback robusto (usando campos disponíveis na interface Listing)
   // originalPrice: preferir priceBase (preço original), depois price (preço atual)

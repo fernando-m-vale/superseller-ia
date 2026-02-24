@@ -595,5 +595,52 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
+  // GET /api/v1/listings/:listingId/hacks/feedback
+  // HOTFIX 09.7: Buscar histórico de feedback dos hacks
+  app.get(
+    '/:listingId/hacks/feedback',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { listingId } = req.params as { listingId: string };
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        // Validar que listing pertence ao tenant
+        const listing = await prisma.listing.findFirst({
+          where: {
+            id: listingId,
+            tenant_id: tenantId,
+          },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({ 
+            error: 'Listing not found',
+            message: 'Anúncio não encontrado'
+          });
+        }
+
+        // Buscar histórico
+        const { getHackHistory } = await import('../services/ListingHacksService');
+        const history = await getHackHistory(tenantId, listingId);
+
+        return reply.status(200).send({
+          message: 'Histórico de feedback carregado',
+          data: history,
+        });
+      } catch (error) {
+        app.log.error({ error, listingId: req.params?.listingId, tenantId: req.tenantId }, 'Error fetching hack feedback history');
+        return reply.status(500).send({ 
+          error: 'Failed to fetch feedback history',
+          message: 'Erro interno ao buscar histórico de feedback'
+        });
+      }
+    }
+  );
+
   done();
 };

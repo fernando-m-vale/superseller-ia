@@ -169,7 +169,20 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   // Media
   const picturesCount = listing.pictures_count ?? 0;
   const hasVideo = listing.has_video ?? false;
+  // HOTFIX 09.7: Preservar tri-state hasClips (true/false/null) - NÃO converter null para false
+  // true = tem clip confirmado, false = confirmado que não tem, null = não detectável via API
   const hasClips = listing.has_clips ?? null;
+  
+  // Log temporário para validação (HOTFIX 09.7)
+  if (process.env.NODE_ENV === 'development' || process.env.LOG_SIGNALS === 'true') {
+    console.log('[SIGNALS-BUILDER] hasClips tri-state:', {
+      listingId: listing.id,
+      listingIdExt: listing.listing_id_ext,
+      hasClipsRaw: listing.has_clips,
+      hasClipsFinal: hasClips,
+      type: typeof hasClips,
+    });
+  }
   
   // HOTFIX 09.2: Variations - usar campo variations_count persistido no sync
   // Fonte de verdade: listing.variations_count (extraído do item.variations no sync ML)
