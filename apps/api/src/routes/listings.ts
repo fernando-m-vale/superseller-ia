@@ -441,9 +441,13 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         const ImportSchema = z.object({
           source: z.enum(['mercadolivre']).default('mercadolivre'),
           externalId: z.string().min(1, 'externalId é obrigatório'),
+          forceRefresh: z.boolean().optional().default(false),
         });
 
-        const { source, externalId } = ImportSchema.parse(req.body);
+        const { source, externalId, forceRefresh } = ImportSchema.parse(req.body);
+        
+        // HOTFIX 09.12: Verificar header x-debug para debug de mídia
+        const debugMedia = req.headers['x-debug'] === '1' || process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
 
         // Extrair ID MLB da URL ou usar diretamente
         let mlbId = externalId.trim();
@@ -486,10 +490,13 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
             id: true,
             title: true,
             status: true,
+            has_clips: true,
+            has_video: true,
           },
         });
 
-        if (existingListing) {
+        // HOTFIX 09.12: Se já existe e forceRefresh=true, atualizar mesmo assim
+        if (existingListing && !forceRefresh) {
           app.log.info({ tenantId, mlbId, listingId: existingListing.id }, 'Anúncio já existe, retornando existente');
           return reply.status(200).send({
             message: 'Anúncio já existe',
@@ -499,8 +506,20 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
               status: existingListing.status,
               listingIdExt: mlbId,
               alreadyExists: true,
+              has_clips: existingListing.has_clips,
+              has_video: existingListing.has_video,
             },
           });
+        }
+        
+        // HOTFIX 09.12: Se já existe mas forceRefresh=true, continuar com o fluxo de atualização
+        if (existingListing && forceRefresh) {
+          app.log.info({ 
+            tenantId, 
+            mlbId, 
+            listingId: existingListing.id,
+            forceRefresh: true,
+          }, 'Anúncio já existe, mas forceRefresh=true - executando refresh completo');
         }
 
         // Usar MercadoLivreSyncService para criar/atualizar listing
@@ -520,7 +539,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
         // Upsert listing (criar ou atualizar)
         const { created, updated } = await syncService.upsertListings(items, 'manual_import', false);
 
-        // Buscar listing criado
+        // Buscar listing criado/atualizado
         const importedListing = await prisma.listing.findUnique({
           where: {
             tenant_id_marketplace_listing_id_ext: {
@@ -537,6 +556,10 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
             price: true,
             stock: true,
             marketplace: true,
+            has_clips: true,
+            has_video: true,
+            updated_at: true,
+            last_synced_at: true,
           },
         });
 
@@ -547,26 +570,78 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
+        // HOTFIX 09.12: Log de debug quando DEBUG_MEDIA=1 ou x-debug:1
+        if (debugMedia) {
+          app.log.info({
+            tenantId,
+            mlbId,
+            listingId: importedListing.id,
+            has_clips_after: importedListing.has_clips,
+            has_video_after: importedListing.has_video,
+            created,
+            updated,
+            forceRefresh,
+          }, 'DEBUG_MEDIA: Import/refresh concluído - valores de mídia após atualização');
+        }
+
         app.log.info({ 
           tenantId, 
           mlbId, 
           listingId: importedListing.id, 
           created, 
-          updated 
-        }, 'Import manual concluído com sucesso');
+          updated,
+          forceRefresh,
+        }, existingListing && forceRefresh ? 'Refresh manual concluído com sucesso' : 'Import manual concluído com sucesso');
 
-        return reply.status(201).send({
-          message: 'Anúncio importado com sucesso',
-          data: {
-            id: importedListing.id,
-            title: importedListing.title,
-            status: importedListing.status,
-            listingIdExt: importedListing.listing_id_ext,
-            price: Number(importedListing.price),
-            stock: importedListing.stock,
-            marketplace: importedListing.marketplace,
-            alreadyExists: false,
-          },
+        // HOTFIX 09.12: Retornar status 200 se foi refresh, 201 se foi criação
+        const statusCode = existingListing && forceRefresh ? 200 : 201;
+        const message = existingListing && forceRefresh 
+          ? 'Anúncio atualizado com sucesso (forceRefresh)'
+          : 'Anúncio importado com sucesso';
+
+        // HOTFIX 09.12: Preparar resposta com campos de mídia e debug
+        const responseData: any = {
+          id: importedListing.id,
+          title: importedListing.title,
+          status: importedListing.status,
+          listingIdExt: importedListing.listing_id_ext,
+          price: Number(importedListing.price),
+          stock: importedListing.stock,
+          marketplace: importedListing.marketplace,
+          alreadyExists: existingListing ? true : false,
+          has_clips: importedListing.has_clips,
+          has_video: importedListing.has_video,
+        };
+        
+        // HOTFIX 09.12: Incluir campos adicionais quando forceRefresh
+        if (existingListing && forceRefresh) {
+          responseData.forceRefresh = true;
+          responseData.updated = updated;
+          responseData.updated_at = importedListing.updated_at?.toISOString();
+          responseData.last_synced_at = importedListing.last_synced_at?.toISOString();
+        } else {
+          responseData.created = created;
+          responseData.updated = updated;
+        }
+        
+        // HOTFIX 09.12: Incluir debug info quando x-debug:1 ou DEBUG_MEDIA=1
+        if (debugMedia) {
+          responseData.debug = {
+            has_clips_after: importedListing.has_clips,
+            has_video_after: importedListing.has_video,
+            has_clips_type: typeof importedListing.has_clips,
+            has_video_type: typeof importedListing.has_video,
+            is_clips_null: importedListing.has_clips === null,
+            is_clips_false: importedListing.has_clips === false,
+            is_clips_true: importedListing.has_clips === true,
+            forceRefresh,
+            source: 'manual_import',
+          };
+        }
+
+        return reply.status(statusCode).send({
+          message,
+          data: responseData,
         });
       } catch (error) {
         app.log.error({ error, tenantId: req.tenantId }, 'Erro ao importar anúncio');

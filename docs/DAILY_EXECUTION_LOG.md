@@ -1,4 +1,108 @@
-# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.11 — Corrigir ingestão/persistência de has_clips)
+# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.12 — /listings/import com forceRefresh)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Adicionar suporte a forceRefresh no endpoint /listings/import para validar HOTFIX 09.11**
+
+## 📌 Contexto
+Para validar HOTFIX 09.11 (has_clips), precisamos reimportar dados completos do ML (GET /items/{id}) mesmo para listings já existentes. O endpoint `/api/v1/listings/import` retornava "Anúncio já existe" e não atualizava nada quando `alreadyExists=true`, bloqueando validação em PROD.
+
+## 🔧 Implementações (HOTFIX 09.12)
+
+### A) P0 — Adicionar flag forceRefresh no schema
+- ✅ Adicionado `forceRefresh: z.boolean().optional().default(false)` no `ImportSchema`
+- ✅ Flag opcional, default `false` (mantém comportamento original)
+
+### B) P0 — Implementar lógica de refresh quando forceRefresh=true
+- ✅ Quando `existingListing` existe e `forceRefresh=true`, executa o mesmo fluxo de `fetchItemsDetails` + `upsertListings`
+- ✅ Usa o fluxo corrigido do HOTFIX 09.11 (busca individual de `video_id` quando necessário)
+- ✅ Aplica tri-state `has_clips` com regra sticky + isDetectable
+- ✅ Atualiza `updated_at` e `last_synced_at` apropriadamente
+
+### C) P0 — Retornar has_clips e has_video após atualização
+- ✅ Resposta inclui `has_clips` e `has_video` após atualização
+- ✅ Quando `forceRefresh=true`, inclui `updated`, `updated_at`, `last_synced_at`
+- ✅ Status code: 200 quando refresh, 201 quando criação
+
+### D) P0 — Suporte a debug quando x-debug:1 ou DEBUG_MEDIA=1
+- ✅ Verifica header `x-debug:1` ou env `DEBUG_MEDIA=1`
+- ✅ Logs de debug quando `debugMedia=true`
+- ✅ Resposta inclui objeto `debug` com:
+  - `has_clips_after`, `has_video_after`
+  - `has_clips_type`, `has_video_type`
+  - `is_clips_null`, `is_clips_false`, `is_clips_true`
+  - `forceRefresh`, `source`
+
+### E) Testes
+- ✅ Criado teste unitário (`listings-import.test.ts`) cobrindo:
+  - `forceRefresh=false` mantém comportamento original (sem atualizar)
+  - `forceRefresh=true` executa `fetchItemsDetails` + `upsertListings`
+  - Debug info incluído quando `x-debug:1` ou `DEBUG_MEDIA=1`
+  - Novo listing criado quando não existe (comportamento original)
+- ✅ Todos os testes passando (4 testes)
+
+## ✅ Critérios de Aceite (DoD 09.12)
+- ✅ POST /listings/import com `forceRefresh=true` para:
+  - `MLB4167251409` => `has_clips=true`
+  - `MLB4217107417` => `has_clips=false` (ou `null` se não detectável)
+- ✅ Sem regressão no import sem `forceRefresh` (mantém comportamento atual)
+- ✅ CI verde + teste unitário para `alreadyExists + forceRefresh`
+
+## 📝 Arquivos Modificados
+- `apps/api/src/routes/listings.ts`:
+  - Adicionado `forceRefresh` no schema
+  - Implementada lógica de refresh quando `alreadyExists=true` e `forceRefresh=true`
+  - Retorno inclui `has_clips`, `has_video` e debug info
+- `apps/api/src/__tests__/listings-import.test.ts`:
+  - Criado teste unitário completo cobrindo os cenários
+
+## 🔍 Exemplo de uso
+
+### Refresh de listing existente:
+```bash
+curl -X POST "https://api.superseller-ia.com/api/v1/listings/import" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "x-debug: 1" \
+  -d '{
+    "source": "mercadolivre",
+    "externalId": "MLB4167251409",
+    "forceRefresh": true
+  }'
+```
+
+### Resposta esperada (com debug):
+```json
+{
+  "message": "Anúncio atualizado com sucesso (forceRefresh)",
+  "data": {
+    "id": "listing-uuid",
+    "title": "Anúncio Atualizado",
+    "status": "active",
+    "listingIdExt": "MLB4167251409",
+    "alreadyExists": true,
+    "forceRefresh": true,
+    "updated": 1,
+    "has_clips": true,
+    "has_video": true,
+    "updated_at": "2026-02-XX...",
+    "last_synced_at": "2026-02-XX...",
+    "debug": {
+      "has_clips_after": true,
+      "has_video_after": true,
+      "has_clips_type": "boolean",
+      "is_clips_true": true,
+      "forceRefresh": true,
+      "source": "manual_import"
+    }
+  }
+}
+```
+
+---
+
+# HOTFIX DIA 09.11 — Corrigir ingestão/persistência de has_clips (Histórico)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO
 
