@@ -536,8 +536,14 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        // Upsert listing (criar ou atualizar)
-        const { created, updated } = await syncService.upsertListings(items, 'manual_import', false);
+        // HOTFIX 09.13: Extrair debug info do item (se disponível)
+        const item = items[0];
+        const videoDebugInfo = (item as any)._videoDebugInfo;
+
+        // HOTFIX 09.13: Upsert listing (criar ou atualizar)
+        // Quando forceRefresh=true, usar source='force_refresh' para atualizar last_synced_at
+        const sourceForUpsert = forceRefresh ? 'force_refresh' : 'manual_import';
+        const { created, updated } = await syncService.upsertListings(items, sourceForUpsert, false);
 
         // Buscar listing criado/atualizado
         const importedListing = await prisma.listing.findUnique({
@@ -624,7 +630,7 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           responseData.updated = updated;
         }
         
-        // HOTFIX 09.12: Incluir debug info quando x-debug:1 ou DEBUG_MEDIA=1
+        // HOTFIX 09.13: Incluir debug info quando x-debug:1 ou DEBUG_MEDIA=1
         if (debugMedia) {
           responseData.debug = {
             has_clips_after: importedListing.has_clips,
@@ -637,6 +643,18 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
             forceRefresh,
             source: 'manual_import',
           };
+          
+          // HOTFIX 09.13: Incluir debug info do payload ML se disponível
+          if (videoDebugInfo) {
+            responseData.debug.mlPayload = {
+              endpointUsed: videoDebugInfo.endpointUsed,
+              mlFieldsSummary: videoDebugInfo.mlFieldsSummary,
+              fallbackTried: videoDebugInfo.fallbackTried,
+              fallbackEndpoint: videoDebugInfo.fallbackEndpoint,
+              fallbackHadVideoId: videoDebugInfo.fallbackHadVideoId,
+              fallbackVideosCount: videoDebugInfo.fallbackVideosCount,
+            };
+          }
         }
 
         return reply.status(statusCode).send({

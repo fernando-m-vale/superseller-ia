@@ -94,6 +94,23 @@ interface MercadoLivreItem {
 }
 
 
+// HOTFIX 09.13: Interface para debug de campos de vídeo
+export interface VideoFieldsDebugInfo {
+  endpointUsed: string;
+  mlFieldsSummary: {
+    hasVideoId: boolean;
+    videoIdType: string;
+    hasVideosArray: boolean;
+    videosCount: number | null;
+    hasAttributesVideo: boolean;
+    rawKeys: string[];
+  };
+  fallbackTried: boolean;
+  fallbackEndpoint?: string;
+  fallbackHadVideoId?: boolean;
+  fallbackVideosCount?: number | null;
+}
+
 interface SyncResult {
   success: boolean;
   itemsProcessed: number;
@@ -958,6 +975,9 @@ export class MercadoLivreSyncService {
         const items: MercadoLivreItem[] = response.data
           .filter((item: { code: number; body: MercadoLivreItem }) => item.code === 200)
           .map((item: { code: number; body: MercadoLivreItem }) => item.body);
+        
+        // HOTFIX 09.13: Armazenar debug info por item (para uso no import)
+        const debugInfoMap = new Map<string, VideoFieldsDebugInfo>();
 
         // Enriquecer dados de preço/promoção se necessário (com limite de concorrência)
         console.log(`[ML-SYNC] Verificando necessidade de enriquecimento de preços para ${items.length} itens...`);
@@ -1007,14 +1027,46 @@ export class MercadoLivreSyncService {
           })
         );
 
-        // HOTFIX 09.11: Verificar se items do batch têm video_id, se não, buscar individualmente
+        // HOTFIX 09.13: Verificar se items do batch têm video_id, se não, buscar individualmente
         const debugMedia = process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
         const itemsNeedingVideoCheck: MercadoLivreItem[] = [];
         
         for (const item of itemsWithDescriptions) {
-          // Verificar se o item do batch tem video_id ou videos array
+          // HOTFIX 09.13: Analisar campos de vídeo no payload do batch
           const hasVideoId = 'video_id' in item && item.video_id !== undefined && item.video_id !== null && typeof item.video_id === 'string' && item.video_id.trim().length > 0;
+          const videoIdType = 'video_id' in item ? typeof item.video_id : 'undefined';
           const hasVideosArray = 'videos' in item && Array.isArray(item.videos) && item.videos.length > 0;
+          const videosCount = Array.isArray(item.videos) ? item.videos.length : null;
+          
+          // Verificar attributes para campos relacionados a vídeo
+          const hasAttributesVideo = item.attributes && Array.isArray(item.attributes) 
+            ? item.attributes.some((attr: any) => {
+                const id = (attr.id || '').toUpperCase();
+                const name = (attr.name || '').toUpperCase();
+                return id.includes('VIDEO') || name.includes('VIDEO') || id.includes('MEDIA') || name.includes('MEDIA');
+              })
+            : false;
+          
+          // Coletar chaves relevantes presentes
+          const rawKeys: string[] = [];
+          if ('video_id' in item) rawKeys.push('video_id');
+          if ('videos' in item) rawKeys.push('videos');
+          if ('pictures' in item) rawKeys.push('pictures');
+          if ('attributes' in item) rawKeys.push('attributes');
+          
+          // HOTFIX 09.13: Armazenar debug info inicial do batch
+          debugInfoMap.set(item.id, {
+            endpointUsed: 'items', // GET /items?ids=...
+            mlFieldsSummary: {
+              hasVideoId,
+              videoIdType,
+              hasVideosArray,
+              videosCount,
+              hasAttributesVideo,
+              rawKeys,
+            },
+            fallbackTried: false,
+          });
           
           if (debugMedia) {
             console.log(`[ML-SYNC] DEBUG_MEDIA: Verificando necessidade de GET individual para ${item.id}:`, {
@@ -1022,6 +1074,7 @@ export class MercadoLivreSyncService {
               hasVideoId,
               hasVideosArray,
               needsIndividualFetch: !hasVideoId && !hasVideosArray,
+              mlFieldsSummary: debugInfoMap.get(item.id)?.mlFieldsSummary,
             });
           }
           
@@ -1031,12 +1084,19 @@ export class MercadoLivreSyncService {
           }
         }
         
-        // Buscar detalhes completos (incluindo video_id) para itens que não têm no batch
+        // HOTFIX 09.13: Buscar detalhes completos (incluindo video_id) para itens que não têm no batch
         if (itemsNeedingVideoCheck.length > 0) {
           console.log(`[ML-SYNC] Buscando detalhes completos (incluindo video_id) para ${itemsNeedingVideoCheck.length} itens que não têm no batch...`);
           const itemsWithVideoDetails = await Promise.all(
             itemsNeedingVideoCheck.map(async (item) => {
               try {
+                // HOTFIX 09.13: Atualizar debug info para indicar que fallback será tentado
+                const debugInfo = debugInfoMap.get(item.id);
+                if (debugInfo) {
+                  debugInfo.fallbackTried = true;
+                  debugInfo.fallbackEndpoint = `/items/${item.id}`;
+                }
+                
                 // Fazer GET /items/{id} individual para obter video_id completo
                 const response = await axios.get(`${ML_API_BASE}/items/${item.id}`, {
                   headers: { Authorization: `Bearer ${this.accessToken}` },
@@ -1044,8 +1104,19 @@ export class MercadoLivreSyncService {
                 
                 const fullItem = response.data as MercadoLivreItem;
                 
+                // HOTFIX 09.13: Analisar campos de vídeo no fallback
+                const fallbackHasVideoId = fullItem.video_id !== null && fullItem.video_id !== undefined && typeof fullItem.video_id === 'string' && fullItem.video_id.trim().length > 0;
+                const fallbackHasVideosArray = fullItem.videos !== undefined && Array.isArray(fullItem.videos) && fullItem.videos.length > 0;
+                const fallbackVideosCount = Array.isArray(fullItem.videos) ? fullItem.videos.length : null;
+                
+                // HOTFIX 09.13: Atualizar debug info com resultados do fallback
+                if (debugInfo) {
+                  debugInfo.fallbackHadVideoId = fallbackHasVideoId || undefined;
+                  debugInfo.fallbackVideosCount = fallbackVideosCount;
+                }
+                
                 // Enriquecer item com video_id/videos se encontrado
-                if (fullItem.video_id && typeof fullItem.video_id === 'string' && fullItem.video_id.trim().length > 0) {
+                if (fallbackHasVideoId && fullItem.video_id) {
                   item.video_id = fullItem.video_id;
                   if (debugMedia) {
                     console.log(`[ML-SYNC] DEBUG_MEDIA: video_id encontrado via GET individual para ${item.id}:`, {
@@ -1056,7 +1127,7 @@ export class MercadoLivreSyncService {
                   }
                 }
                 
-                if (fullItem.videos && Array.isArray(fullItem.videos) && fullItem.videos.length > 0) {
+                if (fallbackHasVideosArray && fullItem.videos) {
                   item.videos = fullItem.videos;
                   if (debugMedia) {
                     console.log(`[ML-SYNC] DEBUG_MEDIA: videos array encontrado via GET individual para ${item.id}:`, {
@@ -1069,6 +1140,15 @@ export class MercadoLivreSyncService {
                 
                 return item;
               } catch (error) {
+                // HOTFIX 09.13: Marcar fallback como falhou no debug info
+                const debugInfo = debugInfoMap.get(item.id);
+                if (debugInfo) {
+                  debugInfo.fallbackTried = true;
+                  debugInfo.fallbackEndpoint = `/items/${item.id}`;
+                  debugInfo.fallbackHadVideoId = false;
+                  debugInfo.fallbackVideosCount = null;
+                }
+                
                 // Se falhar, logar mas continuar com item original
                 if (axios.isAxiosError(error)) {
                   const status = error.response?.status;
@@ -1087,6 +1167,18 @@ export class MercadoLivreSyncService {
             if (enriched) {
               itemsWithDescriptions[i] = enriched;
             }
+          }
+        }
+        
+        // HOTFIX 09.13: Armazenar debug info no item para uso posterior (via propriedade não enumerável)
+        for (const item of itemsWithDescriptions) {
+          const debugInfo = debugInfoMap.get(item.id);
+          if (debugInfo) {
+            Object.defineProperty(item, '_videoDebugInfo', {
+              value: debugInfo,
+              enumerable: false,
+              writable: false,
+            });
           }
         }
 
@@ -1741,20 +1833,34 @@ export class MercadoLivreSyncService {
               }
             } else {
               // hasVideoFromAPI === null: não sobrescrever valores existentes
+              // HOTFIX 09.13: Se isDetectable=false, garantir que has_clips seja null (não false)
               // IMPORTANTE: null significa "não detectável", NÃO significa "false"
               if (existing) {
-                // Manter valor existente (não atualizar)
-                listingData.has_video = undefined; // Não atualizar
-                listingData.has_clips = undefined; // Não atualizar
+                // HOTFIX 09.13: Se não foi detectável e valor existente é false, pode ser que seja null
+                // Manter valor existente (não atualizar) OU setar null se não foi detectável
+                if (!videoExtraction.isDetectable) {
+                  // Se não foi detectável, não devemos ter false persistido
+                  // Manter null ou undefined (não atualizar)
+                  listingData.has_video = undefined; // Não atualizar
+                  listingData.has_clips = undefined; // Não atualizar
+                } else {
+                  // Foi detectável mas retornou null (caso raro) - manter existente
+                  listingData.has_video = undefined; // Não atualizar
+                  listingData.has_clips = undefined; // Não atualizar
+                }
                 if (debugMedia) {
-                  console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo valor existente (null não detectável) para ${item.id}`);
+                  console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo valor existente (null não detectável) para ${item.id}`, {
+                    isDetectable: videoExtraction.isDetectable,
+                  });
                 }
               } else {
-                // Criação: setar null (não false)
+                // Criação: setar null (não false) quando não detectável
                 listingData.has_video = null;
                 listingData.has_clips = null;
                 if (debugMedia) {
-                  console.log(`[ML-SYNC] DEBUG_MEDIA: Setando null (não detectável) para novo listing ${item.id}`);
+                  console.log(`[ML-SYNC] DEBUG_MEDIA: Setando null (não detectável) para novo listing ${item.id}`, {
+                    isDetectable: videoExtraction.isDetectable,
+                  });
                 }
               }
             }
@@ -1819,6 +1925,11 @@ export class MercadoLivreSyncService {
           listingData.source = source;
         }
         listingData.discovery_blocked = discoveryBlocked;
+
+        // HOTFIX 09.13: Atualizar last_synced_at quando forceRefresh ou source='force_refresh'
+        if (source === 'force_refresh' || source === 'manual_import') {
+          listingData.last_synced_at = new Date();
+        }
 
         // Sempre atualizar marketplace_connection_id (identifica qual conexão sincronizou)
         listingData.marketplace_connection_id = this.connectionId;
