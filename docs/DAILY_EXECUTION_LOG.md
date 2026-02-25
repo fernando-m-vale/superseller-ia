@@ -1,6 +1,251 @@
-# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.13 — Debug definitivo do payload de vídeo/clip)
+# DAILY EXECUTION LOG — 2026-02-25 (Sessão de Encerramento — Ciclo HOTFIX 09.9 → 09.13)
 
-## ✅ STATUS: CONCLUÍDO COM SUCESSO
+## ✅ STATUS: HOTFIX 09.13 IMPLEMENTADO — AGUARDANDO VALIDAÇÃO EM PROD
+
+## 📅 Linha do Tempo — Ciclo de Estabilização (09.9 → 09.13)
+
+### HOTFIX 09.9 — Correções Estruturais ✅ CONCLUÍDO
+- **Data:** 2026-02-XX
+- **Foco:** Correções funcionais sem refatorar UX
+- **Entregas:**
+  - Hacks aparecem na primeira análise
+  - Botão "Ver categoria" usa permalink oficial
+  - Tri-state `hasClips` preservado
+  - Hack preço psicológico corrigido (não sugere quando termina em .90/.99)
+
+### HOTFIX 09.10 — Anti Hack Fantasma + Cache Overwrite ✅ CONCLUÍDO
+- **Data:** 2026-02-24
+- **Foco:** Eliminar inconsistência e evitar "hack fantasma"
+- **Entregas:**
+  - Categoria usa permalink oficial do ML
+  - Preço psicológico determinístico (não persiste fantasma)
+  - Cache sobrescreve `growthHacks` com resultado do HackEngine
+  - Debug mínimo para clip/vídeo (endpoint `/media-debug`)
+
+### HOTFIX 09.11 — Correção Persistência has_clips no Sync ✅ CONCLUÍDO
+- **Data:** 2026-02-XX
+- **Foco:** Corrigir ingestão/persistência de has_clips (clip/vídeo) no sync
+- **Entregas:**
+  - Instrumentação obrigatória (logs quando `DEBUG_MEDIA=1`)
+  - Fallback GET /items/{id} individual quando batch não retorna `video_id`
+  - Persistência correta: `has_clips` como `boolean | null` (nunca converter `null` para `false`)
+  - Regra "true é sticky": se `existing.has_clips === true`, manter `true`
+  - Testes unitários completos (16 casos cobrindo tri-state)
+
+### HOTFIX 09.12 — /listings/import com forceRefresh ✅ CONCLUÍDO
+- **Data:** 2026-02-XX
+- **Foco:** Adicionar suporte a forceRefresh para validar HOTFIX 09.11
+- **Entregas:**
+  - Flag `forceRefresh` no schema (opcional, default `false`)
+  - Refresh completo mesmo quando `alreadyExists=true`
+  - Retorno inclui `has_clips`, `has_video` e debug info
+  - Testes unitários (4 casos)
+
+### HOTFIX 09.13 — Debug Definitivo do Payload de Vídeo/Clip ✅ IMPLEMENTADO
+- **Data:** 2026-02-25
+- **Foco:** Instrumentação profunda do payload ML para identificar por que `has_clips` retorna `false`
+- **Entregas:**
+  - Interface `VideoFieldsDebugInfo` exportada
+  - Coleta de debug info no `fetchItemsDetails` (batch + fallback)
+  - Debug info incluído no response quando `x-debug:1` ou `DEBUG_MEDIA=1`
+  - Atualização de `last_synced_at` quando `forceRefresh=true`
+  - Persistência corrigida: `has_clips=null` quando `isDetectable=false`
+
+---
+
+## 🔎 ESTADO ATUAL — PIPELINE DE CLIP/VÍDEO
+
+### Decisão Arquitetural Oficial
+
+**`has_clips` é a fonte de verdade. `has_video` é legado e será removido no futuro.**
+
+- **`has_clips`**: Campo principal, tri-state (`true | false | null`)
+- **`has_video`**: Campo legado mantido por compatibilidade, será removido em refatoração futura
+- **Regra de persistência**: `has_clips` nunca deve ser convertido de `null` para `false` indevidamente
+
+### Fluxo Sync (MercadoLivreSyncService)
+
+1. **Batch Fetch** (`GET /items?ids=...`)
+   - Busca múltiplos itens em uma requisição
+   - **Problema conhecido**: Pode não retornar `video_id` completo
+   - Debug info captura: `endpointUsed: "items"`, `mlFieldsSummary`
+
+2. **Fallback Individual** (HOTFIX 09.11)
+   - Se item não tem `video_id` nem `videos` array no batch → `GET /items/{id}` individual
+   - Debug info captura: `fallbackTried: true`, `fallbackEndpoint`, `fallbackHadVideoId`
+
+3. **Extração de Vídeo** (`extractHasVideoFromMlItem`)
+   - Procura por múltiplas evidências: `video_id`, `videos[]`, `attributes`, `tags`
+   - Retorna tri-state: `true` (tem vídeo), `false` (confirmado sem vídeo), `null` (não detectável)
+   - `isDetectable`: `true` se foi possível determinar via API
+
+4. **Persistência** (`upsertListings`)
+   - **Regra "true é sticky"**: Se `existing.has_clips === true`, manter `true` (não sobrescrever)
+   - **Regra de detecção**: Apenas setar `false` se `isDetectable === true` e `hasVideoFromAPI === false`
+   - **Regra de null**: Se `isDetectable === false`, não atualizar valor existente OU setar `null` em criação
+   - **Fonte**: `source='discovery'` (sync normal), `source='force_refresh'` (import forceRefresh), `source='manual_import'` (import normal)
+
+### Fluxo Import forceRefresh (`/listings/import`)
+
+1. **Verificação de Existência**
+   - Se `existingListing` existe e `forceRefresh=false` → retorna "já existe" (comportamento original)
+   - Se `existingListing` existe e `forceRefresh=true` → executa refresh completo
+
+2. **Fetch Items Details**
+   - Chama `fetchItemsDetails([mlbId], false)`
+   - Usa mesmo fluxo do sync (batch + fallback se necessário)
+   - Debug info armazenado em `item._videoDebugInfo`
+
+3. **Upsert com Source Especial**
+   - Quando `forceRefresh=true`, usa `source='force_refresh'`
+   - Atualiza `last_synced_at = new Date()` quando `source === 'force_refresh'` ou `'manual_import'`
+
+4. **Response com Debug**
+   - Quando `x-debug:1` ou `DEBUG_MEDIA=1`, inclui `debug.mlPayload` com:
+     - `endpointUsed`, `mlFieldsSummary`, `fallbackTried`, `fallbackEndpoint`, `fallbackHadVideoId`, `fallbackVideosCount`
+
+### Tri-State Logic
+
+| Estado | Significado | Quando Aplicar | Persistência |
+|--------|-------------|----------------|--------------|
+| `true` | Tem clip confirmado via API | `video_id` presente OU `videos[]` não vazio | Sticky: não sobrescrever com `null`/`false` |
+| `false` | Confirmado que não tem clip | `video_id` null OU `videos[]` vazio (status 200) | Apenas se `isDetectable === true` |
+| `null` | Não detectável via API | Payload não contém campos de vídeo OU status não é 200 | Não atualizar valor existente OU setar `null` em criação |
+
+### Pontos de Divergência Possíveis
+
+1. **Batch não retorna `video_id`**
+   - **Sintoma**: `mlFieldsSummary.hasVideoId = false` no batch
+   - **Solução**: Fallback GET /items/{id} individual (HOTFIX 09.11)
+   - **Validação**: Verificar `fallbackTried: true` e `fallbackHadVideoId` no debug
+
+2. **Fallback também não retorna `video_id`**
+   - **Sintoma**: `fallbackTried: true` mas `fallbackHadVideoId: false`
+   - **Possível causa**: ML realmente não retorna `video_id` para esse item OU item não tem clip
+   - **Validação**: Comparar com UI do ML diretamente
+
+3. **`isDetectable=false` mas valor existente é `false`**
+   - **Sintoma**: `has_clips=false` no DB mas `isDetectable=false` na extração
+   - **Possível causa**: Valor antigo persistido antes do HOTFIX 09.11
+   - **Solução**: `forceRefresh=true` deve corrigir (se ML retornar dados corretos)
+
+4. **`last_synced_at` não atualiza**
+   - **Sintoma**: `last_synced_at` permanece antigo após `forceRefresh=true`
+   - **Causa**: Lógica de atualização só roda quando `source === 'force_refresh'` ou `'manual_import'`
+   - **Validação**: Verificar `source` usado no `upsertListings`
+
+---
+
+## 📋 PRÓXIMA SESSÃO — PLANO DE VALIDAÇÃO
+
+### Objetivo
+Validar HOTFIX 09.13 e confirmar se o problema está no payload do ML ou na lógica de extração.
+
+### Listagens de Referência
+- **COM clip esperado**: `MLB4167251409` (UUID: `459e4527-8b84-413b-ae76-7ae5788a44ac`)
+- **SEM clip esperado**: `MLB4217107417` (UUID: `4d51feff-f852-4585-9f07-c6b711e56571`)
+
+### Checklist de Validação (P0)
+
+#### 1. Rodar Import forceRefresh com x-debug:1
+```bash
+curl -X POST "https://api.superselleria.com.br/api/v1/listings/import" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "x-debug: 1" \
+  -d '{
+    "source": "mercadolivre",
+    "externalId": "MLB4167251409",
+    "forceRefresh": true
+  }'
+```
+
+**Validar:**
+- [ ] Response inclui `debug.mlPayload` preenchido
+- [ ] `mlPayload.endpointUsed` = "items"
+- [ ] `mlPayload.mlFieldsSummary` mostra campos presentes no batch
+- [ ] `mlPayload.fallbackTried` = `true` (se batch não tinha `video_id`)
+- [ ] `mlPayload.fallbackHadVideoId` mostra resultado do fallback
+- [ ] `data.last_synced_at` foi atualizado (timestamp recente)
+
+#### 2. Validar mlFieldsSummary
+**Para MLB4167251409 (COM clip esperado):**
+- [ ] Se `mlFieldsSummary.hasVideoId = true` → ML retorna `video_id` no batch ✅
+- [ ] Se `mlFieldsSummary.hasVideoId = false` → Verificar `fallbackHadVideoId`:
+  - Se `fallbackHadVideoId = true` → Fallback encontrou `video_id` ✅
+  - Se `fallbackHadVideoId = false` → **PROBLEMA**: ML não retorna `video_id` mesmo no GET individual ❌
+
+#### 3. Confirmar Fallback Executado
+- [ ] `mlPayload.fallbackTried = true` quando batch não tinha `video_id`
+- [ ] `mlPayload.fallbackEndpoint = "/items/MLB4167251409"`
+- [ ] `mlPayload.fallbackHadVideoId` mostra resultado real do fallback
+
+#### 4. Verificar Atualização de last_synced_at
+- [ ] `data.last_synced_at` é timestamp recente (após `forceRefresh=true`)
+- [ ] Comparar com `data.updated_at` (devem ser próximos)
+
+#### 5. Confirmar que COM clip vira has_clips=true
+**Após import forceRefresh:**
+- [ ] Consultar DB: `SELECT has_clips, has_video, last_synced_at FROM listings WHERE listing_id_ext = 'MLB4167251409'`
+- [ ] `has_clips` deve ser `true` se ML retornou `video_id` no batch ou fallback
+- [ ] Se `has_clips` ainda é `false`, verificar `debug.mlPayload` para identificar causa
+
+#### 6. Rodar Analyze e Validar Score Mídia
+**Após import forceRefresh:**
+- [ ] Gerar análise para `MLB4167251409`
+- [ ] Verificar `mediaVerdict.hasClipDetected` (deve ser `true` se `has_clips=true`)
+- [ ] Verificar `score.media` (deve ser 20 se tem clip, <20 se não tem)
+- [ ] Verificar `actionPlan` (não deve sugerir "adicionar clip" se `has_clips=true`)
+
+### Evidências a Capturar
+
+1. **Response JSON completo** do import forceRefresh (com `debug.mlPayload`)
+2. **Screenshot da UI do ML** mostrando clip no anúncio `MLB4167251409`
+3. **Query SQL** mostrando `has_clips`, `has_video`, `last_synced_at` após refresh
+4. **Payload do analyze** mostrando `mediaVerdict` e `score.media`
+
+### Decisões Baseadas na Validação
+
+**Cenário A: ML retorna `video_id` mas `has_clips` ainda é `false`**
+- **Causa**: Bug na lógica de persistência
+- **Ação**: Investigar `upsertListings` e regra de persistência
+
+**Cenário B: ML não retorna `video_id` mesmo no GET individual**
+- **Causa**: API do ML não expõe `video_id` para esse item OU item realmente não tem clip
+- **Ação**: Validar diretamente na UI do ML, considerar endpoint alternativo
+
+**Cenário C: Fallback não é executado**
+- **Causa**: Bug na lógica de detecção de necessidade de fallback
+- **Ação**: Investigar condição `!hasVideoId && !hasVideosArray`
+
+---
+
+## 📊 MILESTONES / BACKLOG — Ciclo HOTFIX 09.9 → 09.13
+
+### ✅ Concluídos
+- **HOTFIX 09.9** — Correções estruturais (hacks primeira análise, categoria permalink, preço psicológico, tri-state clip)
+- **HOTFIX 09.10** — Anti hack fantasma + cache overwrite growthHacks + correções CI
+- **HOTFIX 09.11** — Correção persistência has_clips no sync (tri-state + sticky true + fallback /items/{id})
+- **HOTFIX 09.12** — /listings/import com forceRefresh=true (refresh mesmo quando alreadyExists=true)
+- **HOTFIX 09.13** — Debug definitivo do payload de vídeo/clip (instrumentação profunda)
+
+### 🔍 Em Validação
+- **HOTFIX 09.13** — Aguardando validação em PROD:
+  - Rodar import forceRefresh com `x-debug:1`
+  - Validar `mlPayload` retornado
+  - Confirmar se ML retorna `video_id` para `MLB4167251409`
+  - Verificar atualização de `last_synced_at`
+  - Confirmar que COM clip vira `has_clips=true`
+
+### 🔮 Futuro
+- **Saneamento definitivo has_video** — Remoção do campo legado `has_video` (após confirmação de que `has_clips` é suficiente)
+- **Endpoint alternativo para vídeo** — Se ML não retornar `video_id` via `/items/{id}`, considerar endpoint alternativo ou validação manual
+
+---
+
+## 🎯 HOTFIX 09.13 — Debug Definitivo do Payload de Vídeo/Clip
+
+## ✅ STATUS: IMPLEMENTADO — AGUARDANDO VALIDAÇÃO EM PROD
 
 ## 🎯 Foco do hotfix
 **Debug definitivo do payload de vídeo/clip no /listings/import (forceRefresh) para identificar por que has_clips retorna false**

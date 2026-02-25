@@ -1018,4 +1018,52 @@ O sistema precisava gerar hacks específicos e acionáveis baseados em dados rea
 
 ---
 
+## ADR-011: has_clips como Fonte de Verdade para Detecção de Vídeo/Clip
+
+**Data:** 2026-02-25  
+**Status:** Implementado (HOTFIX 09.11, 09.12, 09.13)
+
+### Contexto
+Sistema possui dois campos relacionados a vídeo/clip: `has_clips` e `has_video`. Após ciclo de estabilização (HOTFIX 09.9 → 09.13), identificamos necessidade de padronização e remoção de legado.
+
+### Decisão
+**`has_clips` é a fonte de verdade. `has_video` é legado e será removido no futuro.**
+
+### Justificativa
+- **`has_clips`**: Campo principal, tri-state (`true | false | null`), implementado com lógica robusta (HOTFIX 09.11)
+- **`has_video`**: Campo legado mantido por compatibilidade, duplicação desnecessária
+- **Tri-state logic**: Permite distinguir entre "tem clip" (`true`), "confirmado sem clip" (`false`), e "não detectável" (`null`)
+- **Regra de persistência**: `has_clips` nunca deve ser convertido de `null` para `false` indevidamente
+- **Sticky true rule**: Se `existing.has_clips === true`, manter `true` (não sobrescrever com `null`/`false`)
+
+### Implementação
+- **HOTFIX 09.11**: Correção persistência `has_clips` no sync (tri-state + sticky true + fallback GET /items/{id})
+- **HOTFIX 09.12**: `/listings/import` com `forceRefresh=true` retorna `has_clips` e `has_video`
+- **HOTFIX 09.13**: Instrumentação profunda do payload ML para debug de detecção
+- **Extração**: `extractHasVideoFromMlItem()` retorna tri-state baseado em múltiplas evidências
+- **Fallback**: Se batch não retorna `video_id`, executa GET /items/{id} individual
+
+### Fluxo de Detecção
+1. **Batch Fetch** (`GET /items?ids=...`): Busca múltiplos itens, pode não retornar `video_id` completo
+2. **Fallback Individual**: Se batch não tem `video_id` nem `videos[]` → `GET /items/{id}` individual
+3. **Extração**: Procura por `video_id`, `videos[]`, `attributes`, `tags`
+4. **Persistência**: Aplica regra sticky + isDetectable
+
+### Impacto
+- **Consistência**: Uma única fonte de verdade elimina divergências
+- **Manutenibilidade**: Remoção futura de `has_video` simplifica código
+- **Debug**: Instrumentação (HOTFIX 09.13) permite identificar problemas no payload ML
+
+### Alternativas consideradas
+- Manter ambos campos: Duplicação desnecessária, risco de divergência
+- Usar apenas `has_video`: Nome menos descritivo, não reflete "clip" do ML
+- Sem tri-state: Perde capacidade de distinguir "não detectável" de "confirmado sem clip"
+
+### Próximos Passos
+- **Validação**: Confirmar que `has_clips` funciona corretamente após HOTFIX 09.13
+- **Refatoração futura**: Remover `has_video` após confirmação de que `has_clips` é suficiente
+- **Documentação**: Atualizar todos os pontos que referenciam `has_video` para usar `has_clips`
+
+---
+
 ⚠️ **Nota:** Esses itens NÃO são falhas. São decisões conscientes e maduras de produto e arquitetura, registradas para evolução futura.

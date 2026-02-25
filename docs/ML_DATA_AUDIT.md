@@ -194,15 +194,40 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - **Helper:** `extractBuyerPricesFromMlPrices()` extrai preços do payload `/prices` com regras: `standard.amount` → originalPrice, `promotion.amount` → promotionalPrice, `promotion.regular_amount` → originalPrice (se disponível)
 
 ### Video / Clips
-**Status:** ✅ RESOLVIDO
-- **Regra:** Não gerar falso negativo; se não detectável via API → `hasClips = null` (não `false`)
-- **Fonte:** API do ML não expõe clips de forma confiável via `/items?ids=...` (multiget)
-- **Tratamento:** `hasClips = null` quando API não permite confirmar; `dataQuality.warnings` inclui `clips_not_detectable_via_items_api`
-- **Lógica condicional na IA:** 
-  - `hasClips = true` → não sugerir adicionar vídeo
-  - `hasClips = false` → sugerir adicionar vídeo
-  - `hasClips = null` → sugestão condicional ("se não houver vídeo, considere adicionar…")
-- **Estado atual:** Campo `has_clips` no schema Prisma permite `null`; normalização via `extractHasVideoFromMlItem()` retorna `null` quando não detectável
+**Status:** 🔍 **EM INVESTIGAÇÃO (HOTFIX 09.13)**
+
+**Decisão Arquitetural Oficial:**
+- **`has_clips`** é a fonte de verdade (tri-state: `true | false | null`)
+- **`has_video`** é legado e será removido no futuro
+- **Regra de persistência**: `has_clips` nunca deve ser convertido de `null` para `false` indevidamente
+
+**Fluxo de Detecção (HOTFIX 09.11 + 09.13):**
+1. **Batch Fetch** (`GET /items?ids=...`): Busca múltiplos itens, pode não retornar `video_id` completo
+2. **Fallback Individual** (HOTFIX 09.11): Se batch não tem `video_id` nem `videos[]` → `GET /items/{id}` individual
+3. **Extração** (`extractHasVideoFromMlItem`): Procura por `video_id`, `videos[]`, `attributes`, `tags`
+4. **Tri-State Logic:**
+   - `true`: Tem clip confirmado via API (sticky: não sobrescrever)
+   - `false`: Confirmado que não tem clip (apenas se `isDetectable === true`)
+   - `null`: Não detectável via API (não atualizar valor existente OU setar `null` em criação)
+
+**Instrumentação (HOTFIX 09.13):**
+- Debug info coletado em `fetchItemsDetails`: `endpointUsed`, `mlFieldsSummary`, `fallbackTried`, `fallbackEndpoint`, `fallbackHadVideoId`
+- Endpoint `/listings/import` com `forceRefresh=true` e `x-debug:1` retorna `debug.mlPayload` completo
+- Permite identificar se problema está no payload do ML ou na lógica de extração
+
+**Problema Conhecido:**
+- `MLB4167251409` (COM clip esperado) retorna `has_clips=false` após refresh
+- **Hipótese**: ML não retorna `video_id` mesmo no GET individual OU lógica de extração não detecta corretamente
+- **Validação pendente**: Rodar import forceRefresh com `x-debug:1` e analisar `mlPayload`
+
+**Listagens de Referência:**
+- COM clip esperado: `MLB4167251409` (UUID: `459e4527-8b84-413b-ae76-7ae5788a44ac`)
+- SEM clip esperado: `MLB4217107417` (UUID: `4d51feff-f852-4585-9f07-c6b711e56571`)
+
+**Próxima Ação:**
+- Validar payload real do ML após HOTFIX 09.13
+- Confirmar se `video_id` está presente no batch ou fallback
+- Se ML não retorna `video_id`, considerar endpoint alternativo ou validação manual
 
 ### Benchmark / Comparação com Concorrentes
 **Status:** ✅ IMPLEMENTADO (Dia 04)

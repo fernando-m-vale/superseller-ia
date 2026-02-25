@@ -1,8 +1,53 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
-## 🔜 Próxima Sessão — Validação PROD DIA 09 + Fechamento + Início DIA 10
+## 🔜 Próxima Sessão — Validação HOTFIX 09.13 + Pipeline de Clip/Vídeo
 
-### Passo 0 — Executar MINI-CHECKLIST PROD — DIA 09 (10-15 min)
+### Passo 0 — Validar HOTFIX 09.13 — Debug Payload de Vídeo/Clip (15-20 min)
+
+**Objetivo:** Confirmar se o problema de `has_clips=false` está no payload do ML ou na lógica de extração.
+
+**Listagens de Referência:**
+- COM clip esperado: `MLB4167251409` (UUID: `459e4527-8b84-413b-ae76-7ae5788a44ac`)
+- SEM clip esperado: `MLB4217107417` (UUID: `4d51feff-f852-4585-9f07-c6b711e56571`)
+
+**Comando de Validação:**
+```bash
+curl -X POST "https://api.superselleria.com.br/api/v1/listings/import" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "x-debug: 1" \
+  -d '{
+    "source": "mercadolivre",
+    "externalId": "MLB4167251409",
+    "forceRefresh": true
+  }'
+```
+
+**Checklist de Validação:**
+1. [ ] Response inclui `debug.mlPayload` preenchido
+2. [ ] `mlPayload.mlFieldsSummary` mostra campos presentes no batch
+3. [ ] `mlPayload.fallbackTried` = `true` (se batch não tinha `video_id`)
+4. [ ] `mlPayload.fallbackHadVideoId` mostra resultado do fallback
+5. [ ] `data.last_synced_at` foi atualizado (timestamp recente)
+6. [ ] Consultar DB: `has_clips` deve ser `true` se ML retornou `video_id`
+7. [ ] Rodar analyze e validar `mediaVerdict.hasClipDetected` e `score.media`
+
+**Decisões Baseadas na Validação:**
+- **Cenário A**: ML retorna `video_id` mas `has_clips` ainda é `false` → Bug na persistência
+- **Cenário B**: ML não retorna `video_id` mesmo no GET individual → API não expõe OU item não tem clip
+- **Cenário C**: Fallback não é executado → Bug na lógica de detecção
+
+**Evidências a Capturar:**
+- Response JSON completo (com `debug.mlPayload`)
+- Screenshot da UI do ML mostrando clip
+- Query SQL mostrando `has_clips`, `has_video`, `last_synced_at`
+- Payload do analyze mostrando `mediaVerdict` e `score.media`
+
+**Ver documentação completa:** `docs/DAILY_EXECUTION_LOG.md` — Seção "PRÓXIMA SESSÃO — PLANO DE VALIDAÇÃO"
+
+---
+
+### Passo 0.1 — Executar MINI-CHECKLIST PROD — DIA 09 (10-15 min) — HISTÓRICO
 
 **Objetivo:** Validar que todas as correções dos HOTFIX 09.5 e 09.6 estão funcionando corretamente em produção antes de declarar DIA 09 oficialmente fechado.
 
