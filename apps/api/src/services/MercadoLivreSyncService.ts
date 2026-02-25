@@ -1007,6 +1007,89 @@ export class MercadoLivreSyncService {
           })
         );
 
+        // HOTFIX 09.11: Verificar se items do batch têm video_id, se não, buscar individualmente
+        const debugMedia = process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
+        const itemsNeedingVideoCheck: MercadoLivreItem[] = [];
+        
+        for (const item of itemsWithDescriptions) {
+          // Verificar se o item do batch tem video_id ou videos array
+          const hasVideoId = 'video_id' in item && item.video_id !== undefined && item.video_id !== null && typeof item.video_id === 'string' && item.video_id.trim().length > 0;
+          const hasVideosArray = 'videos' in item && Array.isArray(item.videos) && item.videos.length > 0;
+          
+          if (debugMedia) {
+            console.log(`[ML-SYNC] DEBUG_MEDIA: Verificando necessidade de GET individual para ${item.id}:`, {
+              listing_id_ext: item.id,
+              hasVideoId,
+              hasVideosArray,
+              needsIndividualFetch: !hasVideoId && !hasVideosArray,
+            });
+          }
+          
+          // Se não tem video_id nem videos array, precisamos buscar individualmente
+          if (!hasVideoId && !hasVideosArray) {
+            itemsNeedingVideoCheck.push(item);
+          }
+        }
+        
+        // Buscar detalhes completos (incluindo video_id) para itens que não têm no batch
+        if (itemsNeedingVideoCheck.length > 0) {
+          console.log(`[ML-SYNC] Buscando detalhes completos (incluindo video_id) para ${itemsNeedingVideoCheck.length} itens que não têm no batch...`);
+          const itemsWithVideoDetails = await Promise.all(
+            itemsNeedingVideoCheck.map(async (item) => {
+              try {
+                // Fazer GET /items/{id} individual para obter video_id completo
+                const response = await axios.get(`${ML_API_BASE}/items/${item.id}`, {
+                  headers: { Authorization: `Bearer ${this.accessToken}` },
+                });
+                
+                const fullItem = response.data as MercadoLivreItem;
+                
+                // Enriquecer item com video_id/videos se encontrado
+                if (fullItem.video_id && typeof fullItem.video_id === 'string' && fullItem.video_id.trim().length > 0) {
+                  item.video_id = fullItem.video_id;
+                  if (debugMedia) {
+                    console.log(`[ML-SYNC] DEBUG_MEDIA: video_id encontrado via GET individual para ${item.id}:`, {
+                      listing_id_ext: item.id,
+                      videoId: `${fullItem.video_id.substring(0, 10)}...`,
+                      source: 'GET_items_id_individual',
+                    });
+                  }
+                }
+                
+                if (fullItem.videos && Array.isArray(fullItem.videos) && fullItem.videos.length > 0) {
+                  item.videos = fullItem.videos;
+                  if (debugMedia) {
+                    console.log(`[ML-SYNC] DEBUG_MEDIA: videos array encontrado via GET individual para ${item.id}:`, {
+                      listing_id_ext: item.id,
+                      videosCount: fullItem.videos.length,
+                      source: 'GET_items_id_individual',
+                    });
+                  }
+                }
+                
+                return item;
+              } catch (error) {
+                // Se falhar, logar mas continuar com item original
+                if (axios.isAxiosError(error)) {
+                  const status = error.response?.status;
+                  console.warn(`[ML-SYNC] Erro ao buscar detalhes completos de ${item.id} (${status}):`, error.message);
+                } else {
+                  console.warn(`[ML-SYNC] Erro ao buscar detalhes completos de ${item.id}:`, error instanceof Error ? error.message : 'Erro desconhecido');
+                }
+                return item; // Retornar item original se falhar
+              }
+            })
+          );
+          
+          // Substituir items originais pelos enriquecidos
+          for (let i = 0; i < itemsWithDescriptions.length; i++) {
+            const enriched = itemsWithVideoDetails.find(e => e.id === itemsWithDescriptions[i].id);
+            if (enriched) {
+              itemsWithDescriptions[i] = enriched;
+            }
+          }
+        }
+
         return itemsWithDescriptions;
       } catch (error) {
         if (axios.isAxiosError(error)) {
@@ -1092,12 +1175,44 @@ export class MercadoLivreSyncService {
         }
       }
       
-      // HOTFIX: Verificar se tem vídeo usando helper robusto
+      // HOTFIX 09.11: Verificar se tem vídeo usando helper robusto
       // Assumir status 200 se item veio do batch (code === 200)
       // Se vier de outro lugar (fallback), passar null para indicar incerteza
       const httpStatusForVideo = 200; // Items do batch sempre vêm com code 200
+      
+      // HOTFIX 09.11: Log de debug obrigatório quando DEBUG_MEDIA=1
+      const debugMedia = process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
+      if (debugMedia) {
+        console.log(`[ML-SYNC] DEBUG_MEDIA: Item ${item.id} - Verificando campos de mídia no payload batch:`, {
+          listing_id_ext: item.id,
+          hasVideoId: 'video_id' in item && item.video_id !== undefined && item.video_id !== null,
+          videoIdValue: 'video_id' in item ? (typeof item.video_id === 'string' ? `${item.video_id.substring(0, 10)}...` : item.video_id) : 'not_present',
+          hasVideosArray: 'videos' in item && Array.isArray(item.videos),
+          videosCount: Array.isArray(item.videos) ? item.videos.length : 'not_array',
+          picturesCount: Array.isArray(item.pictures) ? item.pictures.length : 'not_array',
+          endpointUsed: 'batch_GET_items_ids',
+        });
+      }
+      
       const videoExtraction = extractHasVideoFromMlItem(item, httpStatusForVideo);
       const hasVideoFromAPI = videoExtraction.hasVideo;
+      
+      // HOTFIX 09.11: Log detalhado quando DEBUG_MEDIA=1
+      if (debugMedia) {
+        console.log(`[ML-SYNC] DEBUG_MEDIA: Resultado da extração de vídeo para ${item.id}:`, {
+          listing_id_ext: item.id,
+          hasClipsDetected: hasVideoFromAPI,
+          isDetectable: videoExtraction.isDetectable,
+          evidenceCount: videoExtraction.evidence.length,
+          evidence: videoExtraction.evidence,
+          clipsEvidence: videoExtraction.clipsEvidence,
+          fieldsUsed: [
+            'video_id' in item ? 'video_id' : null,
+            'videos' in item ? 'videos' : null,
+          ].filter(Boolean),
+          valueToPersist: hasVideoFromAPI, // true | false | null
+        });
+      }
       
       // HOTFIX: Log seguro com evidências e clipsEvidence (sem tokens)
       if (process.env.NODE_ENV !== 'production' && videoExtraction.evidence.length > 0) {
@@ -1552,11 +1667,14 @@ export class MercadoLivreSyncService {
         
         // Log estruturado para debug (sem expor tokens) - já logado acima no resultado final
 
-        // HOTFIX: Atualizar has_video/has_clips com regra de persistência "true é sticky"
+        // HOTFIX 09.11: Atualizar has_video/has_clips com regra de persistência "true é sticky"
         // - true: tem vídeo confirmado via API (sticky: não sobrescrever com null/false)
         // - false: confirmado que não tem vídeo (apenas se status 200 e evidência negativa confiável)
         // - null: não detectável via API (não acusar falta)
+        // IMPORTANTE: has_clips deve ser boolean | null, NUNCA converter null para false
         // No fallback via Orders, não temos certeza, então setar null
+        const debugMedia = process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
+        
         if (source === 'orders_fallback') {
           // Fallback: não sobrescrever valores existentes
           if (existing) {
@@ -1564,7 +1682,7 @@ export class MercadoLivreSyncService {
             listingData.has_video = undefined; // Não atualizar
             listingData.has_clips = undefined; // Não atualizar
           } else {
-            // Criação: setar null
+            // Criação: setar null (não false)
             listingData.has_video = null;
             listingData.has_clips = null;
           }
@@ -1573,38 +1691,85 @@ export class MercadoLivreSyncService {
           const existingHasClips = existing ? (existing as any).has_clips : null;
           const existingHasVideo = existing ? (existing as any).has_video : null;
           
+          if (debugMedia) {
+            console.log(`[ML-SYNC] DEBUG_MEDIA: Persistência de has_clips para ${item.id}:`, {
+              listing_id_ext: item.id,
+              hasVideoFromAPI,
+              existingHasClips,
+              existingHasVideo,
+              videoExtractionIsDetectable: videoExtraction.isDetectable,
+            });
+          }
+          
           // Se já existe true, manter true (sticky)
           if (existingHasClips === true || existingHasVideo === true) {
             listingData.has_video = true;
             listingData.has_clips = true;
+            if (debugMedia) {
+              console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo true (sticky) para ${item.id}`);
+            }
           } else {
             // Aplicar novo valor apenas se não for sobrescrever um true existente
             if (hasVideoFromAPI === true) {
               // Novo true: sempre aplicar
               listingData.has_video = true;
               listingData.has_clips = true;
+              if (debugMedia) {
+                console.log(`[ML-SYNC] DEBUG_MEDIA: Aplicando true (novo) para ${item.id}`);
+              }
             } else if (hasVideoFromAPI === false) {
-              // Novo false: só aplicar se não havia true antes
-              if (existingHasClips !== true && existingHasVideo !== true) {
+              // Novo false: só aplicar se não havia true antes E se foi detectável
+              if (existingHasClips !== true && existingHasVideo !== true && videoExtraction.isDetectable) {
                 listingData.has_video = false;
                 listingData.has_clips = false;
+                if (debugMedia) {
+                  console.log(`[ML-SYNC] DEBUG_MEDIA: Aplicando false (confirmado sem vídeo) para ${item.id}`);
+                }
               } else {
-                // Manter true (sticky)
-                listingData.has_video = true;
-                listingData.has_clips = true;
+                // Manter true (sticky) ou não atualizar se não foi detectável
+                if (existingHasClips === true || existingHasVideo === true) {
+                  listingData.has_video = true;
+                  listingData.has_clips = true;
+                } else {
+                  // Não atualizar se não foi detectável
+                  listingData.has_video = undefined;
+                  listingData.has_clips = undefined;
+                }
+                if (debugMedia) {
+                  console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo valor existente (não sobrescrever) para ${item.id}`);
+                }
               }
             } else {
               // hasVideoFromAPI === null: não sobrescrever valores existentes
+              // IMPORTANTE: null significa "não detectável", NÃO significa "false"
               if (existing) {
-                // Manter valor existente
+                // Manter valor existente (não atualizar)
                 listingData.has_video = undefined; // Não atualizar
                 listingData.has_clips = undefined; // Não atualizar
+                if (debugMedia) {
+                  console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo valor existente (null não detectável) para ${item.id}`);
+                }
               } else {
-                // Criação: setar null
+                // Criação: setar null (não false)
                 listingData.has_video = null;
                 listingData.has_clips = null;
+                if (debugMedia) {
+                  console.log(`[ML-SYNC] DEBUG_MEDIA: Setando null (não detectável) para novo listing ${item.id}`);
+                }
               }
             }
+          }
+          
+          if (debugMedia) {
+            console.log(`[ML-SYNC] DEBUG_MEDIA: Valor final a persistir para ${item.id}:`, {
+              listing_id_ext: item.id,
+              has_video: listingData.has_video,
+              has_clips: listingData.has_clips,
+              type_has_clips: typeof listingData.has_clips,
+              isNull: listingData.has_clips === null,
+              isFalse: listingData.has_clips === false,
+              isTrue: listingData.has_clips === true,
+            });
           }
         }
 

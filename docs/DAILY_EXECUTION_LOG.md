@@ -1,4 +1,21 @@
-# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.9 — Correções Estruturais)
+# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.11 — Corrigir ingestão/persistência de has_clips)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Corrigir ingestão/persistência de has_clips (clip/vídeo) no sync do Mercado Livre**
+
+## 📌 Contexto
+Após HOTFIX 09.10, validação em produção mostrou que:
+- `MLB4167251409` (TEM clip confirmado no ML) → está salvando `has_clips=false` errado
+- `MLB4217107417` (SEM clip) → `has_clips=false` ok
+- No JSON do analyze, `mediaVerdict.hasClipDetected=false` e `score/actionPlan` penalizam por falta de clip
+
+**Causa raiz**: O endpoint `GET /items?ids=...` (batch) pode não retornar `video_id` completo, e o sync não estava buscando detalhes individuais quando necessário.
+
+---
+
+# HOTFIX DIA 09.9 — Correções Estruturais (Histórico)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO
 
