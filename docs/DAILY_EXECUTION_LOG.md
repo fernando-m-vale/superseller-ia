@@ -1,4 +1,96 @@
-# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.12 — /listings/import com forceRefresh)
+# DAILY EXECUTION LOG — 2026-02-XX (HOTFIX DIA 09.13 — Debug definitivo do payload de vídeo/clip)
+
+## ✅ STATUS: CONCLUÍDO COM SUCESSO
+
+## 🎯 Foco do hotfix
+**Debug definitivo do payload de vídeo/clip no /listings/import (forceRefresh) para identificar por que has_clips retorna false**
+
+## 📌 Contexto
+- `/listings/import` com `forceRefresh=true` executa refresh e retorna `has_clips_after=false` para `MLB4167251409` (que deveria ter clip).
+- Precisamos inspecionar exatamente quais campos de vídeo o ML está retornando no `fetchItemsDetails` e na fallback de enriquecimento (GET /items/{id}).
+- Não queremos logar URLs nem dados sensíveis, só presença/ausência e tamanhos.
+
+## 🔧 Implementações (HOTFIX 09.13)
+
+### A) P0 — Debug info no response quando x-debug:1 ou DEBUG_MEDIA=1
+- ✅ Criada interface `VideoFieldsDebugInfo` exportada
+- ✅ Coleta de debug info no `fetchItemsDetails`:
+  - `endpointUsed`: endpoint usado (ex: "items")
+  - `mlFieldsSummary`: resumo dos campos de vídeo no payload batch:
+    - `hasVideoId`, `videoIdType`, `hasVideosArray`, `videosCount`
+    - `hasAttributesVideo` (se existir algo tipo attributes com VIDEO)
+    - `rawKeys`: lista curta de chaves relevantes presentes
+  - `fallbackTried`: se fallback foi tentado
+  - `fallbackEndpoint`: "/items/{id}" se usado
+  - `fallbackHadVideoId`, `fallbackVideosCount`: resultados do fallback
+- ✅ Debug info armazenado no item via propriedade não enumerável `_videoDebugInfo`
+- ✅ Endpoint `/listings/import` extrai e inclui debug info no response quando `x-debug:1` ou `DEBUG_MEDIA=1`
+
+### B) P0 — Garantir que fallback do HOTFIX 09.11 roda também no import
+- ✅ Fallback já estava implementado no `fetchItemsDetails` (HOTFIX 09.11)
+- ✅ Verificado que fallback é executado quando item não tem `video_id` nem `videos` array no batch
+- ✅ Debug info captura se fallback foi tentado e seus resultados
+
+### C) P0 — Persistência corrigida
+- ✅ Garantido que `has_clips` seja `null` quando `isDetectable=false`
+- ✅ Apenas setar `false` quando `isDetectable=true` e `hasVideoFromAPI=false`
+- ✅ Lógica já estava correta no HOTFIX 09.11, apenas adicionado log adicional quando `isDetectable=false`
+
+### D) P0 — Atualizar last_synced_at quando forceRefresh=true
+- ✅ Quando `forceRefresh=true`, usar `source='force_refresh'` no `upsertListings`
+- ✅ Adicionada lógica para atualizar `last_synced_at = new Date()` quando `source === 'force_refresh'` ou `source === 'manual_import'`
+
+## ✅ Critérios de Aceite (DoD 09.13)
+- ✅ Rodar import `forceRefresh` com `x-debug:1` e retornar debug `mlPayload` preenchido
+- ✅ Conseguir concluir, com dados do debug, se o ML realmente retorna `video_id`/`videos` para `MLB4167251409`
+- ✅ CI verde (build passando)
+
+## 📝 Arquivos Modificados
+- `apps/api/src/services/MercadoLivreSyncService.ts`:
+  - Adicionada interface `VideoFieldsDebugInfo` exportada
+  - Coleta de debug info no `fetchItemsDetails` (batch + fallback)
+  - Atualização de `last_synced_at` quando `source === 'force_refresh'` ou `'manual_import'`
+- `apps/api/src/routes/listings.ts`:
+  - Extração de `_videoDebugInfo` do item retornado
+  - Inclusão de `mlPayload` no response debug quando disponível
+  - Uso de `source='force_refresh'` quando `forceRefresh=true`
+
+## 🔍 Exemplo de Response com Debug
+
+```json
+{
+  "message": "Anúncio atualizado com sucesso (forceRefresh)",
+  "data": {
+    "id": "listing-uuid",
+    "has_clips": false,
+    "has_video": false,
+    "forceRefresh": true,
+    "debug": {
+      "has_clips_after": false,
+      "has_video_after": false,
+      "mlPayload": {
+        "endpointUsed": "items",
+        "mlFieldsSummary": {
+          "hasVideoId": false,
+          "videoIdType": "undefined",
+          "hasVideosArray": false,
+          "videosCount": null,
+          "hasAttributesVideo": false,
+          "rawKeys": ["pictures", "attributes"]
+        },
+        "fallbackTried": true,
+        "fallbackEndpoint": "/items/MLB4167251409",
+        "fallbackHadVideoId": false,
+        "fallbackVideosCount": null
+      }
+    }
+  }
+}
+```
+
+---
+
+# HOTFIX DIA 09.12 — /listings/import com forceRefresh (Histórico)
 
 ## ✅ STATUS: CONCLUÍDO COM SUCESSO
 
