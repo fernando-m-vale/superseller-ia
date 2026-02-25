@@ -13,6 +13,7 @@ import { aiDebugRoutes } from './routes/ai-debug.routes';
 import { debugRoutes } from './routes/debug.routes';
 import { internalJobsRoutes } from './routes/internal-jobs.routes';
 import { internalDebugRoutes } from './routes/internal-debug.routes';
+import { clipsDebugRoutes } from './routes/clips-debug.routes';
 import { metaRoutes } from './routes/meta.routes';
 import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
@@ -76,6 +77,7 @@ async function main() {
     await app.register(debugRoutes, { prefix: '/api/v1/debug' });
     await app.register(internalJobsRoutes, { prefix: '/api/v1/jobs' });
     await app.register(internalDebugRoutes, { prefix: '/api/v1/internal/debug' });
+    await app.register(clipsDebugRoutes, { prefix: '/api/v1/debug/ml' });
 
     await app.ready();
     
