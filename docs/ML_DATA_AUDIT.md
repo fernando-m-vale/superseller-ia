@@ -226,6 +226,44 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 **Documentação Completa:**
 - Ver `apps/api/docs/CLIPS_API_INVESTIGATION.md` para detalhes da investigação
 
+---
+
+## Clips — Status Oficial (DIA 09)
+
+**Data de Conclusão:** 2026-02-25  
+**Status:** ✅ **Limitação estrutural confirmada — Solução implementada**
+
+### Limitação Estrutural da API do ML
+
+Após investigação oficial, foi confirmado que **Clips não são detectáveis via API pública do Mercado Livre para anúncios MLB**. Esta é uma limitação estrutural da API, não um bug do sistema.
+
+**Evidências:**
+- Endpoint `/items/{id}/clips` não existe na API pública (404)
+- Endpoint `/marketplace/items/{id}/clips` requer permissões especiais não disponíveis (403 PolicyAgent)
+- Documentação oficial indica que endpoints de Clips são apenas para itens CBT (Cross-Border Trade)
+
+### Decisão Arquitetural
+
+**`has_clips = null` quando não detectável**
+
+- **Padrão para MLB:** `has_clips` sempre `NULL` por padrão (não setar `false` automaticamente)
+- **Override manual como única fonte confiável atual:**
+  - Usuário pode setar `true`/`false` via endpoint `PATCH /api/v1/listings/:id/clips`
+  - Quando override é aplicado, `clips_source = "override"`
+  - Quando override é removido (`value: null`), volta ao estado padrão (`clips_source = "unknown"`)
+
+### Impacto no Sistema
+
+- **Score de mídia:** Não penaliza quando `has_clips === null` (limitação da API, não falta do usuário)
+- **MediaVerdict:** Mostra mensagem clara sobre limitação da API e orienta validação manual
+- **UX:** Usuário pode setar manualmente quando necessário via override
+
+### Próximos Passos
+
+- ⏳ Monitorar se ML disponibiliza endpoint público para Clips no futuro
+- 🔮 Considerar integração com API alternativa se disponível
+- ✅ Override manual permanece como solução atual
+
 ### Benchmark / Comparação com Concorrentes
 **Status:** ✅ IMPLEMENTADO (Dia 04)
 - **Fonte de dados:** `/sites/MLB/search` (endpoint público do ML) com `category` e `sort=relevance`

@@ -1,6 +1,71 @@
-# DAILY EXECUTION LOG — 2026-02-25 (Sessão de Encerramento — Ciclo HOTFIX 09.9 → 09.13)
+# DAILY EXECUTION LOG — 2026-02-25 (Encerramento Oficial — DIA 09)
 
-## ✅ STATUS: HOTFIX 09.13 IMPLEMENTADO — AGUARDANDO VALIDAÇÃO EM PROD
+## ✅ STATUS: DIA 09 CONCLUÍDO COM SUCESSO
+
+---
+
+## 📋 RESUMO EXECUTIVO — DIA 09
+
+### Objetivo Principal
+Estabilização definitiva do pipeline de detecção de clip/vídeo (`has_clips`) e correções estruturais do sistema de análise IA.
+
+### Principais Entregas
+
+#### 1. Investigação Oficial da API de Clips do Mercado Livre
+- **Endpoints testados:**
+  - `/items/{id}/clips` → `404 Not Found` (endpoint não existe)
+  - `/marketplace/items/{id}/clips` → `403 Forbidden` (PolicyAgent, requer permissões especiais)
+- **Resultado oficial:** Clips não são detectáveis via API pública para anúncios MLB
+- **Evidência:** Validação em produção via curl confirmou limitação estrutural da API do ML
+- **Documentação:** `apps/api/docs/CLIPS_API_INVESTIGATION.md`
+
+#### 2. Implementação do Tri-State (true/false/null)
+- **`has_clips`**: Campo principal com suporte a tri-state
+  - `true`: Tem clip confirmado (via override manual)
+  - `false`: Confirmado que não tem clip (via override manual)
+  - `null`: Não detectável via API (padrão para MLB)
+- **Regra de persistência:** Nunca converter `null` para `false` automaticamente
+
+#### 3. Separação Semântica has_video vs has_clips
+- **`has_video`**: Vídeo tradicional do ML (baseado em `video_id`/`videos[]`) — **detectável via API**
+- **`has_clips`**: Clips do ML (curtos verticais) — **NÃO detectável via API pública**
+- **Decisão:** Não inferir `has_clips` baseado em `video_id` (são coisas diferentes)
+
+#### 4. Implementação de Override Manual
+- **Endpoint:** `PATCH /api/v1/listings/:id/clips`
+- **Funcionalidade:** Permite setar `has_clips` manualmente quando API não detecta
+- **Comportamento:**
+  - `value: true/false` → `clips_source = "override"`
+  - `value: null` → `clips_source = "unknown"` (remove override)
+
+#### 5. Ajustes no Score e MediaVerdict
+- **`has_clips === null`**: **NÃO penaliza**, mostra mensagem de limitação da API
+- **`has_clips === false`**: Penaliza, mostra ganho potencial de +10 pontos
+- **`has_clips === true`**: Não penaliza, adiciona 10 pontos no score de mídia
+- **Mensagem atualizada:** "Clips não são detectáveis via API pública do Mercado Livre. Valide manualmente no painel do ML."
+
+#### 6. Correções Estruturais (HOTFIX 09.9 → 09.13)
+- Hacks aparecem na primeira análise
+- Botão "Ver categoria" usa permalink oficial
+- Preço psicológico determinístico (sem "fantasma")
+- Cache sobrescreve `growthHacks` corretamente
+- Fallback GET /items/{id} individual quando batch não retorna `video_id`
+- Instrumentação profunda para debug de payload ML
+
+### Validação em Produção
+- ✅ Endpoints testados via curl confirmaram limitação da API
+- ✅ Override manual funcionando corretamente
+- ✅ Score não penaliza quando `has_clips === null`
+- ✅ Build e testes passando
+
+### Decisões Arquiteturais Registradas
+- ADR-011: `has_clips` como fonte de verdade para detecção de vídeo/clip
+- Separação semântica oficial entre `has_video` e `has_clips`
+- Override manual como única fonte confiável atual para Clips
+
+---
+
+## 📅 Linha do Tempo — Ciclo de Estabilização (09.9 → 09.13)
 
 ## 📅 Linha do Tempo — Ciclo de Estabilização (09.9 → 09.13)
 
@@ -217,6 +282,112 @@ curl -X POST "https://api.superselleria.com.br/api/v1/listings/import" \
 **Cenário C: Fallback não é executado**
 - **Causa**: Bug na lógica de detecção de necessidade de fallback
 - **Ação**: Investigar condição `!hasVideoId && !hasVideosArray`
+
+---
+
+## 🎯 DIA 09 — ENCERRAMENTO OFICIAL
+
+**Data de Encerramento:** 2026-02-25  
+**Status:** ✅ **CONCLUÍDO COM SUCESSO**
+
+### Declaração Oficial
+
+O DIA 09 foi oficialmente concluído após:
+- ✅ Investigação oficial da API de Clips do Mercado Livre
+- ✅ Implementação completa do tri-state `has_clips` (true/false/null)
+- ✅ Separação semântica entre `has_video` e `has_clips`
+- ✅ Implementação de override manual via endpoint
+- ✅ Ajustes no Score e MediaVerdict para não penalizar quando não detectável
+- ✅ Validação em produção via curl
+- ✅ Build e testes passando
+- ✅ Documentação completa atualizada
+
+### Evidências de Conclusão
+
+**Endpoints testados e resultados:**
+- `/items/{id}/clips` → `404 Not Found` (endpoint não existe na API pública)
+- `/marketplace/items/{id}/clips` → `403 Forbidden` (PolicyAgent, requer permissões especiais)
+
+**Decisão arquitetural registrada:**
+- ADR-011: `has_clips` como fonte de verdade para detecção de vídeo/clip
+- Clips não são detectáveis via API pública para MLB
+- Override manual como única fonte confiável atual
+
+**Implementações validadas:**
+- ✅ Endpoint `PATCH /api/v1/listings/:id/clips` funcionando
+- ✅ Score não penaliza quando `has_clips === null`
+- ✅ MediaVerdict mostra mensagem apropriada sobre limitação da API
+- ✅ Separação semântica `has_video` vs `has_clips` implementada
+
+---
+
+## 🚀 PRÓXIMOS PASSOS — DIA 10
+
+### Planejamento Estratégico
+
+#### 1. Padronização UX dos Blocos
+- **Objetivo:** Garantir consistência visual e de interação em todos os componentes
+- **Foco:**
+  - Padronizar espaçamentos, tipografia e cores
+  - Unificar comportamento de accordions e modais
+  - Melhorar hierarquia visual dos elementos
+  - Garantir acessibilidade (WCAG 2.1)
+
+#### 2. Experiência Mágica e Segura
+- **Objetivo:** Criar uma experiência fluida e confiável para o usuário
+- **Foco:**
+  - Feedback visual imediato em todas as ações
+  - Estados de loading claros e informativos
+  - Tratamento de erros amigável e acionável
+  - Confirmações para ações destrutivas
+  - Animações sutis que melhoram a percepção de performance
+
+#### 3. Ajustes de Copy e Consistência
+- **Objetivo:** Garantir comunicação clara e consistente em todo o produto
+- **Foco:**
+  - Revisar todos os textos da interface
+  - Padronizar terminologia (ex: "clip" vs "vídeo")
+  - Melhorar mensagens de erro e sucesso
+  - Garantir tom de voz consistente
+  - Revisar tooltips e ajuda contextual
+
+#### 4. Preparação para Empacotamento Comercial
+- **Objetivo:** Preparar o produto para lançamento comercial
+- **Foco:**
+  - Landing page simples e clara
+  - Planos de assinatura (Starter / Growth / Pro)
+  - Onboarding guiado para novos usuários
+  - Primeiro anúncio analisado automaticamente após conexão
+  - Lista de espera / early users
+  - Integração com sistema de pagamento
+  - Métricas de uso e limites por plano
+
+### Prioridades do DIA 10
+
+**P0 (Crítico):**
+- [ ] Padronização visual completa dos blocos
+- [ ] Copy revisado e consistente
+- [ ] Experiência de onboarding funcional
+
+**P1 (Importante):**
+- [ ] Landing page básica
+- [ ] Estrutura de planos definida
+- [ ] Sistema de limites por plano
+
+**P2 (Desejável):**
+- [ ] Animações e micro-interações
+- [ ] Lista de espera
+- [ ] Integração com pagamento
+
+### Critérios de Aceite (DoD) para DIA 10
+
+- [ ] UX padronizada e consistente em todos os componentes
+- [ ] Copy revisado e aprovado
+- [ ] Onboarding funcional end-to-end
+- [ ] Landing page publicada
+- [ ] Estrutura de planos implementada
+- [ ] Build e testes passando
+- [ ] Documentação atualizada
 
 ---
 
