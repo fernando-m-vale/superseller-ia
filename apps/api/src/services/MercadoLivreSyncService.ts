@@ -1759,124 +1759,88 @@ export class MercadoLivreSyncService {
         
         // Log estruturado para debug (sem expor tokens) - já logado acima no resultado final
 
-        // HOTFIX 09.11: Atualizar has_video/has_clips com regra de persistência "true é sticky"
-        // - true: tem vídeo confirmado via API (sticky: não sobrescrever com null/false)
-        // - false: confirmado que não tem vídeo (apenas se status 200 e evidência negativa confiável)
-        // - null: não detectável via API (não acusar falta)
-        // IMPORTANTE: has_clips deve ser boolean | null, NUNCA converter null para false
-        // No fallback via Orders, não temos certeza, então setar null
+        // AJUSTE DEFINITIVO: Separar semanticamente has_video (vídeo tradicional) de has_clips (Clips ML)
+        // - has_video: baseado em video_id/videos (vídeo tradicional do ML)
+        // - has_clips: representa Clips do ML (curtos verticais) - NÃO detectável via API pública para MLB
+        // Para MLB, has_clips deve ser NULL por padrão (não setar false automaticamente)
+        // IMPORTANTE: Não inferir has_clips baseado em video_id (são coisas diferentes)
         const debugMedia = process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
+        
+        // 1. Atualizar has_video (vídeo tradicional) baseado em video_id/videos
+        const existingHasVideo = existing ? (existing as any).has_video : null;
         
         if (source === 'orders_fallback') {
           // Fallback: não sobrescrever valores existentes
           if (existing) {
-            // Manter valor existente (especialmente se for true)
             listingData.has_video = undefined; // Não atualizar
-            listingData.has_clips = undefined; // Não atualizar
           } else {
-            // Criação: setar null (não false)
-            listingData.has_video = null;
-            listingData.has_clips = null;
+            listingData.has_video = null; // Criação: null (não false)
           }
         } else {
-          // Fluxo normal: aplicar regra "true é sticky"
-          const existingHasClips = existing ? (existing as any).has_clips : null;
-          const existingHasVideo = existing ? (existing as any).has_video : null;
-          
-          if (debugMedia) {
-            console.log(`[ML-SYNC] DEBUG_MEDIA: Persistência de has_clips para ${item.id}:`, {
-              listing_id_ext: item.id,
-              hasVideoFromAPI,
-              existingHasClips,
-              existingHasVideo,
-              videoExtractionIsDetectable: videoExtraction.isDetectable,
-            });
-          }
-          
-          // Se já existe true, manter true (sticky)
-          if (existingHasClips === true || existingHasVideo === true) {
+          // Fluxo normal: aplicar regra "true é sticky" para has_video
+          if (hasVideoFromAPI === true) {
             listingData.has_video = true;
-            listingData.has_clips = true;
             if (debugMedia) {
-              console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo true (sticky) para ${item.id}`);
+              console.log(`[ML-SYNC] DEBUG_MEDIA: Aplicando has_video=true (vídeo tradicional) para ${item.id}`);
             }
-          } else {
-            // Aplicar novo valor apenas se não for sobrescrever um true existente
-            if (hasVideoFromAPI === true) {
-              // Novo true: sempre aplicar
-              listingData.has_video = true;
-              listingData.has_clips = true;
+          } else if (hasVideoFromAPI === false && videoExtraction.isDetectable) {
+            // Só setar false se foi detectável e confirmado que não tem vídeo
+            if (existingHasVideo !== true) {
+              listingData.has_video = false;
               if (debugMedia) {
-                console.log(`[ML-SYNC] DEBUG_MEDIA: Aplicando true (novo) para ${item.id}`);
-              }
-            } else if (hasVideoFromAPI === false) {
-              // Novo false: só aplicar se não havia true antes E se foi detectável
-              if (existingHasClips !== true && existingHasVideo !== true && videoExtraction.isDetectable) {
-                listingData.has_video = false;
-                listingData.has_clips = false;
-                if (debugMedia) {
-                  console.log(`[ML-SYNC] DEBUG_MEDIA: Aplicando false (confirmado sem vídeo) para ${item.id}`);
-                }
-              } else {
-                // Manter true (sticky) ou não atualizar se não foi detectável
-                if (existingHasClips === true || existingHasVideo === true) {
-                  listingData.has_video = true;
-                  listingData.has_clips = true;
-                } else {
-                  // Não atualizar se não foi detectável
-                  listingData.has_video = undefined;
-                  listingData.has_clips = undefined;
-                }
-                if (debugMedia) {
-                  console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo valor existente (não sobrescrever) para ${item.id}`);
-                }
+                console.log(`[ML-SYNC] DEBUG_MEDIA: Aplicando has_video=false (confirmado sem vídeo tradicional) para ${item.id}`);
               }
             } else {
-              // hasVideoFromAPI === null: não sobrescrever valores existentes
-              // HOTFIX 09.13: Se isDetectable=false, garantir que has_clips seja null (não false)
-              // IMPORTANTE: null significa "não detectável", NÃO significa "false"
-              if (existing) {
-                // HOTFIX 09.13: Se não foi detectável e valor existente é false, pode ser que seja null
-                // Manter valor existente (não atualizar) OU setar null se não foi detectável
-                if (!videoExtraction.isDetectable) {
-                  // Se não foi detectável, não devemos ter false persistido
-                  // Manter null ou undefined (não atualizar)
-                  listingData.has_video = undefined; // Não atualizar
-                  listingData.has_clips = undefined; // Não atualizar
-                } else {
-                  // Foi detectável mas retornou null (caso raro) - manter existente
-                  listingData.has_video = undefined; // Não atualizar
-                  listingData.has_clips = undefined; // Não atualizar
-                }
-                if (debugMedia) {
-                  console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo valor existente (null não detectável) para ${item.id}`, {
-                    isDetectable: videoExtraction.isDetectable,
-                  });
-                }
-              } else {
-                // Criação: setar null (não false) quando não detectável
-                listingData.has_video = null;
-                listingData.has_clips = null;
-                if (debugMedia) {
-                  console.log(`[ML-SYNC] DEBUG_MEDIA: Setando null (não detectável) para novo listing ${item.id}`, {
-                    isDetectable: videoExtraction.isDetectable,
-                  });
-                }
-              }
+              listingData.has_video = true; // Manter true (sticky)
+            }
+          } else {
+            // hasVideoFromAPI === null ou não detectável: não atualizar se existente, null se criação
+            if (existing) {
+              listingData.has_video = undefined; // Não atualizar
+            } else {
+              listingData.has_video = null; // Criação: null
             }
           }
-          
+        }
+        
+        // 2. has_clips: Para MLB, sempre NULL por padrão (não detectável via API pública)
+        // Só atualizar se clips_source === 'override' (override manual)
+        const existingHasClips = existing ? (existing as any).has_clips : null;
+        const existingClipsSource = existing ? (existing as any).clips_source : null;
+        
+        // Se tem override manual, não tocar em has_clips (será atualizado pelo endpoint de override)
+        if (existingClipsSource === 'override') {
+          listingData.has_clips = undefined; // Não atualizar (mantém override)
           if (debugMedia) {
-            console.log(`[ML-SYNC] DEBUG_MEDIA: Valor final a persistir para ${item.id}:`, {
-              listing_id_ext: item.id,
-              has_video: listingData.has_video,
-              has_clips: listingData.has_clips,
-              type_has_clips: typeof listingData.has_clips,
-              isNull: listingData.has_clips === null,
-              isFalse: listingData.has_clips === false,
-              isTrue: listingData.has_clips === true,
-            });
+            console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo has_clips (override manual) para ${item.id}`);
           }
+        } else {
+          // Para MLB, has_clips não é detectável via API pública
+          // Sempre setar NULL (não false) para novos listings ou se não tem override
+          if (existing) {
+            // Se já existe e não é override, não atualizar (mantém null ou valor existente)
+            listingData.has_clips = undefined; // Não atualizar
+          } else {
+            // Criação: sempre NULL (não detectável via API)
+            listingData.has_clips = null;
+            listingData.clips_source = 'unknown'; // Marcar como desconhecido (não detectável)
+            if (debugMedia) {
+              console.log(`[ML-SYNC] DEBUG_MEDIA: Setando has_clips=null (não detectável via API) para novo listing ${item.id}`);
+            }
+          }
+        }
+        
+        if (debugMedia) {
+          console.log(`[ML-SYNC] DEBUG_MEDIA: Valores finais a persistir para ${item.id}:`, {
+            listing_id_ext: item.id,
+            has_video: listingData.has_video,
+            has_clips: listingData.has_clips,
+            clips_source: listingData.clips_source,
+            type_has_clips: typeof listingData.has_clips,
+            isNull: listingData.has_clips === null,
+            isFalse: listingData.has_clips === false,
+            isTrue: listingData.has_clips === true,
+          });
         }
 
         // Atualizar visits_last_7d/sales_last_7d apenas se a API retornar valores válidos

@@ -194,40 +194,37 @@ Garantir dados confiáveis e consistentes (por tenant, por dia, por listing) par
 - **Helper:** `extractBuyerPricesFromMlPrices()` extrai preços do payload `/prices` com regras: `standard.amount` → originalPrice, `promotion.amount` → promotionalPrice, `promotion.regular_amount` → originalPrice (se disponível)
 
 ### Video / Clips
-**Status:** 🔍 **EM INVESTIGAÇÃO (HOTFIX 09.13)**
+**Status:** ✅ **RESOLVIDO — Clips não são detectáveis via API pública**
 
-**Decisão Arquitetural Oficial:**
-- **`has_clips`** é a fonte de verdade (tri-state: `true | false | null`)
-- **`has_video`** é legado e será removido no futuro
-- **Regra de persistência**: `has_clips` nunca deve ser convertido de `null` para `false` indevidamente
+**Decisão Arquitetural Oficial (2026-02-25):**
+- **`has_video`**: Vídeo tradicional do ML (baseado em `video_id`/`videos[]`) — **detectável via API**
+- **`has_clips`**: Clips do ML (curtos verticais) — **NÃO detectável via API pública para MLB**
+- **Separação semântica**: Não inferir `has_clips` baseado em `video_id` (são coisas diferentes)
 
-**Fluxo de Detecção (HOTFIX 09.11 + 09.13):**
-1. **Batch Fetch** (`GET /items?ids=...`): Busca múltiplos itens, pode não retornar `video_id` completo
-2. **Fallback Individual** (HOTFIX 09.11): Se batch não tem `video_id` nem `videos[]` → `GET /items/{id}` individual
-3. **Extração** (`extractHasVideoFromMlItem`): Procura por `video_id`, `videos[]`, `attributes`, `tags`
-4. **Tri-State Logic:**
-   - `true`: Tem clip confirmado via API (sticky: não sobrescrever)
-   - `false`: Confirmado que não tem clip (apenas se `isDetectable === true`)
-   - `null`: Não detectável via API (não atualizar valor existente OU setar `null` em criação)
+**Investigação Oficial:**
+- `/items/{id}/clips` → `404 Not Found` (endpoint não existe)
+- `/marketplace/items/{id}/clips` → `403 Forbidden` (PolicyAgent, requer permissões especiais)
+- **Conclusão**: Clips não são detectáveis via API pública do Mercado Livre
 
-**Instrumentação (HOTFIX 09.13):**
-- Debug info coletado em `fetchItemsDetails`: `endpointUsed`, `mlFieldsSummary`, `fallbackTried`, `fallbackEndpoint`, `fallbackHadVideoId`
-- Endpoint `/listings/import` com `forceRefresh=true` e `x-debug:1` retorna `debug.mlPayload` completo
-- Permite identificar se problema está no payload do ML ou na lógica de extração
+**Regra de Persistência:**
+- **Para MLB, `has_clips` deve ser `NULL` por padrão** (não setar `false` automaticamente)
+- **Override manual** via `PATCH /api/v1/listings/:id/clips`:
+  - `value: true` → `has_clips = true`, `clips_source = "override"`
+  - `value: false` → `has_clips = false`, `clips_source = "override"`
+  - `value: null` → `has_clips = null`, `clips_source = "unknown"` (remove override)
 
-**Problema Conhecido:**
-- `MLB4167251409` (COM clip esperado) retorna `has_clips=false` após refresh
-- **Hipótese**: ML não retorna `video_id` mesmo no GET individual OU lógica de extração não detecta corretamente
-- **Validação pendente**: Rodar import forceRefresh com `x-debug:1` e analisar `mlPayload`
+**Score e Penalização:**
+- **`has_clips === true`**: Não penaliza, adiciona 10 pontos no score de mídia
+- **`has_clips === false`**: Penaliza, mostra ganho potencial de +10 pontos
+- **`has_clips === null`**: **NÃO penaliza**, mostra mensagem de limitação da API
 
-**Listagens de Referência:**
-- COM clip esperado: `MLB4167251409` (UUID: `459e4527-8b84-413b-ae76-7ae5788a44ac`)
-- SEM clip esperado: `MLB4217107417` (UUID: `4d51feff-f852-4585-9f07-c6b711e56571`)
+**Fluxo de Detecção:**
+1. **`has_video`**: Detectado via `extractHasVideoFromMlItem` (procura `video_id`, `videos[]`)
+2. **`has_clips`**: Sempre `NULL` por padrão (não detectável via API)
+3. **Override manual**: Usuário pode setar `true`/`false` via endpoint
 
-**Próxima Ação:**
-- Validar payload real do ML após HOTFIX 09.13
-- Confirmar se `video_id` está presente no batch ou fallback
-- Se ML não retorna `video_id`, considerar endpoint alternativo ou validação manual
+**Documentação Completa:**
+- Ver `apps/api/docs/CLIPS_API_INVESTIGATION.md` para detalhes da investigação
 
 ### Benchmark / Comparação com Concorrentes
 **Status:** ✅ IMPLEMENTADO (Dia 04)

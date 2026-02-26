@@ -64,6 +64,7 @@ export function getMediaVerdict(
   }
 
   // REGRA 3: hasClips === null → NUNCA sugerir clip, SEMPRE linguagem condicional
+  // IMPORTANTE: Para MLB, Clips não são detectáveis via API pública (limitação da API)
   const picturesContext = picturesCount !== null && picturesCount !== undefined
     ? picturesCount >= 8
       ? ' Imagens estão boas.'
@@ -75,7 +76,7 @@ export function getMediaVerdict(
   return {
     hasClipDetected: null,
     canSuggestClip: false,
-    message: `Não foi possível confirmar via API se o anúncio possui clip. Valide no painel do Mercado Livre.${picturesContext}`,
+    message: `Clips não são detectáveis via API pública do Mercado Livre. Valide manualmente no painel do ML.${picturesContext}`,
     shortMessage: 'Não detectável via API',
   };
 }

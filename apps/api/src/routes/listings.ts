@@ -839,5 +839,78 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
+  // PATCH /api/v1/listings/:id/clips - Override manual de has_clips
+  app.patch<{ Params: { id: string }; Body: { value: boolean | null } }>(
+    '/:id/clips',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { id } = req.params;
+        const { value } = req.body;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        // Validar value
+        if (value !== true && value !== false && value !== null) {
+          return reply.status(400).send({
+            error: 'Invalid value',
+            message: 'value deve ser true, false ou null',
+          });
+        }
+
+        // Buscar listing
+        const listing = await prisma.listing.findFirst({
+          where: {
+            id,
+            tenant_id: tenantId,
+          },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({
+            error: 'Listing not found',
+            message: 'Anúncio não encontrado',
+          });
+        }
+
+        // Atualizar has_clips e clips_source
+        const updateData = {
+          has_clips: value,
+          clips_checked_at: new Date(),
+          clips_source: (value === true || value === false) ? 'override' as const : 'unknown' as const,
+        };
+
+        const updated = await prisma.listing.update({
+          where: { id },
+          data: updateData,
+          select: {
+            id: true,
+            listing_id_ext: true,
+            has_clips: true,
+            clips_source: true,
+            clips_checked_at: true,
+            updated_at: true,
+          },
+        });
+
+        return reply.status(200).send({
+          message: value === null
+            ? 'Override de clips removido (voltou ao estado default)'
+            : `has_clips atualizado para ${value}`,
+          data: updated,
+        });
+      } catch (error) {
+        app.log.error({ error, listingId: req.params.id, tenantId: req.tenantId }, 'Error updating clips');
+        return reply.status(500).send({
+          error: 'Failed to update clips',
+          message: 'Erro interno ao atualizar clips',
+        });
+      }
+    }
+  );
+
   done();
 };

@@ -112,7 +112,7 @@ describe('IAScoreService - has_clips como fonte de verdade para midia', () => {
     expect(result.score.potential_gain.midia).toContain('+10');
   });
 
-  it('Listing com clip desconhecido (has_clips=null): midia score NÃO inclui pontos de vídeo', async () => {
+  it('Listing com clip desconhecido (has_clips=null): midia score NÃO inclui pontos de vídeo E NÃO mostra ganho potencial', async () => {
     const listing = createMockListing({ has_clips: null, has_video: null, pictures_count: 8 });
     mockFindFirst.mockResolvedValue(listing);
 
@@ -121,8 +121,9 @@ describe('IAScoreService - has_clips como fonte de verdade para midia', () => {
 
     // Midia: 10 (fotos >= 6) + 0 (has_clips = null, não é true) = 10
     expect(result.score.breakdown.midia).toBe(10);
-    // Potential gain: +10 vídeo
-    expect(result.score.potential_gain.midia).toContain('+10');
+    // Potential gain: NÃO deve mostrar ganho de clip (null = não detectável via API, limitação da API)
+    // Se tem fotos suficientes, não deve mostrar ganho de clip
+    expect(result.score.potential_gain.midia).toBeUndefined();
   });
 
   it('DIVERGÊNCIA: has_video=true mas has_clips=false → has_clips prevalece (0 pontos vídeo)', async () => {
@@ -162,9 +163,9 @@ describe('IAScoreService - has_clips como fonte de verdade para midia', () => {
 
     // Midia: 5 (fotos >= 3) + 0 (has_clips = false) = 5
     expect(result.score.breakdown.midia).toBe(5);
-    // Potential gain: fotos + vídeo
+    // Potential gain: fotos + clip
     expect(result.score.potential_gain.midia).toBeDefined();
     expect(result.score.potential_gain.midia).toContain('+10');
-    expect(result.score.potential_gain.midia).toContain('vídeo');
+    expect(result.score.potential_gain.midia).toContain('clip');
   });
 });
