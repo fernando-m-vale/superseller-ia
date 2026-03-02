@@ -11,7 +11,75 @@ import { OpportunityBlock } from './OpportunityBlock'
 import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
-import { useListingActions, updateListingActionStatus, type ListingActionStatus } from '@/hooks/use-listing-actions'
+import { useListingActions } from '@/hooks/use-listing-actions'
+
+// Template padronizado para seções
+type SectionTemplateProps = {
+  icon: React.ElementType
+  title: string | React.ReactNode
+  diagnostic: React.ReactNode
+  impact: React.ReactNode
+  actions: React.ReactNode
+}
+
+const SectionTemplate = ({
+  icon: Icon,
+  title,
+  diagnostic,
+  impact,
+  actions,
+}: SectionTemplateProps) => {
+  return (
+    <Card className="border-l-4 border-l-primary">
+      <CardHeader className="pb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Icon className="h-5 w-5 text-primary" />
+          </div>
+          <CardTitle className="text-lg">{typeof title === 'string' ? title : title}</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Diagnóstico */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Brain className="h-4 w-4 text-primary" />
+            <span>🔍 Diagnóstico</span>
+          </div>
+          <div className="pl-6 text-sm leading-relaxed text-foreground">
+            {diagnostic}
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Impacto */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <TrendingDown className="h-4 w-4 text-orange-500" />
+            <span>📉 Impacto</span>
+          </div>
+          <div className="pl-6 text-sm leading-relaxed text-muted-foreground">
+            {impact}
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Ações Concretas */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <span>✅ Ações Concretas</span>
+          </div>
+          <div className="pl-6">
+            {actions}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -96,12 +164,46 @@ interface ListingAIAnalysisPanelProps {
 export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
   const { toast } = useToast()
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false)
-  const editUrl = props.listingIdExt
-    ? buildMercadoLivreListingUrl(props.listingIdExt, null, 'edit')
-    : null
-
-  const { data: actionsData, isLoading: actionsLoading, error: actionsError, refetch: refetchActions } =
-    useListingActions(props.listingId || null)
+  const [verdictExpanded, setVerdictExpanded] = useState(false)
+  // HOTFIX: Estado local para appliedActions (atualizado imediatamente após aplicar)
+  const [localAppliedActions, setLocalAppliedActions] = useState<Array<{ actionType: string; appliedAt: string }>>(appliedActions)
+  // Sincronizar com prop quando mudar (ex: após regerar análise)
+  useEffect(() => {
+    setLocalAppliedActions(appliedActions)
+  }, [appliedActions])
+  
+  // HOTFIX: Verificar se ação já foi aplicada (usando estado local)
+  const isActionApplied = (actionType: string) => {
+    // Verificar ação específica no estado local
+    if (localAppliedActions.some(action => action.actionType === actionType)) {
+      return true;
+    }
+    
+    // Compatibilidade: se procurar "seo", verificar "seo_title" ou "seo_description"
+    if (actionType === 'seo') {
+      return localAppliedActions.some(action => 
+        action.actionType === 'seo_title' || action.actionType === 'seo_description'
+      );
+    }
+    
+    // Compatibilidade: se procurar "midia", verificar "media_images"
+    if (actionType === 'midia') {
+      return localAppliedActions.some(action => action.actionType === 'media_images');
+    }
+    
+    return false;
+  }
+  
+  // DIA 10: Buscar ações persistidas via API (listing_actions)
+  const {
+    actions: apiActions,
+    updateStatus: updateActionStatus,
+  } = useListingActions(listingId || null)
+  const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
+  const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
+  const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
+  
+  const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
 
   const actions = actionsData?.items || []
   const pendingActions = actions.filter((a) => a.status === 'A_IMPLEMENTAR')
@@ -180,25 +282,46 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
 
   const handleRegenerateClick = () => setRegenerateModalOpen(true)
 
-  const handleRegenerateConfirm = async () => {
-    if (props.onRegenerate) {
-      await props.onRegenerate()
+  const handleKanbanStatusChange = async (actionId: string, newStatus: ActionStatus) => {
+    try {
+      await updateActionStatus(actionId, newStatus)
+    } catch (error) {
+      toast({
+        title: 'Erro ao atualizar status',
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: 'destructive',
+      })
     }
   }
 
-  const handleKanbanStatusChange = async (actionId: string, newStatus: ListingActionStatus) => {
-    if (!props.listingId) return
-    await updateListingActionStatus({
-      listingId: props.listingId,
-      actionId,
-      status: newStatus,
-    })
-    await refetchActions()
-    toast({
-      title: 'Status atualizado',
-      description: 'O status da ação foi atualizado com sucesso.',
-      duration: 1500,
-    })
+  // DIA 10: Mapear ações da API para o formato do Kanban
+  const kanbanActionsWithStatus = apiActions.map(action => ({
+    id: action.id,
+    title: action.title,
+    description: action.description,
+    actionType: null as ActionType | null,
+    status: action.status as ActionStatus,
+    suggestedActionUrl: editUrl || null,
+  }))
+
+  const pendingCount = kanbanActionsWithStatus.filter(a => a.status === 'pending').length
+  const appliedCount = kanbanActionsWithStatus.filter(a => a.status === 'applied').length
+  const dismissedCount = kanbanActionsWithStatus.filter(a => a.status === 'dismissed').length
+
+  // Próxima ação recomendada (primeira pendente)
+  const nextAction = kanbanActionsWithStatus.find(a => a.status === 'pending')?.title || null
+  
+  // Prioridade (se disponível no analysisV21)
+  const priority = analysisV21.finalActionPlan?.[0] ? 'Alta' : null
+
+  const handleRegenerateClick = () => {
+    setRegenerateModalOpen(true)
+  }
+
+  const handleRegenerateConfirm = async () => {
+    if (onRegenerate) {
+      await onRegenerate()
+    }
   }
 
   return (
