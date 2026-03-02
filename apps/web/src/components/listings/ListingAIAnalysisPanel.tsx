@@ -20,6 +20,7 @@ import { OpportunityBlock } from './OpportunityBlock'
 import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban, type ActionStatus } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
+import { useListingActions } from '@/hooks/use-listing-actions'
 
 // Template padronizado para seções
 type SectionTemplateProps = {
@@ -220,58 +221,11 @@ export function ListingAIAnalysisPanel({
     return false;
   }
   
-  // Construir ações para o Kanban
-  const buildKanbanActions = (): Array<{ id: string; title: string; description: string; actionType: ActionType | null; status: ActionStatus; suggestedActionUrl: string | null }> => {
-    const actions: Array<{ id: string; title: string; description: string; actionType: ActionType | null; status: ActionStatus; suggestedActionUrl: string | null }> = []
-    
-    // Adicionar ações do finalActionPlan
-    if (analysisV21.finalActionPlan) {
-      analysisV21.finalActionPlan.forEach((action, idx) => {
-        const actionLower = action.toLowerCase()
-        let actionType: ActionType | null = null
-        
-        if (actionLower.includes('título') || actionLower.includes('titulo') || actionLower.includes('title')) {
-          actionType = 'seo_title'
-        } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
-          actionType = 'seo_description'
-        } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
-          actionType = 'media_images'
-        }
-        
-        const actionId = `action-${idx}`
-        const currentStatus = isActionApplied(actionType || '') ? 'applied' : 'pending'
-        
-        actions.push({
-          id: actionId,
-          title: action,
-          description: action,
-          actionType,
-          status: currentStatus,
-          suggestedActionUrl: editUrl || null,
-        })
-      })
-    }
-    
-    return actions
-  }
-
-  const kanbanActions = buildKanbanActions()
-  
-  // Estado para status das ações no Kanban
-  const [actionStatuses, setActionStatuses] = useState<Map<string, ActionStatus>>(new Map())
-  
-  // Inicializar status das ações baseado em appliedActions
-  useEffect(() => {
-    const initialStatuses = new Map<string, ActionStatus>()
-    kanbanActions.forEach(action => {
-      if (isActionApplied(action.actionType || '')) {
-        initialStatuses.set(action.id, 'applied')
-      } else {
-        initialStatuses.set(action.id, action.status)
-      }
-    })
-    setActionStatuses(initialStatuses)
-  }, [appliedActions, kanbanActions.length])
+  // DIA 10: Buscar ações persistidas via API (listing_actions)
+  const {
+    actions: apiActions,
+    updateStatus: updateActionStatus,
+  } = useListingActions(listingId || null)
   const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
   const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
   const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
@@ -413,50 +367,25 @@ export function ListingAIAnalysisPanel({
   // DIA 06.1: promoPlacements removido (não mais usado após remoção do PromotionHighlightPanel)
 
   const handleKanbanStatusChange = async (actionId: string, newStatus: ActionStatus) => {
-    setActionStatuses(prev => new Map(prev).set(actionId, newStatus))
-    
-    // Se mudou para "applied" e tem actionType, registrar via apply-action
-    const action = kanbanActions.find(a => a.id === actionId)
-    
-    if (newStatus === 'applied' && action?.actionType && listingId) {
-      try {
-        // Para ações que podem ser aplicadas via API
-        if (action.actionType === 'seo_title' && analysisV21.titleFix) {
-          await applyAction({
-            actionType: 'seo_title',
-            beforePayload: { title: analysisV21.titleFix.before },
-            afterPayload: { title: analysisV21.titleFix.after },
-          })
-        } else if (action.actionType === 'seo_description' && analysisV21.descriptionFix) {
-          await applyAction({
-            actionType: 'seo_description',
-            beforePayload: { description: listingTitle || '' },
-            afterPayload: { description: analysisV21.descriptionFix.optimizedCopy },
-          })
-        } else if (action.actionType === 'media_images' && analysisV21.imagePlan) {
-          await applyAction({
-            actionType: 'media_images',
-            beforePayload: { plan: null },
-            afterPayload: { plan: analysisV21.imagePlan.map(item => `Imagem ${item.image}: ${item.action}`).join('\n') },
-          })
-        }
-      } catch (error) {
-        // Reverter status em caso de erro
-        setActionStatuses(prev => {
-          const next = new Map(prev)
-          const prevStatus = action.status
-          next.set(actionId, prevStatus)
-          return next
-        })
-        throw error
-      }
+    try {
+      await updateActionStatus(actionId, newStatus)
+    } catch (error) {
+      toast({
+        title: 'Erro ao atualizar status',
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
+        variant: 'destructive',
+      })
     }
   }
 
-  // Atualizar kanbanActions com status do estado
-  const kanbanActionsWithStatus = kanbanActions.map(action => ({
-    ...action,
-    status: actionStatuses.get(action.id) || action.status,
+  // DIA 10: Mapear ações da API para o formato do Kanban
+  const kanbanActionsWithStatus = apiActions.map(action => ({
+    id: action.id,
+    title: action.title,
+    description: action.description,
+    actionType: null as ActionType | null,
+    status: action.status as ActionStatus,
+    suggestedActionUrl: editUrl || null,
   }))
 
   const pendingCount = kanbanActionsWithStatus.filter(a => a.status === 'pending').length
