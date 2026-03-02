@@ -57,14 +57,16 @@ function mapBackendStatus(status: string): FrontendActionStatus {
   }
 }
 
-function mapFrontendStatus(status: FrontendActionStatus): 'IMPLEMENTADO' | 'DESCARTADO' {
+function mapFrontendStatus(status: FrontendActionStatus): 'A_IMPLEMENTAR' | 'IMPLEMENTADO' | 'DESCARTADO' {
   switch (status) {
     case 'applied':
       return 'IMPLEMENTADO'
     case 'dismissed':
       return 'DESCARTADO'
+    case 'pending':
+      return 'A_IMPLEMENTAR'
     default:
-      return 'IMPLEMENTADO'
+      throw new Error(`Unknown frontend status: ${status}`)
   }
 }
 
@@ -144,6 +146,9 @@ export function useListingActions(listingId: string | null): UseListingActionsRe
 
     const backendStatus = mapFrontendStatus(newStatus)
 
+    // Capture previous status for rollback
+    const previousStatus = actions.find((a) => a.id === actionId)?.status ?? 'pending'
+
     // Optimistic update
     setActions((prev) =>
       prev.map((a) =>
@@ -176,10 +181,10 @@ export function useListingActions(listingId: string | null): UseListingActionsRe
         throw new Error(errorData.error || `Erro ao atualizar status (HTTP ${response.status})`)
       }
     } catch (err) {
-      // Revert optimistic update
+      // Revert optimistic update to previous status
       setActions((prev) =>
         prev.map((a) =>
-          a.id === actionId ? { ...a, status: 'pending' } : a
+          a.id === actionId ? { ...a, status: previousStatus } : a
         )
       )
       throw err
