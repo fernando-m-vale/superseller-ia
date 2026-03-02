@@ -161,6 +161,8 @@ interface AIAnalysisApiResponse {
     actionType: string
     appliedAt: string
   }>
+  // DIA 10: verdictText completo gerado pelo backend
+  verdictText?: string
 }
 
 // Interface adaptada para o frontend
@@ -316,6 +318,8 @@ export interface AIAnalysisResponse {
     actionType: string
     appliedAt: string
   }>
+  // DIA 10: verdictText completo gerado pelo backend
+  verdictText?: string
 }
 
 /**
@@ -360,6 +364,8 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     benchmarkInsights: apiResponse.benchmarkInsights,
     // Generated Content (Dia 05) - será preenchido diretamente do response
     generatedContent: apiResponse.generatedContent,
+    // DIA 10: verdictText completo gerado pelo backend
+    verdictText: apiResponse.verdictText,
   }
 }
 

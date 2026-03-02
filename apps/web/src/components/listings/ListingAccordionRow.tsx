@@ -283,6 +283,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
                   score={aiAnalysis.score}
+                  verdictText={aiAnalysis.verdictText}
                 />
               ) : (
                 <Card className="m-4">

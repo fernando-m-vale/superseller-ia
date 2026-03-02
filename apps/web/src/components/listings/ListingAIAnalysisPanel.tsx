@@ -91,6 +91,8 @@ interface ListingAIAnalysisPanelProps {
   isRegenerating?: boolean
   score?: number
   critique?: string
+  // DIA 10: verdictText completo gerado pelo backend (fonte única de verdade)
+  verdictText?: string
 }
 
 export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
@@ -154,67 +156,31 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
   const appliedCount = actions.filter((a) => a.status === 'IMPLEMENTADO').length
   const dismissedCount = actions.filter((a) => a.status === 'DESCARTADO').length
 
-  // Veredito Direto: usar verdictText quando existir, fallback rico se muito curto
+  // DIA 10: Veredito Direto — fonte única de verdade
+  // Prioridade: props.verdictText (backend completo) > analysisV21.verdict > critique
+  // NÃO combinar múltiplas fontes para evitar duplicação
   const verdictText = useMemo(() => {
-    const rawVerdict = props.analysisV21?.verdict?.trim() || ''
-    
-    // Se existe verdictText e tem pelo menos 200 chars, usar diretamente
-    if (rawVerdict.length >= 200) {
-      return rawVerdict
+    // 1. Preferir verdictText do backend (texto completo, sem cortes)
+    if (props.verdictText && props.verdictText.trim().length > 0) {
+      return props.verdictText.trim()
     }
 
-    // Se muito curto ou não existe, construir fallback rico
-    const parts: string[] = []
-
-    // Sempre incluir verdict se existir (mesmo curto)
-    if (rawVerdict.length > 0) {
-      parts.push(rawVerdict)
+    // 2. Fallback: analysisV21.verdict (completo)
+    const v21Verdict = props.analysisV21?.verdict?.trim() || ''
+    if (v21Verdict.length > 0) {
+      return v21Verdict
     }
 
+    // 3. Fallback final: critique (completo)
     if (props.critique && props.critique.trim().length > 0) {
-      parts.push(props.critique.trim())
+      return props.critique.trim()
     }
 
-    const visits = props.metrics30d?.visits
-    const orders = props.metrics30d?.orders
-    const cvr = props.metrics30d?.conversionRate
-
-    const promoText = props.pricingNormalized?.hasPromotion
-      ? `Promoção ativa: de R$ ${props.pricingNormalized.originalPriceForDisplay.toFixed(2)} por R$ ${props.pricingNormalized.finalPriceForDisplay.toFixed(2)}${
-          props.listingDiscountPercent ? ` (-${props.listingDiscountPercent}%)` : ''
-        }.`
-      : null
-
-    const metricsText =
-      visits !== undefined && orders !== undefined
-        ? `Métricas (30d): ${visits} visitas, ${orders} pedidos${
-            cvr !== null && cvr !== undefined ? `, conversão ${(cvr * 100).toFixed(2)}%` : ''
-          }.${promoText ? ` ${promoText}` : ''}`
-        : promoText
-          ? promoText
-          : null
-
-    if (metricsText) {
-      parts.push(metricsText)
-    }
-
-    const top3 = actions.slice(0, 3).map((a) => `- ${a.title}`)
-    if (top3.length > 0) {
-      parts.push(`Principais ações:\n${top3.join('\n')}`)
-    }
-
-    return parts.length > 0 ? parts.join('\n\n') : 'Análise executiva não disponível no momento.'
+    return 'Análise executiva não disponível no momento.'
   }, [
+    props.verdictText,
     props.analysisV21?.verdict,
     props.critique,
-    props.metrics30d?.visits,
-    props.metrics30d?.orders,
-    props.metrics30d?.conversionRate,
-    props.pricingNormalized?.hasPromotion,
-    props.pricingNormalized?.originalPriceForDisplay,
-    props.pricingNormalized?.finalPriceForDisplay,
-    props.listingDiscountPercent,
-    actions,
   ])
 
   const handleOpenEdit = () => {

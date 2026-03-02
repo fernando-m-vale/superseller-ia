@@ -90,6 +90,8 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   // Growth Hacks (DIA 09)
   growthHacks?: AIAnalysisResponse['growthHacks']
   growthHacksMeta?: AIAnalysisResponse['growthHacksMeta']
+  // DIA 10: verdictText completo gerado pelo backend
+  verdictText?: string
 }
 
 /**
@@ -274,6 +276,8 @@ export function normalizeAiAnalyzeResponse(
     // HOTFIX 09.9: Propagar growthHacks e growthHacksMeta (DIA 09)
     growthHacks: response.growthHacks,
     growthHacksMeta: response.growthHacksMeta,
+    // DIA 10: verdictText completo gerado pelo backend
+    verdictText: response.verdictText,
   }
 
   // Construir actionPlan a partir de analysisV21
