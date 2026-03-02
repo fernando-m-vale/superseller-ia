@@ -1,5 +1,5 @@
 import { FastifyPluginCallback } from 'fastify';
-import { PrismaClient, Marketplace } from '@prisma/client';
+import { PrismaClient, Marketplace, ActionStatus } from '@prisma/client';
 import { z } from 'zod';
 import { authGuard } from '../plugins/auth';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
@@ -18,6 +18,10 @@ const ListingsQuerySchema = z.object({
   marketplace: z.enum(['shopee', 'mercadolivre']).optional(),
   q: z.string().optional(),
   status: z.enum(['active', 'paused', 'deleted']).optional(),
+});
+
+const UpdateListingActionStatusSchema = z.object({
+  status: z.enum(['IMPLEMENTADO', 'DESCARTADO']),
 });
 
 export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
@@ -142,6 +146,121 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
       return reply.status(500).send({ error: 'Failed to fetch listings' });
     }
   });
+
+  // GET /api/v1/listings/:listingId/actions
+  app.get<{ Params: { listingId: string } }>(
+    '/:listingId/actions',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { listingId } = req.params;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        const listing = await prisma.listing.findFirst({
+          where: { id: listingId, tenant_id: tenantId },
+          select: { id: true },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({ error: 'Listing not found' });
+        }
+
+        const latestBatch = await prisma.listingAction.findFirst({
+          where: { listingId },
+          orderBy: { createdAt: 'desc' },
+          select: { batchId: true },
+        });
+
+        if (!latestBatch) {
+          return reply.send({ items: [], batchId: null });
+        }
+
+        const items = await prisma.listingAction.findMany({
+          where: {
+            listingId,
+            batchId: latestBatch.batchId,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        return reply.send({
+          items,
+          batchId: latestBatch.batchId,
+        });
+      } catch (error) {
+        app.log.error(error);
+        return reply.status(500).send({ error: 'Failed to fetch listing actions' });
+      }
+    },
+  );
+
+  // PATCH /api/v1/listings/:listingId/actions/:actionId/status
+  app.patch<{ Params: { listingId: string; actionId: string } }>(
+    '/:listingId/actions/:actionId/status',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { listingId, actionId } = req.params;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        const { status } = UpdateListingActionStatusSchema.parse(req.body);
+
+        const listing = await prisma.listing.findFirst({
+          where: { id: listingId, tenant_id: tenantId },
+          select: { id: true },
+        });
+
+        if (!listing) {
+          return reply.status(404).send({ error: 'Listing not found' });
+        }
+
+        const existingAction = await prisma.listingAction.findFirst({
+          where: {
+            id: actionId,
+            listingId,
+          },
+          select: { id: true },
+        });
+
+        if (!existingAction) {
+          return reply.status(404).send({ error: 'Action not found' });
+        }
+
+        const now = new Date();
+        const updatedAction = await prisma.listingAction.update({
+          where: { id: actionId },
+          data: {
+            status: status as ActionStatus,
+            appliedAt: status === 'IMPLEMENTADO' ? now : null,
+            discardedAt: status === 'DESCARTADO' ? now : null,
+          },
+        });
+
+        return reply.send({
+          message: 'Action status updated successfully',
+          item: updatedAction,
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          return reply.status(400).send({
+            error: 'Invalid body',
+            details: error.errors,
+          });
+        }
+
+        app.log.error(error);
+        return reply.status(500).send({ error: 'Failed to update action status' });
+      }
+    },
+  );
 
   // POST /api/v1/listings/:listingId/apply-action
   app.post<{ Params: { listingId: string } }>(
