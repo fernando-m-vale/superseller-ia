@@ -1540,6 +1540,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Persistir ações estratégicas da análise atual (MVP Kanban)
           const actionsBatchId = await persistListingActionsBatch(listingId, responseData.growthHacks || []);
           responseData.actionsBatchId = actionsBatchId;
+          responseData.verdictText = analysisV21?.verdict || responseData.critique;
 
           // Adicionar header com commit SHA
           setVersionHeader(reply);
@@ -2115,6 +2116,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             skippedBecauseOfRequirements: 0,
           };
         }
+
+        // Persistir ações estratégicas mesmo em cache-hit para evitar Kanban vazio
+        const cachedActionsBatchId = await persistListingActionsBatch(listingId, cacheResponseData.growthHacks || []);
+        cacheResponseData.actionsBatchId = cachedActionsBatchId;
+        cacheResponseData.verdictText = (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
+          || cacheResponseData.critique;
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
