@@ -106,19 +106,70 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
 
   const actions = actionsData?.items || []
   const pendingActions = actions.filter((a) => a.status === 'A_IMPLEMENTAR')
-  const nextAction = pendingActions[0]?.title || null
+  
+  // Lógica inteligente para próxima ação recomendada
+  const getNextRecommendedAction = useMemo(() => {
+    if (pendingActions.length === 0) return null
+
+    // 1) Buscar primeira ação pendente com priority=Alta/HIGH
+    const highPriorityAction = pendingActions.find(
+      (a) => a.priority && (a.priority.toLowerCase() === 'alta' || a.priority.toUpperCase() === 'HIGH')
+    )
+    if (highPriorityAction) {
+      return { title: highPriorityAction.title, isUncertain: false }
+    }
+
+    // 2) Buscar primeira pendente que NÃO seja "validação/sem dados"
+    const descriptionLower = (desc: string) => desc.toLowerCase()
+    const isUncertainAction = (action: typeof pendingActions[0]) => {
+      const desc = descriptionLower(action.description || '')
+      return (
+        desc.includes('sem dados') ||
+        desc.includes('insuficiente') ||
+        desc.includes('validar') ||
+        desc.includes('dados insuficientes')
+      )
+    }
+
+    const certainAction = pendingActions.find((a) => !isUncertainAction(a))
+    if (certainAction) {
+      return { title: certainAction.title, isUncertain: false }
+    }
+
+    // 3) Se só restarem ações incertas, retornar primeira com aviso
+    if (pendingActions.length > 0) {
+      return {
+        title: `${pendingActions[0].title} (recomendação com dados insuficientes)`,
+        isUncertain: true,
+      }
+    }
+
+    return null
+  }, [pendingActions])
+
+  const nextAction = getNextRecommendedAction?.title || null
   const priority = pendingActions[0]?.priority || (pendingActions.length > 0 ? 'Alta' : null)
 
   const pendingCount = actions.filter((a) => a.status === 'A_IMPLEMENTAR').length
   const appliedCount = actions.filter((a) => a.status === 'IMPLEMENTADO').length
   const dismissedCount = actions.filter((a) => a.status === 'DESCARTADO').length
 
+  // Veredito Direto: usar verdictText quando existir, fallback rico se muito curto
   const verdictText = useMemo(() => {
-    if (props.analysisV21?.verdict && props.analysisV21.verdict.trim().length > 0) {
-      return props.analysisV21.verdict.trim()
+    const rawVerdict = props.analysisV21?.verdict?.trim() || ''
+    
+    // Se existe verdictText e tem pelo menos 200 chars, usar diretamente
+    if (rawVerdict.length >= 200) {
+      return rawVerdict
     }
 
+    // Se muito curto ou não existe, construir fallback rico
     const parts: string[] = []
+
+    // Sempre incluir verdict se existir (mesmo curto)
+    if (rawVerdict.length > 0) {
+      parts.push(rawVerdict)
+    }
 
     if (props.critique && props.critique.trim().length > 0) {
       parts.push(props.critique.trim())
@@ -261,15 +312,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </Card>
       )}
 
-      {/* A) BLOCO OPORTUNIDADE */}
-      <OpportunityBlock
-        score={props.score || 0}
-        priority={priority}
-        nextAction={nextAction}
-        hasActions={actions.length > 0}
-      />
-
-      {/* B) VEREDITO DIRETO */}
+      {/* A) VEREDITO DIRETO (primeiro) */}
       <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 shadow-lg">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
@@ -283,7 +326,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className={`text-base leading-relaxed font-medium text-foreground ${!verdictExpanded && verdictText && verdictText.length > 300 ? 'line-clamp-4' : ''}`}>
+          <div className={`text-base leading-relaxed font-medium text-foreground whitespace-pre-wrap ${!verdictExpanded && verdictText && verdictText.length > 300 ? 'line-clamp-4' : ''}`}>
             {verdictText || 'Veredito não disponível'}
           </div>
           
@@ -298,6 +341,15 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* B) BLOCO OPORTUNIDADE */}
+      <OpportunityBlock
+        score={props.score || 0}
+        priority={priority}
+        nextAction={nextAction}
+        hasActions={actions.length > 0}
+        isUncertain={getNextRecommendedAction?.isUncertain || false}
+      />
 
       {/* C) PROGRESSO DE EXECUÇÃO */}
       <ExecutionProgress

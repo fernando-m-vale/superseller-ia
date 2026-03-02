@@ -277,7 +277,18 @@ function OverviewContent() {
     );
   }
 
+  // Determinar se há um listing específico selecionado
+  const selectedListingId = listingQuery && listingQuery.trim() !== '' 
+    ? listingSuggestions.data?.items?.find(l => 
+        l.title?.toLowerCase().includes(listingQuery.toLowerCase()) ||
+        l.listingIdExt?.toLowerCase().includes(listingQuery.toLowerCase())
+      )?.id
+    : null
+  
+  const isListingFiltered = selectedListingId !== null && selectedListingId !== undefined
+
   // Usar dados reais da série temporal de vendas se disponível
+  // Se há filtro de listing específico, tentar usar dados filtrados (por enquanto manter global)
   const trendData = (data.salesSeries && data.salesSeries.length > 0)
     ? data.salesSeries.map((item) => ({
         date: new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
@@ -295,6 +306,13 @@ function OverviewContent() {
           visits: null,
         };
       });
+
+  // Determinar label do gráfico e se há dados de série por listing
+  const chartLabel = isListingFiltered 
+    ? `Tendência de Vendas • ${listingSuggestions.data?.items?.[0]?.title || 'Anúncio selecionado'}`
+    : 'Tendência de Vendas • Global (sem filtro)'
+  
+  const hasListingTimeSeriesData = false // Por enquanto, série por listing não disponível
 
   // Verificar se há visitas disponíveis
   const hasVisits = data.visitsCoverage && data.visitsCoverage.filledDays > 0;
@@ -524,10 +542,15 @@ function OverviewContent() {
       <Card>
         <CardHeader>
           <CardTitle>
-            Tendência de Vendas <span className="text-xs font-normal text-muted-foreground">• Global (sem filtro)</span>
+            {chartLabel}
           </CardTitle>
           <CardDescription>
             Evolução de receita, pedidos e visitas (últimos {periodDays} dias)
+            {isListingFiltered && !hasListingTimeSeriesData && (
+              <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
+                • Série por anúncio ainda não disponível
+              </span>
+            )}
             {!hasVisits && (
               <span className="ml-2 text-yellow-600 dark:text-yellow-400 text-xs">
                 • Visitas indisponíveis via API no período ({visitsCoverage.filledDays}/{visitsCoverage.totalDays} dias com dados)
@@ -536,6 +559,14 @@ function OverviewContent() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {isListingFiltered && !hasListingTimeSeriesData && (
+            <Alert className="mb-4 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800 dark:text-yellow-200">
+                Série por anúncio ainda não disponível. Exibindo dados globais.
+              </AlertDescription>
+            </Alert>
+          )}
           {!hasVisits && (
             <Alert className="mb-4 border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20">
               <AlertCircle className="h-4 w-4 text-yellow-600" />
