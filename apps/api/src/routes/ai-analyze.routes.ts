@@ -61,7 +61,7 @@ const AnalyzeQuerySchema = z.object({
   debugPrices: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
 
-type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade';
+type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance';
 
 interface MvpActionItem {
   id: string;
@@ -105,7 +105,7 @@ function buildDeterministicMvpActions(input: {
   discountPercent?: number | null;
   maxItems?: number;
 }): MvpActionItem[] {
-  const maxItems = Math.min(10, Math.max(8, input.maxItems ?? 10));
+  const maxItems = Math.min(15, Math.max(8, input.maxItems ?? 15));
   const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   const actions: MvpActionItem[] = [];
   const add = (action: MvpActionItem) => {
@@ -159,11 +159,17 @@ function buildDeterministicMvpActions(input: {
     { id: 'compet_offer_packaging', actionKey: 'compet_offer_packaging', title: 'Refinar oferta (frete, benefício e condição comercial)', summary: 'Melhore proposta percebida com benefícios comparáveis ao mercado.', description: 'Combine incentivo comercial e clareza de proposta para reduzir fricção em compradores sensíveis a preço.', expectedImpact: 'Melhora de conversão em sessões comparativas.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'competitividade' },
     { id: 'compet_promo_validation', actionKey: 'compet_promo_validation', title: 'Validar profundidade da promoção atual', summary: 'Promoção sem ganho de pedidos indica necessidade de reposicionamento.', description: `Com ${visits} visitas e ${orders} pedidos em 30 dias${cr !== null ? ` (CR ${cr.toFixed(2)}%)` : ''}, revise âncora de preço, parcelamento e mensagem de oferta.`, expectedImpact: 'Redução de desconto improdutivo e ganho de margem/conversão.', impact: input.hasPromotion ? 'high' : 'low', priority: input.hasPromotion ? 'high' : 'low', suggestedActionUrl: editUrl, pillar: 'competitividade' },
     { id: 'seo_cta_alignment', actionKey: 'seo_cta_alignment', title: 'Alinhar headline e CTA com intenção do comprador', summary: 'Ajustar promessa principal para o estágio de decisão.', description: 'Teste variações de headline e CTA enfatizando benefício tangível para aumentar CTR qualificado e reduzir bounce.', expectedImpact: 'Evolução de tráfego qualificado para compra.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'seo' },
+    // DIA 10: 5 templates adicionais para cobertura de 15 ações com diversidade de pilares
+    { id: 'performance_conversion_funnel', actionKey: 'performance_conversion_funnel', title: 'Otimizar funil de conversão do anúncio', summary: 'Mapear pontos de abandono e reduzir fricção na jornada de compra.', description: 'Analise onde os visitantes abandonam (título, galeria, preço, perguntas) e aplique melhorias pontuais para elevar a taxa de conversão.', expectedImpact: 'Aumento direto de conversão sem mais tráfego.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'performance' },
+    { id: 'performance_questions_faq', actionKey: 'performance_questions_faq', title: 'Responder perguntas frequentes na descrição', summary: 'Antecipar dúvidas reduz atrito e acelera decisão de compra.', description: 'Identifique as 5 perguntas mais feitas e incorpore as respostas na descrição para reduzir barreira de compra.', expectedImpact: 'Menor abandono e mais confiança na decisão.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'performance' },
+    { id: 'midia_infographic', actionKey: 'midia_infographic', title: 'Criar imagem infográfica com benefícios-chave', summary: 'Imagem resumo com diferenciais visuais e dados comparativos.', description: 'Adicione uma imagem tipo infográfico na galeria destacando benefícios, especificações e comparativos para acelerar decisão.', expectedImpact: 'Maior engajamento e diferenciação visual.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'midia' },
+    { id: 'cadastro_shipping_optimization', actionKey: 'cadastro_shipping_optimization', title: 'Revisar dimensões e peso para otimizar frete', summary: 'Dados de embalagem corretos podem reduzir custo de frete exibido.', description: 'Verifique se peso e dimensões cadastrados refletem a embalagem real para evitar frete inflado que afasta compradores.', expectedImpact: 'Redução de frete percebido e mais competitividade.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'cadastro' },
+    { id: 'compet_reputation_leverage', actionKey: 'compet_reputation_leverage', title: 'Destacar reputação e garantias na oferta', summary: 'Use reputação como argumento de diferenciação frente a concorrentes.', description: 'Se sua reputação é superior à média da categoria, destaque isso na descrição e nas imagens para justificar preço e gerar confiança.', expectedImpact: 'Diferenciação e justificativa de preço premium.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'competitividade' },
   ];
 
   for (const template of templates) add(template);
 
-  return actions.slice(0, 10);
+  return actions.slice(0, 15);
 }
 
 function buildVerdictText(input: {
@@ -210,7 +216,7 @@ async function persistListingActionsBatch(
 
   const actionsToCreate = growthHacks
     .filter((hack) => Boolean(hack?.title && (hack?.summary || hack?.description)))
-    .slice(0, 10)
+    .slice(0, 15)
     .map((hack) => ({
       listingId,
       actionKey: hack.id || `${batchId}:${hack.title}`,
@@ -2985,6 +2991,19 @@ if (enableAIPing) {
             responseData.analysisV21.meta.version = PROMPT_VERSION as any;
           }
         }
+
+        // DIA 10: Gerar verdictText completo para GET /latest (mesmo fluxo do POST)
+        responseData.verdictText = buildVerdictText({
+          rawVerdict: responseData.analysisV21?.verdict || responseData.critique,
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          hasPromotion: listing.has_promotion,
+          discountPercent: listing.discount_percent,
+          topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+        });
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
