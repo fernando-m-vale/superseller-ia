@@ -16,12 +16,18 @@ import { Eye, ShoppingCart, Award, Zap, TrendingUp, AlertCircle, Link as LinkIco
 import { getApiBaseUrl } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
+import { useListings } from '@/hooks/use-listings';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 
 function OverviewContent() {
   const router = useRouter();
   const [periodDays, setPeriodDays] = useState<number>(7);
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [marketplaceFilter, setMarketplaceFilter] = useState<'all' | 'mercadolivre' | 'shopee'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused'>('all');
+  const [listingQuery, setListingQuery] = useState<string>('');
   const { data: connectionStatus } = useMercadoLivreStatus();
   const { toast } = useToast();
 
@@ -40,6 +46,44 @@ function OverviewContent() {
   }, [periodDays, mounted]);
 
   const { data, isLoading, error, refetch } = useMetricsSummary({ days: periodDays });
+
+  // Filtros (aplicados onde for possível com dados já disponíveis)
+  const listingsTotal = useListings({
+    page: 1,
+    pageSize: 1,
+    marketplace: marketplaceFilter === 'all' ? undefined : marketplaceFilter,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    q: listingQuery ? listingQuery : undefined,
+  });
+
+  const listingsActiveOrPaused = useListings({
+    page: 1,
+    pageSize: 1,
+    marketplace: marketplaceFilter === 'all' ? undefined : marketplaceFilter,
+    status: statusFilter === 'paused' ? 'paused' : 'active',
+    q: listingQuery ? listingQuery : undefined,
+  });
+
+  // Sugestões para dropdown/search de anúncio
+  const listingSuggestions = useListings({
+    page: 1,
+    pageSize: 10,
+    marketplace: marketplaceFilter === 'all' ? undefined : marketplaceFilter,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    q: listingQuery ? listingQuery : undefined,
+  });
+
+  const handleMarketplaceFilterChange = (value: string) => {
+    if (value === 'all' || value === 'mercadolivre' || value === 'shopee') {
+      setMarketplaceFilter(value);
+    }
+  };
+
+  const handleStatusFilterChange = (value: string) => {
+    if (value === 'all' || value === 'active' || value === 'paused') {
+      setStatusFilter(value);
+    }
+  };
 
   const handleReconnect = async () => {
     try {
@@ -345,6 +389,56 @@ function OverviewContent() {
         </div>
       </div>
 
+      {/* Filtros (visuais) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Filtros</CardTitle>
+          <CardDescription>Aplicados onde houver dados granulares no frontend</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Loja / Marketplace</p>
+              <Select
+                value={marketplaceFilter}
+                onChange={(e) => handleMarketplaceFilterChange(e.target.value)}
+              >
+                <option value="all">Todas</option>
+                <option value="mercadolivre">Mercado Livre</option>
+                <option value="shopee">Shopee</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Status</p>
+              <Select
+                value={statusFilter}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
+              >
+                <option value="all">Todos</option>
+                <option value="active">Ativos</option>
+                <option value="paused">Pausados</option>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Anúncio</p>
+              <Input
+                placeholder="Buscar por título / ID..."
+                value={listingQuery}
+                onChange={(e) => setListingQuery(e.target.value)}
+                list="overview-listing-suggestions"
+              />
+              <datalist id="overview-listing-suggestions">
+                {(listingSuggestions.data?.items || []).map((l) => (
+                  <option key={l.id} value={`${l.title} (${l.listingIdExt || l.id})`} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
@@ -353,24 +447,28 @@ function OverviewContent() {
             <Eye className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalListings)}</div>
+            <div className="text-2xl font-bold">
+              {formatNumber(listingsTotal.data?.total ?? data.totalListings)}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Em todas as plataformas
+              {listingsTotal.data ? 'Filtrado' : 'Global (sem filtro)'}
             </p>
           </CardContent>
         </Card>
 
         <Card className="border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Anúncios Ativos</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {statusFilter === 'paused' ? 'Anúncios Pausados' : 'Anúncios Ativos'}
+            </CardTitle>
             <Zap className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-700 dark:text-green-400">
-              {formatNumber(data.activeListings)}
+              {formatNumber(listingsActiveOrPaused.data?.total ?? (statusFilter === 'paused' ? 0 : data.activeListings))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Produtos à venda agora
+              {listingsActiveOrPaused.data ? 'Filtrado' : 'Global (sem filtro)'}
             </p>
           </CardContent>
         </Card>
@@ -389,7 +487,7 @@ function OverviewContent() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Receita: {formatCurrency(data.totalRevenue)}
+              Receita: {formatCurrency(data.totalRevenue)} • <span className="font-medium">Global (sem filtro)</span>
             </p>
           </CardContent>
         </Card>
@@ -403,7 +501,7 @@ function OverviewContent() {
             Impacto Potencial
           </CardTitle>
           <CardDescription>
-            Score médio dos seus anúncios baseado em otimizações de SEO, mídia e competitividade
+            Score médio dos seus anúncios baseado em otimizações de SEO, mídia e competitividade • <span className="font-medium">Global (sem filtro)</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -425,7 +523,9 @@ function OverviewContent() {
       {/* Trend Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Tendência de Vendas</CardTitle>
+          <CardTitle>
+            Tendência de Vendas <span className="text-xs font-normal text-muted-foreground">• Global (sem filtro)</span>
+          </CardTitle>
           <CardDescription>
             Evolução de receita, pedidos e visitas (últimos {periodDays} dias)
             {!hasVisits && (

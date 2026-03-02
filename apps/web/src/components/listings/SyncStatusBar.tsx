@@ -140,7 +140,7 @@ export function SyncStatusBar() {
           ) : (
             <>
               <RefreshCw className="mr-2 h-4 w-4" />
-              Sincronizar agora
+              Atualizar dados
             </>
           )}
         </Button>

@@ -2,15 +2,17 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp, Info } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface OpportunityBlockProps {
   score: number
   priority?: string | null
   nextAction?: string | null
+  hasActions?: boolean
 }
 
-export function OpportunityBlock({ score, priority, nextAction }: OpportunityBlockProps) {
+export function OpportunityBlock({ score, priority, nextAction, hasActions = true }: OpportunityBlockProps) {
   const getScoreColor = (scoreValue: number) => {
     if (scoreValue >= 80) return 'text-green-600 dark:text-green-400'
     if (scoreValue >= 60) return 'text-blue-600 dark:text-blue-400'
@@ -27,30 +29,50 @@ export function OpportunityBlock({ score, priority, nextAction }: OpportunityBlo
 
   return (
     <Card className="border-l-4 border-l-primary">
-      <CardHeader>
-        <CardTitle className="text-lg">Oportunidade</CardTitle>
+      <CardHeader className="py-4">
+        <CardTitle className="text-base">Oportunidade</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 pt-0">
         {/* Score */}
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground">Score</span>
-          <Badge className={`${getScoreBgColor(score)} ${getScoreColor(score)} text-lg font-bold px-4 py-1`}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Score</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-sm">
+                    Este score estima o impacto potencial de otimizações (SEO, mídia e competitividade) para este anúncio.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <Badge className={`${getScoreBgColor(score)} ${getScoreColor(score)} text-sm font-bold px-3 py-1`}>
             {score}/100
           </Badge>
         </div>
 
         {/* Prioridade */}
-        {priority && (
-          <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
+          <div>
             <span className="text-sm font-medium text-muted-foreground">Prioridade</span>
-            <Badge variant="outline" className="text-sm">
-              {priority}
-            </Badge>
+            <p className="text-xs text-muted-foreground mt-0.5">Prioridade da IA para este anúncio</p>
           </div>
-        )}
+          <Badge variant="outline" className="text-sm">
+            {priority || '—'}
+          </Badge>
+        </div>
 
         {/* Próxima ação recomendada */}
-        {nextAction && (
+        {hasActions && nextAction ? (
           <div className="pt-2 border-t">
             <div className="flex items-start gap-2">
               <TrendingUp className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
@@ -59,6 +81,12 @@ export function OpportunityBlock({ score, priority, nextAction }: OpportunityBlo
                 <p className="text-sm text-foreground">{nextAction}</p>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">
+              Gere análise para ver recomendações
+            </span>
           </div>
         )}
       </CardContent>
