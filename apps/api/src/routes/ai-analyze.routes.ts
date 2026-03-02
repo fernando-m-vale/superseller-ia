@@ -61,6 +61,139 @@ const AnalyzeQuerySchema = z.object({
   debugPrices: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
 
+type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade';
+
+interface MvpActionItem {
+  id: string;
+  actionKey: string;
+  title: string;
+  summary: string;
+  description: string;
+  expectedImpact: string;
+  impact: 'high' | 'medium' | 'low';
+  priority: 'high' | 'medium' | 'low';
+  suggestedActionUrl?: string | null;
+  pillar: ActionPillar;
+}
+
+function normalizeMlbId(listingIdExt?: string | null): string | null {
+  if (!listingIdExt) return null;
+  const cleaned = listingIdExt.trim().replace(/-/g, '');
+  const digits = cleaned.match(/\d{6,}/g) || cleaned.match(/\d+/g);
+  if (!digits || digits.length === 0) return null;
+  return digits.reduce((max, current) => (current.length > max.length ? current : max));
+}
+
+function buildMercadoLivreEditUrl(listingIdExt?: string | null): string | null {
+  const normalized = normalizeMlbId(listingIdExt);
+  if (!normalized) return null;
+  return `https://www.mercadolivre.com.br/anuncios/MLB${normalized}/modificar/bomni`;
+}
+
+function normalizePriority(value?: string): 'high' | 'medium' | 'low' {
+  const normalized = (value || '').toLowerCase();
+  if (normalized === 'high' || normalized === 'critical' || normalized === 'alta') return 'high';
+  if (normalized === 'low' || normalized === 'baixa') return 'low';
+  return 'medium';
+}
+
+function buildDeterministicMvpActions(input: {
+  listingIdExt?: string | null;
+  hackActions?: Array<{ id?: string; title?: string; summary?: string; description?: string; impact?: string; estimatedImpact?: string; priority?: string; suggestedActionUrl?: string | null }>;
+  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
+  hasPromotion?: boolean | null;
+  discountPercent?: number | null;
+  maxItems?: number;
+}): MvpActionItem[] {
+  const maxItems = Math.min(10, Math.max(8, input.maxItems ?? 10));
+  const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
+  const actions: MvpActionItem[] = [];
+  const add = (action: MvpActionItem) => {
+    if (actions.length >= maxItems) return;
+    if (actions.some(existing => existing.actionKey === action.actionKey)) return;
+    actions.push(action);
+  };
+
+  const visits = input.metrics30d?.visits ?? 0;
+  const orders = input.metrics30d?.orders ?? 0;
+  const cr = input.metrics30d?.conversionRate ?? null;
+
+  // Aproveitar hacks existentes primeiro (quando vierem do HackEngine).
+  for (const rawHack of input.hackActions || []) {
+    const title = String(rawHack.title || '').trim();
+    const description = String(rawHack.summary || rawHack.description || '').trim();
+    if (!title || !description) continue;
+
+    const id = String(rawHack.id || `hack_${actions.length + 1}`);
+    const lowTitle = title.toLowerCase();
+    const pillar: ActionPillar =
+      lowTitle.includes('categoria') || lowTitle.includes('preço') || lowTitle.includes('frete')
+        ? 'competitividade'
+        : lowTitle.includes('varia')
+          ? 'cadastro'
+          : 'seo';
+
+    add({
+      id,
+      actionKey: id,
+      title,
+      summary: description,
+      description,
+      expectedImpact: String(rawHack.impact || rawHack.estimatedImpact || 'Ganho incremental de conversão').trim(),
+      impact: normalizePriority(String(rawHack.impact || 'medium')),
+      priority: normalizePriority(String(rawHack.priority || rawHack.impact || 'medium')),
+      suggestedActionUrl: rawHack.suggestedActionUrl ?? editUrl,
+      pillar,
+    });
+  }
+
+  // Base determinística para garantir cobertura de pilares (>= 2 cada pilar).
+  const templates: MvpActionItem[] = [
+    { id: 'seo_title_refresh', actionKey: 'seo_title_refresh', title: 'Reescrever título com palavras-chave principais', summary: 'Use intenção de busca + atributos técnicos nas primeiras 60 letras.', description: 'Reescreva o título priorizando produto, marca, modelo e principal diferencial para elevar CTR em busca orgânica.', expectedImpact: 'Melhora de CTR e tráfego qualificado.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'seo' },
+    { id: 'seo_description_blocks', actionKey: 'seo_description_blocks', title: 'Estruturar descrição em blocos escaneáveis', summary: 'Organize descrição com benefícios, especificações e prova social.', description: 'Padronize a descrição em blocos curtos com bullet points para reduzir dúvida e melhorar qualificação do clique.', expectedImpact: 'Aumento de conversão por clareza da oferta.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'seo' },
+    { id: 'midia_gallery_upgrade', actionKey: 'midia_gallery_upgrade', title: 'Completar galeria com 8+ imagens contextualizadas', summary: 'Cobrir uso real, close técnico e diferenciais visuais.', description: 'Planeje fotos que mostrem aplicação prática, detalhes e comparação para elevar confiança na decisão.', expectedImpact: 'Maior engajamento e menor rejeição da página.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'midia' },
+    { id: 'midia_video_clip', actionKey: 'midia_video_clip', title: 'Publicar clip curto de demonstração', summary: 'Vídeo de 15–30s com prova de uso e benefício principal.', description: 'Inclua vídeo objetivo mostrando resultado final e diferencial em poucos segundos para destravar indecisão.', expectedImpact: 'Ganho de conversão em sessões com alta intenção.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'midia' },
+    { id: 'cadastro_attributes', actionKey: 'cadastro_attributes', title: 'Preencher atributos técnicos ausentes', summary: 'Complete ficha técnica com compatibilidade, medidas e voltagem/material.', description: 'Revise atributos obrigatórios e recomendados para aumentar relevância e filtros encontrados.', expectedImpact: 'Mais impressões qualificadas e menos perguntas pré-compra.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'cadastro' },
+    { id: 'cadastro_variations', actionKey: 'cadastro_variations', title: 'Adicionar variações de alto giro', summary: 'Mapear tamanhos/cores/modelos mais pedidos.', description: 'Crie variações com nomenclatura clara e estoque priorizado para capturar mais buscas na mesma página.', expectedImpact: 'Aumento de cobertura de demanda e ticket por item.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'cadastro' },
+    { id: 'compet_price_positioning', actionKey: 'compet_price_positioning', title: 'Recalibrar preço versus concorrência direta', summary: 'Ajustar preço final e percepção de valor frente ao benchmark.', description: 'Avalie posicionamento de preço considerando reputação, prazo e diferenciais para recuperar competitividade sem sacrificar margem.', expectedImpact: 'Recuperação de share de cliques e pedidos.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'competitividade' },
+    { id: 'compet_offer_packaging', actionKey: 'compet_offer_packaging', title: 'Refinar oferta (frete, benefício e condição comercial)', summary: 'Melhore proposta percebida com benefícios comparáveis ao mercado.', description: 'Combine incentivo comercial e clareza de proposta para reduzir fricção em compradores sensíveis a preço.', expectedImpact: 'Melhora de conversão em sessões comparativas.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'competitividade' },
+    { id: 'compet_promo_validation', actionKey: 'compet_promo_validation', title: 'Validar profundidade da promoção atual', summary: 'Promoção sem ganho de pedidos indica necessidade de reposicionamento.', description: `Com ${visits} visitas e ${orders} pedidos em 30 dias${cr !== null ? ` (CR ${cr.toFixed(2)}%)` : ''}, revise âncora de preço, parcelamento e mensagem de oferta.`, expectedImpact: 'Redução de desconto improdutivo e ganho de margem/conversão.', impact: input.hasPromotion ? 'high' : 'low', priority: input.hasPromotion ? 'high' : 'low', suggestedActionUrl: editUrl, pillar: 'competitividade' },
+    { id: 'seo_cta_alignment', actionKey: 'seo_cta_alignment', title: 'Alinhar headline e CTA com intenção do comprador', summary: 'Ajustar promessa principal para o estágio de decisão.', description: 'Teste variações de headline e CTA enfatizando benefício tangível para aumentar CTR qualificado e reduzir bounce.', expectedImpact: 'Evolução de tráfego qualificado para compra.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'seo' },
+  ];
+
+  for (const template of templates) add(template);
+
+  return actions.slice(0, 10);
+}
+
+function buildVerdictText(input: {
+  rawVerdict?: string | null;
+  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
+  hasPromotion?: boolean | null;
+  discountPercent?: number | null;
+  topActions?: Array<{ title?: string; description?: string }>;
+}): string {
+  const raw = (input.rawVerdict || '').trim();
+  const paragraphs = raw.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  if (paragraphs.length >= 3 && raw.length >= 220) {
+    return raw;
+  }
+
+  const visits = input.metrics30d?.visits ?? 0;
+  const orders = input.metrics30d?.orders ?? 0;
+  const cr = input.metrics30d?.conversionRate;
+  const promoText = input.hasPromotion
+    ? `Há promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% de desconto)` : ''}`
+    : 'Não há promoção ativa relevante';
+  const top = (input.topActions || []).slice(0, 3).map((a) => a.title).filter(Boolean) as string[];
+
+  const p1 = `Diagnóstico: nos últimos 30 dias o anúncio acumulou ${visits} visitas e ${orders} pedidos${typeof cr === 'number' ? `, com conversão de ${(cr * 100).toFixed(2)}%` : ''}. Isso indica que já existe demanda, mas a eficiência de transformação de visita em pedido ainda tem espaço relevante para evolução.`;
+  const p2 = `Gargalos: ${promoText}. Quando o desconto já está aplicado e a conversão segue abaixo do esperado, o problema tende a estar em proposta percebida, clareza do cadastro e força dos criativos (título/imagens/descrição), não apenas em reduzir mais o preço.`;
+  const p3 = `Plano resumido: priorize um sprint de implementação com foco em ${top.length > 0 ? top.join(', ') : 'SEO, mídia, cadastro e competitividade'}. O objetivo do próximo ciclo é elevar CTR qualificado, reduzir fricção no detalhe do produto e converter melhor o tráfego já existente.`;
+
+  return [p1, p2, p3].join('\n\n');
+}
+
 async function persistListingActionsBatch(
   listingId: string,
   growthHacks: Array<{
@@ -77,6 +210,7 @@ async function persistListingActionsBatch(
 
   const actionsToCreate = growthHacks
     .filter((hack) => Boolean(hack?.title && (hack?.summary || hack?.description)))
+    .slice(0, 10)
     .map((hack) => ({
       listingId,
       actionKey: hack.id || `${batchId}:${hack.title}`,
@@ -1508,9 +1642,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               categoryPermalink: categoryInfo.permalink,
             });
 
-            // Adicionar hacks ao response
-            responseData.growthHacks = hackEngineResult.hacks;
-            responseData.growthHacksMeta = hackEngineResult.meta;
+            // Adicionar hacks ao response (MVP Dia 10: garantir 8-10 ações úteis)
+            responseData.growthHacks = buildDeterministicMvpActions({
+              listingIdExt: listing.listing_id_ext,
+              hackActions: hackEngineResult.hacks,
+              metrics30d: {
+                visits: result.score.metrics_30d.visits,
+                orders: result.score.metrics_30d.orders,
+                conversionRate: result.score.metrics_30d.conversionRate,
+              },
+              hasPromotion: listing.has_promotion,
+              discountPercent: listing.discount_percent,
+            });
+            responseData.growthHacksMeta = {
+              ...hackEngineResult.meta,
+              rulesTriggered: responseData.growthHacks.length,
+            };
 
             request.log.info({
               listingId,
@@ -1527,11 +1674,20 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               error: hackError instanceof Error ? hackError.message : 'Erro desconhecido',
             }, 'Erro ao gerar hacks (continuando sem hacks)');
             
-            // Incluir hacks vazios para não quebrar frontend
-            responseData.growthHacks = [];
+            // Fallback determinístico: manter kanban útil mesmo sem HackEngine
+            responseData.growthHacks = buildDeterministicMvpActions({
+              listingIdExt: listing.listing_id_ext,
+              metrics30d: {
+                visits: result.score.metrics_30d.visits,
+                orders: result.score.metrics_30d.orders,
+                conversionRate: result.score.metrics_30d.conversionRate,
+              },
+              hasPromotion: listing.has_promotion,
+              discountPercent: listing.discount_percent,
+            });
             responseData.growthHacksMeta = {
               rulesEvaluated: 0,
-              rulesTriggered: 0,
+              rulesTriggered: responseData.growthHacks.length,
               skippedBecauseOfHistory: 0,
               skippedBecauseOfRequirements: 0,
             };
@@ -1540,7 +1696,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Persistir ações estratégicas da análise atual (MVP Kanban)
           const actionsBatchId = await persistListingActionsBatch(listingId, responseData.growthHacks || []);
           responseData.actionsBatchId = actionsBatchId;
-          responseData.verdictText = analysisV21?.verdict || responseData.critique;
+          responseData.verdictText = buildVerdictText({
+            rawVerdict: analysisV21?.verdict || responseData.critique,
+            metrics30d: {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+            topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+          });
 
           // Adicionar header com commit SHA
           setVersionHeader(reply);
@@ -2088,9 +2254,22 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             categoryPermalink: categoryInfo.permalink,
           });
 
-          // Adicionar hacks ao cache response
-          cacheResponseData.growthHacks = cacheHackEngineResult.hacks;
-          cacheResponseData.growthHacksMeta = cacheHackEngineResult.meta;
+          // Adicionar hacks ao cache response (MVP Dia 10: garantir 8-10 ações)
+          cacheResponseData.growthHacks = buildDeterministicMvpActions({
+            listingIdExt: listing.listing_id_ext,
+            hackActions: cacheHackEngineResult.hacks,
+            metrics30d: {
+              visits: scoreResult.metrics_30d.visits,
+              orders: scoreResult.metrics_30d.orders,
+              conversionRate: scoreResult.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+          });
+          cacheResponseData.growthHacksMeta = {
+            ...cacheHackEngineResult.meta,
+            rulesTriggered: cacheResponseData.growthHacks.length,
+          };
 
           request.log.info({
             listingId,
@@ -2107,11 +2286,20 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             error: hackError instanceof Error ? hackError.message : 'Erro desconhecido',
           }, 'Erro ao gerar hacks no cache (continuando sem hacks)');
           
-          // Incluir hacks vazios para não quebrar frontend
-          cacheResponseData.growthHacks = [];
+          // Fallback determinístico para manter Kanban utilizável
+          cacheResponseData.growthHacks = buildDeterministicMvpActions({
+            listingIdExt: listing.listing_id_ext,
+            metrics30d: {
+              visits: scoreResult.metrics_30d.visits,
+              orders: scoreResult.metrics_30d.orders,
+              conversionRate: scoreResult.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+          });
           cacheResponseData.growthHacksMeta = {
             rulesEvaluated: 0,
-            rulesTriggered: 0,
+            rulesTriggered: cacheResponseData.growthHacks.length,
             skippedBecauseOfHistory: 0,
             skippedBecauseOfRequirements: 0,
           };
@@ -2120,8 +2308,18 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Persistir ações estratégicas mesmo em cache-hit para evitar Kanban vazio
         const cachedActionsBatchId = await persistListingActionsBatch(listingId, cacheResponseData.growthHacks || []);
         cacheResponseData.actionsBatchId = cachedActionsBatchId;
-        cacheResponseData.verdictText = (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
-          || cacheResponseData.critique;
+        cacheResponseData.verdictText = buildVerdictText({
+          rawVerdict: (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
+            || cacheResponseData.critique,
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          hasPromotion: listing.has_promotion,
+          discountPercent: listing.discount_percent,
+          topActions: (cacheResponseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+        });
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
@@ -2739,8 +2937,21 @@ if (enableAIPing) {
             categoryPermalink: categoryInfo.permalink,
           });
 
-          responseData.growthHacks = cacheHackEngineResult.hacks;
-          responseData.growthHacksMeta = cacheHackEngineResult.meta;
+          responseData.growthHacks = buildDeterministicMvpActions({
+            listingIdExt: listing.listing_id_ext,
+            hackActions: cacheHackEngineResult.hacks,
+            metrics30d: {
+              visits: scoreResult.metrics_30d.visits,
+              orders: scoreResult.metrics_30d.orders,
+              conversionRate: scoreResult.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+          });
+          responseData.growthHacksMeta = {
+            ...cacheHackEngineResult.meta,
+            rulesTriggered: responseData.growthHacks.length,
+          };
         } catch (hackError) {
           request.log.warn({
             listingId,
@@ -2748,10 +2959,19 @@ if (enableAIPing) {
             error: hackError instanceof Error ? hackError.message : 'Erro desconhecido',
           }, 'Erro ao gerar hacks no GET latest (continuando sem hacks)');
           
-          responseData.growthHacks = [];
+          responseData.growthHacks = buildDeterministicMvpActions({
+            listingIdExt: listing.listing_id_ext,
+            metrics30d: {
+              visits: scoreResult.metrics_30d.visits,
+              orders: scoreResult.metrics_30d.orders,
+              conversionRate: scoreResult.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+          });
           responseData.growthHacksMeta = {
             rulesEvaluated: 0,
-            rulesTriggered: 0,
+            rulesTriggered: responseData.growthHacks.length,
             skippedBecauseOfHistory: 0,
             skippedBecauseOfRequirements: 0,
           };
