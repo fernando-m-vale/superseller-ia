@@ -4,8 +4,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react'
+import type { ListingActionStatus } from '@/hooks/use-listing-actions'
 
-export type ActionStatus = 'A_IMPLEMENTAR' | 'IMPLEMENTADO' | 'DESCARTADO'
+export type ActionStatus = ListingActionStatus
 
 export interface ActionItem {
   id: string

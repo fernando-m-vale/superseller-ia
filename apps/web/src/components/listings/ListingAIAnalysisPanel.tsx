@@ -339,7 +339,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       {/* Modal de Regerar Análise */}
       <RegenerateAnalysisModal
         open={regenerateModalOpen}
-        onClose={() => setRegenerateModalOpen(false)}
+        onOpenChange={setRegenerateModalOpen}
         onConfirm={handleRegenerateConfirm}
         isRegenerating={props.isRegenerating}
       />
