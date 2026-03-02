@@ -1,7 +1,6 @@
 import { AuthGuard } from '@/components/AuthGuard'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { ListingsTable } from '@/components/listings-table'
-import { MercadoLivreSyncButton } from '@/components/MercadoLivreSyncButton'
 
 export default function ListingsPage() {
   return (
@@ -16,7 +15,6 @@ export default function ListingsPage() {
                 Gerencie seus anúncios nos marketplaces conectados
               </p>
             </div>
-            <MercadoLivreSyncButton />
           </div>
           
           {/* Tabela de anúncios */}

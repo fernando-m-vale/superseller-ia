@@ -266,6 +266,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   listingIdExt={listing.listingIdExt}
                   listingTitle={listing.title}
                   listingPrice={listing.price}
+                  critique={aiAnalysis.critique}
                   dataQuality={aiAnalysis.dataQuality}
                   metrics30d={aiAnalysis.metrics30d}
                   listingPriceBase={listing.priceBase}

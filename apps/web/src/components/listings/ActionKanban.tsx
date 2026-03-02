@@ -4,16 +4,17 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react'
-import type { ActionType } from '@/hooks/use-apply-action'
 
-export type ActionStatus = 'pending' | 'applied' | 'dismissed'
+export type ActionStatus = 'A_IMPLEMENTAR' | 'IMPLEMENTADO' | 'DESCARTADO'
 
 export interface ActionItem {
   id: string
+  actionKey?: string
   title: string
   description: string
-  actionType: ActionType | null
   status: ActionStatus
+  priority?: string | null
+  expectedImpact?: string | null
   suggestedActionUrl?: string | null
 }
 
@@ -39,9 +40,9 @@ export function ActionKanban({ actions, onStatusChange, editUrl }: ActionKanbanP
     }
   }
 
-  const pendingActions = actions.filter(a => a.status === 'pending')
-  const appliedActions = actions.filter(a => a.status === 'applied')
-  const dismissedActions = actions.filter(a => a.status === 'dismissed')
+  const pendingActions = actions.filter(a => a.status === 'A_IMPLEMENTAR')
+  const appliedActions = actions.filter(a => a.status === 'IMPLEMENTADO')
+  const dismissedActions = actions.filter(a => a.status === 'DESCARTADO')
 
   const ActionCard = ({ action }: { action: ActionItem }) => {
     const isLoading = changingStatus.has(action.id)
@@ -55,7 +56,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl }: ActionKanbanP
         </div>
         
         <div className="flex flex-col gap-2">
-          {hasLink && action.status === 'pending' && (
+          {hasLink && action.status === 'A_IMPLEMENTAR' && (
             <Button
               variant="default"
               size="sm"
@@ -71,12 +72,12 @@ export function ActionKanban({ actions, onStatusChange, editUrl }: ActionKanbanP
             </Button>
           )}
           
-          {action.status === 'pending' && (
+          {action.status === 'A_IMPLEMENTAR' && (
             <>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleStatusChange(action.id, 'applied')}
+                onClick={() => handleStatusChange(action.id, 'IMPLEMENTADO')}
                 disabled={isLoading}
                 className="w-full"
               >
@@ -86,7 +87,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl }: ActionKanbanP
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleStatusChange(action.id, 'dismissed')}
+                onClick={() => handleStatusChange(action.id, 'DESCARTADO')}
                 disabled={isLoading}
                 className="w-full text-muted-foreground"
               >

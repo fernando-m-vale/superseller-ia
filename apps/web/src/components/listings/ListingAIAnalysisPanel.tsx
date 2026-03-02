@@ -1,93 +1,17 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, AlertTriangle } from 'lucide-react'
+import React, { useMemo, useState } from 'react'
+import { AlertTriangle, ExternalLink, Flame, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
 import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent } from '@/lib/ai/normalizeAiAnalyze'
-import { useToast } from '@/hooks/use-toast'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
-import { BenchmarkPanel } from '@/components/ai/BenchmarkPanel'
-import { BenchmarkInsightsPanel } from '@/components/ai/BenchmarkInsightsPanel'
-import { ApplyActionModal } from '@/components/ai/ApplyActionModal'
-import { useApplyAction, type ActionType } from '@/hooks/use-apply-action'
-import { ActionPlanChecklist } from '@/components/ai/ActionPlanChecklist'
-import { HacksPanel } from '@/components/ai/HacksPanel'
+import { useToast } from '@/hooks/use-toast'
 import { OpportunityBlock } from './OpportunityBlock'
 import { ExecutionProgress } from './ExecutionProgress'
-import { ActionKanban, type ActionStatus } from './ActionKanban'
+import { ActionKanban } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
-
-// Template padronizado para seções
-type SectionTemplateProps = {
-  icon: React.ElementType
-  title: string | React.ReactNode
-  diagnostic: React.ReactNode
-  impact: React.ReactNode
-  actions: React.ReactNode
-}
-
-const SectionTemplate = ({
-  icon: Icon,
-  title,
-  diagnostic,
-  impact,
-  actions,
-}: SectionTemplateProps) => {
-  return (
-    <Card className="border-l-4 border-l-primary">
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
-          <CardTitle className="text-lg">{typeof title === 'string' ? title : title}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Diagnóstico */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Brain className="h-4 w-4 text-primary" />
-            <span>🔍 Diagnóstico</span>
-          </div>
-          <div className="pl-6 text-sm leading-relaxed text-foreground">
-            {diagnostic}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Impacto */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <TrendingDown className="h-4 w-4 text-orange-500" />
-            <span>📉 Impacto</span>
-          </div>
-          <div className="pl-6 text-sm leading-relaxed text-muted-foreground">
-            {impact}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Ações Concretas */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span>✅ Ações Concretas</span>
-          </div>
-          <div className="pl-6">
-            {actions}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+import { useListingActions, updateListingActionStatus, type ListingActionStatus } from '@/hooks/use-listing-actions'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -166,317 +90,115 @@ interface ListingAIAnalysisPanelProps {
   onRegenerate?: () => Promise<void>
   isRegenerating?: boolean
   score?: number
+  critique?: string
 }
 
-export function ListingAIAnalysisPanel({
-  analysisV21,
-  listingId,
-  listingIdExt,
-  listingTitle,
-  listingPrice,
-  listingDiscountPercent,
-  pricingNormalized,
-  appliedActions = [],
-  dataQuality,
-  metrics30d,
-  benchmark,
-  benchmarkInsights,
-  growthHacks,
-  onRegenerate,
-  isRegenerating = false,
-  score,
-}: ListingAIAnalysisPanelProps) {
+export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
   const { toast } = useToast()
-  const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
-  const [applyModalOpen, setApplyModalOpen] = useState(false)
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false)
-  const [verdictExpanded, setVerdictExpanded] = useState(false)
-  // HOTFIX: Estado local para appliedActions (atualizado imediatamente após aplicar)
-  const [localAppliedActions, setLocalAppliedActions] = useState<Array<{ actionType: string; appliedAt: string }>>(appliedActions)
-  // Sincronizar com prop quando mudar (ex: após regerar análise)
-  useEffect(() => {
-    setLocalAppliedActions(appliedActions)
-  }, [appliedActions])
-  
-  // HOTFIX: Verificar se ação já foi aplicada (usando estado local)
-  const isActionApplied = (actionType: string) => {
-    // Verificar ação específica no estado local
-    if (localAppliedActions.some(action => action.actionType === actionType)) {
-      return true;
-    }
-    
-    // Compatibilidade: se procurar "seo", verificar "seo_title" ou "seo_description"
-    if (actionType === 'seo') {
-      return localAppliedActions.some(action => 
-        action.actionType === 'seo_title' || action.actionType === 'seo_description'
-      );
-    }
-    
-    // Compatibilidade: se procurar "midia", verificar "media_images"
-    if (actionType === 'midia') {
-      return localAppliedActions.some(action => action.actionType === 'media_images');
-    }
-    
-    return false;
-  }
-  
-  // Construir ações para o Kanban
-  const buildKanbanActions = (): Array<{ id: string; title: string; description: string; actionType: ActionType | null; status: ActionStatus; suggestedActionUrl: string | null }> => {
-    const actions: Array<{ id: string; title: string; description: string; actionType: ActionType | null; status: ActionStatus; suggestedActionUrl: string | null }> = []
-    
-    // Adicionar ações do finalActionPlan
-    if (analysisV21.finalActionPlan) {
-      analysisV21.finalActionPlan.forEach((action, idx) => {
-        const actionLower = action.toLowerCase()
-        let actionType: ActionType | null = null
-        
-        if (actionLower.includes('título') || actionLower.includes('titulo') || actionLower.includes('title')) {
-          actionType = 'seo_title'
-        } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
-          actionType = 'seo_description'
-        } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
-          actionType = 'media_images'
-        }
-        
-        const actionId = `action-${idx}`
-        const currentStatus = isActionApplied(actionType || '') ? 'applied' : 'pending'
-        
-        actions.push({
-          id: actionId,
-          title: action,
-          description: action,
-          actionType,
-          status: currentStatus,
-          suggestedActionUrl: editUrl || null,
-        })
-      })
-    }
-    
-    return actions
-  }
-
-  const kanbanActions = buildKanbanActions()
-  
-  // Estado para status das ações no Kanban
-  const [actionStatuses, setActionStatuses] = useState<Map<string, ActionStatus>>(new Map())
-  
-  // Inicializar status das ações baseado em appliedActions
-  useEffect(() => {
-    const initialStatuses = new Map<string, ActionStatus>()
-    kanbanActions.forEach(action => {
-      if (isActionApplied(action.actionType || '')) {
-        initialStatuses.set(action.id, 'applied')
-      } else {
-        initialStatuses.set(action.id, action.status)
-      }
-    })
-    setActionStatuses(initialStatuses)
-  }, [appliedActions, kanbanActions.length])
-  const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
-  const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
-  const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
-  
-  const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
-
-  const handleOpenApplyModal = (
-    actionType: ActionType,
-    before: string | React.ReactNode,
-    after: string | React.ReactNode
-  ) => {
-    setApplyModalActionType(actionType)
-    setApplyModalBefore(before)
-    setApplyModalAfter(after)
-    setApplyModalOpen(true)
-  }
-
-  const handleConfirmApply = async () => {
-    if (!listingId) {
-      toast({
-        title: 'Erro',
-        description: 'ID do anúncio não disponível',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    try {
-      // DIA 06.2: Construir payloads corretos baseados no actionType
-      let beforePayload: Record<string, unknown> = {}
-      let afterPayload: Record<string, unknown> = {}
-
-      if (applyModalActionType === 'seo_title') {
-        beforePayload = { title: typeof applyModalBefore === 'string' ? applyModalBefore : String(applyModalBefore) }
-        afterPayload = { title: typeof applyModalAfter === 'string' ? applyModalAfter : String(applyModalAfter) }
-      } else if (applyModalActionType === 'seo_description') {
-        beforePayload = { description: typeof applyModalBefore === 'string' ? applyModalBefore : String(applyModalBefore) }
-        afterPayload = { description: typeof applyModalAfter === 'string' ? applyModalAfter : String(applyModalAfter) }
-      } else if (applyModalActionType === 'media_images') {
-        beforePayload = { plan: typeof applyModalBefore === 'string' ? applyModalBefore : null }
-        afterPayload = { plan: typeof applyModalAfter === 'string' ? applyModalAfter : String(applyModalAfter) }
-      } else {
-        // Fallback para outros tipos
-        beforePayload = typeof applyModalBefore === 'string' 
-          ? { value: applyModalBefore }
-          : { type: 'react_node' }
-        afterPayload = typeof applyModalAfter === 'string'
-          ? { value: applyModalAfter }
-          : { type: 'react_node' }
-      }
-
-      // HOTFIX: Aplicar ação e atualizar estado local imediatamente (sem forceRefresh)
-      const result = await applyAction({
-        actionType: applyModalActionType,
-        beforePayload,
-        afterPayload,
-      })
-
-      toast({
-        title: 'Sucesso!',
-        description: 'Ação registrada com sucesso',
-        duration: 2000,
-      })
-
-      // HOTFIX: Atualizar estado local imediatamente com a ação aplicada
-      const newAction = {
-        actionType: result.actionType,
-        appliedAt: result.appliedAt,
-      }
-      
-      setLocalAppliedActions(prev => {
-        // Evitar duplicatas
-        if (prev.some(a => a.actionType === newAction.actionType)) {
-          return prev.map(a => 
-            a.actionType === newAction.actionType ? newAction : a
-          )
-        }
-        return [...prev, newAction]
-      })
-      
-      // HOTFIX: NÃO chamar onRegenerate() aqui - isso fazia forceRefresh=true e resetava badges
-      // O estado local já foi atualizado acima, então o badge aparece imediatamente
-    } catch (error) {
-      // DIA 06.2: Toast já mostra mensagem detalhada do hook
-      toast({
-        title: 'Erro ao registrar ação',
-        description: error instanceof Error ? error.message : 'Erro desconhecido ao registrar ação',
-        variant: 'destructive',
-        duration: 5000, // Mais tempo para ler mensagem detalhada
-      })
-      throw error
-    }
-  }
-
-  const handleCopy = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedTexts(prev => new Set(prev).add(text))
-      toast({
-        title: 'Copiado!',
-        description: `${label} copiado para a área de transferência`,
-        duration: 2000,
-      })
-      setTimeout(() => {
-        setCopiedTexts(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(text)
-          return newSet
-        })
-      }, 2000)
-    } catch (error) {
-      console.error('Erro ao copiar:', error)
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível copiar o texto',
-        variant: 'destructive',
-        duration: 2000,
-      })
-    }
-  }
-
-  const editUrl = listingIdExt 
-    ? buildMercadoLivreListingUrl(listingIdExt, null, 'edit')
+  const editUrl = props.listingIdExt
+    ? buildMercadoLivreListingUrl(props.listingIdExt, null, 'edit')
     : null
 
+  const { data: actionsData, isLoading: actionsLoading, error: actionsError, refetch: refetchActions } =
+    useListingActions(props.listingId || null)
+
+  const actions = actionsData?.items || []
+  const pendingActions = actions.filter((a) => a.status === 'A_IMPLEMENTAR')
+  const nextAction = pendingActions[0]?.title || null
+  const priority = pendingActions[0]?.priority || (pendingActions.length > 0 ? 'Alta' : null)
+
+  const pendingCount = actions.filter((a) => a.status === 'A_IMPLEMENTAR').length
+  const appliedCount = actions.filter((a) => a.status === 'IMPLEMENTADO').length
+  const dismissedCount = actions.filter((a) => a.status === 'DESCARTADO').length
+
+  const verdictText = useMemo(() => {
+    if (props.analysisV21?.verdict && props.analysisV21.verdict.trim().length > 0) {
+      return props.analysisV21.verdict.trim()
+    }
+
+    const parts: string[] = []
+
+    if (props.critique && props.critique.trim().length > 0) {
+      parts.push(props.critique.trim())
+    }
+
+    const visits = props.metrics30d?.visits
+    const orders = props.metrics30d?.orders
+    const cvr = props.metrics30d?.conversionRate
+
+    const promoText = props.pricingNormalized?.hasPromotion
+      ? `Promoção ativa: de R$ ${props.pricingNormalized.originalPriceForDisplay.toFixed(2)} por R$ ${props.pricingNormalized.finalPriceForDisplay.toFixed(2)}${
+          props.listingDiscountPercent ? ` (-${props.listingDiscountPercent}%)` : ''
+        }.`
+      : null
+
+    const metricsText =
+      visits !== undefined && orders !== undefined
+        ? `Métricas (30d): ${visits} visitas, ${orders} pedidos${
+            cvr !== null && cvr !== undefined ? `, conversão ${(cvr * 100).toFixed(2)}%` : ''
+          }.${promoText ? ` ${promoText}` : ''}`
+        : promoText
+          ? promoText
+          : null
+
+    if (metricsText) {
+      parts.push(metricsText)
+    }
+
+    const top3 = actions.slice(0, 3).map((a) => `- ${a.title}`)
+    if (top3.length > 0) {
+      parts.push(`Principais ações:\n${top3.join('\n')}`)
+    }
+
+    return parts.length > 0 ? parts.join('\n\n') : 'Análise executiva não disponível no momento.'
+  }, [
+    props.analysisV21?.verdict,
+    props.critique,
+    props.metrics30d?.visits,
+    props.metrics30d?.orders,
+    props.metrics30d?.conversionRate,
+    props.pricingNormalized?.hasPromotion,
+    props.pricingNormalized?.originalPriceForDisplay,
+    props.pricingNormalized?.finalPriceForDisplay,
+    props.listingDiscountPercent,
+    actions,
+  ])
+
   const handleOpenEdit = () => {
-    if (editUrl) {
-      window.open(editUrl, '_blank', 'noopener,noreferrer')
-    } else {
+    if (!editUrl) {
       toast({
         title: 'Erro',
         description: 'ID do anúncio no Mercado Livre indisponível',
         variant: 'destructive',
         duration: 2000,
       })
+      return
     }
+    window.open(editUrl, '_blank', 'noopener,noreferrer')
   }
 
-  // DIA 06.1: promoPlacements removido (não mais usado após remoção do PromotionHighlightPanel)
-
-  const handleKanbanStatusChange = async (actionId: string, newStatus: ActionStatus) => {
-    setActionStatuses(prev => new Map(prev).set(actionId, newStatus))
-    
-    // Se mudou para "applied" e tem actionType, registrar via apply-action
-    const action = kanbanActions.find(a => a.id === actionId)
-    
-    if (newStatus === 'applied' && action?.actionType && listingId) {
-      try {
-        // Para ações que podem ser aplicadas via API
-        if (action.actionType === 'seo_title' && analysisV21.titleFix) {
-          await applyAction({
-            actionType: 'seo_title',
-            beforePayload: { title: analysisV21.titleFix.before },
-            afterPayload: { title: analysisV21.titleFix.after },
-          })
-        } else if (action.actionType === 'seo_description' && analysisV21.descriptionFix) {
-          await applyAction({
-            actionType: 'seo_description',
-            beforePayload: { description: listingTitle || '' },
-            afterPayload: { description: analysisV21.descriptionFix.optimizedCopy },
-          })
-        } else if (action.actionType === 'media_images' && analysisV21.imagePlan) {
-          await applyAction({
-            actionType: 'media_images',
-            beforePayload: { plan: null },
-            afterPayload: { plan: analysisV21.imagePlan.map(item => `Imagem ${item.image}: ${item.action}`).join('\n') },
-          })
-        }
-      } catch (error) {
-        // Reverter status em caso de erro
-        setActionStatuses(prev => {
-          const next = new Map(prev)
-          const prevStatus = action.status
-          next.set(actionId, prevStatus)
-          return next
-        })
-        throw error
-      }
-    }
-  }
-
-  // Atualizar kanbanActions com status do estado
-  const kanbanActionsWithStatus = kanbanActions.map(action => ({
-    ...action,
-    status: actionStatuses.get(action.id) || action.status,
-  }))
-
-  const pendingCount = kanbanActionsWithStatus.filter(a => a.status === 'pending').length
-  const appliedCount = kanbanActionsWithStatus.filter(a => a.status === 'applied').length
-  const dismissedCount = kanbanActionsWithStatus.filter(a => a.status === 'dismissed').length
-
-  // Próxima ação recomendada (primeira pendente)
-  const nextAction = kanbanActionsWithStatus.find(a => a.status === 'pending')?.title || null
-  
-  // Prioridade (se disponível no analysisV21)
-  const priority = analysisV21.finalActionPlan?.[0] ? 'Alta' : null
-
-  const handleRegenerateClick = () => {
-    setRegenerateModalOpen(true)
-  }
+  const handleRegenerateClick = () => setRegenerateModalOpen(true)
 
   const handleRegenerateConfirm = async () => {
-    if (onRegenerate) {
-      await onRegenerate()
+    if (props.onRegenerate) {
+      await props.onRegenerate()
     }
+  }
+
+  const handleKanbanStatusChange = async (actionId: string, newStatus: ListingActionStatus) => {
+    if (!props.listingId) return
+    await updateListingActionStatus({
+      listingId: props.listingId,
+      actionId,
+      status: newStatus,
+    })
+    await refetchActions()
+    toast({
+      title: 'Status atualizado',
+      description: 'O status da ação foi atualizado com sucesso.',
+      duration: 1500,
+    })
   }
 
   return (
@@ -484,34 +206,7 @@ export function ListingAIAnalysisPanel({
       {/* Header com resumo e ações */}
       <div className="flex items-start justify-between border-b pb-4">
         <div className="space-y-1">
-          <h3 className="text-xl font-bold">{listingTitle || 'Anúncio'}</h3>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            {/* HOTFIX: Usar pricingNormalized como fonte única de verdade, sem calcular */}
-            {pricingNormalized?.hasPromotion ? (
-              <>
-                {/* Só mostrar "de X por Y" se tiver originalPriceForDisplay da fonte */}
-                {pricingNormalized.originalPriceForDisplay ? (
-                  <>
-                    <span className="line-through">R$ {pricingNormalized.originalPriceForDisplay.toFixed(2)}</span>
-                    <span className="text-primary font-semibold">
-                      R$ {pricingNormalized.finalPriceForDisplay.toFixed(2)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-primary font-semibold">
-                    R$ {pricingNormalized.finalPriceForDisplay.toFixed(2)}
-                  </span>
-                )}
-                {listingDiscountPercent && (
-                  <Badge variant="secondary" className="text-xs">
-                    -{listingDiscountPercent}%
-                  </Badge>
-                )}
-              </>
-            ) : (
-              <span>Preço: R$ {(pricingNormalized?.finalPriceForDisplay ?? listingPrice ?? 0).toFixed(2)}</span>
-            )}
-          </div>
+          <h3 className="text-xl font-bold">{props.listingTitle || 'Anúncio'}</h3>
         </div>
         <div className="flex items-center gap-2">
           {editUrl && (
@@ -525,14 +220,14 @@ export function ListingAIAnalysisPanel({
               Abrir no Mercado Livre
             </Button>
           )}
-          {onRegenerate && (
+          {props.onRegenerate && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleRegenerateClick}
-              disabled={isRegenerating}
+              disabled={props.isRegenerating}
             >
-              {isRegenerating ? (
+              {props.isRegenerating ? (
                 <>
                   <Sparkles className="h-4 w-4 mr-2 animate-spin" />
                   Regenerando...
@@ -549,7 +244,7 @@ export function ListingAIAnalysisPanel({
       </div>
 
       {/* Bloco de aviso quando não há métricas de performance */}
-      {dataQuality?.performanceAvailable === false && (
+      {props.dataQuality?.performanceAvailable === false && (
         <Card className="border-l-4 border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
@@ -562,9 +257,9 @@ export function ListingAIAnalysisPanel({
                   Este anúncio ainda não possui histórico suficiente de visitas e vendas.
                   A análise abaixo foca em otimizações de cadastro, SEO e mídia que podem ajudar a melhorar a performance.
                 </p>
-                {(metrics30d?.visits === 0 || metrics30d?.orders === 0) && (
+                {(props.metrics30d?.visits === 0 || props.metrics30d?.orders === 0) && (
                   <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
-                    Visitas: {metrics30d.visits || 0} | Pedidos: {metrics30d.orders || 0}
+                    Visitas: {props.metrics30d?.visits || 0} | Pedidos: {props.metrics30d?.orders || 0}
                   </p>
                 )}
               </div>
@@ -575,9 +270,10 @@ export function ListingAIAnalysisPanel({
 
       {/* A) BLOCO OPORTUNIDADE */}
       <OpportunityBlock
-        score={score || 0}
+        score={props.score || 0}
         priority={priority}
         nextAction={nextAction}
+        hasActions={actions.length > 0}
       />
 
       {/* B) VEREDITO DIRETO */}
@@ -594,19 +290,9 @@ export function ListingAIAnalysisPanel({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className={`text-base leading-relaxed font-medium text-foreground ${!verdictExpanded && analysisV21.verdict && analysisV21.verdict.length > 300 ? 'line-clamp-4' : ''}`}>
-            {analysisV21.verdict || 'Veredito não disponível'}
+          <div className="text-base leading-relaxed font-medium text-foreground whitespace-pre-wrap">
+            {verdictText}
           </div>
-          
-          {analysisV21.verdict && analysisV21.verdict.length > 300 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setVerdictExpanded(!verdictExpanded)}
-            >
-              {verdictExpanded ? 'Recolher' : 'Expandir'}
-            </Button>
-          )}
         </CardContent>
       </Card>
 
@@ -620,469 +306,43 @@ export function ListingAIAnalysisPanel({
       {/* D) KANBAN SIMPLES */}
       <div>
         <h3 className="text-lg font-semibold mb-4">Ações Recomendadas</h3>
-        <ActionKanban
-          actions={kanbanActionsWithStatus}
-          onStatusChange={handleKanbanStatusChange}
-          editUrl={editUrl}
-        />
-      </div>
-
-      {/* 1️⃣ TÍTULO — DIAGNÓSTICO + AÇÃO */}
-      {analysisV21.titleFix && (
-        <div id="section-seo-title">
-          <SectionTemplate
-            icon={Tag}
-            title={
-              <div className="flex items-center justify-between w-full">
-                <span>1️⃣ Título — Diagnóstico + Ação</span>
-                {isActionApplied('seo_title') && (
-                  <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Implementado
-                  </Badge>
-                )}
-              </div>
-            }
-            diagnostic={<p>{analysisV21.titleFix.problem}</p>}
-            impact={<p>{analysisV21.titleFix.impact}</p>}
-            actions={
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Antes:</p>
-                  <Textarea
-                    readOnly
-                    value={analysisV21.titleFix.before}
-                    className="text-sm min-h-[60px] bg-muted/50"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-muted-foreground">Depois (otimizado):</p>
-                    <div className="flex items-center gap-2">
-                      {!isActionApplied('seo_title') && analysisV21.titleFix && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleOpenApplyModal(
-                            'seo_title',
-                            analysisV21.titleFix!.before,
-                            analysisV21.titleFix!.after
-                          )}
-                        >
-                          <CheckCircle2 className="h-4 w-4 mr-2" />
-                          Registrar como aplicado
-                        </Button>
-                      )}
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleCopy(analysisV21.titleFix!.after, 'Título')}
-                        className="bg-primary hover:bg-primary/90"
-                      >
-                        {copiedTexts.has(analysisV21.titleFix.after) ? (
-                          <>
-                            <Check className="h-4 w-4 mr-2 text-white" />
-                            Copiado
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copiar título
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <Textarea
-                    readOnly
-                    value={analysisV21.titleFix.after}
-                    className="text-sm min-h-[60px] bg-primary/5 border-2 border-primary/20 font-medium"
-                  />
-                </div>
-                {editUrl && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenEdit}
-                    className="w-full"
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Abrir anúncio para editar título
-                  </Button>
-                )}
-              </div>
-            }
+        {actionsLoading ? (
+          <Card className="p-6">
+            <p className="text-sm text-muted-foreground">Carregando ações...</p>
+          </Card>
+        ) : actionsError ? (
+          <Card className="p-6">
+            <p className="text-sm text-destructive">Erro ao carregar ações.</p>
+          </Card>
+        ) : actions.length === 0 ? (
+          <Card className="p-6">
+            <p className="text-sm text-muted-foreground">Sem ações ainda — gere uma análise.</p>
+          </Card>
+        ) : (
+          <ActionKanban
+            actions={actions.map((a) => ({
+              id: a.id,
+              actionKey: a.actionKey,
+              title: a.title,
+              description: a.description,
+              status: a.status,
+              priority: a.priority,
+              expectedImpact: a.expectedImpact,
+              suggestedActionUrl: editUrl,
+            }))}
+            onStatusChange={handleKanbanStatusChange}
+            editUrl={editUrl}
           />
-        </div>
-      )}
-
-      {/* 2️⃣ IMAGENS — DIAGNÓSTICO + AÇÃO */}
-      {analysisV21.imagePlan && analysisV21.imagePlan.length > 0 && (
-        <div id="section-media-images">
-          <SectionTemplate
-            icon={ImageIcon}
-            title={
-              <div className="flex items-center justify-between w-full">
-                <span>2️⃣ Imagens — Diagnóstico + Ação</span>
-                {isActionApplied('media_images') && (
-                  <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Implementado
-                  </Badge>
-                )}
-              </div>
-            }
-          diagnostic={<p>Sequência de imagens pode melhorar conversão</p>}
-          impact={<p>Imagens fortes elevam CTR e conversão.</p>}
-          actions={
-            <div className="space-y-3">
-              <ol className="space-y-3">
-                {analysisV21.imagePlan.map((item, idx) => (
-                  <li key={idx} className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                      {item.image}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">Imagem {item.image}</p>
-                      <p className="text-sm text-muted-foreground mt-1">{item.action}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-              <div className="flex items-center gap-2">
-                {!isActionApplied('media_images') && analysisV21.imagePlan && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleOpenApplyModal(
-                      'media_images',
-                      'Plano de imagens atual',
-                      analysisV21.imagePlan!.map(item => `Imagem ${item.image}: ${item.action}`).join('\n')
-                    )}
-                    className="flex-1"
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Registrar como aplicado
-                  </Button>
-                )}
-                {editUrl && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenEdit}
-                    className={isActionApplied('media_images') ? 'w-full' : 'flex-1'}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Abrir anúncio para editar imagens
-                  </Button>
-                )}
-              </div>
-            </div>
-          }
-        />
-        </div>
-      )}
-
-      {/* 3️⃣ DESCRIÇÃO — SEO + CONVERSÃO */}
-      {analysisV21.descriptionFix && (
-        <div id="section-seo-description">
-        <SectionTemplate
-          icon={Sparkles}
-          title={
-            <div className="flex items-center justify-between w-full">
-              <span>3️⃣ Descrição — SEO + Conversão</span>
-              {isActionApplied('seo_description') && (
-                <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                  Implementado
-                </Badge>
-              )}
-            </div>
-          }
-          diagnostic={<p>{analysisV21.descriptionFix.diagnostic}</p>}
-          impact={<p>Descrição estruturada melhora SEO e reduz objeções.</p>}
-          actions={
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-foreground">Descrição otimizada:</p>
-                <div className="flex items-center gap-2">
-                  {!isActionApplied('seo_description') && analysisV21.descriptionFix && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleOpenApplyModal(
-                        'seo_description',
-                        listingTitle || 'Descrição atual não disponível',
-                        analysisV21.descriptionFix!.optimizedCopy
-                      )}
-                    >
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      Aplicar Sugestão
-                    </Button>
-                  )}
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => handleCopy(analysisV21.descriptionFix!.optimizedCopy, 'Descrição')}
-                    className="bg-primary hover:bg-primary/90"
-                  >
-                    {copiedTexts.has(analysisV21.descriptionFix.optimizedCopy) ? (
-                      <>
-                        <Check className="h-4 w-4 mr-2 text-white" />
-                        Copiado
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copiar descrição
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <Textarea
-                readOnly
-                value={analysisV21.descriptionFix.optimizedCopy}
-                className="text-sm min-h-[250px] font-mono text-xs bg-primary/5 border-2 border-primary/20"
-              />
-              {editUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenEdit}
-                  className="w-full"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir anúncio para editar descrição
-                </Button>
-              )}
-            </div>
-          }
-        />
-        </div>
-      )}
-
-      {/* DIA 06.1: Removido bloco Preço/Promoção (duplicação) - promo já está incorporado nas seções */}
-      
-      {/* 5️⃣ COMPARAÇÃO COM CONCORRENTES — BENCHMARK INSIGHTS (Dia 05) */}
-      {benchmarkInsights && <BenchmarkInsightsPanel benchmarkInsights={benchmarkInsights} />}
-
-      {/* DIA 09: HACKS MERCADO LIVRE — HackEngine v1 */}
-      {growthHacks && growthHacks.length > 0 && listingId && (
-        <HacksPanel 
-          hacks={growthHacks} 
-          listingId={listingId}
-          metrics30d={metrics30d}
-        />
-      )}
-
-      {/* DIA 06.1: Conteúdo Gerado removido como bloco separado - será incorporado nas seções */}
-
-      {/* COMPARAÇÃO COM CONCORRENTES — BENCHMARK (legado, mantido para compatibilidade) */}
-      {benchmark && !benchmarkInsights && <BenchmarkPanel benchmark={benchmark} />}
-
-      {/* Modal de Aplicar Sugestão */}
-      <ApplyActionModal
-        open={applyModalOpen}
-        onClose={() => setApplyModalOpen(false)}
-        onConfirm={handleConfirmApply}
-        actionType={applyModalActionType}
-        beforeValue={applyModalBefore}
-        afterValue={applyModalAfter}
-        isLoading={isApplyingAction}
-      />
+        )}
+      </div>
 
       {/* Modal de Regerar Análise */}
       <RegenerateAnalysisModal
         open={regenerateModalOpen}
         onClose={() => setRegenerateModalOpen(false)}
         onConfirm={handleRegenerateConfirm}
-        isRegenerating={isRegenerating}
+        isRegenerating={props.isRegenerating}
       />
-
-      {/* Diagnostico de preco da IA (complementar) */}
-      {analysisV21.priceFix && (
-        <SectionTemplate
-          icon={Tag}
-          title="Preco — Diagnostico + Acao"
-          diagnostic={<p>{analysisV21.priceFix.diagnostic}</p>}
-          impact={<p>Preco e promo afetam conversao e competitividade.</p>}
-          actions={
-            <div className="space-y-3">
-              <div className="p-4 bg-muted/30 rounded-lg">
-                <p className="text-sm text-foreground">{analysisV21.priceFix.action}</p>
-              </div>
-              {editUrl && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenEdit}
-                  className="w-full"
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Abrir anuncio para editar preco
-                </Button>
-              )}
-            </div>
-          }
-        />
-      )}
-
-      {/* 5️⃣ HACKS DE ALGORITMO — FORMATO EXECUTIVO */}
-      {/* DIA 06.3: Ocultar Hacks se redundante/genérico */}
-      {analysisV21.algorithmHacks && 
-       analysisV21.algorithmHacks.length > 0 && 
-       analysisV21.algorithmHacks.some(hack => {
-         // Verificar se há hacks diferenciados (não apenas recomendações genéricas)
-         const hackText = (hack.hack + ' ' + hack.howToApply).toLowerCase()
-         // Se o hack não contém recomendações já presentes em outras seções, mostrar
-         const isGeneric = hackText.includes('melhorar palavras-chave') || 
-                          hackText.includes('adicionar palavras-chave') ||
-                          (hackText.includes('título') && analysisV21.titleFix) ||
-                          (hackText.includes('descrição') && analysisV21.descriptionFix)
-         return !isGeneric
-       }) && (
-        <SectionTemplate
-          icon={Zap}
-          title="5️⃣ Hacks de Algoritmo"
-          diagnostic={<p>Ações rápidas de ganho para aumentar sinais algorítmicos</p>}
-          impact={<p>Pode aumentar sinais algorítmicos (CTR, relevância, conversão).</p>}
-          actions={
-            <div className="space-y-4">
-              {analysisV21.algorithmHacks.map((hack, idx) => (
-                <Card key={idx} className="bg-gradient-to-r from-primary/5 to-primary/10 border-l-4 border-l-primary">
-                  <CardContent className="pt-4">
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-semibold text-base text-foreground mb-1">{hack.hack}</h4>
-                        <p className="text-sm text-muted-foreground">{hack.howToApply}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-xs">
-                          <TrendingUp className="h-3 w-3 mr-1" />
-                          Impacta: {hack.signalImpacted}
-                        </Badge>
-                      </div>
-                      {editUrl && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleOpenEdit}
-                          className="mt-2"
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Abrir anúncio para aplicar
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          }
-        />
-      )}
-
-      {/* 📋 PLANO DE EXECUÇÃO — CHECKLIST COM STATUS (DIA 06.1) */}
-      {(analysisV21.finalActionPlan && analysisV21.finalActionPlan.length > 0) || (growthHacks && growthHacks.length > 0) ? (
-        <ActionPlanChecklist
-          items={[
-            // HOTFIX 09.8: Incluir hacks ML no plano de execução
-            ...(growthHacks && growthHacks.length > 0 ? growthHacks.slice(0, 5).map((hack) => ({
-              id: `hack-${hack.id}`,
-              title: hack.title,
-              actionType: null, // Hacks ML não são executáveis via apply-action
-              mlDeeplink: hack.suggestedActionUrl || editUrl || undefined,
-            })) : []),
-            // Ações do finalActionPlan
-            ...(analysisV21.finalActionPlan ? analysisV21.finalActionPlan.slice(0, 8).map((action, idx) => {
-            // Mapear ações para actionTypes baseado no conteúdo
-            let actionType: ActionType | null = null
-            let sectionId: string | undefined
-            
-            const actionLower = action.toLowerCase()
-            
-            // HOTFIX: Mapa único (single source of truth) para actionType -> sectionId
-            if (actionLower.includes('título') || actionLower.includes('titulo') || actionLower.includes('title')) {
-              actionType = 'seo_title'
-              sectionId = 'section-seo-title'
-            } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
-              actionType = 'seo_description'
-              sectionId = 'section-seo-description'
-            } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
-              actionType = 'media_images'
-              sectionId = 'section-media-images'
-            } else if (actionLower.includes('selo') || actionLower.includes('capa')) {
-              actionType = 'promo_cover_badge'
-            } else if (actionLower.includes('banner')) {
-              actionType = 'promo_banner'
-            }
-            
-            return {
-              id: `action-${idx}`,
-              title: action,
-              actionType,
-              sectionId,
-              mlDeeplink: editUrl || undefined,
-            }
-          }) : []),
-          ].filter(Boolean)}
-          appliedActions={localAppliedActions}
-          onApplyAction={(actionType, before, after) => {
-            handleOpenApplyModal(actionType, before, after)
-          }}
-          onScrollToSection={(sectionId) => {
-            // HOTFIX: Scroll robusto para a seção correspondente com highlight
-            if (!sectionId) {
-              // Fallback: scroll para topo
-              window.scrollTo({ top: 0, behavior: 'smooth' })
-              return
-            }
-            
-            const element = document.getElementById(sectionId)
-            if (element) {
-              // Scroll suave
-              element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              
-              // Highlight visual temporário (pulse effect)
-              element.classList.add('ring-4', 'ring-primary', 'ring-offset-4', 'animate-pulse')
-              setTimeout(() => {
-                element.classList.remove('ring-4', 'ring-primary', 'ring-offset-4', 'animate-pulse')
-              }, 2000)
-            } else {
-              // Seção não encontrada: scroll para topo
-              window.scrollTo({ top: 0, behavior: 'smooth' })
-            }
-          }}
-          editUrl={editUrl}
-        />
-      ) : null}
-
-      {/* 🎯 RESULTADO ESPERADO — DESTAQUE VISUAL */}
-      <Card className="border-2 border-green-500/20 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10">
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-green-500/20">
-              <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <CardTitle className="text-xl font-bold text-green-900 dark:text-green-100">🎯 Resultado Esperado</CardTitle>
-              <p className="text-sm text-green-700 dark:text-green-300 mt-1">Impacto projetado</p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="text-lg font-semibold text-green-900 dark:text-green-100 mb-4">
-            Mais relevância → mais CTR → mais conversão.
-          </div>
-          {analysisV21.finalActionPlan && analysisV21.finalActionPlan.length > 0 && (
-            <div className="pt-4 border-t border-green-200 dark:border-green-800">
-              <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">Ação principal:</p>
-              <p className="text-sm text-green-700 dark:text-green-300">{analysisV21.finalActionPlan[0]}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   )
 }
