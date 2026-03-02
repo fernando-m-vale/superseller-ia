@@ -146,14 +146,17 @@ export function useListingActions(listingId: string | null): UseListingActionsRe
 
     const backendStatus = mapFrontendStatus(newStatus)
 
-    // Capture previous status for rollback
-    const previousStatus = actions.find((a) => a.id === actionId)?.status ?? 'pending'
+    let previousStatus: FrontendActionStatus = 'pending'
 
-    // Optimistic update
+    // Optimistic update + capture previous status atomically
     setActions((prev) =>
-      prev.map((a) =>
-        a.id === actionId ? { ...a, status: newStatus } : a
-      )
+      prev.map((a) => {
+        if (a.id === actionId) {
+          previousStatus = a.status
+          return { ...a, status: newStatus }
+        }
+        return a
+      })
     )
 
     try {
