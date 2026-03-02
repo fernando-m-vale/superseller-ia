@@ -201,7 +201,7 @@ export interface AIAnalysisResponse {
     skippedBecauseOfHistory: number
     skippedBecauseOfRequirements: number
   }
-  seoSuggestions: {
+  seoSuggestions?: {
     title: string
     description: string
   }
