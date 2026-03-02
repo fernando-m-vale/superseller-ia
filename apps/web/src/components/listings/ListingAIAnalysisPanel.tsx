@@ -11,75 +11,7 @@ import { OpportunityBlock } from './OpportunityBlock'
 import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
-import { useListingActions } from '@/hooks/use-listing-actions'
-
-// Template padronizado para seções
-type SectionTemplateProps = {
-  icon: React.ElementType
-  title: string | React.ReactNode
-  diagnostic: React.ReactNode
-  impact: React.ReactNode
-  actions: React.ReactNode
-}
-
-const SectionTemplate = ({
-  icon: Icon,
-  title,
-  diagnostic,
-  impact,
-  actions,
-}: SectionTemplateProps) => {
-  return (
-    <Card className="border-l-4 border-l-primary">
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Icon className="h-5 w-5 text-primary" />
-          </div>
-          <CardTitle className="text-lg">{typeof title === 'string' ? title : title}</CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Diagnóstico */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <Brain className="h-4 w-4 text-primary" />
-            <span>🔍 Diagnóstico</span>
-          </div>
-          <div className="pl-6 text-sm leading-relaxed text-foreground">
-            {diagnostic}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Impacto */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <TrendingDown className="h-4 w-4 text-orange-500" />
-            <span>📉 Impacto</span>
-          </div>
-          <div className="pl-6 text-sm leading-relaxed text-muted-foreground">
-            {impact}
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Ações Concretas */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <span>✅ Ações Concretas</span>
-          </div>
-          <div className="pl-6">
-            {actions}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+import { useListingActions, updateListingActionStatus, type ListingActionStatus } from '@/hooks/use-listing-actions'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -165,45 +97,12 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
   const { toast } = useToast()
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false)
   const [verdictExpanded, setVerdictExpanded] = useState(false)
-  // HOTFIX: Estado local para appliedActions (atualizado imediatamente após aplicar)
-  const [localAppliedActions, setLocalAppliedActions] = useState<Array<{ actionType: string; appliedAt: string }>>(appliedActions)
-  // Sincronizar com prop quando mudar (ex: após regerar análise)
-  useEffect(() => {
-    setLocalAppliedActions(appliedActions)
-  }, [appliedActions])
-  
-  // HOTFIX: Verificar se ação já foi aplicada (usando estado local)
-  const isActionApplied = (actionType: string) => {
-    // Verificar ação específica no estado local
-    if (localAppliedActions.some(action => action.actionType === actionType)) {
-      return true;
-    }
-    
-    // Compatibilidade: se procurar "seo", verificar "seo_title" ou "seo_description"
-    if (actionType === 'seo') {
-      return localAppliedActions.some(action => 
-        action.actionType === 'seo_title' || action.actionType === 'seo_description'
-      );
-    }
-    
-    // Compatibilidade: se procurar "midia", verificar "media_images"
-    if (actionType === 'midia') {
-      return localAppliedActions.some(action => action.actionType === 'media_images');
-    }
-    
-    return false;
-  }
-  
-  // DIA 10: Buscar ações persistidas via API (listing_actions)
-  const {
-    actions: apiActions,
-    updateStatus: updateActionStatus,
-  } = useListingActions(listingId || null)
-  const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
-  const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
-  const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
-  
-  const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
+  const editUrl = props.listingIdExt
+    ? buildMercadoLivreListingUrl(props.listingIdExt, null, 'edit')
+    : null
+
+  const { data: actionsData, isLoading: actionsLoading, error: actionsError, refetch: refetchActions } =
+    useListingActions(props.listingId || null)
 
   const actions = actionsData?.items || []
   const pendingActions = actions.filter((a) => a.status === 'A_IMPLEMENTAR')
@@ -282,46 +181,25 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
 
   const handleRegenerateClick = () => setRegenerateModalOpen(true)
 
-  const handleKanbanStatusChange = async (actionId: string, newStatus: ActionStatus) => {
-    try {
-      await updateActionStatus(actionId, newStatus)
-    } catch (error) {
-      toast({
-        title: 'Erro ao atualizar status',
-        description: error instanceof Error ? error.message : 'Erro desconhecido',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  // DIA 10: Mapear ações da API para o formato do Kanban
-  const kanbanActionsWithStatus = apiActions.map(action => ({
-    id: action.id,
-    title: action.title,
-    description: action.description,
-    actionType: null as ActionType | null,
-    status: action.status as ActionStatus,
-    suggestedActionUrl: editUrl || null,
-  }))
-
-  const pendingCount = kanbanActionsWithStatus.filter(a => a.status === 'pending').length
-  const appliedCount = kanbanActionsWithStatus.filter(a => a.status === 'applied').length
-  const dismissedCount = kanbanActionsWithStatus.filter(a => a.status === 'dismissed').length
-
-  // Próxima ação recomendada (primeira pendente)
-  const nextAction = kanbanActionsWithStatus.find(a => a.status === 'pending')?.title || null
-  
-  // Prioridade (se disponível no analysisV21)
-  const priority = analysisV21.finalActionPlan?.[0] ? 'Alta' : null
-
-  const handleRegenerateClick = () => {
-    setRegenerateModalOpen(true)
-  }
-
   const handleRegenerateConfirm = async () => {
-    if (onRegenerate) {
-      await onRegenerate()
+    if (props.onRegenerate) {
+      await props.onRegenerate()
     }
+  }
+
+  const handleKanbanStatusChange = async (actionId: string, newStatus: ListingActionStatus) => {
+    if (!props.listingId) return
+    await updateListingActionStatus({
+      listingId: props.listingId,
+      actionId,
+      status: newStatus,
+    })
+    await refetchActions()
+    toast({
+      title: 'Status atualizado',
+      description: 'O status da ação foi atualizado com sucesso.',
+      duration: 1500,
+    })
   }
 
   return (
@@ -357,8 +235,8 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
                 </>
               ) : (
                 <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Regerar análise
+                  <Flame className="h-4 w-4 mr-2" />
+                  REGERAR ANÁLISE
                 </>
               )}
             </Button>
@@ -367,24 +245,16 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       </div>
 
       {/* Bloco de aviso quando não há métricas de performance */}
-      {props.dataQuality?.performanceAvailable === false && (
-        <Card className="border-l-4 border-l-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
+      {props.dataQuality && !props.dataQuality.performanceAvailable && (
+        <Card className="border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-950/20">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5 flex-shrink-0" />
-              <div className="flex-1 space-y-2">
-                <h4 className="font-semibold text-yellow-900 dark:text-yellow-100">
-                  ⚠️ Dados de performance ainda indisponíveis
-                </h4>
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  Este anúncio ainda não possui histórico suficiente de visitas e vendas.
-                  A análise abaixo foca em otimizações de cadastro, SEO e mídia que podem ajudar a melhorar a performance.
+              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm text-yellow-900 dark:text-yellow-100">
+                  <strong>Atenção:</strong> Este anúncio ainda não possui métricas de performance suficientes
+                  (visitas, pedidos, conversão). A análise está baseada apenas em dados estruturais do anúncio.
                 </p>
-                {(props.metrics30d?.visits === 0 || props.metrics30d?.orders === 0) && (
-                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-2">
-                    Visitas: {props.metrics30d?.visits || 0} | Pedidos: {props.metrics30d?.orders || 0}
-                  </p>
-                )}
               </div>
             </div>
           </CardContent>
@@ -413,9 +283,19 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-base leading-relaxed font-medium text-foreground whitespace-pre-wrap">
-            {verdictText}
+          <div className={`text-base leading-relaxed font-medium text-foreground ${!verdictExpanded && verdictText && verdictText.length > 300 ? 'line-clamp-4' : ''}`}>
+            {verdictText || 'Veredito não disponível'}
           </div>
+          
+          {verdictText && verdictText.length > 300 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setVerdictExpanded(!verdictExpanded)}
+            >
+              {verdictExpanded ? 'Recolher' : 'Expandir'}
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -462,7 +342,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       {/* Modal de Regerar Análise */}
       <RegenerateAnalysisModal
         open={regenerateModalOpen}
-        onClose={() => setRegenerateModalOpen(false)}
+        onOpenChange={setRegenerateModalOpen}
         onConfirm={handleRegenerateConfirm}
         isRegenerating={props.isRegenerating}
       />

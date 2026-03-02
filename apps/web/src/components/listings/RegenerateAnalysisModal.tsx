@@ -13,24 +13,24 @@ import { AlertCircle } from 'lucide-react'
 
 interface RegenerateAnalysisModalProps {
   open: boolean
-  onClose: () => void
+  onOpenChange: (open: boolean) => void
   onConfirm: () => Promise<void>
   isRegenerating?: boolean
 }
 
 export function RegenerateAnalysisModal({
   open,
-  onClose,
+  onOpenChange,
   onConfirm,
   isRegenerating = false,
 }: RegenerateAnalysisModalProps) {
   const handleConfirm = async () => {
     await onConfirm()
-    onClose()
+    onOpenChange(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Regerar Análise</DialogTitle>
@@ -49,7 +49,7 @@ export function RegenerateAnalysisModal({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isRegenerating}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isRegenerating}>
             Cancelar
           </Button>
           <Button onClick={handleConfirm} disabled={isRegenerating}>
