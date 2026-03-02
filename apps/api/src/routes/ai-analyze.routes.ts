@@ -32,6 +32,7 @@ import { buildSignals } from '../services/SignalsBuilder';
 import { generateHacks } from '../services/HackEngine';
 import { getHackHistory } from '../services/ListingHacksService';
 import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -59,6 +60,41 @@ const AnalyzeQuerySchema = z.object({
   forceRefresh: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
   debugPrices: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
+
+async function persistListingActionsBatch(
+  listingId: string,
+  growthHacks: Array<{
+    id?: string;
+    title?: string;
+    summary?: string;
+    description?: string;
+    impact?: string;
+    estimatedImpact?: string;
+    priority?: string;
+  }>,
+): Promise<string> {
+  const batchId = randomUUID();
+
+  const actionsToCreate = growthHacks
+    .filter((hack) => Boolean(hack?.title && (hack?.summary || hack?.description)))
+    .map((hack) => ({
+      listingId,
+      actionKey: hack.id || `${batchId}:${hack.title}`,
+      title: hack.title as string,
+      description: (hack.summary || hack.description || '') as string,
+      expectedImpact: hack.impact || hack.estimatedImpact || null,
+      priority: hack.priority || null,
+      batchId,
+    }));
+
+  if (actionsToCreate.length > 0) {
+    await prisma.listingAction.createMany({
+      data: actionsToCreate,
+    });
+  }
+
+  return batchId;
+}
 
 /**
  * Helper para adicionar header x-api-commit nas respostas
@@ -1500,6 +1536,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               skippedBecauseOfRequirements: 0,
             };
           }
+
+          // Persistir ações estratégicas da análise atual (MVP Kanban)
+          const actionsBatchId = await persistListingActionsBatch(listingId, responseData.growthHacks || []);
+          responseData.actionsBatchId = actionsBatchId;
 
           // Adicionar header com commit SHA
           setVersionHeader(reply);
