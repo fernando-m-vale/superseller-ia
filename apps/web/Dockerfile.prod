@@ -16,12 +16,9 @@ COPY packages/core/package.json packages/core/
 # Install all dependencies (using --no-frozen-lockfile as emergency measure for CI compatibility)
 RUN pnpm install --no-frozen-lockfile
 
-# Copy source code (packages first, then apps to ensure proper dependency resolution)
+# Copy source code
 COPY packages ./packages
 COPY apps/web ./apps/web
-
-# Ensure node_modules are properly linked
-RUN pnpm install --no-frozen-lockfile
 
 # Build argument for API URL (baked into client bundle at build time)
 # If not provided, the app will use the production default from lib/api.ts
