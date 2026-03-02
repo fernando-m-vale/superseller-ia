@@ -281,6 +281,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   growthHacksMeta={aiAnalysis.growthHacksMeta}
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
+                  score={aiAnalysis.score}
                 />
               ) : (
                 <Card className="m-4">

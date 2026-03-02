@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Eye, MousePointerClick, ShoppingCart, DollarSign, Award, Zap, TrendingUp, AlertCircle, Link as LinkIcon } from 'lucide-react';
+import { Eye, ShoppingCart, Award, Zap, TrendingUp, AlertCircle, Link as LinkIcon } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -346,7 +346,7 @@ function OverviewContent() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Anúncios</CardTitle>
@@ -377,19 +377,6 @@ function OverviewContent() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estoque Total</CardTitle>
-            <MousePointerClick className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.totalStock)}</div>
-            <p className="text-xs text-muted-foreground">
-              Preço médio: {formatCurrency(data.averagePrice)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pedidos ({periodDays} dias)</CardTitle>
             <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -402,30 +389,38 @@ function OverviewContent() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Ticket médio: {formatCurrency(data.averageTicket)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receita ({periodDays} dias)</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <div className="text-2xl font-bold">{formatCurrency(data.totalRevenue)}</div>
-              <Badge variant="secondary" className="text-xs shrink-0">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                +8%
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              GMV total do período
+              Receita: {formatCurrency(data.totalRevenue)}
             </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Impacto Potencial */}
+      <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <span className="text-xl">⚡</span>
+            Impacto Potencial
+          </CardTitle>
+          <CardDescription>
+            Score médio dos seus anúncios baseado em otimizações de SEO, mídia e competitividade
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-4xl font-bold text-blue-700 dark:text-blue-400 mb-3">
+            {Number(data.averageSuperSellerScore || data.averageHealthScore || 0).toFixed(0)}%
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {(() => {
+              const score = Number(data.averageSuperSellerScore || data.averageHealthScore || 0);
+              if (score >= 80) return '🟢 Excelente - Seus anúncios estão otimizados';
+              if (score >= 60) return '🔵 Bom - Há espaço para melhorias';
+              if (score >= 40) return '🟡 Regular - Atenção aos seus anúncios';
+              return '🔴 Crítico - Melhore seus anúncios urgentemente';
+            })()}
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Trend Chart */}
       <Card>
@@ -496,94 +491,11 @@ function OverviewContent() {
                   connectNulls={false}
                 />
               )}
+              {/* Espaço reservado para marcador futuro */}
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
       </Card>
-
-      {/* Marketplace Breakdown */}
-      {data.byMarketplace && data.byMarketplace.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Award className="h-5 w-5 text-primary" />
-              <CardTitle>Por Marketplace</CardTitle>
-            </div>
-            <CardDescription>
-              Distribuição de anúncios por plataforma
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              {data.byMarketplace.map((mp) => (
-                <div key={mp.marketplace} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div>
-                    <p className="font-semibold capitalize">{mp.marketplace}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {mp.count} anúncios | Score: {Number(mp.avgSuperSellerScore || mp.avgHealthScore || 0).toFixed(0)}%
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="text-lg px-4 py-2">
-                    {formatCurrency(mp.avgPrice)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Additional Metrics */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <span className="text-lg">⚡</span>
-              Super Seller Score
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-700 dark:text-blue-400">
-              {Number(data.averageSuperSellerScore || data.averageHealthScore || 0).toFixed(0)}%
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {(() => {
-                const score = Number(data.averageSuperSellerScore || data.averageHealthScore || 0);
-                if (score >= 80) return '🟢 Excelente - Seus anúncios estão otimizados';
-                if (score >= 60) return '🔵 Bom - Há espaço para melhorias';
-                if (score >= 40) return '🟡 Regular - Atenção aos seus anúncios';
-                return '🔴 Crítico - Melhore seus anúncios urgentemente';
-              })()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Anúncios Pausados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(data.pausedListings)}</div>
-            <p className="text-xs text-muted-foreground">
-              Anúncios inativos
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(data.averageTicket || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Valor médio por pedido
-            </p>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Top Produtos */}
       {data.topListings && data.topListings.length > 0 && (

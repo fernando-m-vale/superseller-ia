@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, ArrowRight, AlertTriangle } from 'lucide-react'
+import { Copy, Check, TrendingUp, Image as ImageIcon, Tag, Sparkles, ExternalLink, Zap, Flame, Brain, TrendingDown, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,6 +16,10 @@ import { ApplyActionModal } from '@/components/ai/ApplyActionModal'
 import { useApplyAction, type ActionType } from '@/hooks/use-apply-action'
 import { ActionPlanChecklist } from '@/components/ai/ActionPlanChecklist'
 import { HacksPanel } from '@/components/ai/HacksPanel'
+import { OpportunityBlock } from './OpportunityBlock'
+import { ExecutionProgress } from './ExecutionProgress'
+import { ActionKanban, type ActionStatus } from './ActionKanban'
+import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
 
 // Template padronizado para seções
 type SectionTemplateProps = {
@@ -161,6 +165,7 @@ interface ListingAIAnalysisPanelProps {
   }
   onRegenerate?: () => Promise<void>
   isRegenerating?: boolean
+  score?: number
 }
 
 export function ListingAIAnalysisPanel({
@@ -179,23 +184,20 @@ export function ListingAIAnalysisPanel({
   growthHacks,
   onRegenerate,
   isRegenerating = false,
+  score,
 }: ListingAIAnalysisPanelProps) {
   const { toast } = useToast()
   const [copiedTexts, setCopiedTexts] = useState<Set<string>>(new Set())
   const [applyModalOpen, setApplyModalOpen] = useState(false)
+  const [regenerateModalOpen, setRegenerateModalOpen] = useState(false)
+  const [verdictExpanded, setVerdictExpanded] = useState(false)
   // HOTFIX: Estado local para appliedActions (atualizado imediatamente após aplicar)
   const [localAppliedActions, setLocalAppliedActions] = useState<Array<{ actionType: string; appliedAt: string }>>(appliedActions)
-  
   // Sincronizar com prop quando mudar (ex: após regerar análise)
   useEffect(() => {
     setLocalAppliedActions(appliedActions)
   }, [appliedActions])
-  const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
-  const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
-  const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
   
-  const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
-
   // HOTFIX: Verificar se ação já foi aplicada (usando estado local)
   const isActionApplied = (actionType: string) => {
     // Verificar ação específica no estado local
@@ -217,6 +219,64 @@ export function ListingAIAnalysisPanel({
     
     return false;
   }
+  
+  // Construir ações para o Kanban
+  const buildKanbanActions = (): Array<{ id: string; title: string; description: string; actionType: ActionType | null; status: ActionStatus; suggestedActionUrl: string | null }> => {
+    const actions: Array<{ id: string; title: string; description: string; actionType: ActionType | null; status: ActionStatus; suggestedActionUrl: string | null }> = []
+    
+    // Adicionar ações do finalActionPlan
+    if (analysisV21.finalActionPlan) {
+      analysisV21.finalActionPlan.forEach((action, idx) => {
+        const actionLower = action.toLowerCase()
+        let actionType: ActionType | null = null
+        
+        if (actionLower.includes('título') || actionLower.includes('titulo') || actionLower.includes('title')) {
+          actionType = 'seo_title'
+        } else if (actionLower.includes('descrição') || actionLower.includes('descricao') || actionLower.includes('description')) {
+          actionType = 'seo_description'
+        } else if (actionLower.includes('imagem') || actionLower.includes('imagens') || actionLower.includes('image')) {
+          actionType = 'media_images'
+        }
+        
+        const actionId = `action-${idx}`
+        const currentStatus = isActionApplied(actionType || '') ? 'applied' : 'pending'
+        
+        actions.push({
+          id: actionId,
+          title: action,
+          description: action,
+          actionType,
+          status: currentStatus,
+          suggestedActionUrl: editUrl || null,
+        })
+      })
+    }
+    
+    return actions
+  }
+
+  const kanbanActions = buildKanbanActions()
+  
+  // Estado para status das ações no Kanban
+  const [actionStatuses, setActionStatuses] = useState<Map<string, ActionStatus>>(new Map())
+  
+  // Inicializar status das ações baseado em appliedActions
+  useEffect(() => {
+    const initialStatuses = new Map<string, ActionStatus>()
+    kanbanActions.forEach(action => {
+      if (isActionApplied(action.actionType || '')) {
+        initialStatuses.set(action.id, 'applied')
+      } else {
+        initialStatuses.set(action.id, action.status)
+      }
+    })
+    setActionStatuses(initialStatuses)
+  }, [appliedActions, kanbanActions.length])
+  const [applyModalActionType, setApplyModalActionType] = useState<ActionType>('seo_title')
+  const [applyModalBefore, setApplyModalBefore] = useState<string | React.ReactNode>('')
+  const [applyModalAfter, setApplyModalAfter] = useState<string | React.ReactNode>('')
+  
+  const { applyAction, isLoading: isApplyingAction } = useApplyAction(listingId || null)
 
   const handleOpenApplyModal = (
     actionType: ActionType,
@@ -352,6 +412,73 @@ export function ListingAIAnalysisPanel({
 
   // DIA 06.1: promoPlacements removido (não mais usado após remoção do PromotionHighlightPanel)
 
+  const handleKanbanStatusChange = async (actionId: string, newStatus: ActionStatus) => {
+    setActionStatuses(prev => new Map(prev).set(actionId, newStatus))
+    
+    // Se mudou para "applied" e tem actionType, registrar via apply-action
+    const action = kanbanActions.find(a => a.id === actionId)
+    
+    if (newStatus === 'applied' && action?.actionType && listingId) {
+      try {
+        // Para ações que podem ser aplicadas via API
+        if (action.actionType === 'seo_title' && analysisV21.titleFix) {
+          await applyAction({
+            actionType: 'seo_title',
+            beforePayload: { title: analysisV21.titleFix.before },
+            afterPayload: { title: analysisV21.titleFix.after },
+          })
+        } else if (action.actionType === 'seo_description' && analysisV21.descriptionFix) {
+          await applyAction({
+            actionType: 'seo_description',
+            beforePayload: { description: listingTitle || '' },
+            afterPayload: { description: analysisV21.descriptionFix.optimizedCopy },
+          })
+        } else if (action.actionType === 'media_images' && analysisV21.imagePlan) {
+          await applyAction({
+            actionType: 'media_images',
+            beforePayload: { plan: null },
+            afterPayload: { plan: analysisV21.imagePlan.map(item => `Imagem ${item.image}: ${item.action}`).join('\n') },
+          })
+        }
+      } catch (error) {
+        // Reverter status em caso de erro
+        setActionStatuses(prev => {
+          const next = new Map(prev)
+          const prevStatus = action.status
+          next.set(actionId, prevStatus)
+          return next
+        })
+        throw error
+      }
+    }
+  }
+
+  // Atualizar kanbanActions com status do estado
+  const kanbanActionsWithStatus = kanbanActions.map(action => ({
+    ...action,
+    status: actionStatuses.get(action.id) || action.status,
+  }))
+
+  const pendingCount = kanbanActionsWithStatus.filter(a => a.status === 'pending').length
+  const appliedCount = kanbanActionsWithStatus.filter(a => a.status === 'applied').length
+  const dismissedCount = kanbanActionsWithStatus.filter(a => a.status === 'dismissed').length
+
+  // Próxima ação recomendada (primeira pendente)
+  const nextAction = kanbanActionsWithStatus.find(a => a.status === 'pending')?.title || null
+  
+  // Prioridade (se disponível no analysisV21)
+  const priority = analysisV21.finalActionPlan?.[0] ? 'Alta' : null
+
+  const handleRegenerateClick = () => {
+    setRegenerateModalOpen(true)
+  }
+
+  const handleRegenerateConfirm = async () => {
+    if (onRegenerate) {
+      await onRegenerate()
+    }
+  }
+
   return (
     <div className="space-y-6 p-6 bg-background">
       {/* Header com resumo e ações */}
@@ -402,7 +529,7 @@ export function ListingAIAnalysisPanel({
             <Button
               variant="outline"
               size="sm"
-              onClick={onRegenerate}
+              onClick={handleRegenerateClick}
               disabled={isRegenerating}
             >
               {isRegenerating ? (
@@ -446,7 +573,14 @@ export function ListingAIAnalysisPanel({
         </Card>
       )}
 
-      {/* 🔥 VEREDITO DIRETO — HERO CARD */}
+      {/* A) BLOCO OPORTUNIDADE */}
+      <OpportunityBlock
+        score={score || 0}
+        priority={priority}
+        nextAction={nextAction}
+      />
+
+      {/* B) VEREDITO DIRETO */}
       <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 shadow-lg">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
@@ -454,31 +588,44 @@ export function ListingAIAnalysisPanel({
               <Flame className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-xl font-bold">🔥 Veredito Direto</CardTitle>
+              <CardTitle className="text-xl font-bold">Veredito Direto</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">Análise executiva do consultor</p>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="text-base leading-relaxed font-medium text-foreground">
+          <div className={`text-base leading-relaxed font-medium text-foreground ${!verdictExpanded && analysisV21.verdict && analysisV21.verdict.length > 300 ? 'line-clamp-4' : ''}`}>
             {analysisV21.verdict || 'Veredito não disponível'}
           </div>
           
-          {analysisV21.finalActionPlan && analysisV21.finalActionPlan.length > 0 && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-sm font-semibold mb-3 text-foreground">Alavancas principais:</p>
-              <ul className="space-y-2">
-                {analysisV21.finalActionPlan.slice(0, 3).map((action, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm">
-                    <ArrowRight className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                    <span className="text-foreground">{action}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {analysisV21.verdict && analysisV21.verdict.length > 300 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setVerdictExpanded(!verdictExpanded)}
+            >
+              {verdictExpanded ? 'Recolher' : 'Expandir'}
+            </Button>
           )}
         </CardContent>
       </Card>
+
+      {/* C) PROGRESSO DE EXECUÇÃO */}
+      <ExecutionProgress
+        pending={pendingCount}
+        applied={appliedCount}
+        dismissed={dismissedCount}
+      />
+
+      {/* D) KANBAN SIMPLES */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4">Ações Recomendadas</h3>
+        <ActionKanban
+          actions={kanbanActionsWithStatus}
+          onStatusChange={handleKanbanStatusChange}
+          editUrl={editUrl}
+        />
+      </div>
 
       {/* 1️⃣ TÍTULO — DIAGNÓSTICO + AÇÃO */}
       {analysisV21.titleFix && (
@@ -743,6 +890,14 @@ export function ListingAIAnalysisPanel({
         beforeValue={applyModalBefore}
         afterValue={applyModalAfter}
         isLoading={isApplyingAction}
+      />
+
+      {/* Modal de Regerar Análise */}
+      <RegenerateAnalysisModal
+        open={regenerateModalOpen}
+        onClose={() => setRegenerateModalOpen(false)}
+        onConfirm={handleRegenerateConfirm}
+        isRegenerating={isRegenerating}
       />
 
       {/* Diagnostico de preco da IA (complementar) */}
