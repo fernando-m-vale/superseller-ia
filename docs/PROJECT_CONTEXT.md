@@ -74,6 +74,42 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
   - ✅ Benchmark → Action Engine → Conteúdo Gerado — **CONCLUÍDO (Dia 5)**
 - 🚀 Próxima fase: Execução Assistida + Jobs Automáticos + Hacks ML Contextuais (Dia 06-10)
 
+---
+
+## Camada de Execução Assistida (Modelo B)
+
+Esta é a camada que transforma “diagnóstico” em **execução guiada**, com foco em produto premium e controle de risco/custo.
+
+### Separação entre ação estrutural e plano detalhado
+
+- **Ação estrutural (listing_actions)**: título/descrição curtos + status (A_IMPLEMENTAR/IMPLEMENTADO/DESCARTADO) + metadados (prioridade/impacto).
+- **Plano detalhado (action details)**: conteúdo longo e operacional exibido apenas sob demanda (por que importa, como fazer, checklist, copy, benchmark).
+
+### Geração sob demanda
+
+- O frontend só busca detalhes quando o usuário clica em **“Detalhes / Ver como fazer”**.
+- Evita poluir o Kanban e mantém UX rápida.
+
+### Cache por actionId
+
+- Persistir `details_json` por (`listingId`, `actionId`) e versionar por `prompt_version`.
+- Permite **cache hit** imediato e reduz chamadas repetidas.
+
+### Controle de custo LLM
+
+- Lazy generation (gera apenas quando solicitado)
+- Cache persistido
+- TTL/invalidations quando houver nova análise (novo batch) ou mudança de prompt
+- Rate-limit por tenant (se necessário)
+
+### Evolução futura (execução automática)
+
+- O Modelo B prepara o caminho para execução real via API:
+  - consentimento explícito
+  - histórico e auditoria
+  - rollback
+  - feature premium (DIA 16–18)
+
 ## 🧠 Estado atual do produto (2026-02-XX — Pós-HOTFIX DIA 09.5 + 09.6)
 
 **Dia atual do projeto:** DIA 09 + HOTFIX 09.5 + 09.6 implementados (validação PROD pendente)  

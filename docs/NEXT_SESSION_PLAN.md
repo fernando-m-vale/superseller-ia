@@ -1,5 +1,24 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
+## Próxima Sessão — Validação Modelo B + Continuidade FASE 1
+
+Checklist:
+
+[ ] Validar nova tabela `listing_action_details`  
+[ ] Testar endpoint `/details` (cache miss)  
+[ ] Testar cache hit  
+[ ] Validar modal frontend  
+[ ] Avaliar qualidade do plano gerado  
+[ ] Ajustar prompt se necessário  
+[ ] Iniciar planejamento DIA 11 (Execução Assistida Forte)
+
+Definir ponto atual:
+
+→ Estamos no fim do DIA 10 (Produto Vendável estabilizado)  
+→ Início prático do DIA 11 (Execução Assistida Forte)
+
+---
+
 ## 🔜 Próxima Sessão — Validação HOTFIX 09.13 + Pipeline de Clip/Vídeo
 
 ### Passo 0 — Validar HOTFIX 09.13 — Debug Payload de Vídeo/Clip (15-20 min)
