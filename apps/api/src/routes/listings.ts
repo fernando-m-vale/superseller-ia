@@ -4,9 +4,11 @@ import { z } from 'zod';
 import { authGuard } from '../plugins/auth';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import axios, { AxiosError } from 'axios';
+import { ActionDetailsError, ActionDetailsService } from '../services/ActionDetailsService';
 
 const prisma = new PrismaClient();
 const ML_API_BASE = 'https://api.mercadolibre.com';
+const actionDetailsService = new ActionDetailsService();
 
 // TTL para considerar análise expirada (em dias)
 const ANALYSIS_TTL_DAYS = Number(process.env.ANALYSIS_TTL_DAYS) || 7;
@@ -194,6 +196,44 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
       } catch (error) {
         app.log.error(error);
         return reply.status(500).send({ error: 'Failed to fetch listing actions' });
+      }
+    },
+  );
+
+
+  // GET /api/v1/listings/:listingId/actions/:actionId/details
+  app.get<{ Params: { listingId: string; actionId: string } }>(
+    '/:listingId/actions/:actionId/details',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { listingId, actionId } = req.params;
+
+        if (!tenantId) {
+          return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
+        }
+
+        const result = await actionDetailsService.getOrGenerate(tenantId, listingId, actionId);
+
+        if (result.state === 'generating') {
+          return reply.status(202).send({
+            message: 'Detalhes em geração. Tente novamente em instantes.',
+            status: 'GENERATING',
+            cached: false,
+          });
+        }
+
+        return reply.send({ data: result.data, cached: result.cached });
+      } catch (error) {
+        if (error instanceof ActionDetailsError) {
+          return reply.status(error.statusCode).send({ error: error.message });
+        }
+
+        app.log.error(error);
+        return reply.status(500).send({
+          error: 'Não foi possível gerar os detalhes desta ação agora. Tente novamente em instantes.',
+        });
       }
     },
   );
