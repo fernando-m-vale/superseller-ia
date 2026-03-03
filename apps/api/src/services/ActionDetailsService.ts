@@ -1,4 +1,4 @@
-import { ListingActionDetailStatus, PrismaClient } from '@prisma/client';
+import { ListingActionDetailStatus, PrismaClient, Prisma } from '@prisma/client';
 import OpenAI from 'openai';
 import {
   ACTION_DETAILS_PROMPT_VERSION,
@@ -155,6 +155,7 @@ export class ActionDetailsService {
     });
 
     if (existing?.status === ListingActionDetailStatus.READY && existing.detailsJson) {
+      // Parse e validar dados do cache (já são JSON-safe do Prisma)
       const data = schemaVersion === 'v2'
         ? ActionDetailsV2Schema.parse(existing.detailsJson)
         : ActionDetailsV1Schema.parse(existing.detailsJson);
@@ -219,6 +220,10 @@ export class ActionDetailsService {
         }
       }
 
+      // Garantir que detailsJson seja JSON-safe para Prisma
+      // Após validação Zod, o objeto já é JSON-safe, mas fazemos cast explícito para satisfazer TypeScript
+      const detailsJsonSafe = generation.details as Prisma.InputJsonValue;
+
       await this.prismaClient.listingActionDetail.upsert({
         where: {
           actionId_schemaVersion: {
@@ -233,7 +238,7 @@ export class ActionDetailsService {
           actionKey: action.actionKey,
           schemaVersion,
           status: ListingActionDetailStatus.READY,
-          detailsJson: generation.details,
+          detailsJson: detailsJsonSafe,
           generatedAt: new Date(),
           model: generation.model,
           promptVersion,
@@ -243,7 +248,7 @@ export class ActionDetailsService {
         },
         update: {
           status: ListingActionDetailStatus.READY,
-          detailsJson: generation.details,
+          detailsJson: detailsJsonSafe,
           generatedAt: new Date(),
           model: generation.model,
           promptVersion,

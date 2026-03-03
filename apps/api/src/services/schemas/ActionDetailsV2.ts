@@ -1,6 +1,25 @@
 import { z } from 'zod';
 
 /**
+ * JsonValueSchema - Schema recursivo compatível com JSON válido
+ * 
+ * Garante que valores sejam JSON-safe (sem unknown, sem funções, etc)
+ * Compatível com Prisma.InputJsonValue
+ */
+export const JsonValueSchema: z.ZodType<any> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ])
+);
+
+export type JsonValue = z.infer<typeof JsonValueSchema>;
+
+/**
  * ActionDetailsV2 - Schema com artifacts tipados e específicos por ActionType
  * 
  * Estrutura modular: cada ActionType pode ter artifacts diferentes (required/optional)
@@ -118,7 +137,7 @@ export const ActionDetailsV2Schema = z.object({
   benchmark: z.object({
     available: z.boolean(),
     notes: z.string().optional(),
-    data: z.unknown().optional(),
+    data: JsonValueSchema.optional(), // JSON-safe ao invés de unknown
   }),
   
   // Metadados
