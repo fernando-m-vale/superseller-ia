@@ -202,19 +202,30 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
 
 
   // GET /api/v1/listings/:listingId/actions/:actionId/details
-  app.get<{ Params: { listingId: string; actionId: string } }>(
+  app.get<{ Params: { listingId: string; actionId: string }; Querystring: { schema?: 'v1' | 'v2' } }>(
     '/:listingId/actions/:actionId/details',
     { preHandler: authGuard },
     async (req, reply) => {
       try {
         const tenantId = req.tenantId;
         const { listingId, actionId } = req.params;
+        const requestedSchema = req.query.schema || 'v1';
 
         if (!tenantId) {
           return reply.status(401).send({ error: 'Unauthorized: No tenant context' });
         }
 
-        const result = await actionDetailsService.getOrGenerate(tenantId, listingId, actionId);
+        // Feature flag: se V2 não estiver habilitado no servidor, forçar v1
+        const v2Enabled = process.env.ACTION_DETAILS_V2_ENABLED === 'true';
+        const schemaVersion = requestedSchema === 'v2' && v2Enabled ? 'v2' : 'v1';
+        
+        if (requestedSchema === 'v2' && !v2Enabled) {
+          reply.header('x-schema-forced', 'v1');
+        }
+
+        const result = await actionDetailsService.getOrGenerate(tenantId, listingId, actionId, {
+          schemaVersion,
+        });
 
         if (result.state === 'generating') {
           return reply.status(202).send({
@@ -224,7 +235,11 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           });
         }
 
-        return reply.send({ data: result.data, cached: result.cached });
+        return reply.send({
+          data: result.data,
+          cached: result.cached,
+          version: result.schemaVersion === 'v2' ? 'action_details_v2' : 'action_details_v1',
+        });
       } catch (error) {
         if (error instanceof ActionDetailsError) {
           return reply.status(error.statusCode).send({ error: error.message });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ListingActionDetailStatus } from '@prisma/client';
 import { ActionDetailsService } from '../ActionDetailsService';
+import { ActionDetailsV2Schema } from '../schemas/ActionDetailsV2';
 
 const baseAction = {
   id: 'action-1',
@@ -65,6 +66,7 @@ describe('ActionDetailsService', () => {
   it('cache-hit retorna sem chamar LLM', async () => {
     prismaMock.listingActionDetail.findUnique.mockResolvedValue({
       actionId: 'action-1',
+      schemaVersion: 'v1',
       status: ListingActionDetailStatus.READY,
       detailsJson: generatedPayload,
       updatedAt: new Date(),
@@ -73,7 +75,12 @@ describe('ActionDetailsService', () => {
     const service = new ActionDetailsService(prismaMock, generator as any);
     const result = await service.getOrGenerate('tenant-1', 'listing-1', 'action-1');
 
-    expect(result).toEqual({ state: 'ready', data: generatedPayload, cached: true });
+    expect(result).toMatchObject({ 
+      state: 'ready', 
+      data: generatedPayload, 
+      cached: true,
+      schemaVersion: 'v1',
+    });
     expect(generator.generate).not.toHaveBeenCalled();
   });
 
@@ -83,7 +90,12 @@ describe('ActionDetailsService', () => {
     const service = new ActionDetailsService(prismaMock, generator as any);
     const result = await service.getOrGenerate('tenant-1', 'listing-1', 'action-1');
 
-    expect(result).toEqual({ state: 'ready', data: generatedPayload, cached: false });
+    expect(result).toMatchObject({ 
+      state: 'ready', 
+      data: generatedPayload, 
+      cached: false,
+      schemaVersion: 'v1',
+    });
     expect(generator.generate).toHaveBeenCalledTimes(1);
     expect(prismaMock.listingActionDetail.upsert).toHaveBeenCalled();
   });
@@ -108,5 +120,98 @@ describe('ActionDetailsService', () => {
       call[0]?.update?.status === ListingActionDetailStatus.FAILED,
     );
     expect(failedCall).toBeTruthy();
+  });
+
+  describe('V2 support', () => {
+    const v2Payload = {
+      version: 'action_details_v2' as const,
+      whyThisMatters: 'Por que importa V2',
+      howToSteps: ['Passo 1', 'Passo 2', 'Passo 3'],
+      doThisNow: ['Item 1', 'Item 2', 'Item 3'],
+      artifacts: {
+        copy: {
+          titleSuggestions: [
+            { variation: 'A' as const, text: 'Título A' },
+            { variation: 'B' as const, text: 'Título B' },
+            { variation: 'C' as const, text: 'Título C' },
+          ],
+        },
+      },
+      benchmark: {
+        available: false,
+      },
+    };
+
+    it('cache-hit v2 retorna sem chamar LLM', async () => {
+      prismaMock.listingActionDetail.findUnique.mockResolvedValue({
+        actionId: 'action-1',
+        schemaVersion: 'v2',
+        status: ListingActionDetailStatus.READY,
+        detailsJson: v2Payload,
+        updatedAt: new Date(),
+      });
+
+      const service = new ActionDetailsService(prismaMock, generator as any);
+      const result = await service.getOrGenerate('tenant-1', 'listing-1', 'action-1', { schemaVersion: 'v2' });
+
+      expect(result).toMatchObject({
+        state: 'ready',
+        schemaVersion: 'v2',
+        cached: true,
+      });
+      expect(generator.generate).not.toHaveBeenCalled();
+      // Verificar que busca por actionId + schemaVersion
+      expect(prismaMock.listingActionDetail.findUnique).toHaveBeenCalledWith({
+        where: {
+          actionId_schemaVersion: {
+            actionId: 'action-1',
+            schemaVersion: 'v2',
+          },
+        },
+      });
+    });
+
+    it('cache-miss v2 cria row com schemaVersion=v2 e não afeta v1', async () => {
+      prismaMock.listingActionDetail.findUnique.mockResolvedValue(null);
+      generator.generate.mockResolvedValue({
+        details: v2Payload,
+        model: 'gpt-4o-mini',
+        tokensIn: 10,
+        tokensOut: 20,
+      });
+
+      const service = new ActionDetailsService(prismaMock, generator as any);
+      const result = await service.getOrGenerate('tenant-1', 'listing-1', 'action-1', { schemaVersion: 'v2' });
+
+      expect(result).toMatchObject({
+        state: 'ready',
+        schemaVersion: 'v2',
+        cached: false,
+      });
+      
+      const upsertCall = prismaMock.listingActionDetail.upsert.mock.calls[0];
+      expect(upsertCall[0]?.create?.schemaVersion).toBe('v2');
+      expect(upsertCall[0]?.where?.actionId_schemaVersion?.schemaVersion).toBe('v2');
+    });
+
+    it('v1 continua funcionando quando schemaVersion=v1', async () => {
+      prismaMock.listingActionDetail.findUnique.mockResolvedValue({
+        actionId: 'action-1',
+        schemaVersion: 'v1',
+        status: ListingActionDetailStatus.READY,
+        detailsJson: generatedPayload,
+        updatedAt: new Date(),
+      });
+
+      const service = new ActionDetailsService(prismaMock, generator as any);
+      const result = await service.getOrGenerate('tenant-1', 'listing-1', 'action-1', { schemaVersion: 'v1' });
+
+      expect(result).toMatchObject({
+        state: 'ready',
+        schemaVersion: 'v1',
+        cached: true,
+      });
+      expect(generator.generate).not.toHaveBeenCalled();
+    });
   });
 });

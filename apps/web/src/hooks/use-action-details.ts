@@ -2,6 +2,7 @@
 
 import useSWR from 'swr'
 import { api } from '@/lib/axios'
+import type { ActionDetailsV2 } from '@/types/action-details-v2'
 
 export interface ActionDetailsV1 {
   whyThisMatters?: string
@@ -23,11 +24,6 @@ export interface ActionDetailsV1 {
   confidence?: 'high' | 'medium' | 'low' | string
 }
 
-interface ActionDetailsResponseEnvelope {
-  data: ActionDetailsV1
-  cached?: boolean
-}
-
 export class ActionDetailsGeneratingError extends Error {
   readonly status = 'GENERATING' as const
 
@@ -37,29 +33,54 @@ export class ActionDetailsGeneratingError extends Error {
   }
 }
 
-const fetcher = async (url: string): Promise<ActionDetailsV1> => {
-  const res = await api.get<ActionDetailsResponseEnvelope>(url)
+export type ActionDetailsResponse = {
+  data: ActionDetailsV1 | ActionDetailsV2
+  cached: boolean
+  version?: 'action_details_v1' | 'action_details_v2'
+}
 
+const fetcher = async (url: string): Promise<ActionDetailsResponse> => {
+  const res = await api.get(url)
+  
   if (res.status === 202) {
     throw new ActionDetailsGeneratingError()
   }
-
-  return res.data.data
+  
+  // Backend retorna { data: {...}, cached: boolean, version?: string }
+  return res.data as ActionDetailsResponse
 }
 
-export function useActionDetails(listingId: string | null, actionId: string | null) {
-  const url = listingId && actionId ? `/listings/${listingId}/actions/${actionId}/details` : null
-  const { data, error, isLoading, mutate } = useSWR<ActionDetailsV1, Error>(url, fetcher, {
-    revalidateOnFocus: false,
-  })
+export function useActionDetails(
+  listingId: string | null,
+  actionId: string | null,
+  schemaVersion: 'v1' | 'v2' = 'v1',
+) {
+  // Feature flag: verificar se V2 está habilitado no frontend
+  const v2Enabled = process.env.NEXT_PUBLIC_ACTION_DETAILS_V2_ENABLED === 'true'
+  const effectiveSchema = schemaVersion === 'v2' && v2Enabled ? 'v2' : 'v1'
+  
+  const url =
+    listingId && actionId
+      ? `/listings/${listingId}/actions/${actionId}/details?schema=${effectiveSchema}`
+      : null
+  
+  const { data, error, isLoading, mutate } = useSWR<ActionDetailsResponse, Error>(
+    url,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+    },
+  )
 
   const isGenerating = error instanceof ActionDetailsGeneratingError
 
   return {
-    data,
+    data: data?.data,
+    version: data?.version || (effectiveSchema === 'v2' ? 'action_details_v2' : 'action_details_v1'),
+    cached: data?.cached ?? false,
     error: isGenerating ? null : error,
-    isGenerating,
     isLoading,
+    isGenerating,
     refetch: mutate,
   }
 }

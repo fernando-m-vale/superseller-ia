@@ -7,6 +7,15 @@ import {
   BuildActionDetailsPromptInput,
   buildActionDetailsPrompt,
 } from './ActionDetailsPrompt';
+import {
+  ActionDetailsV2,
+  ActionDetailsV2Schema,
+} from './schemas/ActionDetailsV2';
+import {
+  buildActionDetailsV2Prompt,
+  ACTION_DETAILS_V2_PROMPT_VERSION,
+} from './actionDetails/prompts/actionDetailsPrompts';
+import { validateArtifacts } from './actionDetails/validateArtifacts';
 
 const prisma = new PrismaClient();
 const GENERATING_WINDOW_MS = 2 * 60 * 1000;
@@ -36,14 +45,14 @@ export class ActionDetailsError extends Error {
 }
 
 interface DetailsGenerationResult {
-  details: ActionDetailsV1;
+  details: ActionDetailsV1 | ActionDetailsV2;
   model: string;
   tokensIn: number | null;
   tokensOut: number | null;
 }
 
 export interface ActionDetailsGenerator {
-  generate(prompt: string): Promise<DetailsGenerationResult>;
+  generate(prompt: string, schemaVersion?: 'v1' | 'v2'): Promise<DetailsGenerationResult>;
 }
 
 export class OpenAIActionDetailsGenerator implements ActionDetailsGenerator {
@@ -53,7 +62,7 @@ export class OpenAIActionDetailsGenerator implements ActionDetailsGenerator {
     this.client = new OpenAI({ apiKey });
   }
 
-  async generate(prompt: string): Promise<DetailsGenerationResult> {
+  async generate(prompt: string, schemaVersion: 'v1' | 'v2' = 'v1'): Promise<DetailsGenerationResult> {
     const completion = await this.client.chat.completions.create({
       model: ACTION_DETAILS_MODEL,
       response_format: { type: 'json_object' },
@@ -69,7 +78,19 @@ export class OpenAIActionDetailsGenerator implements ActionDetailsGenerator {
       throw new Error('LLM retornou resposta vazia para detalhes da ação');
     }
 
-    const parsed = ActionDetailsV1Schema.parse(JSON.parse(content));
+    const parsedJson = JSON.parse(content);
+    
+    if (schemaVersion === 'v2') {
+      const parsed = ActionDetailsV2Schema.parse(parsedJson);
+      return {
+        details: parsed,
+        model: completion.model || ACTION_DETAILS_MODEL,
+        tokensIn: completion.usage?.prompt_tokens ?? null,
+        tokensOut: completion.usage?.completion_tokens ?? null,
+      };
+    }
+
+    const parsed = ActionDetailsV1Schema.parse(parsedJson);
     return {
       details: parsed,
       model: completion.model || ACTION_DETAILS_MODEL,
@@ -91,7 +112,12 @@ export class ActionDetailsService {
     tenantId: string,
     listingId: string,
     actionId: string,
-  ): Promise<{ state: 'ready'; data: ActionDetailsV1; cached: boolean } | { state: 'generating' }> {
+    opts?: { schemaVersion?: 'v1' | 'v2' },
+  ): Promise<
+    | { state: 'ready'; data: ActionDetailsV1 | ActionDetailsV2; cached: boolean; schemaVersion: 'v1' | 'v2' }
+    | { state: 'generating' }
+  > {
+    const schemaVersion = opts?.schemaVersion || 'v1';
     const action = (await this.prismaClient.listingAction.findFirst({
       where: {
         id: actionId,
@@ -119,10 +145,20 @@ export class ActionDetailsService {
       throw new ActionDetailsError('Ação não encontrada para este listing.', 404);
     }
 
-    const existing = await this.prismaClient.listingActionDetail.findUnique({ where: { actionId } });
+    const existing = await this.prismaClient.listingActionDetail.findUnique({
+      where: {
+        actionId_schemaVersion: {
+          actionId,
+          schemaVersion,
+        },
+      },
+    });
 
     if (existing?.status === ListingActionDetailStatus.READY && existing.detailsJson) {
-      return { state: 'ready', data: ActionDetailsV1Schema.parse(existing.detailsJson), cached: true };
+      const data = schemaVersion === 'v2'
+        ? ActionDetailsV2Schema.parse(existing.detailsJson)
+        : ActionDetailsV1Schema.parse(existing.detailsJson);
+      return { state: 'ready', data, cached: true, schemaVersion };
     }
 
     const recentlyGenerating =
@@ -133,7 +169,7 @@ export class ActionDetailsService {
       return { state: 'generating' };
     }
 
-    await this.ensureGeneratingState(action);
+    await this.ensureGeneratingState(action, schemaVersion);
 
     if (!this.generator) {
       await this.markFailed(action, 'OpenAI API key não configurada.');
@@ -142,20 +178,65 @@ export class ActionDetailsService {
 
     try {
       const promptInput = await this.buildPromptInput(action);
-      const generation = await this.generator.generate(buildActionDetailsPrompt(promptInput));
+      
+      let prompt: string;
+      let promptVersion: string;
+      
+      if (schemaVersion === 'v2') {
+        prompt = buildActionDetailsV2Prompt(promptInput, action.actionKey);
+        promptVersion = ACTION_DETAILS_V2_PROMPT_VERSION;
+      } else {
+        prompt = buildActionDetailsPrompt(promptInput);
+        promptVersion = ACTION_DETAILS_PROMPT_VERSION;
+      }
+      
+      const generation = await this.generator.generate(prompt, schemaVersion);
+
+      // Validação V2: verificar artifacts obrigatórios
+      if (schemaVersion === 'v2') {
+        const validation = validateArtifacts(generation.details as ActionDetailsV2, action.actionKey);
+        if (!validation.isValid) {
+          // Retry 1x com prompt "repair"
+          try {
+            const repairPrompt = `${prompt}\n\nERRO: Faltam os seguintes artifacts obrigatórios: ${validation.missingArtifacts.join(', ')}. Gere novamente incluindo TODOS os artifacts obrigatórios.`;
+            const repairGeneration = await this.generator.generate(repairPrompt, schemaVersion);
+            const repairValidation = validateArtifacts(repairGeneration.details as ActionDetailsV2, action.actionKey);
+            
+            if (!repairValidation.isValid) {
+              await this.markFailed(action, repairValidation.errorMessage || 'Artifacts obrigatórios ausentes após retry');
+              throw new ActionDetailsError('Não foi possível gerar todos os artifacts obrigatórios. Tente novamente em instantes.', 500);
+            }
+            
+            // Usar resultado do repair
+            generation.details = repairGeneration.details;
+            generation.model = repairGeneration.model;
+            generation.tokensIn = (generation.tokensIn || 0) + (repairGeneration.tokensIn || 0);
+            generation.tokensOut = (generation.tokensOut || 0) + (repairGeneration.tokensOut || 0);
+          } catch (retryError) {
+            await this.markFailed(action, retryError instanceof Error ? retryError.message : 'Erro no retry de validação');
+            throw new ActionDetailsError('Não foi possível gerar os detalhes agora. Tente novamente em instantes.', 500);
+          }
+        }
+      }
 
       await this.prismaClient.listingActionDetail.upsert({
-        where: { actionId },
+        where: {
+          actionId_schemaVersion: {
+            actionId,
+            schemaVersion,
+          },
+        },
         create: {
           actionId,
           listingId: action.listingId,
           batchId: action.batchId,
           actionKey: action.actionKey,
+          schemaVersion,
           status: ListingActionDetailStatus.READY,
           detailsJson: generation.details,
           generatedAt: new Date(),
           model: generation.model,
-          promptVersion: ACTION_DETAILS_PROMPT_VERSION,
+          promptVersion,
           costTokensIn: generation.tokensIn,
           costTokensOut: generation.tokensOut,
           errorMessage: null,
@@ -165,29 +246,38 @@ export class ActionDetailsService {
           detailsJson: generation.details,
           generatedAt: new Date(),
           model: generation.model,
-          promptVersion: ACTION_DETAILS_PROMPT_VERSION,
+          promptVersion,
           costTokensIn: generation.tokensIn,
           costTokensOut: generation.tokensOut,
           errorMessage: null,
         },
       });
 
-      return { state: 'ready', data: generation.details, cached: false };
+      return { state: 'ready', data: generation.details, cached: false, schemaVersion };
     } catch (error) {
-      await this.markFailed(action, error instanceof Error ? error.message : 'Erro inesperado');
+      await this.markFailed(action, error instanceof Error ? error.message : 'Erro inesperado', schemaVersion);
       throw new ActionDetailsError('Não foi possível gerar os detalhes agora. Tente novamente em instantes.', 500);
     }
   }
 
-  private async ensureGeneratingState(action: NonNullable<ListingActionWithListing>): Promise<void> {
+  private async ensureGeneratingState(
+    action: NonNullable<ListingActionWithListing>,
+    schemaVersion: 'v1' | 'v2' = 'v1',
+  ): Promise<void> {
     try {
       await this.prismaClient.listingActionDetail.upsert({
-        where: { actionId: action.id },
+        where: {
+          actionId_schemaVersion: {
+            actionId: action.id,
+            schemaVersion,
+          },
+        },
         create: {
           actionId: action.id,
           listingId: action.listingId,
           batchId: action.batchId,
           actionKey: action.actionKey,
+          schemaVersion,
           status: ListingActionDetailStatus.GENERATING,
         },
         update: {
@@ -200,14 +290,24 @@ export class ActionDetailsService {
     }
   }
 
-  private async markFailed(action: NonNullable<ListingActionWithListing>, message: string): Promise<void> {
+  private async markFailed(
+    action: NonNullable<ListingActionWithListing>,
+    message: string,
+    schemaVersion: 'v1' | 'v2' = 'v1',
+  ): Promise<void> {
     await this.prismaClient.listingActionDetail.upsert({
-      where: { actionId: action.id },
+      where: {
+        actionId_schemaVersion: {
+          actionId: action.id,
+          schemaVersion,
+        },
+      },
       create: {
         actionId: action.id,
         listingId: action.listingId,
         batchId: action.batchId,
         actionKey: action.actionKey,
+        schemaVersion,
         status: ListingActionDetailStatus.FAILED,
         errorMessage: message,
       },

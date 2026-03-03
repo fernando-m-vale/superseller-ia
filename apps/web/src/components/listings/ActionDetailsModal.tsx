@@ -29,6 +29,8 @@ import {
 import { useActionDetails } from '@/hooks/use-action-details'
 import type { ListingActionStatus } from '@/hooks/use-listing-actions'
 import { useToast } from '@/hooks/use-toast'
+import { ActionDetailsV2Sections } from './ActionDetailsV2Sections'
+import type { ActionDetailsV2 } from '@/types/action-details-v2'
 
 interface ActionDetailsModalProps {
   open: boolean
@@ -55,7 +57,17 @@ export function ActionDetailsModal({
   editUrl,
   onStatusChange,
 }: ActionDetailsModalProps) {
-  const { data, error, isLoading, isGenerating, refetch } = useActionDetails(listingId, open ? actionId : null)
+  // Feature flag: usar V2 se habilitado
+  const v2Enabled = process.env.NEXT_PUBLIC_ACTION_DETAILS_V2_ENABLED === 'true'
+  const { data, error, isLoading, isGenerating, version, refetch } = useActionDetails(
+    listingId,
+    open ? actionId : null,
+    v2Enabled ? 'v2' : 'v1',
+  )
+  
+  const isV2 = version === 'action_details_v2'
+  const v2Data = isV2 ? (data as ActionDetailsV2) : null
+  const v1Data = !isV2 ? data : null
   const { toast } = useToast()
   const [changingStatus, setChangingStatus] = useState(false)
   const [copiedText, setCopiedText] = useState<string | null>(null)
@@ -156,42 +168,51 @@ export function ActionDetailsModal({
 
         {/* Chips de metadados */}
         <div className="flex flex-wrap gap-2">
-          {data?.impact && (
-            <Badge className={getImpactColor(data.impact)}>
+          {(v2Data?.impact || v1Data?.impact) && (
+            <Badge className={getImpactColor(v2Data?.impact || v1Data?.impact)}>
               <TrendingUp className="h-3 w-3 mr-1" />
-              Impacto: {data.impact === 'high' ? 'Alto' : data.impact === 'medium' ? 'Médio' : 'Baixo'}
+              Impacto: {(v2Data?.impact || v1Data?.impact) === 'high' ? 'Alto' : (v2Data?.impact || v1Data?.impact) === 'medium' ? 'Médio' : 'Baixo'}
             </Badge>
           )}
-          {data?.effort && (
-            <Badge className={getEffortColor(data.effort)}>
+          {(v2Data?.effort || v1Data?.effort) && (
+            <Badge className={getEffortColor(v2Data?.effort || v1Data?.effort)}>
               <Target className="h-3 w-3 mr-1" />
-              Esforço: {data.effort === 'low' ? 'Baixo' : data.effort === 'medium' ? 'Médio' : 'Alto'}
+              Esforço: {(v2Data?.effort || v1Data?.effort) === 'low' ? 'Baixo' : (v2Data?.effort || v1Data?.effort) === 'medium' ? 'Médio' : 'Alto'}
             </Badge>
           )}
-          {data?.priority && (
-            <Badge className={getPriorityColor(data.priority)}>
+          {(v2Data?.priority || v1Data?.priority) && (
+            <Badge className={getPriorityColor(v2Data?.priority || v1Data?.priority)}>
               <Zap className="h-3 w-3 mr-1" />
-              Prioridade: {data.priority === 'critical' ? 'Crítica' : data.priority === 'high' ? 'Alta' : data.priority === 'medium' ? 'Média' : 'Baixa'}
+              Prioridade: {(v2Data?.priority || v1Data?.priority) === 'critical' ? 'Crítica' : (v2Data?.priority || v1Data?.priority) === 'high' ? 'Alta' : (v2Data?.priority || v1Data?.priority) === 'medium' ? 'Média' : 'Baixa'}
             </Badge>
           )}
-          {data?.confidence && (
-            <Badge className={getConfidenceColor(data.confidence)}>
+          {(v2Data?.confidence || v1Data?.confidence) && (
+            <Badge className={getConfidenceColor(v2Data?.confidence || v1Data?.confidence)}>
               <BarChart3 className="h-3 w-3 mr-1" />
-              Confiança: {data.confidence === 'high' ? 'Alta' : data.confidence === 'medium' ? 'Média' : 'Baixa'}
+              Confiança: {(v2Data?.confidence || v1Data?.confidence) === 'high' ? 'Alta' : (v2Data?.confidence || v1Data?.confidence) === 'medium' ? 'Média' : 'Baixa'}
             </Badge>
           )}
         </div>
 
-        {/* Loading */}
-        {isLoading && (
+        {/* Loading / Generating */}
+        {(isLoading || isGenerating) && (
           <div className="space-y-4">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-24 w-full" />
+            {isGenerating && (
+              <Alert>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <AlertDescription>
+                  Gerando detalhes da ação. Isso pode levar alguns segundos...
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
         {/* Error */}
+<<<<<<< HEAD
         {isGenerating && (
           <Alert>
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -221,24 +242,11 @@ export function ActionDetailsModal({
           </Alert>
         )}
 
-        {/* Content */}
-
-        {!isLoading && !error && !isGenerating && !data && (
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Ainda não há detalhes disponíveis para esta ação.
-              <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2">
-                Atualizar
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {!isLoading && !error && !isGenerating && data && (
+        {/* Content V2 */}
+        {!isLoading && !error && !isGenerating && isV2 && v2Data && (
           <div className="space-y-6">
             {/* Por que importa */}
-            {data.whyThisMatters && (
+            {v2Data.whyThisMatters && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -247,13 +255,13 @@ export function ActionDetailsModal({
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">{data.whyThisMatters}</p>
+                  <p className="text-sm text-muted-foreground">{v2Data.whyThisMatters}</p>
                 </CardContent>
               </Card>
             )}
 
             {/* Como fazer */}
-            {data.howToSteps && data.howToSteps.length > 0 && (
+            {v2Data.howToSteps && v2Data.howToSteps.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -263,7 +271,7 @@ export function ActionDetailsModal({
                 </CardHeader>
                 <CardContent>
                   <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                    {data.howToSteps.map((step, idx) => (
+                    {v2Data.howToSteps.map((step, idx) => (
                       <li key={idx}>{step}</li>
                     ))}
                   </ol>
@@ -272,7 +280,7 @@ export function ActionDetailsModal({
             )}
 
             {/* Checklist */}
-            {data.doThisNow && data.doThisNow.length > 0 && (
+            {v2Data.doThisNow && v2Data.doThisNow.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -282,7 +290,106 @@ export function ActionDetailsModal({
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2">
-                    {data.doThisNow.map((item, idx) => (
+                    {v2Data.doThisNow.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Artifacts V2 */}
+            <ActionDetailsV2Sections
+              details={v2Data}
+              onCopy={handleCopy}
+              copiedText={copiedText}
+            />
+
+            {/* Benchmark */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  Benchmark
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {v2Data.benchmark?.available === false ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Benchmark indisponível para esta ação.
+                      {v2Data.benchmark.notes && (
+                        <p className="mt-2 text-sm text-muted-foreground">{v2Data.benchmark.notes}</p>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                ) : v2Data.benchmark?.data ? (
+                  <div className="text-sm text-muted-foreground">
+                    <pre className="whitespace-pre-wrap bg-muted p-3 rounded">
+                      {JSON.stringify(v2Data.benchmark.data, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Dados de benchmark não disponíveis.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Content V1 (fallback) */}
+        {!isLoading && !error && !isGenerating && !isV2 && v1Data && (
+          <div className="space-y-6">
+            {/* Por que importa */}
+            {v1Data.whyThisMatters && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-primary" />
+                    Por que isso importa
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{v1Data.whyThisMatters}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Como fazer */}
+            {v1Data.howToSteps && v1Data.howToSteps.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    Como fazer
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    {v1Data.howToSteps.map((step, idx) => (
+                      <li key={idx}>{step}</li>
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Checklist */}
+            {v1Data.doThisNow && v1Data.doThisNow.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    Checklist
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2">
+                    {v1Data.doThisNow.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                         <span>{item}</span>
@@ -294,7 +401,7 @@ export function ActionDetailsModal({
             )}
 
             {/* Sugestões de texto */}
-            {data.copySuggestions && (
+            {v1Data.copySuggestions && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -304,11 +411,11 @@ export function ActionDetailsModal({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Títulos A/B/C */}
-                  {data.copySuggestions.titles && data.copySuggestions.titles.length > 0 && (
+                  {v1Data.copySuggestions.titles && v1Data.copySuggestions.titles.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Títulos sugeridos:</h4>
                       <div className="space-y-2">
-                        {data.copySuggestions.titles.map((title, idx) => (
+                        {v1Data.copySuggestions.titles.map((title, idx) => (
                           <div key={idx} className="flex items-center gap-2 p-2 bg-muted rounded">
                             <Badge variant="outline" className="shrink-0">
                               {title.variation}
@@ -332,19 +439,19 @@ export function ActionDetailsModal({
                   )}
 
                   {/* Descrição */}
-                  {data.copySuggestions.description && (
+                  {v1Data.copySuggestions.description && (
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Template de descrição:</h4>
                       <div className="p-3 bg-muted rounded text-sm text-muted-foreground whitespace-pre-wrap">
-                        {data.copySuggestions.description}
+                        {v1Data.copySuggestions.description}
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopy(data.copySuggestions!.description!, 'Descrição')}
+                        onClick={() => handleCopy(v1Data.copySuggestions!.description!, 'Descrição')}
                         className="mt-2"
                       >
-                        {copiedText === data.copySuggestions.description ? (
+                        {copiedText === v1Data.copySuggestions.description ? (
                           <>
                             <Check className="h-4 w-4 mr-2" />
                             Copiado!
@@ -360,11 +467,11 @@ export function ActionDetailsModal({
                   )}
 
                   {/* Bullets */}
-                  {data.copySuggestions.bullets && data.copySuggestions.bullets.length > 0 && (
+                  {v1Data.copySuggestions.bullets && v1Data.copySuggestions.bullets.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Bullets sugeridos:</h4>
                       <ul className="space-y-1">
-                        {data.copySuggestions.bullets.map((bullet, idx) => (
+                        {v1Data.copySuggestions.bullets.map((bullet, idx) => (
                           <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
                             <span className="text-primary">•</span>
                             <span className="flex-1">{bullet}</span>
@@ -397,20 +504,20 @@ export function ActionDetailsModal({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.benchmark?.available === false ? (
+                {v1Data.benchmark?.available === false ? (
                   <Alert>
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
                       Benchmark indisponível para esta ação.
-                      {data.benchmark.notes && (
-                        <p className="mt-2 text-sm text-muted-foreground">{data.benchmark.notes}</p>
+                      {v1Data.benchmark.notes && (
+                        <p className="mt-2 text-sm text-muted-foreground">{v1Data.benchmark.notes}</p>
                       )}
                     </AlertDescription>
                   </Alert>
-                ) : data.benchmark?.data ? (
+                ) : v1Data.benchmark?.data ? (
                   <div className="text-sm text-muted-foreground">
                     <pre className="whitespace-pre-wrap bg-muted p-3 rounded">
-                      {JSON.stringify(data.benchmark.data, null, 2)}
+                      {JSON.stringify(v1Data.benchmark.data, null, 2)}
                     </pre>
                   </div>
                 ) : (

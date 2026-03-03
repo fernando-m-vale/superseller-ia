@@ -602,7 +602,7 @@ model ListingAction {
   updatedAt      DateTime     @updatedAt
   appliedAt      DateTime?
   discardedAt    DateTime?
-  detail         ListingActionDetail?
+  details        ListingActionDetail[]
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -614,10 +614,11 @@ model ListingAction {
 
 model ListingActionDetail {
   id            String                    @id @default(uuid())
-  actionId      String                    @unique
+  actionId      String
   listingId     String
   batchId       String
   actionKey     String
+  schemaVersion String                    @default("v1")
   status        ListingActionDetailStatus @default(GENERATING)
   detailsJson   Json?
   generatedAt   DateTime?
@@ -631,7 +632,9 @@ model ListingActionDetail {
 
   action ListingAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
 
+  @@unique([actionId, schemaVersion])
   @@index([listingId, batchId])
   @@index([status, generatedAt])
+  @@index([actionId, schemaVersion])
   @@map("listing_action_details")
 }
