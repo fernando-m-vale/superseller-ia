@@ -23,17 +23,42 @@ export interface ActionDetailsV1 {
   confidence?: 'high' | 'medium' | 'low' | string
 }
 
-const fetcher = (url: string) => api.get(url).then((res) => res.data as ActionDetailsV1)
+interface ActionDetailsResponseEnvelope {
+  data: ActionDetailsV1
+  cached?: boolean
+}
+
+export class ActionDetailsGeneratingError extends Error {
+  readonly status = 'GENERATING' as const
+
+  constructor(message = 'Detalhes ainda estão sendo gerados') {
+    super(message)
+    this.name = 'ActionDetailsGeneratingError'
+  }
+}
+
+const fetcher = async (url: string): Promise<ActionDetailsV1> => {
+  const res = await api.get<ActionDetailsResponseEnvelope>(url)
+
+  if (res.status === 202) {
+    throw new ActionDetailsGeneratingError()
+  }
+
+  return res.data.data
+}
 
 export function useActionDetails(listingId: string | null, actionId: string | null) {
   const url = listingId && actionId ? `/listings/${listingId}/actions/${actionId}/details` : null
-  const { data, error, isLoading, mutate } = useSWR<ActionDetailsV1>(url, fetcher, {
+  const { data, error, isLoading, mutate } = useSWR<ActionDetailsV1, Error>(url, fetcher, {
     revalidateOnFocus: false,
   })
 
+  const isGenerating = error instanceof ActionDetailsGeneratingError
+
   return {
     data,
-    error,
+    error: isGenerating ? null : error,
+    isGenerating,
     isLoading,
     refetch: mutate,
   }

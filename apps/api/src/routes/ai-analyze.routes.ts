@@ -178,27 +178,30 @@ function buildVerdictText(input: {
   hasPromotion?: boolean | null;
   discountPercent?: number | null;
   topActions?: Array<{ title?: string; description?: string }>;
+  listingTitle?: string | null;
 }): string {
   const raw = (input.rawVerdict || '').trim();
-  const paragraphs = raw.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-  if (paragraphs.length >= 3 && raw.length >= 220) {
+  if (raw.length >= 120) {
     return raw;
   }
 
   const visits = input.metrics30d?.visits ?? 0;
   const orders = input.metrics30d?.orders ?? 0;
   const cr = input.metrics30d?.conversionRate;
-  const promoText = input.hasPromotion
-    ? `Há promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% de desconto)` : ''}`
-    : 'Não há promoção ativa relevante';
   const top = (input.topActions || []).slice(0, 3).map((a) => a.title).filter(Boolean) as string[];
+  const listingRef = input.listingTitle?.trim() ? `para "${input.listingTitle.trim()}" ` : '';
 
-  const p1 = `Diagnóstico: nos últimos 30 dias o anúncio acumulou ${visits} visitas e ${orders} pedidos${typeof cr === 'number' ? `, com conversão de ${(cr * 100).toFixed(2)}%` : ''}. Isso indica que já existe demanda, mas a eficiência de transformação de visita em pedido ainda tem espaço relevante para evolução.`;
-  const p2 = `Gargalos: ${promoText}. Quando o desconto já está aplicado e a conversão segue abaixo do esperado, o problema tende a estar em proposta percebida, clareza do cadastro e força dos criativos (título/imagens/descrição), não apenas em reduzir mais o preço.`;
-  const p3 = `Plano resumido: priorize um sprint de implementação com foco em ${top.length > 0 ? top.join(', ') : 'SEO, mídia, cadastro e competitividade'}. O objetivo do próximo ciclo é elevar CTR qualificado, reduzir fricção no detalhe do produto e converter melhor o tráfego já existente.`;
+  const p1 = `Diagnóstico ${listingRef}nos últimos 30 dias: ${visits} visitas e ${orders} pedidos${typeof cr === 'number' ? `, com conversão de ${(cr * 100).toFixed(2)}%` : ''}. O volume indica interesse real, mas ainda há margem para converter melhor o tráfego já conquistado.`;
+
+  const p2 = input.hasPromotion
+    ? `Há promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% de desconto)` : ''}, então o maior ganho incremental tende a vir de percepção de valor e redução de fricção na página: título, imagens, descrição, prova social e diferenciais claros.`
+    : 'Sem promoção ativa, o crescimento depende mais de fundamentos: cadastro completo, mídia forte, SEO orientado à busca e proposta percebida superior para justificar o clique e a compra.';
+
+  const p3 = `Priorize no próximo ciclo: ${top.length > 0 ? top.join(', ') : 'SEO, mídia, cadastro e competitividade'}. A meta prática é elevar CTR qualificado e transformar mais visitas em pedidos sem depender apenas de preço.`;
 
   return [p1, p2, p3].join('\n\n');
 }
+
 
 async function persistListingActionsBatch(
   listingId: string,
@@ -1712,6 +1715,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             hasPromotion: listing.has_promotion,
             discountPercent: listing.discount_percent,
             topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+            listingTitle: listing.title,
           });
 
           // Adicionar header com commit SHA
@@ -2325,6 +2329,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           hasPromotion: listing.has_promotion,
           discountPercent: listing.discount_percent,
           topActions: (cacheResponseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+          listingTitle: listing.title,
         });
 
         // Adicionar header com commit SHA
@@ -3003,6 +3008,7 @@ if (enableAIPing) {
           hasPromotion: listing.has_promotion,
           discountPercent: listing.discount_percent,
           topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+          listingTitle: listing.title,
         });
 
         // Adicionar header com commit SHA

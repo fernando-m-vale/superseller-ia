@@ -409,11 +409,10 @@ function OverviewContent() {
 
       {/* Filtros (visuais) */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-2">
           <CardTitle className="text-base">Filtros</CardTitle>
-          <CardDescription>Aplicados onde houver dados granulares no frontend</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           <div className="grid gap-3 md:grid-cols-3">
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Loja / Marketplace</p>
@@ -458,7 +457,7 @@ function OverviewContent() {
       </Card>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Anúncios</CardTitle>
@@ -509,34 +508,22 @@ function OverviewContent() {
             </p>
           </CardContent>
         </Card>
+        {/* Impacto Potencial */}
+        <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Impacto Potencial</CardTitle>
+            <Award className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+              {Number(data.averageSuperSellerScore || data.averageHealthScore || 0).toFixed(0)}%
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Score médio global de otimização
+            </p>
+          </CardContent>
+        </Card>
       </div>
-
-      {/* Impacto Potencial */}
-      <Card className="border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 dark:border-blue-800 dark:from-blue-950/20 dark:to-indigo-950/20">
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <span className="text-xl">⚡</span>
-            Impacto Potencial
-          </CardTitle>
-          <CardDescription>
-            Score médio dos seus anúncios baseado em otimizações de SEO, mídia e competitividade • <span className="font-medium">Global (sem filtro)</span>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-4xl font-bold text-blue-700 dark:text-blue-400 mb-3">
-            {Number(data.averageSuperSellerScore || data.averageHealthScore || 0).toFixed(0)}%
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {(() => {
-              const score = Number(data.averageSuperSellerScore || data.averageHealthScore || 0);
-              if (score >= 80) return '🟢 Excelente - Seus anúncios estão otimizados';
-              if (score >= 60) return '🔵 Bom - Há espaço para melhorias';
-              if (score >= 40) return '🟡 Regular - Atenção aos seus anúncios';
-              return '🔴 Crítico - Melhore seus anúncios urgentemente';
-            })()}
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Trend Chart */}
       <Card>
