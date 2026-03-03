@@ -55,7 +55,7 @@ export function ActionDetailsModal({
   editUrl,
   onStatusChange,
 }: ActionDetailsModalProps) {
-  const { data, error, isLoading, refetch } = useActionDetails(listingId, open ? actionId : null)
+  const { data, error, isLoading, isGenerating, refetch } = useActionDetails(listingId, open ? actionId : null)
   const { toast } = useToast()
   const [changingStatus, setChangingStatus] = useState(false)
   const [copiedText, setCopiedText] = useState<string | null>(null)
@@ -192,7 +192,19 @@ export function ActionDetailsModal({
         )}
 
         {/* Error */}
-        {error && (
+        {isGenerating && (
+          <Alert>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <AlertDescription>
+              Gerando detalhes desta ação... isso pode levar até ~10s.
+              <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2">
+                Atualizar
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {error && !isGenerating && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
@@ -210,7 +222,20 @@ export function ActionDetailsModal({
         )}
 
         {/* Content */}
-        {!isLoading && !error && data && (
+
+        {!isLoading && !error && !isGenerating && !data && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Ainda não há detalhes disponíveis para esta ação.
+              <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2">
+                Atualizar
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!isLoading && !error && !isGenerating && data && (
           <div className="space-y-6">
             {/* Por que importa */}
             {data.whyThisMatters && (

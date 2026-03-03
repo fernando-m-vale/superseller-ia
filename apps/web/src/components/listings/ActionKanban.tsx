@@ -70,24 +70,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
     }
   }
 
-  const getPriorityColor = (priority?: string | null) => {
-    if (!priority) return 'bg-muted text-muted-foreground'
-    switch (priority.toLowerCase()) {
-      case 'critical':
-      case 'alta':
-        return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-      case 'high':
-        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400'
-      case 'medium':
-      case 'média':
-        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
-      case 'low':
-      case 'baixa':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
-      default:
-        return 'bg-muted text-muted-foreground'
-    }
-  }
+
 
   const ActionCard = ({ action }: { action: ActionItem }) => {
     const isLoading = changingStatus.has(action.id)
@@ -101,13 +84,13 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
             <div className="flex items-start justify-between gap-2 mb-1">
               <h4 className="font-semibold text-sm flex-1">{action.title}</h4>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => handleOpenDetails(action.id)}
-                className="h-6 w-6 p-0 shrink-0"
-                title="Ver detalhes"
+                className="h-8 shrink-0 px-2"
               >
-                <Info className="h-3 w-3" />
+                <Info className="h-3.5 w-3.5 mr-1" />
+                Ver detalhes
               </Button>
             </div>
             <p className="text-xs text-muted-foreground line-clamp-2">{action.description}</p>
@@ -118,13 +101,6 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
             {action.expectedImpact && (
               <Badge className={`text-xs ${getImpactColor(action.expectedImpact)}`}>
                 Impacto: {action.expectedImpact === 'high' ? 'Alto' : action.expectedImpact === 'medium' ? 'Médio' : 'Baixo'}
-              </Badge>
-            )}
-            {action.priority && (
-              <Badge className={`text-xs ${getPriorityColor(action.priority)}`}>
-                {action.priority === 'critical' || action.priority === 'alta' ? 'Crítica' : 
-                 action.priority === 'high' ? 'Alta' : 
-                 action.priority === 'medium' || action.priority === 'média' ? 'Média' : 'Baixa'}
               </Badge>
             )}
             {action.effort && (
