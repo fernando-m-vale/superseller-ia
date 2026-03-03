@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { CheckCircle2, XCircle, Clock, ExternalLink } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { CheckCircle2, XCircle, Clock, ExternalLink, Info } from 'lucide-react'
 import type { ListingActionStatus } from '@/hooks/use-listing-actions'
+import { ActionDetailsModal } from './ActionDetailsModal'
 
 export type ActionStatus = ListingActionStatus
 
@@ -16,6 +18,7 @@ export interface ActionItem {
   status: ActionStatus
   priority?: string | null
   expectedImpact?: string | null
+  effort?: string | null
   suggestedActionUrl?: string | null
 }
 
@@ -23,10 +26,13 @@ interface ActionKanbanProps {
   actions: ActionItem[]
   onStatusChange: (actionId: string, newStatus: ActionStatus) => Promise<void>
   editUrl?: string | null
+  listingId?: string | null
 }
 
-export function ActionKanban({ actions, onStatusChange, editUrl }: ActionKanbanProps) {
+export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: ActionKanbanProps) {
   const [changingStatus, setChangingStatus] = useState<Set<string>>(new Set())
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false)
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
 
   const handleStatusChange = async (actionId: string, newStatus: ActionStatus) => {
     setChangingStatus(prev => new Set(prev).add(actionId))
@@ -45,60 +51,149 @@ export function ActionKanban({ actions, onStatusChange, editUrl }: ActionKanbanP
   const appliedActions = actions.filter(a => a.status === 'IMPLEMENTADO')
   const dismissedActions = actions.filter(a => a.status === 'DESCARTADO')
 
+  const handleOpenDetails = (actionId: string) => {
+    setSelectedActionId(actionId)
+    setDetailsModalOpen(true)
+  }
+
+  const getImpactColor = (impact?: string | null) => {
+    if (!impact) return 'bg-muted text-muted-foreground'
+    switch (impact.toLowerCase()) {
+      case 'high':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+      case 'low':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+      default:
+        return 'bg-muted text-muted-foreground'
+    }
+  }
+
+  const getPriorityColor = (priority?: string | null) => {
+    if (!priority) return 'bg-muted text-muted-foreground'
+    switch (priority.toLowerCase()) {
+      case 'critical':
+      case 'alta':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+      case 'high':
+        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400'
+      case 'medium':
+      case 'média':
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400'
+      case 'low':
+      case 'baixa':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+      default:
+        return 'bg-muted text-muted-foreground'
+    }
+  }
+
   const ActionCard = ({ action }: { action: ActionItem }) => {
     const isLoading = changingStatus.has(action.id)
     const hasLink = action.suggestedActionUrl || editUrl
+    const selectedAction = selectedActionId === action.id ? action : null
 
     return (
-      <Card className="p-4 space-y-3">
-        <div>
-          <h4 className="font-semibold text-sm mb-1">{action.title}</h4>
-          <p className="text-xs text-muted-foreground">{action.description}</p>
-        </div>
-        
-        <div className="flex flex-col gap-2">
-          {hasLink && action.status === 'A_IMPLEMENTAR' && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                const url = action.suggestedActionUrl || editUrl
-                if (url) window.open(url, '_blank', 'noopener,noreferrer')
-              }}
-              className="w-full"
-              disabled={isLoading}
-            >
-              <ExternalLink className="h-3 w-3 mr-2" />
-              APLICAR AGORA
-            </Button>
-          )}
+      <>
+        <Card className="p-4 space-y-3">
+          <div>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h4 className="font-semibold text-sm flex-1">{action.title}</h4>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleOpenDetails(action.id)}
+                className="h-6 w-6 p-0 shrink-0"
+                title="Ver detalhes"
+              >
+                <Info className="h-3 w-3" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground line-clamp-2">{action.description}</p>
+          </div>
+
+          {/* Chips */}
+          <div className="flex flex-wrap gap-1">
+            {action.expectedImpact && (
+              <Badge className={`text-xs ${getImpactColor(action.expectedImpact)}`}>
+                Impacto: {action.expectedImpact === 'high' ? 'Alto' : action.expectedImpact === 'medium' ? 'Médio' : 'Baixo'}
+              </Badge>
+            )}
+            {action.priority && (
+              <Badge className={`text-xs ${getPriorityColor(action.priority)}`}>
+                {action.priority === 'critical' || action.priority === 'alta' ? 'Crítica' : 
+                 action.priority === 'high' ? 'Alta' : 
+                 action.priority === 'medium' || action.priority === 'média' ? 'Média' : 'Baixa'}
+              </Badge>
+            )}
+            {action.effort && (
+              <Badge className="text-xs bg-muted text-muted-foreground">
+                Esforço: {action.effort === 'low' ? 'Baixo' : action.effort === 'medium' ? 'Médio' : 'Alto'}
+              </Badge>
+            )}
+          </div>
           
-          {action.status === 'A_IMPLEMENTAR' && (
-            <>
+          <div className="flex flex-col gap-2">
+            {hasLink && action.status === 'A_IMPLEMENTAR' && (
               <Button
-                variant="outline"
+                variant="default"
                 size="sm"
-                onClick={() => handleStatusChange(action.id, 'IMPLEMENTADO')}
-                disabled={isLoading}
+                onClick={() => {
+                  const url = action.suggestedActionUrl || editUrl
+                  if (url) window.open(url, '_blank', 'noopener,noreferrer')
+                }}
                 className="w-full"
-              >
-                <CheckCircle2 className="h-3 w-3 mr-2" />
-                APLICADO
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleStatusChange(action.id, 'DESCARTADO')}
                 disabled={isLoading}
-                className="w-full text-muted-foreground"
               >
-                <XCircle className="h-3 w-3 mr-2" />
-                NÃO SE APLICA
+                <ExternalLink className="h-3 w-3 mr-2" />
+                APLICAR AGORA
               </Button>
-            </>
-          )}
-        </div>
-      </Card>
+            )}
+            
+            {action.status === 'A_IMPLEMENTAR' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleStatusChange(action.id, 'IMPLEMENTADO')}
+                  disabled={isLoading}
+                  className="w-full"
+                >
+                  <CheckCircle2 className="h-3 w-3 mr-2" />
+                  APLICADO
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleStatusChange(action.id, 'DESCARTADO')}
+                  disabled={isLoading}
+                  className="w-full text-muted-foreground"
+                >
+                  <XCircle className="h-3 w-3 mr-2" />
+                  NÃO SE APLICA
+                </Button>
+              </>
+            )}
+          </div>
+        </Card>
+
+        {/* Modal de detalhes */}
+        {selectedAction && listingId && (
+          <ActionDetailsModal
+            open={detailsModalOpen && selectedActionId === action.id}
+            onOpenChange={setDetailsModalOpen}
+            listingId={listingId}
+            actionId={action.id}
+            actionTitle={action.title}
+            actionDescription={action.description}
+            actionStatus={action.status}
+            suggestedActionUrl={action.suggestedActionUrl}
+            editUrl={editUrl}
+            onStatusChange={onStatusChange}
+          />
+        )}
+      </>
     )
   }
 

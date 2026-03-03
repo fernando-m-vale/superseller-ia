@@ -349,10 +349,12 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
               status: a.status,
               priority: a.priority,
               expectedImpact: a.expectedImpact,
+              effort: null, // Será preenchido pelos detalhes quando disponível
               suggestedActionUrl: editUrl,
             }))}
             onStatusChange={handleKanbanStatusChange}
             editUrl={editUrl}
+            listingId={props.listingId || undefined}
           />
         )}
       </div>
