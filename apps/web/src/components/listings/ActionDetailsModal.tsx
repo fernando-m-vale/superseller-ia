@@ -212,19 +212,6 @@ export function ActionDetailsModal({
         )}
 
         {/* Error */}
-<<<<<<< HEAD
-        {isGenerating && (
-          <Alert>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <AlertDescription>
-              Gerando detalhes desta ação... isso pode levar até ~10s.
-              <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2">
-                Atualizar
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
-
         {error && !isGenerating && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -401,7 +388,7 @@ export function ActionDetailsModal({
             )}
 
             {/* Sugestões de texto */}
-            {v1Data.copySuggestions && (
+            {v1Data && 'copySuggestions' in v1Data && v1Data.copySuggestions && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
@@ -411,7 +398,7 @@ export function ActionDetailsModal({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Títulos A/B/C */}
-                  {v1Data.copySuggestions.titles && v1Data.copySuggestions.titles.length > 0 && (
+                  {'copySuggestions' in v1Data && v1Data.copySuggestions.titles && v1Data.copySuggestions.titles.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Títulos sugeridos:</h4>
                       <div className="space-y-2">
@@ -439,7 +426,7 @@ export function ActionDetailsModal({
                   )}
 
                   {/* Descrição */}
-                  {v1Data.copySuggestions.description && (
+                  {'copySuggestions' in v1Data && v1Data.copySuggestions.description && (
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Template de descrição:</h4>
                       <div className="p-3 bg-muted rounded text-sm text-muted-foreground whitespace-pre-wrap">
@@ -448,10 +435,10 @@ export function ActionDetailsModal({
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleCopy(v1Data.copySuggestions!.description!, 'Descrição')}
+                        onClick={() => handleCopy('copySuggestions' in v1Data && v1Data.copySuggestions?.description ? v1Data.copySuggestions.description : '', 'Descrição')}
                         className="mt-2"
                       >
-                        {copiedText === v1Data.copySuggestions.description ? (
+                        {copiedText === ('copySuggestions' in v1Data && v1Data.copySuggestions?.description ? v1Data.copySuggestions.description : '') ? (
                           <>
                             <Check className="h-4 w-4 mr-2" />
                             Copiado!
@@ -467,7 +454,7 @@ export function ActionDetailsModal({
                   )}
 
                   {/* Bullets */}
-                  {v1Data.copySuggestions.bullets && v1Data.copySuggestions.bullets.length > 0 && (
+                  {'copySuggestions' in v1Data && v1Data.copySuggestions.bullets && v1Data.copySuggestions.bullets.length > 0 && (
                     <div>
                       <h4 className="text-sm font-semibold mb-2">Bullets sugeridos:</h4>
                       <ul className="space-y-1">
