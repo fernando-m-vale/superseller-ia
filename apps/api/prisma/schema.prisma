@@ -134,6 +134,12 @@ enum ActionStatus {
   DESCARTADO
 }
 
+enum ListingActionDetailStatus {
+  READY
+  GENERATING
+  FAILED
+}
+
 // Models
 model Tenant {
   id         String   @id @default(uuid())
@@ -596,6 +602,7 @@ model ListingAction {
   updatedAt      DateTime     @updatedAt
   appliedAt      DateTime?
   discardedAt    DateTime?
+  detail         ListingActionDetail?
 
   listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
@@ -603,4 +610,28 @@ model ListingAction {
   @@index([listingId, batchId])
   @@index([status])
   @@map("listing_actions")
+}
+
+model ListingActionDetail {
+  id            String                    @id @default(uuid())
+  actionId      String                    @unique
+  listingId     String
+  batchId       String
+  actionKey     String
+  status        ListingActionDetailStatus @default(GENERATING)
+  detailsJson   Json?
+  generatedAt   DateTime?
+  model         String?
+  promptVersion String?
+  costTokensIn  Int?
+  costTokensOut Int?
+  errorMessage  String?                   @db.Text
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  action ListingAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, batchId])
+  @@index([status, generatedAt])
+  @@map("listing_action_details")
 }
