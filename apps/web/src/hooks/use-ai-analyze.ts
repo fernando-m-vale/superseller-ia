@@ -201,7 +201,7 @@ export interface AIAnalysisResponse {
     skippedBecauseOfHistory: number
     skippedBecauseOfRequirements: number
   }
-  seoSuggestions: {
+  seoSuggestions?: {
     title: string
     description: string
   }
@@ -326,27 +326,39 @@ export interface AIAnalysisResponse {
  * Adapter que converte a resposta da API para o formato esperado pelo frontend
  */
 function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysisResponse {
-  // Converter seoSuggestions
-  const seoDescription = [
-    ...(apiResponse.seoSuggestions.suggestedDescriptionPoints || []),
-    ...(apiResponse.seoSuggestions.keywords?.map(k => `#${k}`) || []),
-  ].join('\n')
+  // Converter seoSuggestions (null-safe: GET /latest may not return seoSuggestions)
+  const seo = apiResponse.seoSuggestions
+  const seoDescription = seo
+    ? [
+        ...(seo.suggestedDescriptionPoints || []),
+        ...(seo.keywords?.map(k => `#${k}`) || []),
+      ].join('\n')
+    : ''
+
+  // GET /latest may not return analyzedAt at top level — fall back to analysisV21.meta
+  const v21Meta = (apiResponse.analysisV21 as Record<string, unknown> | undefined)?.meta as Record<string, unknown> | undefined
+  const analyzedAt = apiResponse.analyzedAt
+    || (v21Meta?.analyzed_at as string)
+    || (v21Meta?.analyzedAt as string)
+    || new Date().toISOString()
 
   return {
     listingId: apiResponse.listingId,
     score: apiResponse.score,
     scoreBreakdown: apiResponse.scoreBreakdown,
     potentialGain: apiResponse.potentialGain,
-    critique: apiResponse.critique,
+    critique: apiResponse.critique || '',
     growthHacks: apiResponse.growthHacks || [],
     growthHacksMeta: apiResponse.growthHacksMeta,
-    seoSuggestions: {
-      title: apiResponse.seoSuggestions.suggestedTitle || '',
-      description: seoDescription,
-    },
+    seoSuggestions: seo
+      ? {
+          title: seo.suggestedTitle || '',
+          description: seoDescription,
+        }
+      : undefined,
     savedRecommendations: apiResponse.savedRecommendations,
-    analyzedAt: apiResponse.analyzedAt,
-    model: apiResponse.model,
+    analyzedAt,
+    model: apiResponse.model || 'gpt-4o',
     metrics30d: apiResponse.metrics30d,
     dataQuality: apiResponse.dataQuality,
     cacheHit: apiResponse.cacheHit,
