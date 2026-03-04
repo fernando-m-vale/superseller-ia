@@ -1,3 +1,139 @@
+# DAILY EXECUTION LOG — SuperSeller IA
+
+---
+
+## DIA X — ActionDetailsV2 + Rollout Paralelo
+
+**Data:** 2026-03-03  
+**Status:** ✅ Implementação concluída, ⏳ Validação em produção pendente
+
+---
+
+### 🎯 Objetivo do dia
+
+Implementar ActionDetailsV2 com artifacts tipados e estratégia de prompt por ActionType, mantendo V1 intacto via rollout paralelo por 1 dia (sem quebrar cache/telemetria).
+
+### 🏗️ Implementações realizadas
+
+#### Backend
+- ✅ **Schema ActionDetailsV2 (Zod + JSON-safe)**
+  - Criado `JsonValueSchema` recursivo compatível com `Prisma.InputJsonValue`
+  - Substituído `z.unknown()` por `JsonValueSchema` em `benchmark.data`
+  - Tipos TypeScript derivados do schema Zod
+
+- ✅ **Mapeamento ActionType → Artifacts**
+  - Criado `actionTypeMapping.ts` com mapeamento de `actionKey` → `ActionType`
+  - Definidos `requiredArtifacts` por tipo de ação
+  - Validação via `validateArtifacts.ts` com retry repair automático
+
+- ✅ **Prompt Builder V2 (base + snippets)**
+  - Prompt base com regras anti-template, coerência `hasPromotion`, citar 2 fatos do contexto
+  - Snippets específicos por ActionType (SEO_TITLE_REWRITE, DESCRIPTION_REWRITE_BLOCKS, MEDIA_GALLERY_PLAN, etc.)
+  - Reutiliza dados disponíveis (listingTitle, breadcrumb, pricing, metrics30d, media, attributes)
+
+- ✅ **Persistência com schemaVersion**
+  - Migration criada: `20260303130000_add_schema_version_to_action_details`
+  - Adicionada coluna `schema_version TEXT NOT NULL DEFAULT 'v1'`
+  - Unique constraint composto `(actionId, schemaVersion)` permite coexistência V1/V2
+  - Relação mudada de one-to-one para one-to-many (`details[]`)
+
+- ✅ **Feature flags (server-side)**
+  - `ACTION_DETAILS_V2_ENABLED` (boolean, default false)
+  - Endpoint força v1 se flag desabilitada (com header `x-schema-forced: v1`)
+
+- ✅ **Validação e retry**
+  - Validação de artifacts obrigatórios após geração
+  - Retry 1x com prompt "repair" se faltar artifact obrigatório
+  - Marca como FAILED se ainda faltar após retry
+
+#### Frontend
+- ✅ **Tipos TypeScript V2**
+  - Criado `apps/web/src/types/action-details-v2.ts` com tipos derivados do backend
+  - Compatibilidade mantida com V1
+
+- ✅ **Componente ActionDetailsV2Sections**
+  - Renderização de artifacts tipados (titleSuggestions, descriptionTemplate, galleryPlan, videoScript, etc.)
+  - Botões "Copiar" para cada artifact
+  - Seções condicionais baseadas em artifacts presentes
+
+- ✅ **Modal condicional V1/V2**
+  - Detecção automática via campo `version` na resposta
+  - Renderização V2 quando `version === 'action_details_v2'`
+  - Fallback para V1 mantido
+
+- ✅ **Feature flags (client-side)**
+  - `NEXT_PUBLIC_ACTION_DETAILS_V2_ENABLED` (boolean, default false)
+  - Hook `useActionDetails` aceita `schemaVersion` param
+
+#### Correções de build
+- ✅ **Fix WEB: sintaxe JSX**
+  - Removidos marcadores de conflito de merge (`<<<<<<< HEAD`)
+  - Adicionados type guards para `copySuggestions` (V1 vs V2)
+  - Removido import não utilizado (`Separator`)
+
+- ✅ **Fix API: Prisma JSON vs unknown**
+  - `JsonValueSchema` criado para garantir tipos JSON-safe
+  - Cast explícito para `Prisma.InputJsonValue` após validação Zod
+  - `benchmark.data` agora usa `JsonValueSchema.optional()` ao invés de `z.unknown()`
+
+### 🧠 Decisão estratégica tomada
+
+**Rollout paralelo por 1 dia:**
+- V1 permanece como fallback seguro (default)
+- V2 só ativa quando ambas flags habilitadas (`ACTION_DETAILS_V2_ENABLED=true` + `NEXT_PUBLIC_ACTION_DETAILS_V2_ENABLED=true`)
+- Cache segregado por `(actionId, schemaVersion)` - V1 e V2 coexistem sem conflito
+- Telemetria preservada (promptVersion, model, tokens, cost) para ambos V1 e V2
+- Não quebrar endpoints V1 existentes (contrato mantido)
+
+**Estratégia de validação:**
+- Rollout gradual possível (10% → 50% → 100% via feature flags)
+- Monitoramento de telemetria (tokens, latência, taxa de erro)
+- Validação qualitativa dos artifacts gerados antes de ativar 100%
+
+### ⚠️ Pontos pendentes
+
+- [ ] **Ativar flags em produção** (App Runner API + WEB)
+- [ ] **Validar endpoint** `GET /api/v1/listings/:listingId/actions/:actionId/details?schema=v2`
+- [ ] **Confirmar geração de artifacts reais:**
+  - `titleSuggestions` (3-5 títulos copyáveis)
+  - `descriptionTemplate` (headline + blocks + bullets)
+  - `galleryPlan` (6-12 slots com objetivo + whatToShow)
+  - `videoScript` (hook + scenes)
+- [ ] **Verificar se conteúdo deixou de ser genérico:**
+  - Cita 2 fatos específicos do contexto?
+  - Coerência com `hasPromotion`?
+  - Não usa templates genéricos?
+- [ ] **Monitorar taxa de 202 (GENERATING):**
+  - Latência de geração V2 vs V1
+  - Taxa de cache hit/miss
+  - Taxa de retry repair
+
+### 📝 Commits realizados
+
+1. `feat: implementar ActionDetailsV2 com artifacts tipados e rollout paralelo`
+2. `fix(web): corrigir sintaxe JSX no ActionDetailsModal`
+3. `fix(api): tornar ActionDetailsV2 JSON-safe para Prisma`
+
+### 🔗 Arquivos criados/alterados
+
+**Backend:**
+- `apps/api/src/services/schemas/ActionDetailsV2.ts` (novo)
+- `apps/api/src/services/actionDetails/actionTypeMapping.ts` (novo)
+- `apps/api/src/services/actionDetails/validateArtifacts.ts` (novo)
+- `apps/api/src/services/actionDetails/prompts/actionDetailsPrompts.ts` (novo)
+- `apps/api/src/services/ActionDetailsService.ts` (alterado)
+- `apps/api/src/routes/listings.ts` (alterado)
+- `apps/api/prisma/schema.prisma` (alterado)
+- `apps/api/prisma/migrations/20260303130000_add_schema_version_to_action_details/migration.sql` (novo)
+
+**Frontend:**
+- `apps/web/src/types/action-details-v2.ts` (novo)
+- `apps/web/src/components/listings/ActionDetailsV2Sections.tsx` (novo)
+- `apps/web/src/components/listings/ActionDetailsModal.tsx` (alterado)
+- `apps/web/src/hooks/use-action-details.ts` (alterado)
+
+---
+
 # DAILY EXECUTION LOG — 2026-02-25 (Encerramento Oficial — DIA 09)
 
 ## ✅ STATUS: DIA 09 CONCLUÍDO COM SUCESSO

@@ -1,6 +1,163 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
-## Próxima Sessão — Validação Modelo B + Continuidade FASE 1
+## Próxima Sessão — Ativação e Validação V2
+
+**Status atual:** ActionDetailsV2 implementado e corrigido (builds passando)  
+**Próximo passo:** Ativar flags em produção e validar qualidade dos artifacts
+
+---
+
+### Etapa 1 — Ativar flags em produção
+
+**Objetivo:** Habilitar V2 gradualmente para validação
+
+**Ações:**
+- [ ] **API (App Runner):** Definir `ACTION_DETAILS_V2_ENABLED=true` no Secrets Manager / Environment Variables
+- [ ] **WEB (App Runner):** Definir `NEXT_PUBLIC_ACTION_DETAILS_V2_ENABLED=true` no Environment Variables
+- [ ] **Redeploy ambos serviços** (API + WEB) para aplicar variáveis
+- [ ] **Verificar logs:** Confirmar que flags foram carregadas corretamente
+
+**Comandos de validação:**
+```bash
+# Verificar se API está usando V2
+curl -X GET "https://api.superselleria.com.br/api/v1/listings/{listingId}/actions/{actionId}/details?schema=v2" \
+  -H "Authorization: Bearer {token}" \
+  -H "x-debug: 1"
+
+# Verificar header x-schema-forced (deve estar ausente se V2 habilitado)
+```
+
+**Critério de sucesso:** Endpoint retorna `version: "action_details_v2"` quando `schema=v2`
+
+---
+
+### Etapa 2 — Validar endpoint
+
+**Objetivo:** Confirmar que endpoint V2 está funcionando corretamente
+
+**Checklist:**
+- [ ] **Chamada básica:** `GET /api/v1/listings/:listingId/actions/:actionId/details?schema=v2`
+- [ ] **Response contém:** `"version": "action_details_v2"`
+- [ ] **Cache miss:** Primeira chamada retorna `cached: false` e status 200 (ou 202 se GENERATING)
+- [ ] **Cache hit:** Segunda chamada retorna `cached: true` e status 200
+- [ ] **Status 202 (GENERATING):** Se geração em andamento, retorna 202 com mensagem apropriada
+- [ ] **Erro controlado:** Se falha, retorna erro 500 com mensagem clara (não 502 genérico)
+
+**Evidências a capturar:**
+- Response JSON completo (primeira chamada - cache miss)
+- Response JSON completo (segunda chamada - cache hit)
+- Tempo de resposta (latência)
+- Logs do backend (geração LLM, validação, persistência)
+
+---
+
+### Etapa 3 — Validar qualidade dos artifacts
+
+**Objetivo:** Confirmar que V2 gera artifacts específicos e não genéricos
+
+**Testes por ActionType:**
+
+#### 3.1 SEO_TITLE_REWRITE
+- [ ] **titleSuggestions:** Retorna 3-5 títulos (não genéricos)
+- [ ] **Cada título:** Máximo 60 caracteres, inclui palavras-chave relevantes
+- [ ] **keywordSuggestions:** Retorna 3+ palavras-chave com placement e rationale
+- [ ] **Coerência:** Títulos citam dados específicos (ex: "Seu anúncio tem X visitas")
+
+#### 3.2 DESCRIPTION_REWRITE_BLOCKS
+- [ ] **descriptionTemplate:** Contém headline, blocks (mínimo 2), bullets (mínimo 3)
+- [ ] **bulletSuggestions:** Retorna 3+ bullets copyáveis
+- [ ] **keywordSuggestions:** Retorna 3+ palavras-chave para incluir
+- [ ] **Coerência:** Template cita dados específicos do anúncio
+
+#### 3.3 MEDIA_GALLERY_PLAN
+- [ ] **galleryPlan:** Retorna 6-12 slots
+- [ ] **Cada slot:** Contém `slotNumber`, `objective`, `whatToShow`, `overlaySuggestion` (opcional)
+- [ ] **Objetivos específicos:** "mostrar uso real", "close técnico", "comparação", etc.
+- [ ] **Não genérico:** Descrições específicas do produto, não templates
+
+#### 3.4 MEDIA_ADD_VIDEO_CLIP
+- [ ] **videoScript:** Contém `hook` (3-5 segundos) e `scenes` (mínimo 2)
+- [ ] **Hook:** Captura atenção imediata (problema/benefício/curiosidade)
+- [ ] **Scenes:** Cada cena tem `order`, `description`, `durationSeconds` (opcional)
+- [ ] **Coerência:** Roteiro específico do produto, não genérico
+
+#### 3.5 PRICE_PSYCHOLOGICAL
+- [ ] **suggestions:** Retorna 1-3 sugestões de preço
+- [ ] **Cada sugestão:** `suggestedPrice`, `rationale`, `expectedImpact` (opcional)
+- [ ] **Rationale:** Cita dados específicos (preço atual, benchmark, promoção ativa)
+- [ ] **Coerência:** Considera `hasPromotion` e `discountPercent` quando aplicável
+
+**Critério de sucesso:** Artifacts são específicos, citam dados reais, não são templates genéricos
+
+---
+
+### Etapa 4 — Avaliar qualidade geral
+
+**Objetivo:** Verificar se V2 melhorou a qualidade em relação a V1
+
+**Checklist:**
+- [ ] **Conteúdo ainda genérico?** Comparar V1 vs V2 para mesma ação
+- [ ] **Ordem dos cards coerente?** Prioridade/impacto fazem sentido?
+- [ ] **Quantidade de ações adequada?** Não está gerando ações demais/poucas?
+- [ ] **Impacto vs esforço coerentes?** Ações de alto impacto têm esforço justificado?
+- [ ] **Benchmark:** Quando `available=false`, explica heurísticas claramente?
+- [ ] **RequiredInputs:** Quando falta informação, lista `requiredInputs` com `howToConfirm`?
+
+**Evidências a capturar:**
+- Screenshot comparativo V1 vs V2 (mesma ação)
+- Exemplos de artifacts gerados (titleSuggestions, descriptionTemplate, galleryPlan)
+- Métricas de telemetria (tokens, latência, taxa de erro)
+
+---
+
+### Etapa 5 — Decidir ajustes
+
+**Objetivo:** Avaliar se ajustes são necessários antes de ativar 100%
+
+**Decisões possíveis:**
+
+#### Se artifacts ainda genéricos:
+- [ ] Ajustar prompt base (regras anti-template mais rígidas)
+- [ ] Ajustar snippets por ActionType (exemplos mais específicos)
+- [ ] Adicionar validação pós-geração (rejeitar se muito genérico)
+
+#### Se artifacts faltando:
+- [ ] Ajustar `requiredArtifacts` por ActionType
+- [ ] Melhorar retry repair (prompt mais específico)
+- [ ] Adicionar fallback para artifacts opcionais
+
+#### Se ranking/ordem incoerente:
+- [ ] Ajustar lógica de priorização no `ActionDetailsService`
+- [ ] Revisar mapeamento `actionKey` → `ActionType`
+
+#### Se qualidade OK:
+- [ ] Manter rollout gradual (10% → 50% → 100%)
+- [ ] Monitorar telemetria por 1 dia
+- [ ] Desligar V1 após validação completa
+
+---
+
+### Etapa 6 — Monitoramento (1 dia)
+
+**Objetivo:** Validar estabilidade e qualidade em produção
+
+**Métricas a monitorar:**
+- Taxa de cache hit/miss
+- Latência média de geração (V2 vs V1)
+- Taxa de retry repair
+- Taxa de erro (500, 502, timeout)
+- Custo estimado (tokens in/out)
+- Taxa de 202 (GENERATING)
+
+**Ações:**
+- [ ] Configurar alertas para taxa de erro > 5%
+- [ ] Configurar alertas para latência > 30s
+- [ ] Revisar logs diariamente
+- [ ] Coletar feedback de usuários (se aplicável)
+
+---
+
+## Próxima Sessão — Validação Modelo B + Continuidade FASE 1 (Histórico)
 
 Checklist:
 

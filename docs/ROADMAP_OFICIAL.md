@@ -17,6 +17,9 @@ Este documento é a referência **oficial** do roadmap macro do produto.
 
 **Objetivo:** Vendedor entende valor em 2 minutos.
 
+**Status:** ✅ Estrutura técnica concluída (V2 implementado)  
+**Pendente:** Validação qualitativa em produção
+
 ### DIA 11 — Execução Assistida Forte
 - Botão aplicar sugestão
 - Antes / Depois real
@@ -25,6 +28,8 @@ Este documento é a referência **oficial** do roadmap macro do produto.
 - UX de confiança
 
 **Objetivo:** Produto parece mágico, mas seguro.
+
+**Status:** 🔄 Em andamento (Artifacts V2 é base)
 
 ### DIA 12 — Onboarding + Primeira Vitória
 - Welcome inteligente

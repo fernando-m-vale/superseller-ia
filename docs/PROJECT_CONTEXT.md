@@ -76,9 +76,32 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 
 ---
 
+## Estado Atual do Produto
+
+### Engine
+- ✅ **ScoreActionEngine ativo:** Geração determinística de ações implementada
+- ✅ **ActionDetailsV2 implementado (behind flag):** Schema JSON-safe, artifacts tipados, validação obrigatória
+- ✅ **Rollout paralelo:** V1 (default) e V2 (behind flags) coexistem sem conflito
+
+### UX
+- ✅ **Kanban funcional:** Cards compactos com status (A_IMPLEMENTAR/IMPLEMENTADO/DESCARTADO)
+- ✅ **Modal V1/V2 condicional:** Detecção automática via campo `version`, renderização apropriada
+- ✅ **Artifacts copyáveis:** Quando V2 ativo, artifacts prontos para copiar (títulos, descrições, bullets, etc.)
+
+### Estratégia
+**Produto em transição de:**
+- **Diagnóstico estático** → **Execução Assistida com artifacts prontos**
+
+**Status atual:**
+- Estrutura técnica concluída (V2 implementado e corrigido)
+- Pendente: validação qualitativa em produção
+- Próximo passo: ativar flags e validar qualidade dos artifacts
+
+---
+
 ## Camada de Execução Assistida (Modelo B)
 
-Esta é a camada que transforma “diagnóstico” em **execução guiada**, com foco em produto premium e controle de risco/custo.
+Esta é a camada que transforma "diagnóstico" em **execução guiada**, com foco em produto premium e controle de risco/custo.
 
 ### Separação entre ação estrutural e plano detalhado
 

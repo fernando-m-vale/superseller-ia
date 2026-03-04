@@ -120,17 +120,125 @@ Pilares:
 
 ---
 
+## ActionDetailsV2 — Arquitetura
+
+### Visão Geral
+
+ActionDetailsV2 introduz artifacts tipados e específicos por ActionType, mantendo V1 como fallback seguro via rollout paralelo.
+
+**Princípios:**
+- Schema JSON-safe (Zod) compatível com Prisma
+- Mapping ActionType → requiredArtifacts
+- Prompt Base + Snippets por ActionType
+- Retry repair se faltar artifact obrigatório
+- Persistência com schemaVersion (V1/V2 coexistem)
+- Rollout paralelo via feature flag
+
+### Fluxo de Geração V2
+
+1. **Front solicita details** (`schema=v2` via query param)
+2. **Service verifica cache** (`actionId + schemaVersion`)
+3. **Se cache miss:**
+   - Gera via OpenAI JSON mode com prompt V2 (base + snippet do ActionType)
+   - Valida via `ActionDetailsV2Schema.parse()`
+   - Valida `requiredArtifacts` via `validateArtifacts()`
+   - Se faltar artifact obrigatório → retry 1x com prompt "repair"
+   - Se ainda faltar → marca como FAILED
+4. **Persiste como READY** com `schemaVersion='v2'` e `promptVersion='action-details-v2'`
+5. **Front renderiza sections tipadas** via `ActionDetailsV2Sections` quando `version === 'action_details_v2'`
+
+### Schema JSON-Safe
+
+**JsonValueSchema (recursivo):**
+```typescript
+z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ])
+)
+```
+
+**Uso:** `benchmark.data` usa `JsonValueSchema.optional()` ao invés de `z.unknown().optional()`
+
+**Garantia:** Após validação Zod, objeto é cast para `Prisma.InputJsonValue` antes de persistir
+
+### Mapeamento ActionType → Artifacts
+
+**ActionTypes suportados:**
+- `SEO_TITLE_REWRITE` → `titleSuggestions` + `keywordSuggestions`
+- `DESCRIPTION_REWRITE_BLOCKS` → `descriptionTemplate` + `bulletSuggestions` + `keywordSuggestions`
+- `MEDIA_GALLERY_PLAN` → `galleryPlan` (6-12 slots)
+- `MEDIA_ADD_VIDEO_CLIP` → `videoScript` (hook + scenes)
+- `PRICE_PSYCHOLOGICAL` → `pricing.suggestions`
+- `VARIATIONS_ADD` → `variations`
+- `KITS_CREATE_COMBO` → `kits`
+- `TECH_SPECS_FILL_ATTRIBUTES` → `techSpecs`
+- `TRUST_GUARANTEES_HIGHLIGHT` → `trustGuarantees`
+- `SEO_KEYWORDS_ENRICH` → `keywordSuggestions`
+
+**Validação:** `validateArtifacts()` verifica se todos os `requiredArtifacts` estão presentes após geração
+
+### Prompt Builder V2
+
+**Estrutura:**
+- **Base:** Regras anti-template, coerência `hasPromotion`, citar 2 fatos do contexto
+- **Snippet por ActionType:** Diretrizes específicas e artifacts obrigatórios
+
+**Exemplo (SEO_TITLE_REWRITE):**
+```
+AÇÃO: Reescrever título do anúncio para SEO e conversão.
+
+ARTIFACTS OBRIGATÓRIOS:
+- artifacts.copy.titleSuggestions: array com 3-5 títulos prontos para copiar
+- artifacts.copy.keywordSuggestions: array com 3+ palavras-chave principais
+
+DIRETRIZES:
+- Títulos devem incluir: produto principal, marca/modelo, principal diferencial
+- Primeiras 40 letras são críticas (aparecem em busca)
+- Use variações: uma focada em SEO, outra em conversão, outra em promoção
+```
+
+### Rollout Paralelo
+
+**Feature Flags:**
+- `ACTION_DETAILS_V2_ENABLED` (server) - default: false
+- `NEXT_PUBLIC_ACTION_DETAILS_V2_ENABLED` (web) - default: false
+
+**Comportamento:**
+- Se ambas flags `true`: frontend solicita `schema=v2`, backend gera V2
+- Se qualquer flag `false`: frontend solicita `schema=v1`, backend retorna V1 (ou força v1 com header)
+
+**Cache:**
+- Segregado por `(actionId, schemaVersion)`
+- V1 e V2 podem coexistir para mesma `actionId`
+- Unique constraint garante isolamento
+
+**Telemetria:**
+- V2 persiste `promptVersion='action-details-v2'`, `model`, `costTokensIn`, `costTokensOut`
+- Compatível com observabilidade existente
+
+---
+
 ## Roadmap Evolutivo da Feature
 
-### V1 (Agora) — Modelo B (Híbrido)
+### V1 (Atual) — Modelo B (Híbrido)
 - Modal/drawer com detalhes sob demanda
 - Cache persistido
 - Botões aplicar/descartar também no modal
+- **Status:** ✅ Funcional, mantido como fallback
 
-### V2 — Qualidade + Consistência
-- Prompt mais restrito e padronizado por tipo de ação
-- Validação de schema (zod) no backend
-- Melhor fallback e mensagens de erro
+### V2 (Implementado) — Artifacts Tipados
+- ✅ Schema JSON-safe (Zod) compatível com Prisma
+- ✅ Prompt base + snippets por ActionType
+- ✅ Validação de artifacts obrigatórios
+- ✅ Retry repair automático
+- ✅ Rollout paralelo via feature flag
+- **Status:** ✅ Implementado, ⏳ Validação em produção pendente
 
 ### V3 — Execução Real (DIA 16–18)
 - Apply via API (com consentimento explícito)
