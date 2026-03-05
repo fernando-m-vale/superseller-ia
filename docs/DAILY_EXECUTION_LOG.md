@@ -43,6 +43,19 @@
 
 **Commit mergeado:** `fed7387 fix(api): fix V2 action details - drop stale unique index + coerce LLM output schema (#103)`
 
+**Arquivos alterados no fix:**
+- `apps/api/prisma/migrations/20260305200000_drop_old_actionid_unique_index/migration.sql` (novo)
+- `apps/api/src/services/schemas/ActionDetailsV2.ts` (coercion Zod adicionada)
+
+**Próximos passos:**
+- [ ] Aplicar migration `20260305200000` em PROD via CloudShell
+- [ ] Deploy API no App Runner (já contém fixes)
+- [ ] Validar endpoint `/details?schema=v1` retorna 200
+- [ ] Validar endpoint `/details?schema=v2` retorna 200/202 (não mais 500)
+- [ ] Validar UI "Ver detalhes" funciona sem erro
+
+**Runbook:** `apps/api/docs/RUNBOOK_PROD_ACTION_DETAILS_V2_FIX_20260305.md`
+
 ---
 
 ## DIA X — ActionDetailsV2 + Rollout Paralelo + Hotfix PROD
