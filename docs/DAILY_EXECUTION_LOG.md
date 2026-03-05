@@ -5,7 +5,7 @@
 ## 🔥 Incidente V2 Action Details — 2026-03-05
 
 **Data/Hora:** 2026-03-05 (Tarde)  
-**Status:** ⚠️ Resolvido parcialmente, ⏳ Deploy PROD pendente
+**Status:** ✅ Fixes implementados e mergeados, ⏳ Deploy PROD pendente
 
 ---
 
@@ -24,21 +24,24 @@
 **Evidência:**
 - Devin confirmou no Postgres: índice `listing_action_details_actionId_key` existia
 - Migration criada: `apps/api/prisma/migrations/20260305200000_drop_old_actionid_unique_index/migration.sql`
+- Conteúdo: `DROP INDEX IF EXISTS "listing_action_details_actionId_key";`
 
 **Causa raiz #2 — Validação Zod inconsistente:**
 - Após remover índice, V2 passou a falhar por Zod validation
 - LLM retorna formatos inconsistentes:
-  - `titleSuggestions` e `keywordSuggestions` como strings em vez de objetos
+  - `titleSuggestions` como array de strings em vez de objetos `{variation, text}`
+  - `keywordSuggestions` como strings em vez de objetos `{keyword, placement}`
   - `techSpecs` e `trustGuarantees` como objeto único em vez de array
   - `variation` ausente em alguns `titleSuggestions`
 
 **Solução implementada:**
-- Coercion via Zod `preprocess` em `apps/api/src/services/schemas/ActionDetailsV2.ts`:
-  - String → objeto com defaults (`variation: 'A'`, `text: string`)
-  - Objeto único → array `[objeto]`
-  - `variation` default `'A'` quando ausente
+- ✅ Coercion via Zod `preprocess` em `apps/api/src/services/schemas/ActionDetailsV2.ts`:
+  - `coerceTitleSuggestionsArray`: string → objeto `{variation: 'A'|'B'|'C', text: string}`
+  - `coerceKeywordSuggestion`: string → objeto `{keyword: string, placement: 'title'}`
+  - `techSpecs` e `trustGuarantees`: objeto único → array `[objeto]`
+  - `variation` default baseado em índice (`VARIATION_LABELS[idx] ?? 'A'`)
 
-**Branch:** `devin/1772743406-fix-v2-action-details-schema` (aguardando merge)
+**Commit mergeado:** `fed7387 fix(api): fix V2 action details - drop stale unique index + coerce LLM output schema (#103)`
 
 ---
 
