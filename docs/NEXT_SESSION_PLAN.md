@@ -5,10 +5,10 @@
 **Status atual:** 
 - ✅ ActionDetailsV2 implementado e corrigido (builds passando)
 - ✅ Flags ativadas em PROD (API + WEB)
-- ✅ Fixes implementados (índice único + coercion Zod)
-- ⏳ **Deploy PROD pendente:** Merge branch Devin + aplicar migration + deploy API
+- ✅ Fixes mergeados em `main` (commit `fed7387`)
+- ⏳ **Deploy PROD pendente:** Aplicar migration + deploy API + validar endpoints
 
-**Próximo passo:** Merge branch Devin, aplicar migration em PROD, deploy API, validar endpoints
+**Próximo passo:** Aplicar migration `20260305200000` em PROD, deploy API, validar endpoints
 
 ---
 
