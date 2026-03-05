@@ -1,17 +1,188 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
-## Próxima Sessão — Hotfix PROD + Validação V2
+## Próxima Sessão — Deploy Fix V2 Action Details + Validação
 
 **Status atual:** 
 - ✅ ActionDetailsV2 implementado e corrigido (builds passando)
 - ✅ Flags ativadas em PROD (API + WEB)
-- ⚠️ **Hotfix necessário:** Migration não aplicada + schema mismatch causando 500
+- ✅ Fixes implementados (índice único + coercion Zod)
+- ⏳ **Deploy PROD pendente:** Merge branch Devin + aplicar migration + deploy API
 
-**Próximo passo:** Aplicar migration em PROD e validar endpoints
+**Próximo passo:** Merge branch Devin, aplicar migration em PROD, deploy API, validar endpoints
 
 ---
 
-### Etapa 0 — Aplicar Migration em PROD (URGENTE)
+### Etapa A — Merge Branch Devin + Preparar Deploy
+
+**Objetivo:** Incorporar fixes de coercion Zod e migration de índice
+
+**Ações:**
+- [ ] Merge `devin/1772743406-fix-v2-action-details-schema` → `main`
+- [ ] Verificar que migration `20260305200000_drop_old_actionid_unique_index` está presente
+- [ ] Verificar que coercion Zod está em `apps/api/src/services/schemas/ActionDetailsV2.ts`
+- [ ] Build local passa: `pnpm --filter @superseller/api build`
+
+**Arquivos esperados após merge:**
+- `apps/api/prisma/migrations/20260305200000_drop_old_actionid_unique_index/migration.sql`
+- `apps/api/src/services/schemas/ActionDetailsV2.ts` (com `z.preprocess`)
+
+---
+
+### Etapa B — Aplicar Migration em PROD
+
+**Objetivo:** Remover índice único antigo que bloqueia V2
+
+**Comandos:**
+```bash
+# 1. Obter DATABASE_URL do Secrets Manager
+export DATABASE_URL=$(aws secretsmanager get-secret-value \
+  --secret-id prod/DATABASE_URL \
+  --query SecretString \
+  --output text)
+
+# 2. Aplicar migration
+cd apps/api
+npx prisma migrate deploy
+
+# 3. Verificar migration aplicada
+psql $DATABASE_URL -c "SELECT migration_name FROM _prisma_migrations WHERE migration_name LIKE '%20260305%';"
+```
+
+**Checklist PASS/FAIL:**
+
+#### PASS ✅
+- [ ] Migration `20260305200000_drop_old_actionid_unique_index` aplicada sem erros
+- [ ] Índice `listing_action_details_actionId_key` removido (verificar via `\d listing_action_details` no psql)
+- [ ] Migration aparece em `_prisma_migrations` table
+
+#### FAIL ❌
+- [ ] Migration falha ao aplicar (erro SQL)
+- [ ] Índice `listing_action_details_actionId_key` ainda existe após migration
+- [ ] Migration não aparece em `_prisma_migrations`
+
+**Runbook completo:** `apps/api/docs/RUNBOOK_PROD_ACTION_DETAILS_V2_FIX_20260305.md`
+
+---
+
+### Etapa C — Deploy API em PROD
+
+**Objetivo:** Deploy App Runner com fixes de coercion Zod
+
+**Ações:**
+- [ ] Push `main` para trigger deploy automático OU deploy manual via AWS Console
+- [ ] Aguardar deploy completar (verificar status no App Runner)
+- [ ] Verificar logs iniciais (sem erros de startup)
+
+**Validação:**
+- [ ] App Runner status: `RUNNING`
+- [ ] Logs não mostram erros de import/compilação
+- [ ] Health check `/health` retorna 200
+
+---
+
+### Etapa D — Validar Endpoints
+
+**Objetivo:** Confirmar que V1 e V2 funcionam corretamente
+
+**Comandos de validação:**
+
+```bash
+# V1 (deve retornar 200)
+curl -X GET "https://api.superselleria.com.br/api/v1/listings/{listingId}/actions/{actionId}/details?schema=v1" \
+  -H "Authorization: Bearer {token}" \
+  -v
+
+# V2 primeira chamada (deve retornar 202 GENERATING ou 200 se cache hit)
+curl -X GET "https://api.superselleria.com.br/api/v1/listings/{listingId}/actions/{actionId}/details?schema=v2" \
+  -H "Authorization: Bearer {token}" \
+  -v
+
+# V2 segunda chamada (deve retornar 200 com cached: true)
+curl -X GET "https://api.superselleria.com.br/api/v1/listings/{listingId}/actions/{actionId}/details?schema=v2" \
+  -H "Authorization: Bearer {token}" \
+  -v
+```
+
+**Checklist PASS/FAIL:**
+
+#### PASS ✅
+- [ ] `/details?schema=v1` retorna `200 OK` com `version: "action_details_v1"`
+- [ ] `/details?schema=v2` retorna `200 OK` ou `202 Accepted` (não mais 500)
+- [ ] Se 200: response contém `version: "action_details_v2"` e `cached: boolean`
+- [ ] Se 202: response contém `status: "GENERATING"`
+- [ ] Segunda chamada V2 retorna `200 OK` com `cached: true`
+
+#### FAIL ❌
+- [ ] `/details?schema=v1` retorna `500 Internal Server Error`
+- [ ] `/details?schema=v2` retorna `500 Internal Server Error`
+- [ ] Response contém erro Prisma P2002 (unique constraint)
+- [ ] Response contém erro Zod validation
+
+---
+
+### Etapa E — Validar UI "Ver detalhes"
+
+**Objetivo:** Confirmar que modal funciona em PROD
+
+**Ações:**
+- [ ] Abrir listing no frontend PROD
+- [ ] Clicar em "Ver detalhes" em uma ação
+- [ ] Modal abre sem erro
+- [ ] Conteúdo renderiza corretamente (V1 ou V2 conforme flag)
+
+**Checklist PASS/FAIL:**
+
+#### PASS ✅
+- [ ] Modal abre sem erro no console
+- [ ] Conteúdo renderiza (skeleton → dados)
+- [ ] Botões "Copiar" funcionam (se V2)
+- [ ] Botões "Aplicar/Descartar" funcionam
+
+#### FAIL ❌
+- [ ] Modal não abre (erro no console)
+- [ ] Erro 500 visível na UI
+- [ ] Conteúdo não renderiza (fica em loading)
+
+---
+
+### Etapa F — Checar Logs do App Runner
+
+**Objetivo:** Confirmar que não há erros recorrentes
+
+**Comandos:**
+```bash
+# Ver logs recentes (últimas 100 linhas)
+aws logs tail /aws/apprunner/{service-name}/application \
+  --since 10m \
+  --filter-pattern "P2002|schema_version|ZodError|ActionDetails"
+```
+
+**Checklist PASS/FAIL:**
+
+#### PASS ✅
+- [ ] Logs não mostram erros P2002 (unique constraint)
+- [ ] Logs não mostram erros Zod validation recorrentes
+- [ ] Logs mostram gerações V2 bem-sucedidas (status READY)
+
+#### FAIL ❌
+- [ ] Logs mostram erros P2002 recorrentes
+- [ ] Logs mostram erros Zod validation recorrentes
+- [ ] Logs mostram falhas de geração V2
+
+---
+
+### Etapa G — Cleanup (se necessário)
+
+**Objetivo:** Remover recursos temporários criados durante debug
+
+**Ações:**
+- [ ] Verificar se há Lambdas/roles temporários criados para debug
+- [ ] Remover recursos não utilizados
+- [ ] Documentar recursos mantidos (se houver)
+
+---
+
+### Etapa 0 — Aplicar Migration em PROD (URGENTE) — HISTÓRICO
 
 **Objetivo:** Destravar endpoint `/details` que está retornando 500
 

@@ -2,6 +2,46 @@
 
 ---
 
+## 🔥 Incidente V2 Action Details — 2026-03-05
+
+**Data/Hora:** 2026-03-05 (Tarde)  
+**Status:** ⚠️ Resolvido parcialmente, ⏳ Deploy PROD pendente
+
+---
+
+### Problema identificado
+
+**Sintoma:**
+- Endpoint `/details?schema=v2` em PROD retorna `500 Internal Server Error`
+- Erro Prisma P2002: "Unique constraint failed on (actionId)"
+- UI "Ver detalhes" quebrada para ações V2
+
+**Causa raiz #1 — Índice único antigo:**
+- Migration `20260303130000` criou unique composto `(actionId, schema_version)`
+- `DROP CONSTRAINT` removeu constraint, mas **índice** `listing_action_details_actionId_key` permaneceu
+- Prisma tentava inserir V2 com mesmo `actionId` → violava índice único antigo
+
+**Evidência:**
+- Devin confirmou no Postgres: índice `listing_action_details_actionId_key` existia
+- Migration criada: `apps/api/prisma/migrations/20260305200000_drop_old_actionid_unique_index/migration.sql`
+
+**Causa raiz #2 — Validação Zod inconsistente:**
+- Após remover índice, V2 passou a falhar por Zod validation
+- LLM retorna formatos inconsistentes:
+  - `titleSuggestions` e `keywordSuggestions` como strings em vez de objetos
+  - `techSpecs` e `trustGuarantees` como objeto único em vez de array
+  - `variation` ausente em alguns `titleSuggestions`
+
+**Solução implementada:**
+- Coercion via Zod `preprocess` em `apps/api/src/services/schemas/ActionDetailsV2.ts`:
+  - String → objeto com defaults (`variation: 'A'`, `text: string`)
+  - Objeto único → array `[objeto]`
+  - `variation` default `'A'` quando ausente
+
+**Branch:** `devin/1772743406-fix-v2-action-details-schema` (aguardando merge)
+
+---
+
 ## DIA X — ActionDetailsV2 + Rollout Paralelo + Hotfix PROD
 
 **Data:** 2026-03-03  
