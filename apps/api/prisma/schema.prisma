@@ -589,17 +589,17 @@ model ListingHack {
 }
 
 model ListingAction {
-  id             String       @id @default(uuid())
+  id             String                @id @default(uuid())
   listingId      String
   actionKey      String
   title          String
   description    String
   expectedImpact String?
   priority       String?
-  status         ActionStatus @default(A_IMPLEMENTAR)
+  status         ActionStatus          @default(A_IMPLEMENTAR)
   batchId        String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
   appliedAt      DateTime?
   discardedAt    DateTime?
   details        ListingActionDetail[]
