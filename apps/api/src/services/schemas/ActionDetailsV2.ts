@@ -27,23 +27,30 @@ export type JsonValue = z.infer<typeof JsonValueSchema>;
  */
 
 export const TitleSuggestionV2Schema = z.object({
-  variation: z.enum(['A', 'B', 'C']).optional().default('A'),
+  variation: z.enum(['A', 'B', 'C']),
   text: z.string().min(1).max(60),
   rationale: z.string().optional(),
 });
 
 /**
- * Coerce a plain string into a TitleSuggestionV2 object.
+ * Coerce an array of title suggestions at the array level.
  * LLMs sometimes return ["title1","title2"] instead of [{variation,text,rationale}].
+ * By coercing at the array level we can assign sequential variation labels (A, B, C).
  */
-const coerceTitleSuggestion = (val: unknown) => {
-  if (typeof val === 'string') {
-    return { text: val.slice(0, 60) };
-  }
-  return val;
+const VARIATION_LABELS: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C'];
+const coerceTitleSuggestionsArray = (val: unknown): unknown => {
+  if (!Array.isArray(val)) return val;
+  return val.map((item, idx) => {
+    if (typeof item === 'string') {
+      return { variation: VARIATION_LABELS[idx] ?? 'A', text: item.slice(0, 60) };
+    }
+    // If object lacks variation, assign one based on index
+    if (item != null && typeof item === 'object' && !('variation' in item)) {
+      return { ...item, variation: VARIATION_LABELS[idx] ?? 'A' };
+    }
+    return item;
+  });
 };
-
-const TitleSuggestionV2Coerced = z.preprocess(coerceTitleSuggestion, TitleSuggestionV2Schema);
 
 export const DescriptionTemplateV2Schema = z.object({
   headline: z.string().min(1),
@@ -131,7 +138,10 @@ export const ActionDetailsV2Schema = z.object({
   artifacts: z.object({
     // SEO / Title
     copy: z.object({
-      titleSuggestions: z.array(TitleSuggestionV2Coerced).min(3).max(5).optional(),
+      titleSuggestions: z.preprocess(
+        coerceTitleSuggestionsArray,
+        z.array(TitleSuggestionV2Schema).min(3).max(5).optional(),
+      ),
       descriptionTemplate: DescriptionTemplateV2Schema.optional(),
       bulletSuggestions: z.array(z.string().min(1)).min(3).optional(),
       keywordSuggestions: z.array(KeywordSuggestionV2Coerced).min(3).optional(),
