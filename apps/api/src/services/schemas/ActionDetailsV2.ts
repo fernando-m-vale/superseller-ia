@@ -32,6 +32,26 @@ export const TitleSuggestionV2Schema = z.object({
   rationale: z.string().optional(),
 });
 
+/**
+ * Coerce an array of title suggestions at the array level.
+ * LLMs sometimes return ["title1","title2"] instead of [{variation,text,rationale}].
+ * By coercing at the array level we can assign sequential variation labels (A, B, C).
+ */
+const VARIATION_LABELS: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C'];
+const coerceTitleSuggestionsArray = (val: unknown): unknown => {
+  if (!Array.isArray(val)) return val;
+  return val.map((item, idx) => {
+    if (typeof item === 'string') {
+      return { variation: VARIATION_LABELS[idx] ?? 'A', text: item.slice(0, 60) };
+    }
+    // If object lacks variation, assign one based on index
+    if (item != null && typeof item === 'object' && !('variation' in item)) {
+      return { ...item, variation: VARIATION_LABELS[idx] ?? 'A' };
+    }
+    return item;
+  });
+};
+
 export const DescriptionTemplateV2Schema = z.object({
   headline: z.string().min(1),
   blocks: z.array(z.string().min(1)).min(2),
@@ -92,6 +112,19 @@ export const KeywordSuggestionV2Schema = z.object({
   rationale: z.string().optional(),
 });
 
+/**
+ * Coerce a plain string into a KeywordSuggestionV2 object.
+ * LLMs sometimes return ["kw1","kw2"] instead of [{keyword,placement,rationale}].
+ */
+const coerceKeywordSuggestion = (val: unknown) => {
+  if (typeof val === 'string') {
+    return { keyword: val, placement: 'title' as const, rationale: undefined };
+  }
+  return val;
+};
+
+const KeywordSuggestionV2Coerced = z.preprocess(coerceKeywordSuggestion, KeywordSuggestionV2Schema);
+
 // Schema principal ActionDetailsV2
 export const ActionDetailsV2Schema = z.object({
   version: z.literal('action_details_v2'),
@@ -105,10 +138,13 @@ export const ActionDetailsV2Schema = z.object({
   artifacts: z.object({
     // SEO / Title
     copy: z.object({
-      titleSuggestions: z.array(TitleSuggestionV2Schema).min(3).max(5).optional(),
+      titleSuggestions: z.preprocess(
+        coerceTitleSuggestionsArray,
+        z.array(TitleSuggestionV2Schema).min(3).max(5).optional(),
+      ),
       descriptionTemplate: DescriptionTemplateV2Schema.optional(),
       bulletSuggestions: z.array(z.string().min(1)).min(3).optional(),
-      keywordSuggestions: z.array(KeywordSuggestionV2Schema).min(3).optional(),
+      keywordSuggestions: z.array(KeywordSuggestionV2Coerced).min(3).optional(),
     }).optional(),
     
     // Media
@@ -126,11 +162,17 @@ export const ActionDetailsV2Schema = z.object({
     variations: z.array(VariationSuggestionV2Schema).optional(),
     kits: z.array(KitSuggestionV2Schema).optional(),
     
-    // Tech Specs
-    techSpecs: z.array(TechSpecSuggestionV2Schema).optional(),
+    // Tech Specs — coerce single object to array
+    techSpecs: z.preprocess(
+      (val) => (val != null && !Array.isArray(val) && typeof val === 'object' ? [val] : val),
+      z.array(TechSpecSuggestionV2Schema).optional(),
+    ),
     
-    // Trust / Guarantees
-    trustGuarantees: z.array(TrustGuaranteeSuggestionV2Schema).optional(),
+    // Trust / Guarantees — coerce single object to array
+    trustGuarantees: z.preprocess(
+      (val) => (val != null && !Array.isArray(val) && typeof val === 'object' ? [val] : val),
+      z.array(TrustGuaranteeSuggestionV2Schema).optional(),
+    ),
   }).optional(),
   
   // Benchmark (mantido compatível com V1)
