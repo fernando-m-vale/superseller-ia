@@ -6,11 +6,11 @@
 - Acesso ao AWS CloudShell ou EC2 com acesso ao RDS
 - Credenciais do Secrets Manager para `DATABASE_URL`
 - Prisma CLI disponível (`npx prisma`)
-- Branch `devin/1772743406-fix-v2-action-details-schema` mergeado em `main`
+- ✅ Fixes já mergeados em `main` (commit `fed7387`)
 
 ---
 
-## Passo 1 — Verificar Branch Mergeado
+## Passo 1 — Verificar Fixes Mergeados
 
 ```bash
 # Verificar que migration existe
@@ -22,8 +22,11 @@ cat apps/api/prisma/migrations/20260305200000_drop_old_actionid_unique_index/mig
 
 **Esperado:**
 ```sql
+-- DropIndex: remove stale unique index on actionId only
 DROP INDEX IF EXISTS "listing_action_details_actionId_key";
 ```
+
+**Status:** ✅ Migration presente, coercion Zod implementada em `apps/api/src/services/schemas/ActionDetailsV2.ts`
 
 ---
 
