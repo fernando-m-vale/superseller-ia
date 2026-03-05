@@ -618,7 +618,7 @@ model ListingActionDetail {
   listingId     String
   batchId       String
   actionKey     String
-  schemaVersion String                    @default("v1")
+  schemaVersion String                    @default("v1") @map("schema_version")
   status        ListingActionDetailStatus @default(GENERATING)
   detailsJson   Json?
   generatedAt   DateTime?
@@ -632,9 +632,9 @@ model ListingActionDetail {
 
   action ListingAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
 
-  @@unique([actionId, schemaVersion])
+  @@unique([actionId, schemaVersion], map: "listing_action_details_actionId_schemaVersion_key")
   @@index([listingId, batchId])
   @@index([status, generatedAt])
-  @@index([actionId, schemaVersion])
+  @@index([actionId, schemaVersion], map: "listing_action_details_actionId_schemaVersion_idx")
   @@map("listing_action_details")
 }

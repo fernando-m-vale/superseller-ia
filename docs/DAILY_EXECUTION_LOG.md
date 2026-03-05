@@ -2,10 +2,50 @@
 
 ---
 
+## DIA X — ActionDetailsV2 + Rollout Paralelo + Hotfix PROD
+
+**Data:** 2026-03-03  
+**Status:** ✅ Implementação concluída, ⚠️ Hotfix necessário para PROD
+
+---
+
+### 🔥 Hotfix PROD — 2026-03-03 (Tarde)
+
+**Problema identificado:**
+- Flags ativadas em PROD (API + WEB)
+- Endpoint `/details?schema=v1` retorna `500 Internal Server Error`
+- Modal "Ver detalhes" quebrado em PROD
+- Overview funcionando normalmente
+
+**Hipótese de causa raiz:**
+- Migration SQL cria coluna como `schema_version` (snake_case)
+- Schema Prisma usa `schemaVersion` (camelCase) sem `@map("schema_version")`
+- Mismatch entre nome da coluna no DB e nome no Prisma Client causa erro 500
+- Migration pode não ter sido aplicada em PROD ainda
+
+**Evidências observadas:**
+- Frontend chama `GET /api/v1/listings/{listingId}/actions/{actionId}/details?schema=v1`
+- Response: `500 Internal Server Error`
+- Logs provavelmente mostram erro relacionado a `schema_version` ou `schemaVersion`
+
+**Hotfix aplicado:**
+- ✅ Adicionado `@map("schema_version")` no campo `schemaVersion` do model `ListingActionDetail`
+- ✅ Mapeados índices unique e index para nomes corretos do DB
+- ✅ `prisma generate` executado para regenerar cliente
+- ✅ Runbook criado: `apps/api/docs/RUNBOOK_MIGRATION_ACTION_DETAILS_V2.md`
+
+**Próximos passos:**
+- [ ] Aplicar migration em PROD via CloudShell (seguir runbook)
+- [ ] Validar endpoint `/details?schema=v1` retorna 200
+- [ ] Validar endpoint `/details?schema=v2` retorna 200/202
+- [ ] Confirmar que V1 não quebrou (rollout paralelo preservado)
+
+---
+
 ## DIA X — ActionDetailsV2 + Rollout Paralelo
 
 **Data:** 2026-03-03  
-**Status:** ✅ Implementação concluída, ⏳ Validação em produção pendente
+**Status:** ✅ Implementação concluída, ⚠️ Hotfix necessário para PROD
 
 ---
 

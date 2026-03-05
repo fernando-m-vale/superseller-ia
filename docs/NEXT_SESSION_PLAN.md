@@ -1,13 +1,61 @@
 # 🚀 NOVO ROADMAP — DIA 06 a DIA 10
 
-## Próxima Sessão — Ativação e Validação V2
+## Próxima Sessão — Hotfix PROD + Validação V2
 
-**Status atual:** ActionDetailsV2 implementado e corrigido (builds passando)  
-**Próximo passo:** Ativar flags em produção e validar qualidade dos artifacts
+**Status atual:** 
+- ✅ ActionDetailsV2 implementado e corrigido (builds passando)
+- ✅ Flags ativadas em PROD (API + WEB)
+- ⚠️ **Hotfix necessário:** Migration não aplicada + schema mismatch causando 500
+
+**Próximo passo:** Aplicar migration em PROD e validar endpoints
 
 ---
 
-### Etapa 1 — Ativar flags em produção
+### Etapa 0 — Aplicar Migration em PROD (URGENTE)
+
+**Objetivo:** Destravar endpoint `/details` que está retornando 500
+
+**Checklist PASS/FAIL:**
+
+#### PASS ✅
+- [ ] Migration `20260303130000_add_schema_version_to_action_details` aplicada sem erros
+- [ ] Coluna `schema_version` existe na tabela `listing_action_details`
+- [ ] Índices criados corretamente (`listing_action_details_actionId_schemaVersion_key`, `listing_action_details_actionId_schemaVersion_idx`)
+- [ ] Endpoint `/details?schema=v1` retorna `200 OK` (não mais 500)
+- [ ] Endpoint `/details?schema=v2` retorna `200 OK` ou `202 Accepted`
+- [ ] Logs do App Runner não mostram erros relacionados a `schema_version`
+
+#### FAIL ❌
+- [ ] Migration falha ao aplicar (erro SQL)
+- [ ] Coluna `schema_version` não existe após migration
+- [ ] Endpoint `/details?schema=v1` ainda retorna `500 Internal Server Error`
+- [ ] Endpoint `/details?schema=v2` retorna `500 Internal Server Error`
+- [ ] Logs mostram erros relacionados a `schema_version` ou `schemaVersion`
+
+**Runbook:** `apps/api/docs/RUNBOOK_MIGRATION_ACTION_DETAILS_V2.md`
+
+**Comandos principais:**
+```bash
+# 1. Obter DATABASE_URL do Secrets Manager
+export DATABASE_URL=$(aws secretsmanager get-secret-value \
+  --secret-id prod/DATABASE_URL \
+  --query SecretString \
+  --output text)
+
+# 2. Aplicar migration
+cd apps/api
+npx prisma migrate deploy
+
+# 3. Validar endpoints
+curl -X GET "https://api.superselleria.com.br/api/v1/listings/{listingId}/actions/{actionId}/details?schema=v1" \
+  -H "Authorization: Bearer {token}"
+```
+
+**Critério de sucesso:** Endpoint `/details?schema=v1` retorna `200 OK` (não mais 500)
+
+---
+
+### Etapa 1 — Validar flags em produção (após hotfix)
 
 **Objetivo:** Habilitar V2 gradualmente para validação
 
