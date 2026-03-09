@@ -33,7 +33,7 @@ import { generateHacks } from '../services/HackEngine';
 import { getHackHistory } from '../services/ListingHacksService';
 import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 import { randomUUID } from 'crypto';
-import { buildDeterministicMvpActions, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../services/AnalysisResponseBuilders';
+import { buildDeterministicMvpActions, buildExecutionRoadmap, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../services/AnalysisResponseBuilders';
 import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
 
 const prisma = new PrismaClient();
@@ -1613,6 +1613,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               conversionRate: result.score.metrics_30d.conversionRate,
             },
           });
+          responseData.executionRoadmap = buildExecutionRoadmap({
+            bottleneckDiagnosis: responseData.funnelDiagnosis,
+            growthHacks: responseData.growthHacks || [],
+          });
           responseData.verdictText = buildVerdictText({
             rawVerdict: analysisV21?.verdict || responseData.critique,
             metrics30d: {
@@ -2282,6 +2286,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             orders: scoreResult.metrics_30d.orders,
             conversionRate: scoreResult.metrics_30d.conversionRate,
           },
+        });
+        cacheResponseData.executionRoadmap = buildExecutionRoadmap({
+          bottleneckDiagnosis: cacheResponseData.funnelDiagnosis,
+          growthHacks: cacheResponseData.growthHacks || [],
         });
         cacheResponseData.verdictText = buildVerdictText({
           rawVerdict: (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
@@ -3059,6 +3067,10 @@ if (enableAIPing) {
             orders: scoreResult.metrics_30d.orders,
             conversionRate: scoreResult.metrics_30d.conversionRate,
           },
+        });
+        responseData.executionRoadmap = buildExecutionRoadmap({
+          bottleneckDiagnosis: responseData.funnelDiagnosis,
+          growthHacks: responseData.growthHacks || [],
         });
         responseData.verdictText = buildVerdictText({
           rawVerdict: responseData.analysisV21?.verdict || responseData.critique,

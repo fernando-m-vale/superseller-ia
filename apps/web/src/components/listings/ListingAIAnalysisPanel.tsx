@@ -93,6 +93,17 @@ interface ListingAIAnalysisPanelProps {
   critique?: string
   // DIA 10: verdictText completo gerado pelo backend (fonte única de verdade)
   verdictText?: string
+  funnelDiagnosis?: {
+    primaryBottleneck: 'SEARCH' | 'CLICK' | 'CONVERSION'
+    explanation: string
+    recommendedFocus: string
+  }
+  executionRoadmap?: Array<{
+    stepNumber: number
+    actionTitle: string
+    reason: string
+    expectedImpact: string
+  }>
 }
 
 export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
@@ -307,6 +318,43 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* B) BLOCO OPORTUNIDADE */}
+      {props.funnelDiagnosis && (
+        <Card className="border border-primary/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Diagnóstico de Funil</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p><strong>Primary Bottleneck:</strong> {props.funnelDiagnosis.primaryBottleneck}</p>
+            <p>{props.funnelDiagnosis.explanation}</p>
+            <p><strong>Recommended focus:</strong> {props.funnelDiagnosis.recommendedFocus}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {props.executionRoadmap && props.executionRoadmap.length > 0 && (
+        <Card className="border border-primary/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Execution Roadmap</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {props.executionRoadmap.map((step) => (
+              <div key={step.stepNumber} className="rounded-md border p-3 space-y-1">
+                <p className="text-sm font-semibold">
+                  Step {step.stepNumber} — {step.actionTitle}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  <strong>Reason:</strong> {step.reason}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  <strong>Expected impact:</strong> {step.expectedImpact}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* B) BLOCO OPORTUNIDADE */}
       <OpportunityBlock

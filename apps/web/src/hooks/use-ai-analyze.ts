@@ -171,6 +171,12 @@ interface AIAnalysisApiResponse {
     explanation: string
     recommendedFocus: string
   }
+  executionRoadmap?: Array<{
+    stepNumber: number
+    actionTitle: string
+    reason: string
+    expectedImpact: string
+  }>
 }
 
 // Interface adaptada para o frontend
@@ -336,6 +342,12 @@ export interface AIAnalysisResponse {
     explanation: string
     recommendedFocus: string
   }
+  executionRoadmap?: Array<{
+    stepNumber: number
+    actionTitle: string
+    reason: string
+    expectedImpact: string
+  }>
 }
 
 /**
@@ -395,6 +407,7 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     // DIA 10: verdictText completo gerado pelo backend
     verdictText: apiResponse.verdictText,
     funnelDiagnosis: apiResponse.funnelDiagnosis,
+    executionRoadmap: apiResponse.executionRoadmap,
   }
 }
 

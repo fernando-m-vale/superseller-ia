@@ -82,6 +82,13 @@ export interface FunnelBottleneckDiagnosis {
   recommendedFocus: string;
 }
 
+export interface ExecutionRoadmapStep {
+  stepNumber: number;
+  actionTitle: string;
+  reason: string;
+  expectedImpact: string;
+}
+
 function normalizeMlbId(listingIdExt?: string | null): string | null {
   if (!listingIdExt) return null;
   const cleaned = listingIdExt.trim().replace(/-/g, '');
@@ -267,6 +274,76 @@ function enrichActionWithOpportunityImpact(
     impactEstimate,
     impactReason,
   };
+}
+
+function estimateActionEffort(action: MvpActionItem): number {
+  const haystack = `${action.title} ${action.summary} ${action.description}`.toLowerCase();
+  if (haystack.includes('título') || haystack.includes('titulo') || haystack.includes('keyword') || haystack.includes('faq')) {
+    return 1;
+  }
+  if (haystack.includes('imagem') || haystack.includes('galeria') || haystack.includes('clip') || haystack.includes('vídeo') || haystack.includes('video')) {
+    return 2;
+  }
+  if (haystack.includes('descrição') || haystack.includes('descricao') || haystack.includes('preço') || haystack.includes('preco')) {
+    return 3;
+  }
+  return 2;
+}
+
+function parseImpactUpperBound(impactEstimate?: string | null): number {
+  if (!impactEstimate) return 0;
+  const matches = impactEstimate.match(/(\d+(?:\.\d+)?)/g);
+  if (!matches || matches.length === 0) return 0;
+  const numeric = matches.map((value) => Number(value)).filter((value) => Number.isFinite(value));
+  if (numeric.length === 0) return 0;
+  return Math.max(...numeric);
+}
+
+export function buildExecutionRoadmap(input: {
+  bottleneckDiagnosis?: FunnelBottleneckDiagnosis | null;
+  growthHacks?: MvpActionItem[] | null;
+}): ExecutionRoadmapStep[] {
+  const actions = (input.growthHacks || []).slice();
+  if (actions.length === 0) return [];
+
+  const primaryBottleneck = input.bottleneckDiagnosis?.primaryBottleneck ?? 'CONVERSION';
+
+  const ranked = actions
+    .map((action) => {
+      const stage = inferFunnelStage(action);
+      return {
+        action,
+        stage,
+        solvesPrimaryBottleneck: stage === primaryBottleneck,
+        effort: estimateActionEffort(action),
+        impactUpperBound: parseImpactUpperBound(action.impactEstimate || action.expectedImpact),
+      };
+    })
+    .sort((a, b) => {
+      if (a.solvesPrimaryBottleneck !== b.solvesPrimaryBottleneck) {
+        return a.solvesPrimaryBottleneck ? -1 : 1;
+      }
+      if (b.impactUpperBound !== a.impactUpperBound) {
+        return b.impactUpperBound - a.impactUpperBound;
+      }
+      if (a.effort !== b.effort) {
+        return a.effort - b.effort;
+      }
+      const priorityOrder: Record<'high' | 'medium' | 'low', number> = { high: 3, medium: 2, low: 1 };
+      return priorityOrder[b.action.priority] - priorityOrder[a.action.priority];
+    })
+    .slice(0, 3);
+
+  return ranked.map((entry, index) => ({
+    stepNumber: index + 1,
+    actionTitle: entry.action.title,
+    reason: entry.action.impactReason
+      ? entry.action.impactReason
+      : entry.solvesPrimaryBottleneck
+      ? `Esta ação ataca diretamente o gargalo primário de ${primaryBottleneck}.`
+      : `Esta ação reforça a etapa ${entry.stage} para melhorar performance do funil.`,
+    expectedImpact: entry.action.impactEstimate || entry.action.expectedImpact || 'Impacto estimado indisponível.',
+  }));
 }
 
 function makeManualValidationLowImpact(action: MvpActionItem): MvpActionItem {

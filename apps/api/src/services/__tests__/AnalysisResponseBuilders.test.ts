@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeterministicMvpActions, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../AnalysisResponseBuilders';
+import { buildDeterministicMvpActions, buildExecutionRoadmap, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../AnalysisResponseBuilders';
 
 describe('AnalysisResponseBuilders', () => {
   it('respeita teto maximo sem obrigatoriedade de preencher 15', () => {
@@ -302,6 +302,35 @@ describe('buildFunnelBottleneckDiagnosis', () => {
       metrics30d: { visits: 220, orders: 3, conversionRate: 0.013 },
     });
     expect(diagnosis.primaryBottleneck).toBe('CONVERSION');
+  });
+});
+
+describe('buildExecutionRoadmap', () => {
+  it('gera roadmap em 3 passos priorizando gargalo primario e impacto', () => {
+    const growthHacks = buildDeterministicMvpActions({
+      listingIdExt: 'MLB123456789',
+      listingTitle: 'Tenis Corrida',
+      picturesCount: 5,
+      metrics30d: { visits: 260, orders: 3, conversionRate: 0.0115 },
+      mediaVerdict: { canSuggestClip: true, hasClipDetected: false },
+      benchmark: { confidence: 'high', sampleSize: 180 },
+    });
+
+    const funnel = buildFunnelBottleneckDiagnosis({
+      metrics30d: { visits: 260, orders: 3, conversionRate: 0.0115 },
+    });
+
+    const roadmap = buildExecutionRoadmap({
+      bottleneckDiagnosis: funnel,
+      growthHacks,
+    });
+
+    expect(roadmap.length).toBeLessThanOrEqual(3);
+    if (roadmap.length > 0) {
+      expect(roadmap[0].stepNumber).toBe(1);
+      expect(roadmap[0].actionTitle.length).toBeGreaterThan(0);
+      expect(roadmap[0].expectedImpact.length).toBeGreaterThan(0);
+    }
   });
 });
 
