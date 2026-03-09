@@ -33,6 +33,7 @@ import { generateHacks } from '../services/HackEngine';
 import { getHackHistory } from '../services/ListingHacksService';
 import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 import { randomUUID } from 'crypto';
+import { buildDeterministicMvpActions, buildVerdictText } from '../services/AnalysisResponseBuilders';
 
 const prisma = new PrismaClient();
 
@@ -60,148 +61,6 @@ const AnalyzeQuerySchema = z.object({
   forceRefresh: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
   debugPrices: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
-
-type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance';
-
-interface MvpActionItem {
-  id: string;
-  actionKey: string;
-  title: string;
-  summary: string;
-  description: string;
-  expectedImpact: string;
-  impact: 'high' | 'medium' | 'low';
-  priority: 'high' | 'medium' | 'low';
-  suggestedActionUrl?: string | null;
-  pillar: ActionPillar;
-}
-
-function normalizeMlbId(listingIdExt?: string | null): string | null {
-  if (!listingIdExt) return null;
-  const cleaned = listingIdExt.trim().replace(/-/g, '');
-  const digits = cleaned.match(/\d{6,}/g) || cleaned.match(/\d+/g);
-  if (!digits || digits.length === 0) return null;
-  return digits.reduce((max, current) => (current.length > max.length ? current : max));
-}
-
-function buildMercadoLivreEditUrl(listingIdExt?: string | null): string | null {
-  const normalized = normalizeMlbId(listingIdExt);
-  if (!normalized) return null;
-  return `https://www.mercadolivre.com.br/anuncios/MLB${normalized}/modificar/bomni`;
-}
-
-function normalizePriority(value?: string): 'high' | 'medium' | 'low' {
-  const normalized = (value || '').toLowerCase();
-  if (normalized === 'high' || normalized === 'critical' || normalized === 'alta') return 'high';
-  if (normalized === 'low' || normalized === 'baixa') return 'low';
-  return 'medium';
-}
-
-function buildDeterministicMvpActions(input: {
-  listingIdExt?: string | null;
-  hackActions?: Array<{ id?: string; title?: string; summary?: string; description?: string; impact?: string; estimatedImpact?: string; priority?: string; suggestedActionUrl?: string | null }>;
-  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
-  hasPromotion?: boolean | null;
-  discountPercent?: number | null;
-  maxItems?: number;
-}): MvpActionItem[] {
-  const maxItems = Math.min(15, Math.max(8, input.maxItems ?? 15));
-  const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
-  const actions: MvpActionItem[] = [];
-  const add = (action: MvpActionItem) => {
-    if (actions.length >= maxItems) return;
-    if (actions.some(existing => existing.actionKey === action.actionKey)) return;
-    actions.push(action);
-  };
-
-  const visits = input.metrics30d?.visits ?? 0;
-  const orders = input.metrics30d?.orders ?? 0;
-  const cr = input.metrics30d?.conversionRate ?? null;
-
-  // Aproveitar hacks existentes primeiro (quando vierem do HackEngine).
-  for (const rawHack of input.hackActions || []) {
-    const title = String(rawHack.title || '').trim();
-    const description = String(rawHack.summary || rawHack.description || '').trim();
-    if (!title || !description) continue;
-
-    const id = String(rawHack.id || `hack_${actions.length + 1}`);
-    const lowTitle = title.toLowerCase();
-    const pillar: ActionPillar =
-      lowTitle.includes('categoria') || lowTitle.includes('preço') || lowTitle.includes('frete')
-        ? 'competitividade'
-        : lowTitle.includes('varia')
-          ? 'cadastro'
-          : 'seo';
-
-    add({
-      id,
-      actionKey: id,
-      title,
-      summary: description,
-      description,
-      expectedImpact: String(rawHack.impact || rawHack.estimatedImpact || 'Ganho incremental de conversão').trim(),
-      impact: normalizePriority(String(rawHack.impact || 'medium')),
-      priority: normalizePriority(String(rawHack.priority || rawHack.impact || 'medium')),
-      suggestedActionUrl: rawHack.suggestedActionUrl ?? editUrl,
-      pillar,
-    });
-  }
-
-  // Base determinística para garantir cobertura de pilares (>= 2 cada pilar).
-  const templates: MvpActionItem[] = [
-    { id: 'seo_title_refresh', actionKey: 'seo_title_refresh', title: 'Reescrever título com palavras-chave principais', summary: 'Use intenção de busca + atributos técnicos nas primeiras 60 letras.', description: 'Reescreva o título priorizando produto, marca, modelo e principal diferencial para elevar CTR em busca orgânica.', expectedImpact: 'Melhora de CTR e tráfego qualificado.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'seo' },
-    { id: 'seo_description_blocks', actionKey: 'seo_description_blocks', title: 'Estruturar descrição em blocos escaneáveis', summary: 'Organize descrição com benefícios, especificações e prova social.', description: 'Padronize a descrição em blocos curtos com bullet points para reduzir dúvida e melhorar qualificação do clique.', expectedImpact: 'Aumento de conversão por clareza da oferta.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'seo' },
-    { id: 'midia_gallery_upgrade', actionKey: 'midia_gallery_upgrade', title: 'Completar galeria com 8+ imagens contextualizadas', summary: 'Cobrir uso real, close técnico e diferenciais visuais.', description: 'Planeje fotos que mostrem aplicação prática, detalhes e comparação para elevar confiança na decisão.', expectedImpact: 'Maior engajamento e menor rejeição da página.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'midia' },
-    { id: 'midia_video_clip', actionKey: 'midia_video_clip', title: 'Publicar clip curto de demonstração', summary: 'Vídeo de 15–30s com prova de uso e benefício principal.', description: 'Inclua vídeo objetivo mostrando resultado final e diferencial em poucos segundos para destravar indecisão.', expectedImpact: 'Ganho de conversão em sessões com alta intenção.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'midia' },
-    { id: 'cadastro_attributes', actionKey: 'cadastro_attributes', title: 'Preencher atributos técnicos ausentes', summary: 'Complete ficha técnica com compatibilidade, medidas e voltagem/material.', description: 'Revise atributos obrigatórios e recomendados para aumentar relevância e filtros encontrados.', expectedImpact: 'Mais impressões qualificadas e menos perguntas pré-compra.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'cadastro' },
-    { id: 'cadastro_variations', actionKey: 'cadastro_variations', title: 'Adicionar variações de alto giro', summary: 'Mapear tamanhos/cores/modelos mais pedidos.', description: 'Crie variações com nomenclatura clara e estoque priorizado para capturar mais buscas na mesma página.', expectedImpact: 'Aumento de cobertura de demanda e ticket por item.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'cadastro' },
-    { id: 'compet_price_positioning', actionKey: 'compet_price_positioning', title: 'Recalibrar preço versus concorrência direta', summary: 'Ajustar preço final e percepção de valor frente ao benchmark.', description: 'Avalie posicionamento de preço considerando reputação, prazo e diferenciais para recuperar competitividade sem sacrificar margem.', expectedImpact: 'Recuperação de share de cliques e pedidos.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'competitividade' },
-    { id: 'compet_offer_packaging', actionKey: 'compet_offer_packaging', title: 'Refinar oferta (frete, benefício e condição comercial)', summary: 'Melhore proposta percebida com benefícios comparáveis ao mercado.', description: 'Combine incentivo comercial e clareza de proposta para reduzir fricção em compradores sensíveis a preço.', expectedImpact: 'Melhora de conversão em sessões comparativas.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'competitividade' },
-    { id: 'compet_promo_validation', actionKey: 'compet_promo_validation', title: 'Validar profundidade da promoção atual', summary: 'Promoção sem ganho de pedidos indica necessidade de reposicionamento.', description: `Com ${visits} visitas e ${orders} pedidos em 30 dias${cr !== null ? ` (CR ${cr.toFixed(2)}%)` : ''}, revise âncora de preço, parcelamento e mensagem de oferta.`, expectedImpact: 'Redução de desconto improdutivo e ganho de margem/conversão.', impact: input.hasPromotion ? 'high' : 'low', priority: input.hasPromotion ? 'high' : 'low', suggestedActionUrl: editUrl, pillar: 'competitividade' },
-    { id: 'seo_cta_alignment', actionKey: 'seo_cta_alignment', title: 'Alinhar headline e CTA com intenção do comprador', summary: 'Ajustar promessa principal para o estágio de decisão.', description: 'Teste variações de headline e CTA enfatizando benefício tangível para aumentar CTR qualificado e reduzir bounce.', expectedImpact: 'Evolução de tráfego qualificado para compra.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'seo' },
-    // DIA 10: 5 templates adicionais para cobertura de 15 ações com diversidade de pilares
-    { id: 'performance_conversion_funnel', actionKey: 'performance_conversion_funnel', title: 'Otimizar funil de conversão do anúncio', summary: 'Mapear pontos de abandono e reduzir fricção na jornada de compra.', description: 'Analise onde os visitantes abandonam (título, galeria, preço, perguntas) e aplique melhorias pontuais para elevar a taxa de conversão.', expectedImpact: 'Aumento direto de conversão sem mais tráfego.', impact: 'high', priority: 'high', suggestedActionUrl: editUrl, pillar: 'performance' },
-    { id: 'performance_questions_faq', actionKey: 'performance_questions_faq', title: 'Responder perguntas frequentes na descrição', summary: 'Antecipar dúvidas reduz atrito e acelera decisão de compra.', description: 'Identifique as 5 perguntas mais feitas e incorpore as respostas na descrição para reduzir barreira de compra.', expectedImpact: 'Menor abandono e mais confiança na decisão.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'performance' },
-    { id: 'midia_infographic', actionKey: 'midia_infographic', title: 'Criar imagem infográfica com benefícios-chave', summary: 'Imagem resumo com diferenciais visuais e dados comparativos.', description: 'Adicione uma imagem tipo infográfico na galeria destacando benefícios, especificações e comparativos para acelerar decisão.', expectedImpact: 'Maior engajamento e diferenciação visual.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'midia' },
-    { id: 'cadastro_shipping_optimization', actionKey: 'cadastro_shipping_optimization', title: 'Revisar dimensões e peso para otimizar frete', summary: 'Dados de embalagem corretos podem reduzir custo de frete exibido.', description: 'Verifique se peso e dimensões cadastrados refletem a embalagem real para evitar frete inflado que afasta compradores.', expectedImpact: 'Redução de frete percebido e mais competitividade.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'cadastro' },
-    { id: 'compet_reputation_leverage', actionKey: 'compet_reputation_leverage', title: 'Destacar reputação e garantias na oferta', summary: 'Use reputação como argumento de diferenciação frente a concorrentes.', description: 'Se sua reputação é superior à média da categoria, destaque isso na descrição e nas imagens para justificar preço e gerar confiança.', expectedImpact: 'Diferenciação e justificativa de preço premium.', impact: 'medium', priority: 'medium', suggestedActionUrl: editUrl, pillar: 'competitividade' },
-  ];
-
-  for (const template of templates) add(template);
-
-  return actions.slice(0, 15);
-}
-
-function buildVerdictText(input: {
-  rawVerdict?: string | null;
-  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
-  hasPromotion?: boolean | null;
-  discountPercent?: number | null;
-  topActions?: Array<{ title?: string; description?: string }>;
-  listingTitle?: string | null;
-}): string {
-  const raw = (input.rawVerdict || '').trim();
-  if (raw.length >= 120) {
-    return raw;
-  }
-
-  const visits = input.metrics30d?.visits ?? 0;
-  const orders = input.metrics30d?.orders ?? 0;
-  const cr = input.metrics30d?.conversionRate;
-  const top = (input.topActions || []).slice(0, 3).map((a) => a.title).filter(Boolean) as string[];
-  const listingRef = input.listingTitle?.trim() ? `para "${input.listingTitle.trim()}" ` : '';
-
-  const p1 = `Diagnóstico ${listingRef}nos últimos 30 dias: ${visits} visitas e ${orders} pedidos${typeof cr === 'number' ? `, com conversão de ${(cr * 100).toFixed(2)}%` : ''}. O volume indica interesse real, mas ainda há margem para converter melhor o tráfego já conquistado.`;
-
-  const p2 = input.hasPromotion
-    ? `Há promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% de desconto)` : ''}, então o maior ganho incremental tende a vir de percepção de valor e redução de fricção na página: título, imagens, descrição, prova social e diferenciais claros.`
-    : 'Sem promoção ativa, o crescimento depende mais de fundamentos: cadastro completo, mídia forte, SEO orientado à busca e proposta percebida superior para justificar o clique e a compra.';
-
-  const p3 = `Priorize no próximo ciclo: ${top.length > 0 ? top.join(', ') : 'SEO, mídia, cadastro e competitividade'}. A meta prática é elevar CTR qualificado e transformar mais visitas em pedidos sem depender apenas de preço.`;
-
-  return [p1, p2, p3].join('\n\n');
-}
-
 
 async function persistListingActionsBatch(
   listingId: string,
@@ -1654,6 +1513,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // Adicionar hacks ao response (MVP Dia 10: garantir 8-10 ações úteis)
             responseData.growthHacks = buildDeterministicMvpActions({
               listingIdExt: listing.listing_id_ext,
+              listingTitle: listing.title,
+              picturesCount: listing.pictures_count,
               hackActions: hackEngineResult.hacks,
               metrics30d: {
                 visits: result.score.metrics_30d.visits,
@@ -1662,6 +1523,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               },
               hasPromotion: listing.has_promotion,
               discountPercent: listing.discount_percent,
+              mediaVerdict: {
+                canSuggestClip: mediaVerdict?.canSuggestClip,
+              },
+              benchmark: {
+                confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
+                sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+                baselineConversionRate: benchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+              },
             });
             responseData.growthHacksMeta = {
               ...hackEngineResult.meta,
@@ -1686,6 +1555,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // Fallback determinístico: manter kanban útil mesmo sem HackEngine
             responseData.growthHacks = buildDeterministicMvpActions({
               listingIdExt: listing.listing_id_ext,
+              listingTitle: listing.title,
+              picturesCount: listing.pictures_count,
               metrics30d: {
                 visits: result.score.metrics_30d.visits,
                 orders: result.score.metrics_30d.orders,
@@ -1693,6 +1564,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               },
               hasPromotion: listing.has_promotion,
               discountPercent: listing.discount_percent,
+              mediaVerdict: {
+                canSuggestClip: mediaVerdict?.canSuggestClip,
+              },
+              benchmark: {
+                confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
+                sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+                baselineConversionRate: benchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+              },
             });
             responseData.growthHacksMeta = {
               rulesEvaluated: 0,
@@ -2267,6 +2146,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Adicionar hacks ao cache response (MVP Dia 10: garantir 8-10 ações)
           cacheResponseData.growthHacks = buildDeterministicMvpActions({
             listingIdExt: listing.listing_id_ext,
+            listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
             hackActions: cacheHackEngineResult.hacks,
             metrics30d: {
               visits: scoreResult.metrics_30d.visits,
@@ -2275,6 +2156,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
             hasPromotion: listing.has_promotion,
             discountPercent: listing.discount_percent,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+            },
+            benchmark: {
+              confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
           });
           cacheResponseData.growthHacksMeta = {
             ...cacheHackEngineResult.meta,
@@ -2299,6 +2188,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Fallback determinístico para manter Kanban utilizável
           cacheResponseData.growthHacks = buildDeterministicMvpActions({
             listingIdExt: listing.listing_id_ext,
+            listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
             metrics30d: {
               visits: scoreResult.metrics_30d.visits,
               orders: scoreResult.metrics_30d.orders,
@@ -2306,6 +2197,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
             hasPromotion: listing.has_promotion,
             discountPercent: listing.discount_percent,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+            },
+            benchmark: {
+              confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
           });
           cacheResponseData.growthHacksMeta = {
             rulesEvaluated: 0,
@@ -2950,6 +2849,8 @@ if (enableAIPing) {
 
           responseData.growthHacks = buildDeterministicMvpActions({
             listingIdExt: listing.listing_id_ext,
+            listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
             hackActions: cacheHackEngineResult.hacks,
             metrics30d: {
               visits: scoreResult.metrics_30d.visits,
@@ -2958,6 +2859,14 @@ if (enableAIPing) {
             },
             hasPromotion: listing.has_promotion,
             discountPercent: listing.discount_percent,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+            },
+            benchmark: {
+              confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
           });
           responseData.growthHacksMeta = {
             ...cacheHackEngineResult.meta,
@@ -2972,6 +2881,8 @@ if (enableAIPing) {
           
           responseData.growthHacks = buildDeterministicMvpActions({
             listingIdExt: listing.listing_id_ext,
+            listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
             metrics30d: {
               visits: scoreResult.metrics_30d.visits,
               orders: scoreResult.metrics_30d.orders,
@@ -2979,6 +2890,14 @@ if (enableAIPing) {
             },
             hasPromotion: listing.has_promotion,
             discountPercent: listing.discount_percent,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+            },
+            benchmark: {
+              confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
           });
           responseData.growthHacksMeta = {
             rulesEvaluated: 0,
@@ -3047,3 +2966,4 @@ if (enableAIPing) {
 
   done();
 };
+

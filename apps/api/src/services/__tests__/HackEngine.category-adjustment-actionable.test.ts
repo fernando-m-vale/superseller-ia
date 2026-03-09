@@ -26,13 +26,13 @@ describe('HackEngine - ml_category_adjustment acionável (HOTFIX 09.5)', () => {
       metrics30d: {
         visits: 500,
         orders: 2,
-        conversionRate: 0.5, // 0.5%
+        conversionRate: 0.005, // 0.5%
       },
       benchmark: {
         medianPrice: 95,
         p25Price: 80,
         p75Price: 120,
-        baselineConversionRate: 1.0, // 1.0%
+        baselineConversionRate: 0.01, // 1.0%
         baselineConversionConfidence: 'medium',
         baselineSampleSize: 500,
       },

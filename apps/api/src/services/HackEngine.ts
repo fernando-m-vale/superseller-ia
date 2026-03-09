@@ -6,6 +6,7 @@
  */
 
 import { ListingSignals } from './SignalsBuilder';
+import { conversionRateToPercentValue, formatConversionRatePercent } from '../utils/percentage-format';
 
 export type HackId = 
   | 'ml_full_shipping'
@@ -137,6 +138,7 @@ function isHackInCooldown(history: HackEngineInput['history'], hackId: HackId, n
  * -10 price < 30
  */
 function evaluateMlFullShipping(signals: ListingSignals): { score: number; shouldOmit: boolean; blocking: boolean } {
+  const conversionRatePct = conversionRateToPercentValue(signals.metrics30d?.conversionRate ?? null);
   // Gate: shippingMode === 'full' → omit
   if (signals.shippingMode === 'full') {
     return { score: 0, shouldOmit: true, blocking: false };
@@ -166,7 +168,7 @@ function evaluateMlFullShipping(signals: ListingSignals): { score: number; shoul
   
   // Pontuação positiva
   if ((signals.metrics30d?.visits ?? 0) >= 300) score += 25;
-  if ((signals.metrics30d?.conversionRate ?? 100) < 2) score += 20;
+  if ((conversionRatePct ?? 100) < 2) score += 20;
   if (signals.shippingMode === 'me2' || signals.shippingMode === 'unknown') score += 15;
   if (signals.isFreeShipping === false) score += 10;
   if ((signals.availableQuantity ?? 0) >= 5 || signals.availableQuantity === null) score += 10;
@@ -211,6 +213,7 @@ function evaluateMlFullShipping(signals: ListingSignals): { score: number; shoul
  * -10 isCatalog
  */
 function evaluateMlBundleKit(signals: ListingSignals): { score: number; shouldOmit: boolean } {
+  const conversionRatePct = conversionRateToPercentValue(signals.metrics30d?.conversionRate ?? null);
   // Gate: isKitHeuristic === true → omit
   if (signals.isKitHeuristic === true) {
     return { score: 0, shouldOmit: true };
@@ -220,7 +223,7 @@ function evaluateMlBundleKit(signals: ListingSignals): { score: number; shouldOm
   
   // Pontuação positiva
   if ((signals.metrics30d?.visits ?? 0) >= 200) score += 25;
-  if ((signals.metrics30d?.conversionRate ?? 100) < 1.5) score += 20;
+  if ((conversionRatePct ?? 100) < 1.5) score += 20;
   if (signals.price <= 120) score += 15;
   if ((signals.availableQuantity ?? 0) >= 10) score += 10;
   if ((signals.variationsCount ?? 0) >= 2) score += 10;
@@ -228,7 +231,7 @@ function evaluateMlBundleKit(signals: ListingSignals): { score: number; shouldOm
   
   // Pontuação negativa
   if ((signals.availableQuantity ?? 0) <= 2) score -= 20;
-  if ((signals.metrics30d?.orders ?? 0) >= 15 && (signals.metrics30d?.conversionRate ?? 0) >= 3) score -= 15;
+  if ((signals.metrics30d?.orders ?? 0) >= 15 && (conversionRatePct ?? 0) >= 3) score -= 15;
   if (signals.isCatalog === true) score -= 10;
   
   // Normalizar para 0-100
@@ -255,6 +258,7 @@ function evaluateMlBundleKit(signals: ListingSignals): { score: number; shouldOm
  * -15 visits < 80
  */
 function evaluateMlSmartVariations(signals: ListingSignals): { score: number; shouldOmit: boolean } {
+  const conversionRatePct = conversionRateToPercentValue(signals.metrics30d?.conversionRate ?? null);
   // HOTFIX 09.3: Gate explícito - omitir se variationsCount >= 5
   if ((signals.variationsCount ?? 0) >= 5) {
     return { score: 0, shouldOmit: true };
@@ -264,7 +268,7 @@ function evaluateMlSmartVariations(signals: ListingSignals): { score: number; sh
   
   // Pontuação positiva
   if ((signals.metrics30d?.visits ?? 0) >= 200) score += 25;
-  if ((signals.metrics30d?.conversionRate ?? 100) < 2) score += 20;
+  if ((conversionRatePct ?? 100) < 2) score += 20;
   if (signals.hasVariations === false) score += 15;
   if ((signals.picturesCount ?? 0) >= 6) score += 10;
   if (signals.categoryId) score += 10;
@@ -297,6 +301,7 @@ function evaluateMlSmartVariations(signals: ListingSignals): { score: number; sh
  * -15 visits < 100
  */
 function evaluateMlCategoryAdjustment(signals: ListingSignals): { score: number; blocking: boolean } {
+  const conversionRatePct = conversionRateToPercentValue(signals.metrics30d?.conversionRate ?? null);
   let score = 0;
   let blocking = false;
   
@@ -308,7 +313,7 @@ function evaluateMlCategoryAdjustment(signals: ListingSignals): { score: number;
   
   // Pontuação positiva
   if ((signals.metrics30d?.visits ?? 0) >= 300 && (signals.metrics30d?.orders ?? 0) === 0) score += 30;
-  if ((signals.metrics30d?.conversionRate ?? 100) < 1 && (signals.metrics30d?.visits ?? 0) >= 200) score += 25;
+  if ((conversionRatePct ?? 100) < 1 && (signals.metrics30d?.visits ?? 0) >= 200) score += 25;
   if (signals.categoryPath && signals.categoryPath.length <= 2) score += 15;
   if (signals.isCatalog === false) score += 10;
   if (
@@ -430,14 +435,13 @@ function evaluateMlPsychologicalPricing(
     }
     return { score: 0, shouldOmit: true, debug };
   }
-  
-  const centsStr = priceStr.slice(-2);
+  const conversionRatePct = conversionRateToPercentValue(signals.metrics30d?.conversionRate ?? null);
   
   let score = 0;
   
   // Pontuação positiva
   if ((signals.metrics30d?.visits ?? 0) >= 300) score += 25;
-  if ((signals.metrics30d?.conversionRate ?? 100) < 2) score += 20;
+  if ((conversionRatePct ?? 100) < 2) score += 20;
   
   // Preço redondo (.00/.50) - usar cents (number) para comparação
   if (cents === 0 || cents === 50) score += 15;
@@ -512,7 +516,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
         evidence: [
           `Modo de envio atual: ${signals.shippingMode}`,
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
-          `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
+          `Taxa de conversão: ${formatConversionRatePercent(signals.metrics30d?.conversionRate) ?? 'N/A'}`,
         ],
         suggestedActionUrl: suggestedEditUrl,
       });
@@ -544,7 +548,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
         confidenceLevel: getConfidenceLevel(result.score),
         evidence: [
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
-          `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
+          `Taxa de conversão: ${formatConversionRatePercent(signals.metrics30d?.conversionRate) ?? 'N/A'}`,
           `Preço atual: R$ ${signals.price.toFixed(2)}`,
         ],
         suggestedActionUrl: suggestedEditUrl,
@@ -576,7 +580,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
         confidenceLevel: getConfidenceLevel(result.score),
         evidence: [
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
-          `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
+          `Taxa de conversão: ${formatConversionRatePercent(signals.metrics30d?.conversionRate) ?? 'N/A'}`,
           `Imagens: ${signals.picturesCount ?? 0}`,
         ],
         suggestedActionUrl: suggestedEditUrl,
@@ -630,8 +634,8 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
           `Categoria atual: ${categoryText}`,
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
           `Pedidos (30d): ${signals.metrics30d?.orders ?? 0}`,
-          ...(listingCR !== null && listingCR !== undefined ? [`Conversão atual: ${listingCR.toFixed(2)}%`] : []),
-          ...(hasBenchmarkCR ? [`Baseline (categoria): ${(benchmarkCR as number).toFixed(2)}%`] : []),
+          ...(listingCR !== null && listingCR !== undefined ? [`Conversão atual: ${formatConversionRatePercent(listingCR)}`] : []),
+          ...(hasBenchmarkCR ? [`Baseline (categoria): ${formatConversionRatePercent(benchmarkCR as number)}`] : []),
         ],
         suggestedActionUrl: suggestedEditUrl,
         // HOTFIX 09.8: Incluir categoryId para botão "Ver categoria"
@@ -669,7 +673,7 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
         evidence: [
           `Preço atual: R$ ${signals.price.toFixed(2)}`,
           `Visitas (30d): ${signals.metrics30d?.visits ?? 0}`,
-          `Taxa de conversão: ${signals.metrics30d?.conversionRate?.toFixed(2) ?? 'N/A'}%`,
+          `Taxa de conversão: ${formatConversionRatePercent(signals.metrics30d?.conversionRate) ?? 'N/A'}`,
         ],
         suggestedActionUrl: suggestedEditUrl,
       });
@@ -693,3 +697,4 @@ export function generateHacks(input: HackEngineInput): HackEngineOutput {
     },
   };
 }
+

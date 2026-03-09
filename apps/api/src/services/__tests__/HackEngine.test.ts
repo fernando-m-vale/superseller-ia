@@ -48,7 +48,7 @@ describe('HackEngine', () => {
           isOutOfStock: false,
           metrics30d: {
             visits: 400,
-            conversionRate: 1.5,
+            conversionRate: 0.015,
           },
         },
         history: [],
@@ -147,7 +147,7 @@ describe('HackEngine', () => {
           currency: 'BRL',
           metrics30d: {
             visits: 400,
-            conversionRate: 1.5,
+            conversionRate: 0.015,
           },
         },
         history: [
@@ -183,7 +183,7 @@ describe('HackEngine', () => {
           currency: 'BRL',
           metrics30d: {
             visits: 250,
-            conversionRate: 1.0,
+            conversionRate: 0.01,
           },
         },
         history: [
@@ -220,7 +220,7 @@ describe('HackEngine', () => {
           availableQuantity: 15,
           metrics30d: {
             visits: 250,
-            conversionRate: 1.0,
+            conversionRate: 0.01,
           },
         },
         history: [
@@ -264,7 +264,7 @@ describe('HackEngine', () => {
           metrics30d: {
             visits: 450,
             orders: 5,
-            conversionRate: 1.11,
+            conversionRate: 0.0111,
           },
         },
         history: [],
@@ -294,7 +294,7 @@ describe('HackEngine', () => {
           currency: 'BRL',
           metrics30d: {
             visits: 50, // Muito baixo
-            conversionRate: 5.0, // Muito alto
+            conversionRate: 0.05, // Muito alto
           },
         },
         history: [],
@@ -308,3 +308,4 @@ describe('HackEngine', () => {
     });
   });
 });
+
