@@ -29,12 +29,24 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function asTitleArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item.trim();
+      const record = asRecord(item);
+      return asString(record?.text) || asString(record?.title) || '';
+    })
+    .filter(Boolean);
+}
+
 function extractFallbackSources(payload?: Record<string, unknown> | null): {
   suggestedTitle: string | null;
   titleAfter: string | null;
   titleBefore: string | null;
   titleProblem: string | null;
   titleRationale: string | null;
+  generatedTitles: string[];
   descriptionCopy: string | null;
   descriptionDiagnostic: string | null;
   generatedLongDescription: string | null;
@@ -67,6 +79,7 @@ function extractFallbackSources(payload?: Record<string, unknown> | null): {
     titleBefore: asString(titleFix?.before),
     titleProblem: asString(titleFix?.problem),
     titleRationale: asString(seoSuggestions?.titleRationale),
+    generatedTitles: asTitleArray(generatedContent?.titles),
     descriptionCopy: asString(descriptionFix?.optimized_copy),
     descriptionDiagnostic: asString(descriptionFix?.diagnostic),
     generatedLongDescription: asString(seoDescription?.long),
@@ -75,10 +88,12 @@ function extractFallbackSources(payload?: Record<string, unknown> | null): {
   };
 }
 
-function ensureThreeTitleSuggestions(primary: string, secondary?: string | null, tertiary?: string | null): string[] {
-  const dedup = [primary, secondary || '', tertiary || '']
+function ensureThreeTitleSuggestions(primary: string, alternatives: string[] = []): string[] {
+  const dedup = [primary, ...alternatives]
     .map((item) => item.trim())
     .filter(Boolean)
+    .map((item) => item.slice(0, 60))
+    .filter((item, index, array) => array.indexOf(item) === index)
     .slice(0, 3);
 
   while (dedup.length < 3) {
@@ -104,6 +119,16 @@ function getDescriptionBlocks(source: string): string[] {
   if (bySentence.length >= 2) return bySentence.slice(0, 4);
   if (bySentence.length === 1) return [bySentence[0], bySentence[0]];
   return [];
+}
+
+function buildCopyReadyDescription(source: string, bullets: string[]): string {
+  const blocks = getDescriptionBlocks(source);
+  const selectedBullets = bullets.slice(0, 6);
+  const lines = [
+    ...blocks,
+    ...(selectedBullets.length > 0 ? ['', ...selectedBullets.map((bullet) => `• ${bullet}`)] : []),
+  ];
+  return lines.filter(Boolean).join('\n\n');
 }
 
 function getKeywordSuggestionsFromTitle(title: string): Array<{ keyword: string; placement: 'title' | 'description' | 'bullets' }> {
@@ -148,28 +173,54 @@ export function applyConcreteFallbackDetails(input: ApplyConcreteFallbackInput):
 
   const actionType = mapActionKeyToActionType(input.actionKey);
   const source = extractFallbackSources(input.analysisPayload);
+  const prioritizedTitle = source.titleAfter || source.suggestedTitle || source.generatedTitles[0] || null;
+  const alternativeTitles = [source.suggestedTitle, ...source.generatedTitles, source.titleAfter]
+    .filter((item): item is string => Boolean(item && item.trim().length > 0))
+    .filter((item, index, array) => array.findIndex((entry) => entry.toLowerCase() === item.toLowerCase()) === index);
+  const prioritizedDescription = source.descriptionCopy || source.generatedLongDescription || null;
+  const titleReason = source.titleProblem || source.titleRationale;
 
   if (input.schemaVersion === 'v1') {
-    const details = { ...(input.details as ActionDetailsV1) };
+    const details = { ...(input.details as ActionDetailsV1) } as ActionDetailsV1 & {
+      copySuggestions?: {
+        titles?: Array<{ variation: 'A' | 'B' | 'C'; text: string }>;
+        description?: string;
+        bullets?: string[];
+      };
+    };
 
     if (actionType === 'SEO_TITLE_REWRITE') {
-      const title = source.suggestedTitle || source.titleAfter;
-      if (title && (!details.titleSuggestions || details.titleSuggestions.length === 0)) {
-        details.titleSuggestions = ensureThreeTitleSuggestions(title, source.titleAfter, source.titleBefore);
-      }
-      if (title) {
-        details.rationale = `${details.rationale} Sugestão concreta: "${title}". ${source.titleProblem || source.titleRationale || ''}`.trim();
+      if (prioritizedTitle) {
+        const variants = ensureThreeTitleSuggestions(prioritizedTitle, alternativeTitles);
+        details.titleSuggestions = variants;
+        details.copySuggestions = {
+          ...(details.copySuggestions || {}),
+          titles: variants.map((text, index) => ({
+            variation: index === 0 ? 'A' : index === 1 ? 'B' : 'C',
+            text,
+          })),
+        };
+        if (source.titleBefore || titleReason) {
+          const titleNow = source.titleBefore ? `Título atual: "${source.titleBefore}". ` : '';
+          const reason = titleReason ? `Motivo da troca: ${titleReason}.` : '';
+          details.rationale = `${titleNow}Título sugerido: "${prioritizedTitle}". ${reason}`.trim();
+        }
+        details.summary = `Título sugerido pronto para copiar: "${prioritizedTitle}".`;
       }
     }
 
     if (actionType === 'DESCRIPTION_REWRITE_BLOCKS') {
-      const copy = source.descriptionCopy || source.generatedLongDescription;
-      if (copy && (!details.descriptionTemplateBlocks || details.descriptionTemplateBlocks.length === 0)) {
-        const blocks = getDescriptionBlocks(copy);
+      if (prioritizedDescription) {
+        const blocks = getDescriptionBlocks(prioritizedDescription);
         if (blocks.length >= 2) details.descriptionTemplateBlocks = blocks;
-      }
-      if (copy) {
-        details.summary = `${details.summary} Copy sugerida disponível para aplicar diretamente.`.trim();
+        const bullets = source.generatedBullets.slice(0, 6);
+        const copyReadyDescription = buildCopyReadyDescription(prioritizedDescription, bullets);
+        details.copySuggestions = {
+          ...(details.copySuggestions || {}),
+          description: copyReadyDescription,
+          bullets: bullets.length > 0 ? bullets : undefined,
+        };
+        details.summary = `Descrição pronta para copiar disponível.${source.descriptionDiagnostic ? ` Diagnóstico: ${source.descriptionDiagnostic}.` : ''}`.trim();
       }
     }
 
@@ -188,41 +239,55 @@ export function applyConcreteFallbackDetails(input: ApplyConcreteFallbackInput):
   const artifacts = { ...(details.artifacts || {}) };
 
   if (actionType === 'SEO_TITLE_REWRITE') {
-    const title = source.suggestedTitle || source.titleAfter;
-    if (title) {
+    if (prioritizedTitle) {
       const copy = { ...(artifacts.copy || {}) };
-      if (!copy.titleSuggestions || copy.titleSuggestions.length === 0) {
-        const variants = ensureThreeTitleSuggestions(title, source.titleAfter, source.titleBefore);
-        copy.titleSuggestions = variants.map((text, index) => ({
-          variation: index === 0 ? 'A' : index === 1 ? 'B' : 'C',
-          text: text.slice(0, 60),
-          rationale: index === 0 ? (source.titleProblem || source.titleRationale || undefined) : undefined,
+      const variants = ensureThreeTitleSuggestions(prioritizedTitle, alternativeTitles);
+      copy.titleSuggestions = variants.map((text, index) => ({
+        variation: index === 0 ? 'A' : index === 1 ? 'B' : 'C',
+        text,
+        rationale: index === 0
+          ? [
+              source.titleBefore ? `Título atual: ${source.titleBefore}` : null,
+              titleReason ? `Motivo: ${titleReason}` : null,
+            ]
+              .filter(Boolean)
+              .join(' | ') || undefined
+          : 'Variação alternativa para teste A/B.',
+      }));
+      if (copy.titleSuggestions.length > 0) {
+        copy.keywordSuggestions = getKeywordSuggestionsFromTitle(copy.titleSuggestions[0].text).map((keyword) => ({
+          ...keyword,
+          rationale: 'Termo extraído do título sugerido para reforçar intenção de busca.',
         }));
-      }
-      if (!copy.keywordSuggestions || copy.keywordSuggestions.length === 0) {
-        copy.keywordSuggestions = getKeywordSuggestionsFromTitle(title);
       }
       artifacts.copy = copy;
     }
   }
 
   if (actionType === 'DESCRIPTION_REWRITE_BLOCKS') {
-    const copySource = source.descriptionCopy || source.generatedLongDescription;
-    if (copySource) {
+    if (prioritizedDescription) {
       const copy = { ...(artifacts.copy || {}) };
-      const blocks = getDescriptionBlocks(copySource);
-      if ((!copy.descriptionTemplate || copy.descriptionTemplate.blocks.length === 0) && blocks.length >= 2) {
+      const blocks = getDescriptionBlocks(prioritizedDescription);
+      const preferredSourceLabel = source.descriptionCopy ? 'analysisV21.description_fix.optimized_copy' : 'generatedContent.seoDescription.long';
+      const secondarySourceLabel = source.descriptionCopy && source.generatedLongDescription
+        ? 'generatedContent.seoDescription.long'
+        : null;
+      if (blocks.length >= 2) {
         copy.descriptionTemplate = {
-          headline: source.descriptionDiagnostic || 'Descrição otimizada para aplicar',
+          headline: source.descriptionDiagnostic || 'Descrição pronta para copiar no ML',
           blocks,
           bullets: source.generatedBullets.length >= 3 ? source.generatedBullets.slice(0, 6) : undefined,
-          cta: 'Aplicar esta versão no anúncio e monitorar conversão por 7 dias.',
+          cta: `Versão principal: ${preferredSourceLabel}.${secondarySourceLabel ? ` Fallback secundário: ${secondarySourceLabel}.` : ''}`,
         };
       }
-      if ((!copy.bulletSuggestions || copy.bulletSuggestions.length === 0) && source.generatedBullets.length > 0) {
+      if (source.generatedBullets.length > 0) {
         const bullets = source.generatedBullets.slice(0, 5);
         while (bullets.length < 3) bullets.push(bullets[0]);
         copy.bulletSuggestions = bullets;
+      }
+      if (!copy.keywordSuggestions || copy.keywordSuggestions.length === 0) {
+        const keywordSource = prioritizedTitle || prioritizedDescription;
+        copy.keywordSuggestions = getKeywordSuggestionsFromTitle(keywordSource);
       }
       artifacts.copy = copy;
     }
