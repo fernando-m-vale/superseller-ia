@@ -1527,7 +1527,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
                 hasClipDetected: mediaVerdict?.hasClipDetected,
               },
-              dataQualityWarnings: inputV21?.dataQuality?.warnings ?? [],
+              dataQualityWarnings: result.dataQuality?.warnings ?? [],
               analysisV21,
               seoSuggestions: {
                 suggestedTitle: analysisV21?.title_fix?.after,
@@ -1578,7 +1578,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
                 hasClipDetected: mediaVerdict?.hasClipDetected,
               },
-              dataQualityWarnings: inputV21?.dataQuality?.warnings ?? [],
+              dataQualityWarnings: result.dataQuality?.warnings ?? [],
               analysisV21,
               seoSuggestions: {
                 suggestedTitle: analysisV21?.title_fix?.after,
