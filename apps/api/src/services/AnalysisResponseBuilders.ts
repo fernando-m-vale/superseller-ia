@@ -616,138 +616,179 @@ export function buildVerdictText(input: {
   const orders = input.metrics30d?.orders ?? 0;
   const crValue = input.metrics30d?.conversionRate ?? null;
   const cr = formatConversionRatePercent(crValue);
-  const top = (input.topActions || []).slice(0, 3).map((a) => a.title).filter(Boolean) as string[];
+  const top = (input.topActions || []).slice(0, 3).map((a) => a.title?.trim()).filter(Boolean) as string[];
   const listingTitle = input.listingTitle?.trim();
   const listingRef = listingTitle ? `"${listingTitle}"` : 'este anúncio';
   const lowVisits = visits < 80;
   const highVisits = visits >= 250;
-  const reasonableVisits = visits >= 80 && visits < 250;
   const zeroOrders = orders === 0;
   const weakConversion = typeof crValue === 'number' ? crValue < 0.01 : zeroOrders;
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark ?? undefined);
+  const clipInconclusive = (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api');
   const mediaEvidence = input.analysisV21?.image_plan?.some((step) => Boolean(step?.action && step.action.trim().length > 0)) ?? false;
-  const mediaWeak = mediaEvidence || (input.picturesCount ?? 0) > 0 && (input.picturesCount ?? 0) < 6 || input.mediaVerdict?.canSuggestClip === true;
-  const seoWeak = Boolean(
+  const mediaWeak = mediaEvidence || (((input.picturesCount ?? 0) > 0) && ((input.picturesCount ?? 0) < 6)) || input.mediaVerdict?.canSuggestClip === true;
+  const seoEvidence = Boolean(
     input.analysisV21?.title_fix?.problem ||
     input.analysisV21?.title_fix?.after ||
     input.analysisV21?.description_fix?.diagnostic ||
     input.analysisV21?.description_fix?.optimized_copy
   );
+  const hasPromotion = input.hasPromotion === true;
+  const promotionLine = hasPromotion
+    ? `Promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% OFF)` : ''}.`
+    : 'Sem promoção ativa.';
 
   const pillars: ActionPillar[] = ['seo', 'midia', 'cadastro', 'competitividade', 'performance'];
   const breakdown = input.scoreBreakdown || {};
   const availableScores = pillars
     .map((pillar) => ({ pillar, value: breakdown[pillar] }))
     .filter((entry): entry is { pillar: ActionPillar; value: number } => typeof entry.value === 'number' && Number.isFinite(entry.value));
-  const dominantPillar = availableScores.length > 0
-    ? availableScores.sort((a, b) => a.value - b.value)[0].pillar
-    : null;
-  const hasPromotion = input.hasPromotion === true;
+  const dominantPillar = availableScores.length > 0 ? availableScores.sort((a, b) => a.value - b.value)[0].pillar : null;
 
-  const seedBase = `${listingTitle || ''}|${visits}|${orders}|${cr || ''}|${hasPromotion}|${dominantPillar || ''}`;
-  let seed = 0;
-  for (let i = 0; i < seedBase.length; i += 1) {
-    seed = (seed * 31 + seedBase.charCodeAt(i)) >>> 0;
-  }
-  const pick = (choices: string[], offset = 0): string => choices[(seed + offset) % choices.length];
-
-  const choosePattern = (): 'A' | 'B' | 'C' | 'D' | 'E' => {
-    if (hasPromotion && weakConversion) return 'C';
-    if (!hasPromotion && zeroOrders) return 'C';
-    if (lowVisits && zeroOrders) return 'A';
-    if (highVisits && weakConversion) return 'B';
-    if (dominantPillar === 'seo' || dominantPillar === 'midia') return 'D';
-    if (dominantPillar === 'competitividade' || dominantPillar === 'performance') return 'E';
-    if (reasonableVisits && zeroOrders) return 'B';
-    return 'A';
+  const summarize = (text?: string | null, max = 90): string | null => {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return null;
+    if (clean.length <= max) return clean;
+    return `${clean.slice(0, max - 1).trimEnd()}…`;
   };
 
-  const pattern = choosePattern();
-  const topAction = top[0] || pick([
-    'priorizar o ajuste com maior evidência operacional',
-    'executar a melhoria mais direta para remover fricção de compra',
-    'atacar primeiro o ponto de bloqueio mais claro no anúncio',
-  ], 2);
+  const inferActionPillar = (title: string): ActionPillar | null => {
+    const value = title.toLowerCase();
+    if (value.includes('titulo') || value.includes('título') || value.includes('descricao') || value.includes('descrição') || value.includes('seo')) {
+      return 'seo';
+    }
+    if (value.includes('imagem') || value.includes('foto') || value.includes('galeria') || value.includes('clip') || value.includes('video') || value.includes('vídeo')) {
+      return 'midia';
+    }
+    if (value.includes('preco') || value.includes('preço') || value.includes('frete') || value.includes('compet')) {
+      return 'competitividade';
+    }
+    if (value.includes('varia') || value.includes('ficha') || value.includes('cadastro')) {
+      return 'cadastro';
+    }
+    if (value.includes('convers') || value.includes('funil') || value.includes('oferta')) {
+      return 'performance';
+    }
+    return null;
+  };
 
-  const metricsLine = pick([
+  const inferMainProblem = (): 'descoberta' | 'conversao' | 'oferta' | 'clareza' | 'midia' | 'competitividade' | 'performance' => {
+    if (lowVisits) return 'descoberta';
+    if (highVisits && weakConversion) return 'conversao';
+    if (zeroOrders) return hasPromotion ? 'conversao' : 'oferta';
+    if (dominantPillar === 'seo') return 'clareza';
+    if (dominantPillar === 'midia') return 'midia';
+    if (dominantPillar === 'competitividade' && !benchmarkUnavailable) return 'competitividade';
+    if (dominantPillar === 'performance') return 'performance';
+    if (seoEvidence) return 'clareza';
+    if (mediaWeak) return 'midia';
+    return weakConversion ? 'conversao' : 'performance';
+  };
+
+  const mainProblem = inferMainProblem();
+  const topAction = top[0] || 'priorizar o ajuste com maior evidência operacional';
+  const topActionPillar = inferActionPillar(topAction);
+  const titleProblem = summarize(input.analysisV21?.title_fix?.problem, 96);
+  const descriptionDiagnostic = summarize(input.analysisV21?.description_fix?.diagnostic, 96);
+  const imageHint = summarize(
+    (input.analysisV21?.image_plan || []).find((step) => typeof step?.action === 'string' && step.action.trim().length > 0)?.action,
+    92
+  );
+
+  const executiveLines: string[] = [
     `${listingRef} registrou ${visits} visitas e ${orders} pedidos nos últimos 30 dias${cr ? `, com conversão de ${cr}` : ''}.`,
-    `Nos últimos 30 dias, ${listingRef} acumulou ${visits} visitas para ${orders} pedidos${cr ? ` (${cr} de conversão)` : ''}.`,
-    `A leitura recente de ${listingRef} mostra ${visits} visitas e ${orders} pedidos${cr ? `, em ${cr} de conversão` : ''}.`,
-  ]);
-
-  const discoveryLine = lowVisits
-    ? pick([
-      'O gargalo principal ainda está em tração: falta volume qualificado suficiente para validar escala.',
-      'O cenário aponta mais limitação de alcance qualificado do que de fechamento em escala.',
-    ], 1)
-    : highVisits && weakConversion
-      ? pick([
-        'O anúncio já atrai atenção, mas perde força na etapa de decisão.',
-        'Há sinais claros de descoberta; o bloqueio parece estar no convencimento para fechar compra.',
-      ], 1)
-      : reasonableVisits && zeroOrders
-        ? pick([
-          'Existe fluxo de visitas, porém a proposta ainda não está fechando pedidos.',
-          'Há descoberta, mas a oferta não está convertendo interesse em compra.',
-        ])
-        : pick([
-          'A base de tráfego existe, e o avanço agora depende de reduzir fricções da página.',
-          'O próximo salto vem menos de volume e mais de clareza de decisão para quem já visita.',
-        ]);
-
-  const promoLine = hasPromotion
-    ? `Promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% OFF)` : ''}: o desconto já está em jogo, então o ganho tende a vir da percepção de valor e da prova de oferta.`
-    : pick([
-      'Sem promoção ativa, o anúncio precisa sustentar valor por clareza comercial e confiança de página.',
-      'Como não há promoção ativa, a evolução depende de comunicação de oferta e redução de objeções.',
-    ], 1);
-
-  const mediaLine = (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api')
-    ? 'O status de clip está inconclusivo via API; a prioridade de mídia fica em reforçar galeria e validar vídeo manualmente.'
-    : input.mediaVerdict?.canSuggestClip === true
-      ? 'Há oportunidade de mídia: o anúncio entra no radar, mas ainda falta prova visual forte para sustentar decisão.'
-      : (mediaWeak
-        ? 'A mídia ainda pode avançar em prova visual para reduzir insegurança na etapa final da compra.'
-        : 'A base visual está razoável; o bloqueio parece mais de proposta/comunicação do que de cobertura de mídia.');
-
-  const seoLine = seoWeak
-    ? pick([
-      'Os sinais de SEO/copys indicam espaço para melhorar descoberta qualificada e remover dúvida na leitura da oferta.',
-      'Há indícios de ajuste em título/descrição para alinhar busca com intenção de compra.',
-    ])
-    : 'O texto comercial está funcional, então o foco imediato fica em execução de oferta e conversão.';
-
-  const benchmarkLine = benchmarkUnavailable
-    ? 'Benchmark externo está indisponível no momento; as decisões aqui se apoiam apenas nos sinais do próprio anúncio.'
-    : '';
-
-  let p2 = '';
-  if (pattern === 'A') {
-    p2 = [discoveryLine, mediaWeak ? mediaLine : seoLine, benchmarkLine].filter(Boolean).join(' ');
-  } else if (pattern === 'B') {
-    p2 = [discoveryLine, hasPromotion ? promoLine : seoLine, benchmarkLine].filter(Boolean).join(' ');
-  } else if (pattern === 'C') {
-    p2 = [promoLine, weakConversion ? pick([
-      'O problema parece menos de alcance e mais de convencimento no momento da decisão.',
-      'O bloqueio atual é transformar interesse em fechamento, não apenas atrair clique.',
-    ]) : discoveryLine, benchmarkLine].filter(Boolean).join(' ');
-  } else if (pattern === 'D') {
-    p2 = [mediaWeak ? mediaLine : seoLine, discoveryLine, benchmarkLine].filter(Boolean).join(' ');
+  ];
+  if (hasPromotion || zeroOrders) {
+    executiveLines.push(`${promotionLine} ${zeroOrders ? 'Até aqui, o resultado é 0 pedidos.' : ''}`.trim());
+  }
+  if (mainProblem === 'descoberta') {
+    executiveLines.push('Leitura executiva: o gargalo dominante está em descoberta e tração qualificada.');
+  } else if (mainProblem === 'conversao') {
+    executiveLines.push('Leitura executiva: existe descoberta, mas o bloqueio principal está na conversão da visita em decisão.');
+  } else if (mainProblem === 'oferta') {
+    executiveLines.push('Leitura executiva: o ponto crítico está na força comercial da oferta para transformar interesse em pedido.');
+  } else if (mainProblem === 'clareza') {
+    executiveLines.push('Leitura executiva: o anúncio precisa de mais clareza de proposta para alinhar busca e decisão.');
+  } else if (mainProblem === 'midia') {
+    executiveLines.push('Leitura executiva: o principal limitador está em mídia e prova visual da oferta.');
+  } else if (mainProblem === 'competitividade') {
+    executiveLines.push('Leitura executiva: o risco dominante está em competitividade e posicionamento comercial.');
   } else {
-    const dominantLine = dominantPillar === 'competitividade'
-      ? 'O ponto mais sensível está em competitividade comercial e posicionamento da oferta.'
-      : dominantPillar === 'performance'
-        ? 'O gargalo dominante está em performance de funil (visita para pedido).'
-        : 'O anúncio tem base funcional, mas com bloqueio concentrado em uma frente específica.';
-    p2 = [dominantLine, benchmarkLine || discoveryLine].filter(Boolean).join(' ');
+    executiveLines.push('Leitura executiva: o funil tem base funcional, mas ainda com perda relevante na etapa final.');
   }
 
-  const p3 = pick([
-    `Prioridade imediata: ${topAction}.`,
-    `Alavanca mais direta agora: ${topAction}.`,
-    `Foco operacional desta rodada: ${topAction}.`,
-  ], 3);
+  const diagnosisLines: string[] = [];
+  if (mainProblem === 'conversao' && hasPromotion) {
+    diagnosisLines.push('Como o desconto já está ativo, o bloqueio parece menos de preço e mais de convencimento, confiança e percepção de valor.');
+  } else if (mainProblem === 'descoberta') {
+    diagnosisLines.push('O volume atual limita aprendizado de escala, o que sugere baixa descoberta qualificada antes da etapa de fechamento.');
+  } else if (mainProblem === 'midia') {
+    diagnosisLines.push('Há sinais de interesse, mas a apresentação visual ainda não sustenta decisão com prova de uso e diferenciais claros.');
+  } else if (mainProblem === 'clareza') {
+    diagnosisLines.push('Os sinais de SEO e copy indicam desalinhamento entre intenção de busca e leitura comercial da página.');
+  } else if (mainProblem === 'oferta') {
+    diagnosisLines.push('Sem incentivo promocional, a conversão depende mais da clareza da proposta e da redução de objeções no anúncio.');
+  } else {
+    diagnosisLines.push('O anúncio já gera algum fluxo, mas perde eficiência ao transformar interesse em fechamento.');
+  }
+  if (titleProblem || descriptionDiagnostic) {
+    diagnosisLines.push(`Evidência direta do diagnóstico: ${titleProblem || descriptionDiagnostic}.`);
+  } else if (imageHint && mainProblem !== 'clareza') {
+    diagnosisLines.push(`Evidência operacional de mídia: ${imageHint}.`);
+  }
+  if (clipInconclusive) {
+    diagnosisLines.push('O status de clip está inconclusivo via API; qualquer decisão sobre vídeo depende de validação manual.');
+  }
+  if (benchmarkUnavailable) {
+    diagnosisLines.push('Benchmark externo está indisponível no momento, então a leitura competitiva fica restrita aos sinais internos do anúncio.');
+  }
 
-  return [metricsLine, p2, p3].join('\n\n');
+  const priorityReason = (() => {
+    if (topActionPillar === 'seo') return 'Esse foco atua na entrada qualificada do funil e na clareza da decisão já na leitura do anúncio.';
+    if (topActionPillar === 'midia') return 'Esse foco reduz fricção visual no momento da decisão e tende a melhorar confiança para compra.';
+    if (topActionPillar === 'competitividade') {
+      return benchmarkUnavailable
+        ? 'Esse foco deve começar por validação interna de valor percebido antes de comparação externa mais assertiva.'
+        : 'Esse foco ataca diretamente o posicionamento comercial frente ao mercado.';
+    }
+    if (topActionPillar === 'cadastro') return 'Esse foco organiza a base do anúncio e reduz ruído operacional no funil.';
+    if (mainProblem === 'conversao') return 'Esse é o melhor ponto de alavanca agora porque atua no bloqueio entre interesse e pedido.';
+    if (mainProblem === 'descoberta') return 'Esse é o melhor ponto de alavanca agora porque acelera descoberta antes de otimizações finas.';
+    return 'Esse é o melhor ponto de alavanca agora porque concentra esforço no principal gargalo desta rodada.';
+  })();
+
+  const gainHint = topActionPillar && input.potentialGain?.[topActionPillar]
+    ? ` Há potencial de ganho reportado para esta frente (${String(input.potentialGain[topActionPillar])}).`
+    : '';
+
+  const priorityLines = [
+    `Prioridade operacional agora: ${topAction}.`,
+    `${priorityReason}${gainHint}`,
+  ];
+
+  const expectedResult = (() => {
+    if (mainProblem === 'descoberta' || topActionPillar === 'seo') {
+      return 'Resultado esperado: aumentar CTR qualificado e elevar o volume de visitas com melhor aderência de busca.';
+    }
+    if (mainProblem === 'midia' || topActionPillar === 'midia') {
+      return 'Resultado esperado: melhorar percepção de valor e reduzir insegurança visual, elevando a taxa de decisão.';
+    }
+    if (mainProblem === 'oferta' || topActionPillar === 'competitividade') {
+      return 'Resultado esperado: fortalecer proposta comercial e converter melhor o interesse já gerado.';
+    }
+    return 'Resultado esperado: reduzir fricção no funil e aumentar conversão de visitas em pedidos de forma sustentada.';
+  })();
+
+  const resultLines = [expectedResult];
+  if (hasPromotion && weakConversion) {
+    resultLines.push('Com promoção já ativa, o ganho deve vir principalmente de melhor comunicação e prova da oferta, não de novo desconto.');
+  }
+
+  return [
+    executiveLines.slice(0, 3).join(' '),
+    diagnosisLines.slice(0, 3).join(' '),
+    priorityLines.slice(0, 2).join(' '),
+    resultLines.slice(0, 2).join(' '),
+  ].join('\n\n');
 }
 

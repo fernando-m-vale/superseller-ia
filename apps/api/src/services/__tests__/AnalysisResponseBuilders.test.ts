@@ -350,5 +350,70 @@ describe('buildVerdictText', () => {
     expect(promoLowCr).not.toBe(highVisitsLowCr);
     expect(noPromoZeroOrders).not.toBe(highVisitsLowCr);
   });
+
+  it('sinaliza clip inconclusivo sem afirmar presenca ou ausencia de video', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Caixa de Som Bluetooth',
+      metrics30d: { visits: 380, orders: 2, conversionRate: 0.0052 },
+      hasPromotion: false,
+      mediaVerdict: { canSuggestClip: true, hasClipDetected: null },
+      dataQualityWarnings: ['clips_not_detectable_via_items_api'],
+      topActions: [{ title: 'Reforcar galeria com prova de uso' }],
+    });
+
+    expect(text).toContain('status de clip está inconclusivo via API');
+    expect(text.toLowerCase()).not.toContain('clip já está ativo');
+    expect(text.toLowerCase()).not.toContain('clip ausente');
+  });
+
+  it('mantem estrutura consultiva curta em 4 blocos', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Mouse Vertical Ergonômico',
+      metrics30d: { visits: 300, orders: 2, conversionRate: 0.0067 },
+      hasPromotion: true,
+      discountPercent: 20,
+      topActions: [{ title: 'Reescrever titulo com foco em intencao de busca' }],
+      analysisV21: {
+        title_fix: { problem: 'Titulo atual pouco aderente a busca de cauda longa' },
+        description_fix: { diagnostic: 'Descricao nao reforca diferenciais ergonomicos de forma objetiva' },
+      },
+    });
+
+    const blocks = text.split('\n\n');
+    expect(blocks).toHaveLength(4);
+    expect(blocks.every((block) => block.trim().length > 0)).toBe(true);
+    expect(text.length).toBeLessThan(1400);
+  });
+
+  it('gera leitura executiva e diagnostico diferentes entre SEO e midia', () => {
+    const seoCase = buildVerdictText({
+      listingTitle: 'Teclado Mecanico Gamer',
+      metrics30d: { visits: 210, orders: 2, conversionRate: 0.0095 },
+      hasPromotion: false,
+      topActions: [{ title: 'Reescrever titulo com intencao de busca' }],
+      scoreBreakdown: { seo: 30, midia: 72, cadastro: 64, competitividade: 58, performance: 61 },
+      analysisV21: {
+        title_fix: { problem: 'Titulo sem termos-chave relevantes para a categoria' },
+      },
+    });
+
+    const mediaCase = buildVerdictText({
+      listingTitle: 'Mini Aspirador Automotivo',
+      metrics30d: { visits: 210, orders: 2, conversionRate: 0.0095 },
+      hasPromotion: false,
+      picturesCount: 3,
+      mediaVerdict: { canSuggestClip: true, hasClipDetected: false },
+      topActions: [{ title: 'Atualizar galeria com provas de uso real' }],
+      scoreBreakdown: { seo: 68, midia: 26, cadastro: 64, competitividade: 58, performance: 61 },
+    });
+
+    const seoBlocks = seoCase.split('\n\n');
+    const mediaBlocks = mediaCase.split('\n\n');
+
+    expect(seoBlocks[0]).not.toBe(mediaBlocks[0]);
+    expect(seoBlocks[1]).not.toBe(mediaBlocks[1]);
+    expect(seoCase).toMatch(/SEO|busca|título|descrição/i);
+    expect(mediaCase).toMatch(/mídia|media|galeria|visual|clip/i);
+  });
 });
 
