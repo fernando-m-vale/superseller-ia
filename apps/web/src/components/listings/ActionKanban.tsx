@@ -58,7 +58,8 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
 
   const getImpactColor = (impact?: string | null) => {
     if (!impact) return 'bg-muted text-muted-foreground'
-    switch (impact.toLowerCase()) {
+    const normalized = impact.toLowerCase()
+    switch (normalized) {
       case 'high':
         return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
       case 'medium':
@@ -66,7 +67,25 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
       case 'low':
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
       default:
+        // Range impacts (+10% a +40%) should look like opportunity, not fallback.
+        if (normalized.includes('%') || normalized.includes('+')) {
+          return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400'
+        }
         return 'bg-muted text-muted-foreground'
+    }
+  }
+
+  const formatImpactLabel = (impact?: string | null) => {
+    if (!impact) return null
+    switch (impact.toLowerCase()) {
+      case 'high':
+        return 'Alto'
+      case 'medium':
+        return 'Médio'
+      case 'low':
+        return 'Baixo'
+      default:
+        return impact
     }
   }
 
@@ -100,7 +119,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
           <div className="flex flex-wrap gap-1">
             {action.expectedImpact && (
               <Badge className={`text-xs ${getImpactColor(action.expectedImpact)}`}>
-                Impacto: {action.expectedImpact === 'high' ? 'Alto' : action.expectedImpact === 'medium' ? 'Médio' : 'Baixo'}
+                Impacto estimado: {formatImpactLabel(action.expectedImpact)}
               </Badge>
             )}
             {action.effort && (

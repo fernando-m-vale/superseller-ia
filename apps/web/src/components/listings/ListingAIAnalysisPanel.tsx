@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { AlertTriangle, ExternalLink, Flame, Sparkles } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Flame, Sparkles, Target, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent } from '@/lib/ai/normalizeAiAnalyze'
@@ -162,6 +162,55 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
 
   const nextAction = getNextRecommendedAction?.title || null
   const priority = pendingActions[0]?.priority || (pendingActions.length > 0 ? 'Alta' : null)
+  const bottleneckLabel = {
+    SEARCH: 'Busca',
+    CLICK: 'Clique',
+    CONVERSION: 'Conversão',
+  } as const
+
+  const roundOpportunity = useMemo(() => {
+    if (!props.funnelDiagnosis) return null
+
+    const primary = props.funnelDiagnosis.primaryBottleneck
+    const objectiveByBottleneck = {
+      SEARCH: 'Aumentar entrada qualificada no anúncio',
+      CLICK: 'Elevar taxa de clique nas impressões já conquistadas',
+      CONVERSION: 'Reduzir hesitação e melhorar decisão de compra',
+    } as const
+
+    const leverageByBottleneck = {
+      SEARCH: 'Estrutura de título orientada para termos buscáveis',
+      CLICK: 'Clareza imediata de oferta no título e imagem principal',
+      CONVERSION: 'Maior clareza de uso, especificações e confiança',
+    } as const
+
+    const stageSignals = [
+      ...(props.executionRoadmap || []).map((step) => step.expectedImpact).filter(Boolean),
+      ...pendingActions.map((action) => action.expectedImpact).filter(Boolean),
+    ] as string[]
+
+    const hasVisitsSignal = stageSignals.some((signal) => /visit|busca/i.test(signal))
+    const hasCtrSignal = stageSignals.some((signal) => /ctr|clique/i.test(signal))
+    const hasConversionSignal = stageSignals.some((signal) => /convers/i.test(signal))
+
+    const expectedGains = [
+      hasVisitsSignal ? 'Visitas: tendência de ganho de alcance qualificado ao corrigir visibilidade.' : null,
+      hasCtrSignal ? 'CTR: tendência de melhora na atração de clique com proposta mais clara.' : null,
+      hasConversionSignal ? 'Conversão: tendência de avanço ao reduzir dúvidas na decisão final.' : null,
+    ].filter(Boolean) as string[]
+
+    return {
+      objective: objectiveByBottleneck[primary],
+      leverage: leverageByBottleneck[primary],
+      summary:
+        primary === 'SEARCH'
+          ? 'Esta rodada está orientada para destravar visibilidade e aumentar tráfego qualificado.'
+          : primary === 'CLICK'
+            ? 'Esta rodada está orientada para transformar exposição em mais cliques qualificados.'
+            : 'Esta rodada está orientada para converter melhor o tráfego já existente.',
+      expectedGains,
+    }
+  }, [props.funnelDiagnosis, props.executionRoadmap, pendingActions])
 
   const pendingCount = actions.filter((a) => a.status === 'A_IMPLEMENTAR').length
   const appliedCount = actions.filter((a) => a.status === 'IMPLEMENTADO').length
@@ -319,16 +368,63 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </CardContent>
       </Card>
 
-      {/* B) BLOCO OPORTUNIDADE */}
+      {/* B) DIAGNÓSTICO DE FUNIL */}
       {props.funnelDiagnosis && (
-        <Card className="border border-primary/30">
+        <Card className="border border-primary/30 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Diagnóstico de Funil</CardTitle>
+            <CardTitle className="text-base">Diagnóstico do funil</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p><strong>Primary Bottleneck:</strong> {props.funnelDiagnosis.primaryBottleneck}</p>
+            <p className="text-foreground">
+              <strong>Gargalo principal do anúncio:</strong>{' '}
+              <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                {bottleneckLabel[props.funnelDiagnosis.primaryBottleneck]}
+              </span>
+            </p>
             <p>{props.funnelDiagnosis.explanation}</p>
-            <p><strong>Recommended focus:</strong> {props.funnelDiagnosis.recommendedFocus}</p>
+            <p>
+              <strong>Foco desta rodada:</strong> {props.funnelDiagnosis.recommendedFocus}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* C) GANHO POTENCIAL DA RODADA */}
+      {roundOpportunity && (
+        <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Ganho potencial da rodada</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-foreground">{roundOpportunity.summary}</p>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p className="flex items-start gap-2">
+                <Target className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <span>
+                  <strong>Objetivo principal:</strong> {roundOpportunity.objective}
+                </span>
+              </p>
+              <p className="flex items-start gap-2">
+                <TrendingUp className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                <span>
+                  <strong>Alavanca esperada:</strong> {roundOpportunity.leverage}
+                </span>
+              </p>
+            </div>
+            {roundOpportunity.expectedGains.length > 0 && (
+              <div className="rounded-md border bg-background/60 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                  Ganho esperado por estágio
+                </p>
+                <div className="space-y-1">
+                  {roundOpportunity.expectedGains.map((gain) => (
+                    <p key={gain} className="text-sm text-muted-foreground">
+                      {gain}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -336,19 +432,24 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       {props.executionRoadmap && props.executionRoadmap.length > 0 && (
         <Card className="border border-primary/20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Execution Roadmap</CardTitle>
+            <CardTitle className="text-base">Plano de execução recomendado</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {props.executionRoadmap.map((step) => (
-              <div key={step.stepNumber} className="rounded-md border p-3 space-y-1">
-                <p className="text-sm font-semibold">
-                  Step {step.stepNumber} — {step.actionTitle}
+              <div key={step.stepNumber} className="rounded-md border p-3 space-y-2">
+                <p className="text-sm font-semibold flex items-center gap-2">
+                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-bold text-primary">
+                    {step.stepNumber}
+                  </span>
+                  <span>
+                    Passo {step.stepNumber} - {step.actionTitle}
+                  </span>
+                </p>
+                <p className="text-sm text-muted-foreground line-clamp-2" title={step.reason}>
+                  <strong>Por que agora:</strong> {step.reason}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  <strong>Reason:</strong> {step.reason}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  <strong>Expected impact:</strong> {step.expectedImpact}
+                  <strong>Impacto esperado:</strong> {step.expectedImpact}
                 </p>
               </div>
             ))}
@@ -356,7 +457,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </Card>
       )}
 
-      {/* B) BLOCO OPORTUNIDADE */}
+      {/* D) BLOCO OPORTUNIDADE */}
       <OpportunityBlock
         score={props.score || 0}
         priority={priority}
@@ -365,14 +466,14 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         isUncertain={getNextRecommendedAction?.isUncertain || false}
       />
 
-      {/* C) PROGRESSO DE EXECUÇÃO */}
+      {/* E) PROGRESSO DE EXECUÇÃO */}
       <ExecutionProgress
         pending={pendingCount}
         applied={appliedCount}
         dismissed={dismissedCount}
       />
 
-      {/* D) KANBAN SIMPLES */}
+      {/* F) KANBAN SIMPLES */}
       <div>
         <h3 className="text-lg font-semibold mb-4">Ações Recomendadas</h3>
         {actionsLoading ? (

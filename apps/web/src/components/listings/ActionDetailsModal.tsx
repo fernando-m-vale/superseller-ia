@@ -171,7 +171,7 @@ export function ActionDetailsModal({
           {(v2Data?.impact || v1Data?.impact) && (
             <Badge className={getImpactColor(v2Data?.impact || v1Data?.impact)}>
               <TrendingUp className="h-3 w-3 mr-1" />
-              Impacto: {(v2Data?.impact || v1Data?.impact) === 'high' ? 'Alto' : (v2Data?.impact || v1Data?.impact) === 'medium' ? 'Médio' : 'Baixo'}
+              Impacto estimado: {(v2Data?.impact || v1Data?.impact) === 'high' ? 'Alto' : (v2Data?.impact || v1Data?.impact) === 'medium' ? 'Médio' : 'Baixo'}
             </Badge>
           )}
           {(v2Data?.effort || v1Data?.effort) && (
@@ -197,16 +197,28 @@ export function ActionDetailsModal({
         {/* Loading / Generating */}
         {(isLoading || isGenerating) && (
           <div className="space-y-4">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-24 w-full" />
             {isGenerating && (
-              <Alert>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <AlertDescription>
-                  Gerando detalhes da ação...
-                </AlertDescription>
-              </Alert>
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-primary/10 p-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">Gerando detalhes da ação...</p>
+                      <p className="text-sm text-muted-foreground">
+                        Estamos estruturando recomendações práticas para facilitar a execução.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-20 w-full" />
+            {isGenerating && (
+              <p className="text-xs text-muted-foreground">Isso pode levar alguns segundos.</p>
             )}
           </div>
         )}
