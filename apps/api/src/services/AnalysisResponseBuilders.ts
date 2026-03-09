@@ -9,6 +9,8 @@ export interface MvpActionItem {
   summary: string;
   description: string;
   expectedImpact: string;
+  impactEstimate?: string;
+  impactReason?: string;
   impact: 'high' | 'medium' | 'low';
   priority: 'high' | 'medium' | 'low';
   suggestedActionUrl?: string | null;
@@ -197,6 +199,74 @@ function getFunnelStageWeight(stage: FunnelStage): number {
   if (stage === 'SEARCH') return 30;
   if (stage === 'CLICK') return 20;
   return 10;
+}
+
+function formatImpactRange(stage: FunnelStage, minValue: number, maxValue: number): string {
+  if (stage === 'CONVERSION') {
+    return `+${minValue.toFixed(2)}% to +${maxValue.toFixed(2)}% conversion rate`;
+  }
+  const roundedMin = Math.round(minValue);
+  const roundedMax = Math.round(maxValue);
+  const metric = stage === 'SEARCH' ? 'visits' : 'CTR';
+  return `+${roundedMin}% to +${roundedMax}% ${metric}`;
+}
+
+function getImpactRangeByStage(stage: FunnelStage): { min: number; max: number } {
+  if (stage === 'SEARCH') return { min: 10, max: 40 };
+  if (stage === 'CLICK') return { min: 5, max: 20 };
+  return { min: 0.3, max: 2 };
+}
+
+function getImpactStrengthMultiplier(impact: 'high' | 'medium' | 'low'): { min: number; max: number } {
+  if (impact === 'high') return { min: 1, max: 1 };
+  if (impact === 'medium') return { min: 0.85, max: 0.8 };
+  return { min: 0.7, max: 0.6 };
+}
+
+function buildImpactReason(
+  action: MvpActionItem,
+  stage: FunnelStage,
+  input: DeterministicMvpActionsInput,
+  isPrimaryBottleneck: boolean
+): string {
+  const listingRef = input.listingTitle?.trim() ? `no anúncio "${input.listingTitle.trim()}"` : 'no anúncio';
+  const visits = input.metrics30d?.visits ?? 0;
+  const cr = input.metrics30d?.conversionRate ?? null;
+  const crText = cr !== null ? `${(cr * 100).toFixed(2)}%` : 'indisponível';
+  const bottleneckLine = isPrimaryBottleneck
+    ? 'Esta ação ataca o gargalo primário do funil e recebeu multiplicador de impacto.'
+    : 'Esta ação melhora uma etapa complementar do funil.';
+
+  if (stage === 'SEARCH') {
+    return `${listingRef}, a fricção de descoberta limita alcance qualificado (visitas 30d: ${visits}). ${bottleneckLine}`;
+  }
+  if (stage === 'CLICK') {
+    return `${listingRef}, compradores veem o anúncio mas a proposta visual/textual ainda reduz clique qualificado. ${bottleneckLine}`;
+  }
+  return `${listingRef}, há tráfego ativo (visitas 30d: ${visits}) com conversão em ${crText}, sinal de dúvida na decisão. ${bottleneckLine}`;
+}
+
+function enrichActionWithOpportunityImpact(
+  action: MvpActionItem,
+  stage: FunnelStage,
+  primaryBottleneck: FunnelStage,
+  input: DeterministicMvpActionsInput
+): MvpActionItem {
+  const baseRange = getImpactRangeByStage(stage);
+  const strength = getImpactStrengthMultiplier(action.impact);
+  const bottleneckMultiplier = stage === primaryBottleneck ? 1.5 : 1;
+
+  const minValue = baseRange.min * strength.min * bottleneckMultiplier;
+  const maxValue = baseRange.max * strength.max * bottleneckMultiplier;
+  const impactEstimate = formatImpactRange(stage, minValue, maxValue);
+  const impactReason = buildImpactReason(action, stage, input, stage === primaryBottleneck);
+
+  return {
+    ...action,
+    expectedImpact: impactEstimate,
+    impactEstimate,
+    impactReason,
+  };
 }
 
 function makeManualValidationLowImpact(action: MvpActionItem): MvpActionItem {
@@ -490,6 +560,9 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
   const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
   const clipDetectionInconclusive = hasClipInconclusiveWarning(input);
+  const primaryBottleneck = buildFunnelBottleneckDiagnosis({
+    metrics30d: input.metrics30d,
+  }).primaryBottleneck;
 
   const candidatesByKey = new Map<string, ActionCandidate>();
 
@@ -640,7 +713,9 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
       return b.impactScore - a.impactScore;
     })
     .slice(0, maxItems)
-    .map((candidate) => candidate.action);
+    .map((candidate) =>
+      enrichActionWithOpportunityImpact(candidate.action, candidate.funnelStage, primaryBottleneck, input)
+    );
 
   return sorted;
 }
@@ -914,4 +989,3 @@ export function buildFunnelBottleneckDiagnosis(input: {
     recommendedFocus: 'refinar identificação imediata do produto no título e na imagem principal.',
   };
 }
-

@@ -34,6 +34,8 @@ interface AIAnalysisApiResponse {
     confidence: number
     confidenceLevel: 'low' | 'medium' | 'high'
     evidence: string[]
+    impactEstimate?: string
+    impactReason?: string
     suggestedActionUrl?: string | null
   }>
   growthHacksMeta?: {
@@ -199,6 +201,8 @@ export interface AIAnalysisResponse {
     confidence: number
     confidenceLevel: 'low' | 'medium' | 'high'
     evidence: string[]
+    impactEstimate?: string
+    impactReason?: string
     suggestedActionUrl?: string | null
   }>
   growthHacksMeta?: {

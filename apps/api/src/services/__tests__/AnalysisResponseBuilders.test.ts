@@ -22,6 +22,10 @@ describe('AnalysisResponseBuilders', () => {
     });
 
     expect(actions.length).toBeLessThan(15);
+    if (actions.length > 0) {
+      expect(actions[0]?.impactEstimate).toBeDefined();
+      expect(actions[0]?.impactReason).toBeDefined();
+    }
   });
 
   it('nao gera clip quando canSuggestClip=false', () => {
@@ -173,6 +177,42 @@ describe('AnalysisResponseBuilders', () => {
 
     expect(actions[0]?.actionKey).toBe('midia_gallery_upgrade');
     expect(actions[0]?.summary).toContain('Funnel Stage:');
+    expect(actions[0]?.impactEstimate).toContain('CTR');
+  });
+
+  it('aplica multiplicador de bottleneck no impacto estimado', () => {
+    const conversionActions = buildDeterministicMvpActions({
+      listingIdExt: 'MLB123456789',
+      listingTitle: 'Produto Teste',
+      picturesCount: 8,
+      metrics30d: {
+        visits: 260,
+        orders: 2,
+        conversionRate: 0.007,
+      },
+      mediaVerdict: { canSuggestClip: false, hasClipDetected: true },
+      hackActions: [
+        {
+          id: 'faq_conversion',
+          title: 'Criar FAQ de dúvidas de compra',
+          summary: 'Responder dúvidas recorrentes de tamanho e uso para reduzir objeção final.',
+          impact: 'high',
+          priority: 'high',
+          confidence: 90,
+          evidence: ['visitas 260', 'CR 0.7%'],
+        },
+      ],
+      benchmark: {
+        confidence: 'high',
+        sampleSize: 200,
+      },
+    });
+
+    const target = conversionActions.find((a) => a.actionKey === 'faq_conversion');
+    expect(target).toBeDefined();
+    expect(target?.impactEstimate).toContain('+0.45%');
+    expect(target?.impactEstimate).toContain('+3.00%');
+    expect(target?.impactReason).toContain('gargalo primário');
   });
 
   it('permite varias acoes quando ha evidencias internas concretas', () => {
