@@ -164,6 +164,11 @@ interface AIAnalysisApiResponse {
   }>
   // DIA 10: verdictText completo gerado pelo backend
   verdictText?: string
+  funnelDiagnosis?: {
+    primaryBottleneck: 'SEARCH' | 'CLICK' | 'CONVERSION'
+    explanation: string
+    recommendedFocus: string
+  }
 }
 
 // Interface adaptada para o frontend
@@ -322,6 +327,11 @@ export interface AIAnalysisResponse {
   }>
   // DIA 10: verdictText completo gerado pelo backend
   verdictText?: string
+  funnelDiagnosis?: {
+    primaryBottleneck: 'SEARCH' | 'CLICK' | 'CONVERSION'
+    explanation: string
+    recommendedFocus: string
+  }
 }
 
 /**
@@ -380,6 +390,7 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     generatedContent: apiResponse.generatedContent,
     // DIA 10: verdictText completo gerado pelo backend
     verdictText: apiResponse.verdictText,
+    funnelDiagnosis: apiResponse.funnelDiagnosis,
   }
 }
 

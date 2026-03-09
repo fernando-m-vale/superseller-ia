@@ -74,6 +74,12 @@ export interface DeterministicMvpActionsInput {
   maxItems?: number;
 }
 
+export interface FunnelBottleneckDiagnosis {
+  primaryBottleneck: FunnelStage;
+  explanation: string;
+  recommendedFocus: string;
+}
+
 function normalizeMlbId(listingIdExt?: string | null): string | null {
   if (!listingIdExt) return null;
   const cleaned = listingIdExt.trim().replace(/-/g, '');
@@ -662,6 +668,9 @@ export function buildVerdictText(input: {
     baselineConversionRate?: number | null;
   } | null;
 }): string {
+  const funnelDiagnosis = buildFunnelBottleneckDiagnosis({
+    metrics30d: input.metrics30d,
+  });
   const raw = (input.rawVerdict || '').trim();
   if (raw.length >= 280) {
     return raw;
@@ -839,11 +848,70 @@ export function buildVerdictText(input: {
     resultLines.push('Com promoção já ativa, o ganho deve vir principalmente de melhor comunicação e prova da oferta, não de novo desconto.');
   }
 
-  return [
+  const bottleneckBlock = [
+    `Primary Bottleneck: ${funnelDiagnosis.primaryBottleneck}`,
+    funnelDiagnosis.explanation,
+    `Recommended focus: ${funnelDiagnosis.recommendedFocus}`,
+  ].join('\n\n');
+
+  const auditBlock = [
     executiveLines.slice(0, 3).join(' '),
     diagnosisLines.slice(0, 3).join(' '),
     priorityLines.slice(0, 2).join(' '),
     resultLines.slice(0, 2).join(' '),
   ].join('\n\n');
+
+  return [bottleneckBlock, auditBlock].join('\n\n');
+}
+
+export function buildFunnelBottleneckDiagnosis(input: {
+  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
+}): FunnelBottleneckDiagnosis {
+  const visits = input.metrics30d?.visits ?? 0;
+  const conversionRate = input.metrics30d?.conversionRate ?? null;
+  const hasAcceptableConversion = conversionRate !== null && conversionRate >= 0.025;
+
+  if (visits < 80) {
+    return {
+      primaryBottleneck: 'SEARCH',
+      explanation:
+        'O anúncio tem baixo volume de visitas, sinal de baixa visibilidade em busca e baixa aderência de indexação.',
+      recommendedFocus: 'otimizar título com atributos buscáveis e alinhar categoria/palavras-chave.',
+    };
+  }
+
+  if (visits > 100 && conversionRate !== null && conversionRate < 0.025) {
+    return {
+      primaryBottleneck: 'CONVERSION',
+      explanation:
+        'O anúncio já recebe tráfego, mas a taxa de conversão indica hesitação na decisão de compra.',
+      recommendedFocus: 'melhorar clareza de produto com descrição, FAQ e imagens de demonstração.',
+    };
+  }
+
+  if (visits >= 80 && visits <= 200 && hasAcceptableConversion) {
+    return {
+      primaryBottleneck: 'CLICK',
+      explanation:
+        'O anúncio aparece para compradores, mas ainda perde eficiência na etapa de clique.',
+      recommendedFocus: 'aumentar clareza do título e força visual da imagem principal.',
+    };
+  }
+
+  if (conversionRate !== null && conversionRate < 0.025) {
+    return {
+      primaryBottleneck: 'CONVERSION',
+      explanation:
+        'Existe tráfego no anúncio, porém a conversão continua abaixo do esperado para o volume de visitas.',
+      recommendedFocus: 'reduzir objeções com especificações claras, FAQ objetivo e prova visual de uso.',
+    };
+  }
+
+  return {
+    primaryBottleneck: 'CLICK',
+    explanation:
+      'O funil tem descoberta ativa, então o principal ganho incremental está em aumentar taxa de clique qualificado.',
+    recommendedFocus: 'refinar identificação imediata do produto no título e na imagem principal.',
+  };
 }
 

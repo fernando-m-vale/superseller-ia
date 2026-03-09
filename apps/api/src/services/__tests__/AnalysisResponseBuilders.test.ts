@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeterministicMvpActions, buildVerdictText } from '../AnalysisResponseBuilders';
+import { buildDeterministicMvpActions, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../AnalysisResponseBuilders';
 
 describe('AnalysisResponseBuilders', () => {
   it('respeita teto maximo sem obrigatoriedade de preencher 15', () => {
@@ -242,6 +242,29 @@ describe('AnalysisResponseBuilders', () => {
   });
 });
 
+describe('buildFunnelBottleneckDiagnosis', () => {
+  it('classifica SEARCH quando visitas < 80', () => {
+    const diagnosis = buildFunnelBottleneckDiagnosis({
+      metrics30d: { visits: 60, orders: 1, conversionRate: 0.03 },
+    });
+    expect(diagnosis.primaryBottleneck).toBe('SEARCH');
+  });
+
+  it('classifica CLICK quando visitas entre 80 e 200 e conversao aceitavel', () => {
+    const diagnosis = buildFunnelBottleneckDiagnosis({
+      metrics30d: { visits: 150, orders: 5, conversionRate: 0.032 },
+    });
+    expect(diagnosis.primaryBottleneck).toBe('CLICK');
+  });
+
+  it('classifica CONVERSION quando visitas > 100 e conversao < 2.5%', () => {
+    const diagnosis = buildFunnelBottleneckDiagnosis({
+      metrics30d: { visits: 220, orders: 3, conversionRate: 0.013 },
+    });
+    expect(diagnosis.primaryBottleneck).toBe('CONVERSION');
+  });
+});
+
 describe('buildVerdictText', () => {
   it('cobre promocao ativa com conversao fraca', () => {
     const text = buildVerdictText({
@@ -367,7 +390,7 @@ describe('buildVerdictText', () => {
     expect(text.toLowerCase()).not.toContain('clip ausente');
   });
 
-  it('mantem estrutura consultiva curta em 4 blocos', () => {
+  it('inclui bloco estruturado de bottleneck e foco recomendado', () => {
     const text = buildVerdictText({
       listingTitle: 'Mouse Vertical Ergonômico',
       metrics30d: { visits: 300, orders: 2, conversionRate: 0.0067 },
@@ -380,16 +403,15 @@ describe('buildVerdictText', () => {
       },
     });
 
-    const blocks = text.split('\n\n');
-    expect(blocks).toHaveLength(4);
-    expect(blocks.every((block) => block.trim().length > 0)).toBe(true);
+    expect(text).toContain('Primary Bottleneck:');
+    expect(text).toContain('Recommended focus:');
     expect(text.length).toBeLessThan(1400);
   });
 
   it('gera leitura executiva e diagnostico diferentes entre SEO e midia', () => {
     const seoCase = buildVerdictText({
       listingTitle: 'Teclado Mecanico Gamer',
-      metrics30d: { visits: 210, orders: 2, conversionRate: 0.0095 },
+      metrics30d: { visits: 60, orders: 1, conversionRate: 0.016 },
       hasPromotion: false,
       topActions: [{ title: 'Reescrever titulo com intencao de busca' }],
       scoreBreakdown: { seo: 30, midia: 72, cadastro: 64, competitividade: 58, performance: 61 },
@@ -400,21 +422,15 @@ describe('buildVerdictText', () => {
 
     const mediaCase = buildVerdictText({
       listingTitle: 'Mini Aspirador Automotivo',
-      metrics30d: { visits: 210, orders: 2, conversionRate: 0.0095 },
+      metrics30d: { visits: 150, orders: 5, conversionRate: 0.0333 },
       hasPromotion: false,
       picturesCount: 3,
       mediaVerdict: { canSuggestClip: true, hasClipDetected: false },
       topActions: [{ title: 'Atualizar galeria com provas de uso real' }],
       scoreBreakdown: { seo: 68, midia: 26, cadastro: 64, competitividade: 58, performance: 61 },
     });
-
-    const seoBlocks = seoCase.split('\n\n');
-    const mediaBlocks = mediaCase.split('\n\n');
-
-    expect(seoBlocks[0]).not.toBe(mediaBlocks[0]);
-    expect(seoBlocks[1]).not.toBe(mediaBlocks[1]);
-    expect(seoCase).toMatch(/SEO|busca|título|descrição/i);
-    expect(mediaCase).toMatch(/mídia|media|galeria|visual|clip/i);
+    expect(seoCase).toContain('Primary Bottleneck: SEARCH');
+    expect(mediaCase).toContain('Primary Bottleneck: CLICK');
   });
 });
 

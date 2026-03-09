@@ -33,7 +33,7 @@ import { generateHacks } from '../services/HackEngine';
 import { getHackHistory } from '../services/ListingHacksService';
 import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 import { randomUUID } from 'crypto';
-import { buildDeterministicMvpActions, buildVerdictText } from '../services/AnalysisResponseBuilders';
+import { buildDeterministicMvpActions, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../services/AnalysisResponseBuilders';
 import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
 
 const prisma = new PrismaClient();
@@ -1606,6 +1606,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Persistir ações estratégicas da análise atual (MVP Kanban)
           const actionsBatchId = await persistListingActionsBatch(listingId, responseData.growthHacks || []);
           responseData.actionsBatchId = actionsBatchId;
+          responseData.funnelDiagnosis = buildFunnelBottleneckDiagnosis({
+            metrics30d: {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+            },
+          });
           responseData.verdictText = buildVerdictText({
             rawVerdict: analysisV21?.verdict || responseData.critique,
             metrics30d: {
@@ -2269,6 +2276,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Persistir ações estratégicas mesmo em cache-hit para evitar Kanban vazio
         const cachedActionsBatchId = await persistListingActionsBatch(listingId, cacheResponseData.growthHacks || []);
         cacheResponseData.actionsBatchId = cachedActionsBatchId;
+        cacheResponseData.funnelDiagnosis = buildFunnelBottleneckDiagnosis({
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+        });
         cacheResponseData.verdictText = buildVerdictText({
           rawVerdict: (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
             || cacheResponseData.critique,
@@ -3039,6 +3053,13 @@ if (enableAIPing) {
         }
 
         // DIA 10: Gerar verdictText completo para GET /latest (mesmo fluxo do POST)
+        responseData.funnelDiagnosis = buildFunnelBottleneckDiagnosis({
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+        });
         responseData.verdictText = buildVerdictText({
           rawVerdict: responseData.analysisV21?.verdict || responseData.critique,
           metrics30d: {
