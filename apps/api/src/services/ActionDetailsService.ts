@@ -16,6 +16,7 @@ import {
   ACTION_DETAILS_V2_PROMPT_VERSION,
 } from './actionDetails/prompts/actionDetailsPrompts';
 import { validateArtifacts } from './actionDetails/validateArtifacts';
+import { applyConcreteFallbackDetails } from './actionDetails/concreteFallback';
 
 const prisma = new PrismaClient();
 const GENERATING_WINDOW_MS = 2 * 60 * 1000;
@@ -156,9 +157,16 @@ export class ActionDetailsService {
 
     if (existing?.status === ListingActionDetailStatus.READY && existing.detailsJson) {
       // Parse e validar dados do cache (já são JSON-safe do Prisma)
-      const data = schemaVersion === 'v2'
+      const dataParsed = schemaVersion === 'v2'
         ? ActionDetailsV2Schema.parse(existing.detailsJson)
         : ActionDetailsV1Schema.parse(existing.detailsJson);
+      const analysisPayload = await this.getLatestAnalysisPayload(action);
+      const data = applyConcreteFallbackDetails({
+        actionKey: action.actionKey,
+        schemaVersion,
+        details: dataParsed,
+        analysisPayload,
+      });
       return { state: 'ready', data, cached: true, schemaVersion };
     }
 
@@ -178,7 +186,7 @@ export class ActionDetailsService {
     }
 
     try {
-      const promptInput = await this.buildPromptInput(action);
+      const { promptInput, analysisPayload } = await this.buildPromptInput(action);
       
       let prompt: string;
       let promptVersion: string;
@@ -220,9 +228,16 @@ export class ActionDetailsService {
         }
       }
 
+      const detailsWithFallback = applyConcreteFallbackDetails({
+        actionKey: action.actionKey,
+        schemaVersion,
+        details: generation.details,
+        analysisPayload,
+      });
+
       // Garantir que detailsJson seja JSON-safe para Prisma
       // Após validação Zod, o objeto já é JSON-safe, mas fazemos cast explícito para satisfazer TypeScript
-      const detailsJsonSafe = generation.details as Prisma.InputJsonValue;
+      const detailsJsonSafe = detailsWithFallback as Prisma.InputJsonValue;
 
       await this.prismaClient.listingActionDetail.upsert({
         where: {
@@ -258,7 +273,7 @@ export class ActionDetailsService {
         },
       });
 
-      return { state: 'ready', data: generation.details, cached: false, schemaVersion };
+      return { state: 'ready', data: detailsWithFallback, cached: false, schemaVersion };
     } catch (error) {
       await this.markFailed(action, error instanceof Error ? error.message : 'Erro inesperado', schemaVersion);
       throw new ActionDetailsError('Não foi possível gerar os detalhes agora. Tente novamente em instantes.', 500);
@@ -323,7 +338,24 @@ export class ActionDetailsService {
     });
   }
 
-  private async buildPromptInput(action: NonNullable<ListingActionWithListing>): Promise<BuildActionDetailsPromptInput> {
+  private async getLatestAnalysisPayload(
+    action: NonNullable<ListingActionWithListing>,
+  ): Promise<Record<string, unknown> | null> {
+    const latestAnalysis = await this.prismaClient.listingAIAnalysis.findFirst({
+      where: {
+        tenant_id: action.listing.tenant_id,
+        listing_id: action.listingId,
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    return (latestAnalysis?.result_json as Record<string, unknown> | null) ?? null;
+  }
+
+  private async buildPromptInput(action: NonNullable<ListingActionWithListing>): Promise<{
+    promptInput: BuildActionDetailsPromptInput;
+    analysisPayload: Record<string, unknown> | null;
+  }> {
     const [metrics, latestAnalysis] = await Promise.all([
       this.prismaClient.listingMetricsDaily.findMany({
         where: {
@@ -353,6 +385,8 @@ export class ActionDetailsService {
     );
 
     return {
+      analysisPayload,
+      promptInput: {
       listing: {
         idExt: action.listing.listing_id_ext,
         title: action.listing.title,
@@ -389,6 +423,7 @@ export class ActionDetailsService {
         expectedImpact: action.expectedImpact,
         priority: action.priority,
         suggestedActionUrl: suggestedAction?.suggestedActionUrl ?? null,
+      },
       },
     };
   }

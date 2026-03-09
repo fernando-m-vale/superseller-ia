@@ -1525,7 +1525,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               discountPercent: listing.discount_percent,
               mediaVerdict: {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
+                hasClipDetected: mediaVerdict?.hasClipDetected,
               },
+              dataQualityWarnings: inputV21?.dataQuality?.warnings ?? [],
+              analysisV21,
+              seoSuggestions: {
+                suggestedTitle: analysisV21?.title_fix?.after,
+                titleRationale: analysisV21?.title_fix?.problem,
+              },
+              generatedContent,
+              scoreBreakdown: result.score.score.breakdown,
+              potentialGain: result.score.score.potential_gain as unknown as Record<string, unknown>,
               benchmark: {
                 confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
                 sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
@@ -1566,7 +1576,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               discountPercent: listing.discount_percent,
               mediaVerdict: {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
+                hasClipDetected: mediaVerdict?.hasClipDetected,
               },
+              dataQualityWarnings: inputV21?.dataQuality?.warnings ?? [],
+              analysisV21,
+              seoSuggestions: {
+                suggestedTitle: analysisV21?.title_fix?.after,
+                titleRationale: analysisV21?.title_fix?.problem,
+              },
+              generatedContent,
+              scoreBreakdown: result.score.score.breakdown,
+              potentialGain: result.score.score.potential_gain as unknown as Record<string, unknown>,
               benchmark: {
                 confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
                 sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
@@ -2158,7 +2178,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             discountPercent: listing.discount_percent,
             mediaVerdict: {
               canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+            seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
+            generatedContent: cacheGeneratedContent as any,
+            scoreBreakdown: scoreResult.score.breakdown as any,
+            potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
             benchmark: {
               confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
               sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
@@ -2199,7 +2226,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             discountPercent: listing.discount_percent,
             mediaVerdict: {
               canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+            seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
+            generatedContent: cacheGeneratedContent as any,
+            scoreBreakdown: scoreResult.score.breakdown as any,
+            potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
             benchmark: {
               confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
               sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
@@ -2861,7 +2895,14 @@ if (enableAIPing) {
             discountPercent: listing.discount_percent,
             mediaVerdict: {
               canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+            seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
+            generatedContent: cacheGeneratedContent as any,
+            scoreBreakdown: scoreResult.score.breakdown as any,
+            potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
             benchmark: {
               confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
               sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
@@ -2892,7 +2933,14 @@ if (enableAIPing) {
             discountPercent: listing.discount_percent,
             mediaVerdict: {
               canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+            seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
+            generatedContent: cacheGeneratedContent as any,
+            scoreBreakdown: scoreResult.score.breakdown as any,
+            potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
             benchmark: {
               confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
               sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,

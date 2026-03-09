@@ -135,6 +135,11 @@ describe('ActionDetailsService', () => {
             { variation: 'B' as const, text: 'Título B' },
             { variation: 'C' as const, text: 'Título C' },
           ],
+          keywordSuggestions: [
+            { keyword: 'titulo', placement: 'title' as const },
+            { keyword: 'produto', placement: 'title' as const },
+            { keyword: 'mercado', placement: 'title' as const },
+          ],
         },
       },
       benchmark: {

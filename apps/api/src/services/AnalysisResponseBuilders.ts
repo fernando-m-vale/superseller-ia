@@ -45,7 +45,24 @@ export interface DeterministicMvpActionsInput {
   metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
   hasPromotion?: boolean | null;
   discountPercent?: number | null;
-  mediaVerdict?: { canSuggestClip?: boolean | null };
+  mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  dataQualityWarnings?: string[] | null;
+  seoSuggestions?: {
+    suggestedTitle?: string | null;
+    titleRationale?: string | null;
+  } | null;
+  analysisV21?: {
+    title_fix?: { before?: string | null; after?: string | null; problem?: string | null } | null;
+    description_fix?: { diagnostic?: string | null; optimized_copy?: string | null } | null;
+    image_plan?: Array<{ image?: number | null; action?: string | null }> | null;
+    price_fix?: { diagnostic?: string | null; action?: string | null } | null;
+  } | null;
+  generatedContent?: {
+    bullets?: string[] | null;
+    seoDescription?: { long?: string | null } | null;
+  } | null;
+  scoreBreakdown?: Partial<Record<ActionPillar | 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance', number>> | null;
+  potentialGain?: Partial<Record<ActionPillar | 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance', unknown>> | null;
   benchmark?: {
     confidence?: string | null;
     sampleSize?: number | null;
@@ -108,6 +125,10 @@ function isClipAction(action: MvpActionItem): boolean {
   return haystack.includes('clip') || haystack.includes('video') || haystack.includes('vídeo');
 }
 
+function hasClipInconclusiveWarning(input: DeterministicMvpActionsInput): boolean {
+  return (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api');
+}
+
 function isBenchmarkUnavailable(benchmark?: DeterministicMvpActionsInput['benchmark']): boolean {
   if (!benchmark) return true;
   if ((benchmark.confidence || '').toLowerCase() === 'unavailable') return true;
@@ -144,6 +165,121 @@ function makeManualValidationLowImpact(action: MvpActionItem): MvpActionItem {
     impact: 'low',
     priority: 'low',
   };
+}
+
+function hasConcreteTitleEvidence(input: DeterministicMvpActionsInput): boolean {
+  const suggestedTitle = input.seoSuggestions?.suggestedTitle;
+  const titleAfter = input.analysisV21?.title_fix?.after;
+  return Boolean((suggestedTitle && suggestedTitle.trim()) || (titleAfter && titleAfter.trim()));
+}
+
+function hasConcreteDescriptionEvidence(input: DeterministicMvpActionsInput): boolean {
+  const optimizedCopy = input.analysisV21?.description_fix?.optimized_copy;
+  const generatedLong = input.generatedContent?.seoDescription?.long;
+  const bullets = input.generatedContent?.bullets || [];
+  return Boolean((optimizedCopy && optimizedCopy.trim()) || (generatedLong && generatedLong.trim()) || bullets.length > 0);
+}
+
+function hasConcreteImageEvidence(input: DeterministicMvpActionsInput): boolean {
+  const plan = input.analysisV21?.image_plan || [];
+  return plan.some((step) => Boolean(step?.action && step.action.trim()));
+}
+
+function hasConcretePriceEvidence(input: DeterministicMvpActionsInput): boolean {
+  const action = input.analysisV21?.price_fix?.action;
+  return Boolean(action && action.trim());
+}
+
+function hasMediaImprovementEvidence(input: DeterministicMvpActionsInput): boolean {
+  const picturesCount = input.picturesCount ?? 0;
+  return picturesCount < 6 || input.mediaVerdict?.canSuggestClip === true;
+}
+
+function shouldAddEvidenceDrivenAction(actionKey: string, input: DeterministicMvpActionsInput): boolean {
+  if (actionKey === 'seo_title_refresh') return hasConcreteTitleEvidence(input);
+  if (actionKey === 'seo_description_blocks') return hasConcreteDescriptionEvidence(input);
+  if (actionKey === 'midia_gallery_upgrade') return hasConcreteImageEvidence(input) || hasMediaImprovementEvidence(input);
+  if (actionKey === 'compet_price_positioning') return hasConcretePriceEvidence(input);
+  return true;
+}
+
+function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: string | null): MvpActionItem[] {
+  const templates: MvpActionItem[] = [];
+  const titleAfter = input.analysisV21?.title_fix?.after || input.seoSuggestions?.suggestedTitle;
+  const titleProblem = input.analysisV21?.title_fix?.problem || input.seoSuggestions?.titleRationale;
+  const optimizedCopy = input.analysisV21?.description_fix?.optimized_copy || input.generatedContent?.seoDescription?.long;
+  const descriptionDiagnostic = input.analysisV21?.description_fix?.diagnostic;
+  const imagePlan = (input.analysisV21?.image_plan || [])
+    .filter((step) => typeof step?.action === 'string' && step.action.trim().length > 0)
+    .slice(0, 3);
+  const priceAction = input.analysisV21?.price_fix?.action;
+  const hasAggressivePromo = Boolean(input.hasPromotion && (input.discountPercent ?? 0) >= 30);
+
+  if (titleAfter && titleAfter.trim()) {
+    templates.push({
+      id: 'seo_title_refresh',
+      actionKey: 'seo_title_refresh',
+      title: 'Reescrever título com palavras-chave principais',
+      summary: `Sugestão pronta de título: "${titleAfter.trim()}".`,
+      description: titleProblem?.trim()
+        ? `Motivo do ajuste: ${titleProblem.trim()}`
+        : 'Há evidência concreta no diagnóstico para otimizar o título e aumentar CTR qualificado.',
+      expectedImpact: 'Mais cliques qualificados e melhor entrada no funil.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'seo',
+    });
+  }
+
+  if (optimizedCopy && optimizedCopy.trim()) {
+    templates.push({
+      id: 'seo_description_blocks',
+      actionKey: 'seo_description_blocks',
+      title: 'Atualizar descrição com blocos prontos',
+      summary: 'Existe copy otimizada pronta no diagnóstico para reaproveitar imediatamente.',
+      description: descriptionDiagnostic?.trim()
+        ? descriptionDiagnostic.trim()
+        : 'Aplicar blocos da descrição otimizada tende a reduzir objeções e melhorar conversão.',
+      expectedImpact: 'Mais clareza de oferta e menor fricção na decisão de compra.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'seo',
+    });
+  }
+
+  if (imagePlan.length > 0) {
+    templates.push({
+      id: 'midia_gallery_upgrade',
+      actionKey: 'midia_gallery_upgrade',
+      title: 'Executar plano de imagens do diagnóstico',
+      summary: `Plano concreto disponível com ${imagePlan.length} prioridades de imagem.`,
+      description: imagePlan.map((step, index) => `${index + 1}. ${step.action?.trim()}`).join(' '),
+      expectedImpact: 'Melhor prova visual e aumento de conversão.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'midia',
+    });
+  }
+
+  if (priceAction && priceAction.trim() && !hasAggressivePromo) {
+    templates.push({
+      id: 'compet_price_positioning',
+      actionKey: 'compet_price_positioning',
+      title: 'Ajustar estratégia de preço/oferta',
+      summary: 'Há recomendação concreta de preço/oferta no diagnóstico.',
+      description: priceAction.trim(),
+      expectedImpact: 'Melhor competitividade sem perder margem desnecessariamente.',
+      impact: 'medium',
+      priority: 'medium',
+      suggestedActionUrl: editUrl,
+      pillar: 'competitividade',
+    });
+  }
+
+  return templates;
 }
 
 function computeEvidenceScore(action: MvpActionItem, extra?: { confidence?: number; evidenceCount?: number }): number {
@@ -303,6 +439,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
   const maxItems = Math.min(15, Math.max(1, input.maxItems ?? 15));
   const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
+  const clipDetectionInconclusive = hasClipInconclusiveWarning(input);
 
   const candidatesByKey = new Map<string, ActionCandidate>();
 
@@ -312,7 +449,15 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
   ): void => {
     let normalizedAction = action;
 
-    if (isClipAction(normalizedAction) && input.mediaVerdict?.canSuggestClip !== true) {
+    if (
+      isClipAction(normalizedAction) &&
+      normalizedAction.actionKey !== 'midia_clip_manual_validation' &&
+      (clipDetectionInconclusive || input.mediaVerdict?.canSuggestClip !== true)
+    ) {
+      return;
+    }
+
+    if (!shouldAddEvidenceDrivenAction(normalizedAction.actionKey, input)) {
       return;
     }
 
@@ -365,6 +510,24 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     }
   };
 
+  if (clipDetectionInconclusive) {
+    upsertCandidate({
+      id: 'midia_clip_manual_validation',
+      actionKey: 'midia_clip_manual_validation',
+      title: 'Validar clip manualmente no Mercado Livre',
+      summary: 'A API pública não detecta clips com confiabilidade neste anúncio.',
+      description: 'Valide manualmente no painel do Mercado Livre se já existe clip publicado antes de qualquer ajuste de mídia.',
+      expectedImpact: 'Evita ação incorreta de baixo valor e mantém o plano confiável.',
+      impact: 'low',
+      priority: 'low',
+      suggestedActionUrl: editUrl,
+      pillar: 'midia',
+    }, {
+      confidence: 70,
+      evidenceCount: 2,
+    });
+  }
+
   for (const rawHack of input.hackActions || []) {
     const title = String(rawHack.title || '').trim();
     const description = String(rawHack.summary || rawHack.description || '').trim();
@@ -399,6 +562,10 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
         evidenceCount: rawHack.evidence?.length,
       }
     );
+  }
+
+  for (const template of buildEvidenceTemplates(input, editUrl)) {
+    upsertCandidate(template, { hardPenalty: -6 });
   }
 
   for (const template of buildTemplates(input, editUrl)) {
