@@ -1615,6 +1615,20 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             discountPercent: listing.discount_percent,
             topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
             listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
+            },
+            dataQualityWarnings: result.dataQuality?.warnings ?? [],
+            analysisV21,
+            scoreBreakdown: result.score.score.breakdown as any,
+            potentialGain: result.score.score.potential_gain as unknown as Record<string, unknown>,
+            benchmark: {
+              confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: benchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
           });
 
           // Adicionar header com commit SHA
@@ -2263,6 +2277,20 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           discountPercent: listing.discount_percent,
           topActions: (cacheResponseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
           listingTitle: listing.title,
+          picturesCount: listing.pictures_count,
+          mediaVerdict: {
+            canSuggestClip: mediaVerdict?.canSuggestClip,
+            hasClipDetected: mediaVerdict?.hasClipDetected,
+          },
+          dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+          analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+          scoreBreakdown: scoreResult.score.breakdown as any,
+          potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
+          benchmark: {
+            confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+            sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+            baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+          },
         });
 
         // Adicionar header com commit SHA
@@ -2976,6 +3004,20 @@ if (enableAIPing) {
           discountPercent: listing.discount_percent,
           topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
           listingTitle: listing.title,
+          picturesCount: listing.pictures_count,
+          mediaVerdict: {
+            canSuggestClip: mediaVerdict?.canSuggestClip,
+            hasClipDetected: mediaVerdict?.hasClipDetected,
+          },
+          dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+          analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+          scoreBreakdown: scoreResult.score.breakdown as any,
+          potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
+          benchmark: {
+            confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+            sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+            baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+          },
         });
 
         // Adicionar header com commit SHA

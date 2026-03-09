@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDeterministicMvpActions } from '../AnalysisResponseBuilders';
+import { buildDeterministicMvpActions, buildVerdictText } from '../AnalysisResponseBuilders';
 
 describe('AnalysisResponseBuilders', () => {
   it('respeita teto maximo sem obrigatoriedade de preencher 15', () => {
@@ -238,6 +238,117 @@ describe('AnalysisResponseBuilders', () => {
     });
 
     expect(actions.some((a) => a.actionKey === 'seo_description_blocks')).toBe(true);
+  });
+});
+
+describe('buildVerdictText', () => {
+  it('cobre promocao ativa com conversao fraca', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Mouse Gamer RGB 7200 DPI',
+      metrics30d: { visits: 420, orders: 2, conversionRate: 0.0048 },
+      hasPromotion: true,
+      discountPercent: 35,
+      topActions: [{ title: 'Reforcar prova visual e FAQ de objecoes' }],
+    });
+
+    expect(text).toContain('Promoção ativa');
+    expect(text).toContain('Reforcar prova visual e FAQ de objecoes');
+  });
+
+  it('cobre sem promocao com zero pedidos', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Fone Bluetooth TWS',
+      metrics30d: { visits: 140, orders: 0, conversionRate: 0 },
+      hasPromotion: false,
+      topActions: [{ title: 'Reescrever oferta com beneficios e garantia' }],
+    });
+
+    expect(text).toContain('Sem promoção ativa');
+    expect(text).toContain('0 pedidos');
+  });
+
+  it('cobre visitas altas com conversao fraca', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Kit Ferramentas 129 pecas',
+      metrics30d: { visits: 820, orders: 3, conversionRate: 0.0037 },
+      hasPromotion: false,
+      topActions: [{ title: 'Reorganizar bloco de decisao da descricao' }],
+    });
+
+    expect(text).toContain('820 visitas');
+    expect(text).toMatch(/atencao|descoberta|decisao/i);
+  });
+
+  it('sinaliza benchmark unavailable sem afirmar comparacao objetiva', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Smartwatch Sport',
+      metrics30d: { visits: 310, orders: 2, conversionRate: 0.0064 },
+      hasPromotion: false,
+      topActions: [{ title: 'Ajustar posicionamento comercial' }],
+      scoreBreakdown: { competitividade: 42, performance: 65, seo: 70, midia: 68, cadastro: 74 },
+      benchmark: { confidence: 'unavailable', sampleSize: 0, baselineConversionRate: null },
+    });
+
+    expect(text).toContain('Benchmark externo está indisponível');
+    expect(text.toLowerCase()).not.toContain('abaixo do baseline');
+  });
+
+  it('prioriza narrativa de SEO quando seo e dominante', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Cadeira de Escritorio',
+      metrics30d: { visits: 190, orders: 1, conversionRate: 0.0052 },
+      hasPromotion: false,
+      topActions: [{ title: 'Reescrever titulo com intencao de busca' }],
+      scoreBreakdown: { seo: 28, midia: 66, cadastro: 63, competitividade: 59, performance: 62 },
+      analysisV21: {
+        title_fix: { problem: 'Titulo sem termos de busca relevantes', after: 'Cadeira Ergonomica Escritorio Ajustavel' },
+        description_fix: { diagnostic: 'Descricao sem blocos de decisao' },
+      },
+    });
+
+    expect(text).toMatch(/SEO|título|descrição|busca/i);
+  });
+
+  it('prioriza narrativa de midia quando midia e dominante', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Aspirador Portatil',
+      metrics30d: { visits: 260, orders: 2, conversionRate: 0.0077 },
+      hasPromotion: false,
+      picturesCount: 3,
+      mediaVerdict: { canSuggestClip: true, hasClipDetected: false },
+      topActions: [{ title: 'Atualizar galeria com provas de uso real' }],
+      scoreBreakdown: { seo: 67, midia: 22, cadastro: 64, competitividade: 60, performance: 58 },
+    });
+
+    expect(text).toMatch(/mídia|media|galeria|visual|clip/i);
+  });
+
+  it('gera textos diferentes para cenarios diferentes', () => {
+    const promoLowCr = buildVerdictText({
+      listingTitle: 'Mouse Gamer RGB 7200 DPI',
+      metrics30d: { visits: 420, orders: 2, conversionRate: 0.0048 },
+      hasPromotion: true,
+      discountPercent: 35,
+      topActions: [{ title: 'Reforcar prova visual e FAQ de objecoes' }],
+    });
+
+    const noPromoZeroOrders = buildVerdictText({
+      listingTitle: 'Fone Bluetooth TWS',
+      metrics30d: { visits: 140, orders: 0, conversionRate: 0 },
+      hasPromotion: false,
+      topActions: [{ title: 'Reescrever oferta com beneficios e garantia' }],
+    });
+
+    const highVisitsLowCr = buildVerdictText({
+      listingTitle: 'Kit Ferramentas 129 pecas',
+      metrics30d: { visits: 820, orders: 3, conversionRate: 0.0037 },
+      hasPromotion: false,
+      topActions: [{ title: 'Reorganizar bloco de decisao da descricao' }],
+    });
+
+    expect(promoLowCr).not.toBe(noPromoZeroOrders);
+    expect(promoLowCr).not.toBe(highVisitsLowCr);
+    expect(noPromoZeroOrders).not.toBe(highVisitsLowCr);
   });
 });
 
