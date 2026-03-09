@@ -171,7 +171,8 @@ describe('AnalysisResponseBuilders', () => {
       },
     });
 
-    expect(actions[0]?.actionKey).toBe('specific_cr_fix');
+    expect(actions[0]?.actionKey).toBe('midia_gallery_upgrade');
+    expect(actions[0]?.summary).toContain('Funnel Stage:');
   });
 
   it('permite varias acoes quando ha evidencias internas concretas', () => {

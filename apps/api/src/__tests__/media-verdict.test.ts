@@ -14,6 +14,7 @@ describe('MediaVerdict', () => {
       const verdict = getMediaVerdict(true, 10);
       
       expect(verdict.hasClipDetected).toBe(true);
+      expect(verdict.clipStatus).toBe('HAS_CLIP');
       expect(verdict.canSuggestClip).toBe(false);
       expect(verdict.message).toContain('possui clip');
       expect(verdict.shortMessage).toBe('Clip presente');
@@ -23,6 +24,7 @@ describe('MediaVerdict', () => {
       const verdict = getMediaVerdict(false, 5);
       
       expect(verdict.hasClipDetected).toBe(false);
+      expect(verdict.clipStatus).toBe('NO_CLIP');
       expect(verdict.canSuggestClip).toBe(true);
       expect(verdict.message).toContain('não possui clip');
       expect(verdict.shortMessage).toBe('Sem clip');
@@ -32,9 +34,10 @@ describe('MediaVerdict', () => {
       const verdict = getMediaVerdict(null, 10);
       
       expect(verdict.hasClipDetected).toBe(null);
+      expect(verdict.clipStatus).toBe('INCONCLUSIVE');
       expect(verdict.canSuggestClip).toBe(false);
-      expect(verdict.message).toContain('Não foi possível confirmar');
-      expect(verdict.message).toContain('Valide no painel');
+      expect(verdict.message).toContain('Não foi possível determinar');
+      expect(verdict.message).toContain('Validar clip manualmente no anúncio');
       expect(verdict.shortMessage).toBe('Não detectável via API');
     });
 

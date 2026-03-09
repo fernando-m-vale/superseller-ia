@@ -7,9 +7,41 @@
  * - null: não detectável via API
  */
 
-import { extractHasVideoFromMlItem } from '../ml-video-extractor';
+import { classifyMlClipStatus, extractHasVideoFromMlItem } from '../ml-video-extractor';
 
 describe('ml-video-extractor', () => {
+  describe('classifyMlClipStatus', () => {
+    it('prioriza metadata e classifica HAS_CLIP', () => {
+      const result = classifyMlClipStatus({ id: 'MLB1', video_url: 'https://cdn/video.mp4' }, 200);
+      expect(result.clipStatus).toBe('HAS_CLIP');
+      expect(result.hasClips).toBe(true);
+      expect(result.reason).toBe('MEDIA_METADATA');
+    });
+
+    it('classifica HAS_CLIP por estrutura de mídia', () => {
+      const result = classifyMlClipStatus({
+        id: 'MLB1',
+        pictures: [{ id: '1', type: 'video' }],
+      }, 200);
+      expect(result.clipStatus).toBe('HAS_CLIP');
+      expect(result.reason).toBe('MEDIA_STRUCTURE');
+    });
+
+    it('classifica INCONCLUSIVE quando API não permite determinar', () => {
+      const result = classifyMlClipStatus({ id: 'MLB1' }, 403);
+      expect(result.clipStatus).toBe('INCONCLUSIVE');
+      expect(result.hasClips).toBeNull();
+      expect(result.reason).toBe('API_LIMITATION');
+    });
+
+    it('classifica NO_CLIP quando ausência é confirmada', () => {
+      const result = classifyMlClipStatus({ id: 'MLB1', pictures: [] }, 200);
+      expect(result.clipStatus).toBe('NO_CLIP');
+      expect(result.hasClips).toBe(false);
+      expect(result.reason).toBe('CONFIRMED_ABSENCE');
+    });
+  });
+
   describe('extractHasVideoFromMlItem - Tri-state has_clips (HOTFIX 09.11)', () => {
     it('deve retornar true quando video_id está presente e não vazio (status 200)', () => {
       const item = {

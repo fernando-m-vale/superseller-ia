@@ -34,6 +34,7 @@ import { getHackHistory } from '../services/ListingHacksService';
 import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 import { randomUUID } from 'crypto';
 import { buildDeterministicMvpActions, buildVerdictText } from '../services/AnalysisResponseBuilders';
+import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
 
 const prisma = new PrismaClient();
 
@@ -232,6 +233,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const query = AnalyzeQuerySchema.parse(request.query);
         const { listingId } = params;
         const forceRefresh = query.forceRefresh ?? false;
+        analysisStatusTracker.setStatus(tenantId, listingId, 'generating');
         // Debug controlado: calcular uma única vez no topo do handler para evitar TS2451
         // Considera tanto query param (?debugPrices=true) quanto env var (DEBUG_ML_PRICES=true)
         const debugPricesEnabled = (query.debugPrices ?? false) || (process.env.DEBUG_ML_PRICES === 'true');
@@ -1633,9 +1635,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
           // Adicionar header com commit SHA
           setVersionHeader(reply);
+          analysisStatusTracker.setStatus(tenantId, listingId, 'completed');
 
           return reply.status(200).send({
             message: 'Análise concluída com sucesso',
+            analysis: { status: 'completed' },
             data: responseData,
           });
         }
@@ -2295,13 +2299,18 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
+        analysisStatusTracker.setStatus(tenantId, listingId, 'completed');
 
         return reply.status(200).send({
           message: 'Análise concluída com sucesso (cache)',
+          analysis: { status: 'completed' },
           data: cacheResponseData,
         });
       } catch (error) {
         const { listingId } = (request.params as { listingId: string }) || {};
+        if (tenantId && listingId) {
+          analysisStatusTracker.setStatus(tenantId, listingId, 'failed');
+        }
 
         // Log erro sanitizado (sem tokens/secrets)
         // Reutilizar variáveis já declaradas no topo do handler
@@ -2488,6 +2497,43 @@ if (enableAIPing) {
     return reply.status(404).send({ error: 'Not Found' });
   });
 }
+
+  /**
+   * GET /api/v1/ai/analyze/:listingId/status
+   *
+   * Retorna status atual da análise para fluxos que dependem da geração.
+   */
+  app.get<{ Params: { listingId: string } }>(
+    '/analyze/:listingId/status',
+    { preHandler: authGuard },
+    async (request: FastifyRequest<{ Params: { listingId: string } }>, reply: FastifyReply) => {
+      const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
+
+      try {
+        if (!tenantId || !userId) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Usuário não autenticado',
+          });
+        }
+
+        const { listingId } = AnalyzeParamsSchema.parse(request.params);
+        const status = analysisStatusTracker.getStatus(tenantId, listingId) ?? 'completed';
+
+        return reply.status(200).send({
+          analysis: {
+            status,
+          },
+        });
+      } catch (error) {
+        request.log.error({ requestId, userId, tenantId, err: error }, 'Error getting analysis status');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Erro ao consultar status da análise',
+        });
+      }
+    },
+  );
 
   /**
    * GET /api/v1/ai/analyze/:listingId/latest
@@ -3022,9 +3068,11 @@ if (enableAIPing) {
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
+        analysisStatusTracker.setStatus(tenantId, listingId, 'completed');
 
         return reply.status(200).send({
           message: 'Análise encontrada (fetch-only)',
+          analysis: { status: 'completed' },
           data: responseData,
         });
       } catch (error) {

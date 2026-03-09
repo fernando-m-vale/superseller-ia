@@ -27,7 +27,7 @@ export interface ActionDetailsV1 {
 export class ActionDetailsGeneratingError extends Error {
   readonly status = 'GENERATING' as const
 
-  constructor(message = 'Detalhes ainda estão sendo gerados') {
+  constructor(message = 'Gerando detalhes da ação...') {
     super(message)
     this.name = 'ActionDetailsGeneratingError'
   }
@@ -39,10 +39,35 @@ export type ActionDetailsResponse = {
   version?: 'action_details_v1' | 'action_details_v2'
 }
 
+function extractListingId(url: string): string | null {
+  const match = url.match(/\/listings\/([^/]+)\/actions\//)
+  return match?.[1] ?? null
+}
+
 const fetcher = async (url: string): Promise<ActionDetailsResponse> => {
+  const listingId = extractListingId(url)
+
+  if (listingId) {
+    try {
+      const statusRes = await api.get(`/ai/analyze/${listingId}/status`)
+      const status = statusRes?.data?.analysis?.status
+      if (status === 'generating') {
+        throw new ActionDetailsGeneratingError()
+      }
+    } catch (error) {
+      if (error instanceof ActionDetailsGeneratingError) {
+        throw error
+      }
+    }
+  }
+
   const res = await api.get(url)
   
   if (res.status === 202) {
+    throw new ActionDetailsGeneratingError()
+  }
+
+  if (res.data?.status === 'generating' || res.data?.status === 'GENERATING') {
     throw new ActionDetailsGeneratingError()
   }
   

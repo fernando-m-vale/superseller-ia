@@ -5,6 +5,7 @@ import { authGuard } from '../plugins/auth';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import axios, { AxiosError } from 'axios';
 import { ActionDetailsError, ActionDetailsService } from '../services/ActionDetailsService';
+import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
 
 const prisma = new PrismaClient();
 const ML_API_BASE = 'https://api.mercadolibre.com';
@@ -223,14 +224,23 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           reply.header('x-schema-forced', 'v1');
         }
 
+        const analysisStatus = analysisStatusTracker.getStatus(tenantId, listingId);
+        if (analysisStatus === 'generating') {
+          return reply.status(202).send({
+            message: 'Gerando detalhes da ação...',
+            status: 'generating',
+            cached: false,
+          });
+        }
+
         const result = await actionDetailsService.getOrGenerate(tenantId, listingId, actionId, {
           schemaVersion,
         });
 
         if (result.state === 'generating') {
           return reply.status(202).send({
-            message: 'Detalhes em geração. Tente novamente em instantes.',
-            status: 'GENERATING',
+            message: 'Gerando detalhes da ação...',
+            status: 'generating',
             cached: false,
           });
         }

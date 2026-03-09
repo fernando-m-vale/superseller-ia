@@ -81,6 +81,7 @@ interface AIAnalysisApiResponse {
   scoreExplanation?: string[]
   // MediaVerdict - Fonte única de verdade para mídia (clip/vídeo)
   mediaVerdict?: {
+    clipStatus?: 'HAS_CLIP' | 'NO_CLIP' | 'INCONCLUSIVE'
     hasClipDetected: boolean | null
     canSuggestClip: boolean
     message: string
@@ -238,6 +239,7 @@ export interface AIAnalysisResponse {
   scoreExplanation?: string[]
   // MediaVerdict - Fonte única de verdade para mídia (clip/vídeo)
   mediaVerdict?: {
+    clipStatus?: 'HAS_CLIP' | 'NO_CLIP' | 'INCONCLUSIVE'
     hasClipDetected: boolean | null
     canSuggestClip: boolean
     message: string
@@ -924,4 +926,3 @@ export function useAIAnalyze(listingId: string | null) {
     fetchExisting,
   }
 }
-

@@ -17,6 +17,7 @@ export interface MvpActionItem {
 
 interface ActionCandidate {
   action: MvpActionItem;
+  funnelStage: FunnelStage;
   score: number;
   evidenceScore: number;
   impactScore: number;
@@ -25,6 +26,8 @@ interface ActionCandidate {
   executionScore: number;
   penalties: number;
 }
+
+type FunnelStage = 'SEARCH' | 'CLICK' | 'CONVERSION';
 
 export interface DeterministicMvpActionsInput {
   listingIdExt?: string | null;
@@ -126,7 +129,10 @@ function isClipAction(action: MvpActionItem): boolean {
 }
 
 function hasClipInconclusiveWarning(input: DeterministicMvpActionsInput): boolean {
-  return (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api');
+  return (
+    (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api') ||
+    input.mediaVerdict?.hasClipDetected === null
+  );
 }
 
 function isBenchmarkUnavailable(benchmark?: DeterministicMvpActionsInput['benchmark']): boolean {
@@ -147,6 +153,44 @@ function isBenchmarkDependent(action: MvpActionItem): boolean {
 function isManualValidationAction(action: MvpActionItem): boolean {
   const haystack = `${action.title} ${action.summary} ${action.description}`.toLowerCase();
   return haystack.includes('validar') || haystack.includes('verificar') || haystack.includes('validação manual');
+}
+
+function inferFunnelStage(action: MvpActionItem): FunnelStage {
+  const haystack = `${action.actionKey} ${action.title} ${action.summary} ${action.description}`.toLowerCase();
+  if (
+    haystack.includes('seo_title') ||
+    haystack.includes('título') ||
+    haystack.includes('titulo') ||
+    haystack.includes('busca') ||
+    haystack.includes('palavras-chave')
+  ) {
+    return 'SEARCH';
+  }
+  if (
+    haystack.includes('imagem') ||
+    haystack.includes('foto') ||
+    haystack.includes('galeria') ||
+    haystack.includes('clip') ||
+    haystack.includes('miniatura') ||
+    haystack.includes('capa')
+  ) {
+    return 'CLICK';
+  }
+  return 'CONVERSION';
+}
+
+function attachFunnelDiagnosis(action: MvpActionItem): MvpActionItem {
+  const stage = inferFunnelStage(action);
+  const summary = action.summary.includes('Funnel Stage:')
+    ? action.summary
+    : `Funnel Stage: ${stage}. ${action.summary}`;
+  return { ...action, summary };
+}
+
+function getFunnelStageWeight(stage: FunnelStage): number {
+  if (stage === 'SEARCH') return 30;
+  if (stage === 'CLICK') return 20;
+  return 10;
 }
 
 function makeManualValidationLowImpact(action: MvpActionItem): MvpActionItem {
@@ -447,7 +491,8 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     action: MvpActionItem,
     extra?: { confidence?: number; evidenceCount?: number; hardPenalty?: number }
   ): void => {
-    let normalizedAction = action;
+    let normalizedAction = attachFunnelDiagnosis(action);
+    const funnelStage = inferFunnelStage(normalizedAction);
 
     if (
       isClipAction(normalizedAction) &&
@@ -485,7 +530,8 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     if (benchmarkUnavailable && isBenchmarkDependent(normalizedAction)) penalties += 12;
     penalties += extra?.hardPenalty ?? 0;
 
-    const score = impactScore + evidenceScore + confidenceScore + urgencyScore + executionScore - penalties;
+    const stageScore = getFunnelStageWeight(funnelStage);
+    const score = stageScore + impactScore + evidenceScore + confidenceScore + urgencyScore + executionScore - penalties;
 
     if (evidenceScore < 10 && normalizedAction.impact !== 'high') {
       return;
@@ -499,6 +545,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     if (!existing || score > existing.score) {
       candidatesByKey.set(normalizedAction.actionKey, {
         action: normalizedAction,
+        funnelStage,
         score,
         evidenceScore,
         impactScore,
@@ -574,6 +621,14 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
 
   const sorted = Array.from(candidatesByKey.values())
     .sort((a, b) => {
+      const stageOrder: Record<FunnelStage, number> = {
+        SEARCH: 3,
+        CLICK: 2,
+        CONVERSION: 1,
+      };
+      if (stageOrder[b.funnelStage] !== stageOrder[a.funnelStage]) {
+        return stageOrder[b.funnelStage] - stageOrder[a.funnelStage];
+      }
       if (b.score !== a.score) return b.score - a.score;
       if (b.evidenceScore !== a.evidenceScore) return b.evidenceScore - a.evidenceScore;
       return b.impactScore - a.impactScore;

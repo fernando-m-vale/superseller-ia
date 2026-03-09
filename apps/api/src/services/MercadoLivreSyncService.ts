@@ -2,7 +2,7 @@ import axios, { AxiosError } from 'axios';
 import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus, OrderStatus, ListingAccessStatus } from '@prisma/client';
 import { ScoreCalculator } from './ScoreCalculator';
 import { RecommendationService } from './RecommendationService';
-import { extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
+import { classifyMlClipStatus, extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
 import { resolveMercadoLivreConnection } from '../utils/ml-connection-resolver';
 import { getValidAccessToken } from '../utils/ml-token-helper';
 import { extractBuyerPricesFromMlPrices, applyBuyerPricesOverrideFromMlPrices } from '../utils/ml-prices-extractor';
@@ -1288,6 +1288,7 @@ export class MercadoLivreSyncService {
       
       const videoExtraction = extractHasVideoFromMlItem(item, httpStatusForVideo);
       const hasVideoFromAPI = videoExtraction.hasVideo;
+      const clipClassification = classifyMlClipStatus(item, httpStatusForVideo);
       
       // HOTFIX 09.11: Log detalhado quando DEBUG_MEDIA=1
       if (debugMedia) {
@@ -1303,6 +1304,9 @@ export class MercadoLivreSyncService {
             'videos' in item ? 'videos' : null,
           ].filter(Boolean),
           valueToPersist: hasVideoFromAPI, // true | false | null
+          clipStatus: clipClassification.clipStatus,
+          clipReason: clipClassification.reason,
+          clipSignals: clipClassification.signals,
         });
       }
       
@@ -1759,11 +1763,7 @@ export class MercadoLivreSyncService {
         
         // Log estruturado para debug (sem expor tokens) - já logado acima no resultado final
 
-        // AJUSTE DEFINITIVO: Separar semanticamente has_video (vídeo tradicional) de has_clips (Clips ML)
-        // - has_video: baseado em video_id/videos (vídeo tradicional do ML)
-        // - has_clips: representa Clips do ML (curtos verticais) - NÃO detectável via API pública para MLB
-        // Para MLB, has_clips deve ser NULL por padrão (não setar false automaticamente)
-        // IMPORTANTE: Não inferir has_clips baseado em video_id (são coisas diferentes)
+        // has_video: mantém regra legada de vídeo tradicional
         const debugMedia = process.env.DEBUG_MEDIA === '1' || process.env.DEBUG_MEDIA === 'true';
         
         // 1. Atualizar has_video (vídeo tradicional) baseado em video_id/videos
@@ -1803,9 +1803,7 @@ export class MercadoLivreSyncService {
           }
         }
         
-        // 2. has_clips: Para MLB, sempre NULL por padrão (não detectável via API pública)
-        // Só atualizar se clips_source === 'override' (override manual)
-        const existingHasClips = existing ? (existing as any).has_clips : null;
+        // 2. has_clips: classificação determinística (HAS_CLIP / NO_CLIP / INCONCLUSIVE)
         const existingClipsSource = existing ? (existing as any).clips_source : null;
         
         // Se tem override manual, não tocar em has_clips (será atualizado pelo endpoint de override)
@@ -1815,18 +1813,28 @@ export class MercadoLivreSyncService {
             console.log(`[ML-SYNC] DEBUG_MEDIA: Mantendo has_clips (override manual) para ${item.id}`);
           }
         } else {
-          // Para MLB, has_clips não é detectável via API pública
-          // Sempre setar NULL (não false) para novos listings ou se não tem override
-          if (existing) {
-            // Se já existe e não é override, não atualizar (mantém null ou valor existente)
-            listingData.has_clips = undefined; // Não atualizar
+          if (clipClassification.clipStatus === 'HAS_CLIP') {
+            listingData.has_clips = true;
+            listingData.clips_source = 'api';
+            listingData.clips_checked_at = now;
+          } else if (clipClassification.clipStatus === 'NO_CLIP') {
+            listingData.has_clips = false;
+            listingData.clips_source = 'api';
+            listingData.clips_checked_at = now;
           } else {
-            // Criação: sempre NULL (não detectável via API)
             listingData.has_clips = null;
-            listingData.clips_source = 'unknown'; // Marcar como desconhecido (não detectável)
-            if (debugMedia) {
-              console.log(`[ML-SYNC] DEBUG_MEDIA: Setando has_clips=null (não detectável via API) para novo listing ${item.id}`);
-            }
+            listingData.clips_source = 'unknown';
+            listingData.clips_checked_at = now;
+          }
+
+          if (debugMedia) {
+            console.log(`[ML-SYNC] DEBUG_MEDIA: Classificação de clip para ${item.id}`, {
+              clipStatus: clipClassification.clipStatus,
+              reason: clipClassification.reason,
+              signals: clipClassification.signals,
+              has_clips: listingData.has_clips,
+              clips_source: listingData.clips_source,
+            });
           }
         }
         
@@ -3449,4 +3457,3 @@ export class MercadoLivreSyncService {
     return false;
   }
 }
-

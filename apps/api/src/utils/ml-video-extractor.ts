@@ -20,6 +20,112 @@ export interface VideoExtractionResult {
   };
 }
 
+export type ClipStatus = 'HAS_CLIP' | 'NO_CLIP' | 'INCONCLUSIVE';
+
+export interface ClipClassificationResult {
+  clipStatus: ClipStatus;
+  hasClips: boolean | null;
+  reason: 'MEDIA_METADATA' | 'MEDIA_STRUCTURE' | 'API_LIMITATION' | 'CONFIRMED_ABSENCE';
+  signals: string[];
+}
+
+function hasNonEmptyValue(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== null && value !== undefined;
+}
+
+/**
+ * Classifica status de clip de forma determinística com ordem de prioridade.
+ */
+export function classifyMlClipStatus(
+  item: unknown,
+  httpStatus?: number | null
+): ClipClassificationResult {
+  if (!item || typeof item !== 'object') {
+    return {
+      clipStatus: 'INCONCLUSIVE',
+      hasClips: null,
+      reason: 'API_LIMITATION',
+      signals: ['payload_not_object'],
+    };
+  }
+
+  const itemObj = item as Record<string, unknown>;
+
+  // 1) MEDIA METADATA
+  const metadataSignals: string[] = [];
+  const metadataKeys = ['video', 'clip', 'video_url', 'video_thumbnail', 'video_id', 'clip_url', 'clip_id'];
+  for (const key of metadataKeys) {
+    if (hasNonEmptyValue(itemObj[key])) {
+      metadataSignals.push(`metadata:${key}`);
+    }
+  }
+  if (metadataSignals.length > 0) {
+    return {
+      clipStatus: 'HAS_CLIP',
+      hasClips: true,
+      reason: 'MEDIA_METADATA',
+      signals: metadataSignals,
+    };
+  }
+
+  // 2) MEDIA STRUCTURE (gallery/pictures/videos com preview de vídeo)
+  const structureSignals: string[] = [];
+  const mediaCollections = ['pictures', 'gallery', 'media', 'videos'];
+  for (const collectionKey of mediaCollections) {
+    const collection = itemObj[collectionKey];
+    if (!Array.isArray(collection)) continue;
+    const hasVideoPreview = collection.some((entry) => {
+      if (!entry || typeof entry !== 'object') return false;
+      const obj = entry as Record<string, unknown>;
+      const type = String(obj.type || '').toLowerCase();
+      return (
+        type === 'video' ||
+        type === 'clip' ||
+        hasNonEmptyValue(obj.video) ||
+        hasNonEmptyValue(obj.video_url) ||
+        hasNonEmptyValue(obj.video_thumbnail) ||
+        hasNonEmptyValue(obj.clip) ||
+        hasNonEmptyValue(obj.clip_url) ||
+        hasNonEmptyValue(obj.video_id) ||
+        hasNonEmptyValue(obj.clip_id)
+      );
+    });
+    if (hasVideoPreview) {
+      structureSignals.push(`structure:${collectionKey}`);
+    }
+  }
+  if (structureSignals.length > 0) {
+    return {
+      clipStatus: 'HAS_CLIP',
+      hasClips: true,
+      reason: 'MEDIA_STRUCTURE',
+      signals: structureSignals,
+    };
+  }
+
+  // 3) API LIMITATION
+  if (httpStatus !== undefined && httpStatus !== null && httpStatus !== 200) {
+    return {
+      clipStatus: 'INCONCLUSIVE',
+      hasClips: null,
+      reason: 'API_LIMITATION',
+      signals: [`http_status:${httpStatus}`],
+    };
+  }
+
+  // 4) CONFIRMED ABSENCE
+  return {
+    clipStatus: 'NO_CLIP',
+    hasClips: false,
+    reason: 'CONFIRMED_ABSENCE',
+    signals: ['no_video_metadata', 'no_video_preview'],
+  };
+}
+
 /**
  * Extrai informação de vídeo do payload do Mercado Livre
  * 

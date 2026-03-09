@@ -14,6 +14,8 @@
  */
 
 export interface MediaVerdict {
+  /** Classificação determinística do status de clip */
+  clipStatus: 'HAS_CLIP' | 'NO_CLIP' | 'INCONCLUSIVE';
   /** Se clip foi detectado via API (true) ou não (false) ou não detectável (null) */
   hasClipDetected: boolean | null;
   /** Se é seguro sugerir adicionar clip (false quando já tem ou quando null) */
@@ -38,6 +40,7 @@ export function getMediaVerdict(
   // REGRA 1: hasClips === true → NUNCA sugerir clip, SEMPRE afirmar presença
   if (hasClips === true) {
     return {
+      clipStatus: 'HAS_CLIP',
       hasClipDetected: true,
       canSuggestClip: false,
       message: 'O anúncio possui clip. Mídia está completa.',
@@ -56,9 +59,10 @@ export function getMediaVerdict(
       : '';
     
     return {
+      clipStatus: 'NO_CLIP',
       hasClipDetected: false,
       canSuggestClip: true,
-      message: `O anúncio não possui clip. Adicionar clip pode melhorar engajamento e conversão.${picturesContext}`,
+      message: `O anúncio não possui clip. Adicionar clip demonstrando o produto em uso pode melhorar engajamento e conversão.${picturesContext}`,
       shortMessage: 'Sem clip',
     };
   }
@@ -74,9 +78,10 @@ export function getMediaVerdict(
     : '';
   
   return {
+    clipStatus: 'INCONCLUSIVE',
     hasClipDetected: null,
     canSuggestClip: false,
-    message: `Clips não são detectáveis via API pública do Mercado Livre. Valide manualmente no painel do ML.${picturesContext}`,
+    message: `Não foi possível determinar via API se o anúncio possui clip. Validar clip manualmente no anúncio.${picturesContext}`,
     shortMessage: 'Não detectável via API',
   };
 }
@@ -110,4 +115,3 @@ export function canAffirmHasClip(hasClips: boolean | null): boolean {
 export function isClipStatusKnown(hasClips: boolean | null): boolean {
   return hasClips !== null;
 }
-
