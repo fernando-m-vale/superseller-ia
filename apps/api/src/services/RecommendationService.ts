@@ -6,7 +6,7 @@
  */
 
 import { PrismaClient, RecommendationType, RecommendationStatus, Listing } from '@prisma/client';
-import { ScoreBreakdown, ScoreDetails } from './ScoreCalculator';
+import { ScoreBreakdown } from './ScoreCalculator';
 
 const prisma = new PrismaClient();
 
@@ -48,8 +48,6 @@ export class RecommendationService {
    */
   generateRecommendationsForListing(input: RecommendationInput): GeneratedRecommendation[] {
     const recommendations: GeneratedRecommendation[] = [];
-    const details = input.scoreBreakdown?.details;
-
     // ================================================
     // 1. ANÁLISE DE CADASTRO (SEO, Imagens, Conteúdo)
     // ================================================
@@ -126,36 +124,6 @@ export class RecommendationService {
         ruleTrigger: `pictures_count < 3 (atual: ${validPicturesCount})`,
         scoreImpact: 5,
       });
-    }
-
-    // Vídeo / Clips
-    // IMPORTANTE: has_video = null significa "não detectável via API" (não afirmar ausência)
-    // has_video = false significa "confirmado que não tem vídeo"
-    if (input.picturesCount >= 3) {
-      if (input.hasVideo === false) {
-        // Confirmado que não tem vídeo - pode sugerir adicionar
-        recommendations.push({
-          type: RecommendationType.content,
-          priority: 40,
-          title: '🎬 Adicione um vídeo ao anúncio',
-          description: 'Anúncios com vídeo têm até 40% mais conversão. Grave um vídeo curto (15-60 segundos) mostrando o produto em uso, seus benefícios e diferenciais.',
-          impactEstimate: '+40% conversão',
-          ruleTrigger: 'has_video = false',
-          scoreImpact: 5,
-        });
-      } else if (input.hasVideo === null) {
-        // Não detectável via API - sugerir revisar no painel do ML
-        recommendations.push({
-          type: RecommendationType.content,
-          priority: 30,
-          title: '🎬 Revisar clips e vídeos no painel do Mercado Livre',
-          description: 'Não foi possível detectar vídeos ou clips via API. Verifique no painel do Mercado Livre se seu anúncio possui vídeo ou clips. Se ainda não tiver, adicionar pode aumentar a conversão em até 40%.',
-          impactEstimate: '+40% conversão (se adicionar)',
-          ruleTrigger: 'has_video = null (não detectável via API)',
-          scoreImpact: 5,
-        });
-      }
-      // Se has_video === true, não gerar recomendação (já tem vídeo)
     }
 
     // ================================================
@@ -465,4 +433,3 @@ export class RecommendationService {
     });
   }
 }
-

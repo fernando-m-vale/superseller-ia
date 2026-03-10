@@ -143,13 +143,6 @@ function isClipAction(action: MvpActionItem): boolean {
   return haystack.includes('clip') || haystack.includes('video') || haystack.includes('vídeo');
 }
 
-function hasClipInconclusiveWarning(input: DeterministicMvpActionsInput): boolean {
-  return (
-    (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api') ||
-    input.mediaVerdict?.hasClipDetected === null
-  );
-}
-
 function isBenchmarkUnavailable(benchmark?: DeterministicMvpActionsInput['benchmark']): boolean {
   if (!benchmark) return true;
   if ((benchmark.confidence || '').toLowerCase() === 'unavailable') return true;
@@ -281,7 +274,7 @@ function estimateActionEffort(action: MvpActionItem): number {
   if (haystack.includes('título') || haystack.includes('titulo') || haystack.includes('keyword') || haystack.includes('faq')) {
     return 1;
   }
-  if (haystack.includes('imagem') || haystack.includes('galeria') || haystack.includes('clip') || haystack.includes('vídeo') || haystack.includes('video')) {
+  if (haystack.includes('imagem') || haystack.includes('galeria')) {
     return 2;
   }
   if (haystack.includes('descrição') || haystack.includes('descricao') || haystack.includes('preço') || haystack.includes('preco')) {
@@ -303,7 +296,7 @@ export function buildExecutionRoadmap(input: {
   bottleneckDiagnosis?: FunnelBottleneckDiagnosis | null;
   growthHacks?: MvpActionItem[] | null;
 }): ExecutionRoadmapStep[] {
-  const actions = (input.growthHacks || []).slice();
+  const actions = (input.growthHacks || []).filter((action) => !isClipAction(action));
   if (actions.length === 0) return [];
 
   const primaryBottleneck = input.bottleneckDiagnosis?.primaryBottleneck ?? 'CONVERSION';
@@ -389,7 +382,7 @@ function hasConcretePriceEvidence(input: DeterministicMvpActionsInput): boolean 
 
 function hasMediaImprovementEvidence(input: DeterministicMvpActionsInput): boolean {
   const picturesCount = input.picturesCount ?? 0;
-  return picturesCount < 6 || input.mediaVerdict?.canSuggestClip === true;
+  return picturesCount < 6;
 }
 
 function shouldAddEvidenceDrivenAction(actionKey: string, input: DeterministicMvpActionsInput): boolean {
@@ -553,21 +546,6 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
     });
   }
 
-  if (input.mediaVerdict?.canSuggestClip === true && visits >= 100) {
-    templates.push({
-      id: 'midia_video_clip',
-      actionKey: 'midia_video_clip',
-      title: 'Publicar clip curto de demonstração',
-      summary: `Com ${visits} visitas em 30 dias, um clip de 15-30s pode responder dúvidas de uso que a foto não cobre.`,
-      description: 'Gravar demonstração objetiva do uso real, foco no benefício principal e no resultado final em poucos segundos.',
-      expectedImpact: 'Aumento de confiança e conversão em tráfego de alta intenção.',
-      impact: 'medium',
-      priority: 'medium',
-      suggestedActionUrl: editUrl,
-      pillar: 'midia',
-    });
-  }
-
   if (input.hasPromotion && visits >= 120 && cr !== null && cr < 0.02) {
     templates.push({
       id: 'compet_promo_validation',
@@ -636,7 +614,6 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
   const maxItems = Math.min(15, Math.max(1, input.maxItems ?? 15));
   const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
-  const clipDetectionInconclusive = hasClipInconclusiveWarning(input);
   const primaryBottleneck = buildFunnelBottleneckDiagnosis({
     metrics30d: input.metrics30d,
   }).primaryBottleneck;
@@ -650,11 +627,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     let normalizedAction = attachFunnelDiagnosis(action);
     const funnelStage = inferFunnelStage(normalizedAction);
 
-    if (
-      isClipAction(normalizedAction) &&
-      normalizedAction.actionKey !== 'midia_clip_manual_validation' &&
-      (clipDetectionInconclusive || input.mediaVerdict?.canSuggestClip !== true)
-    ) {
+    if (isClipAction(normalizedAction)) {
       return;
     }
 
@@ -713,24 +686,6 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     }
   };
 
-  if (clipDetectionInconclusive) {
-    upsertCandidate({
-      id: 'midia_clip_manual_validation',
-      actionKey: 'midia_clip_manual_validation',
-      title: 'Validar clip manualmente no Mercado Livre',
-      summary: 'A API pública não detecta clips com confiabilidade neste anúncio.',
-      description: 'Valide manualmente no painel do Mercado Livre se já existe clip publicado antes de qualquer ajuste de mídia.',
-      expectedImpact: 'Evita ação incorreta de baixo valor e mantém o plano confiável.',
-      impact: 'low',
-      priority: 'low',
-      suggestedActionUrl: editUrl,
-      pillar: 'midia',
-    }, {
-      confidence: 70,
-      evidenceCount: 2,
-    });
-  }
-
   for (const rawHack of input.hackActions || []) {
     const title = String(rawHack.title || '').trim();
     const description = String(rawHack.summary || rawHack.description || '').trim();
@@ -743,7 +698,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
         ? 'competitividade'
         : lowTitle.includes('varia')
           ? 'cadastro'
-          : lowTitle.includes('clip') || lowTitle.includes('imagem') || lowTitle.includes('foto')
+          : lowTitle.includes('imagem') || lowTitle.includes('foto')
             ? 'midia'
             : 'seo';
 
@@ -832,7 +787,11 @@ export function buildVerdictText(input: {
   const orders = input.metrics30d?.orders ?? 0;
   const crValue = input.metrics30d?.conversionRate ?? null;
   const cr = formatConversionRatePercent(crValue);
-  const top = (input.topActions || []).slice(0, 3).map((a) => a.title?.trim()).filter(Boolean) as string[];
+  const top = (input.topActions || [])
+    .map((a) => a.title?.trim())
+    .filter((value): value is string => Boolean(value))
+    .filter((value) => !/clip|video|vídeo/i.test(value))
+    .slice(0, 3);
   const listingTitle = input.listingTitle?.trim();
   const listingRef = listingTitle ? `"${listingTitle}"` : 'este anúncio';
   const lowVisits = visits < 80;
@@ -840,9 +799,8 @@ export function buildVerdictText(input: {
   const zeroOrders = orders === 0;
   const weakConversion = typeof crValue === 'number' ? crValue < 0.01 : zeroOrders;
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark ?? undefined);
-  const clipInconclusive = (input.dataQualityWarnings || []).includes('clips_not_detectable_via_items_api');
   const mediaEvidence = input.analysisV21?.image_plan?.some((step) => Boolean(step?.action && step.action.trim().length > 0)) ?? false;
-  const mediaWeak = mediaEvidence || (((input.picturesCount ?? 0) > 0) && ((input.picturesCount ?? 0) < 6)) || input.mediaVerdict?.canSuggestClip === true;
+  const mediaWeak = mediaEvidence || (((input.picturesCount ?? 0) > 0) && ((input.picturesCount ?? 0) < 6));
   const seoEvidence = Boolean(
     input.analysisV21?.title_fix?.problem ||
     input.analysisV21?.title_fix?.after ||
@@ -873,7 +831,7 @@ export function buildVerdictText(input: {
     if (value.includes('titulo') || value.includes('título') || value.includes('descricao') || value.includes('descrição') || value.includes('seo')) {
       return 'seo';
     }
-    if (value.includes('imagem') || value.includes('foto') || value.includes('galeria') || value.includes('clip') || value.includes('video') || value.includes('vídeo')) {
+    if (value.includes('imagem') || value.includes('foto') || value.includes('galeria')) {
       return 'midia';
     }
     if (value.includes('preco') || value.includes('preço') || value.includes('frete') || value.includes('compet')) {
@@ -951,9 +909,6 @@ export function buildVerdictText(input: {
     diagnosisLines.push(`Evidência direta do diagnóstico: ${titleProblem || descriptionDiagnostic}.`);
   } else if (imageHint && mainProblem !== 'clareza') {
     diagnosisLines.push(`Evidência operacional de mídia: ${imageHint}.`);
-  }
-  if (clipInconclusive) {
-    diagnosisLines.push('O status de clip está inconclusivo via API; qualquer decisão sobre clip depende de validação manual.');
   }
   if (benchmarkUnavailable) {
     diagnosisLines.push('Benchmark externo está indisponível no momento, então a leitura competitiva fica restrita aos sinais internos do anúncio.');

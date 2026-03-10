@@ -45,6 +45,10 @@ interface ActionDetailsModalProps {
   onStatusChange: (actionId: string, newStatus: ListingActionStatus) => Promise<void>
 }
 
+function isClipText(value?: string | null) {
+  return /clip|video|vídeo/i.test(String(value || ''))
+}
+
 export function ActionDetailsModal({
   open,
   onOpenChange,
@@ -158,12 +162,17 @@ export function ActionDetailsModal({
     }
   }
 
+  const modalTitle = isClipText(actionTitle) ? 'Detalhes da ação' : actionTitle
+  const modalDescription = isClipText(actionTitle) || isClipText(actionDescription)
+    ? 'Esta ação está temporariamente oculta na experiência.'
+    : actionDescription
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
         <DialogHeader>
-          <DialogTitle className="text-xl">{actionTitle}</DialogTitle>
-          <DialogDescription>{actionDescription}</DialogDescription>
+          <DialogTitle className="text-xl">{modalTitle}</DialogTitle>
+          <DialogDescription>{modalDescription}</DialogDescription>
         </DialogHeader>
 
         {/* Chips de metadados */}

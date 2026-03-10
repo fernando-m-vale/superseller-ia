@@ -8,7 +8,6 @@ import {
   Copy,
   Check,
   Image,
-  Video,
   DollarSign,
   Package,
   Layers,
@@ -240,38 +239,6 @@ export function ActionDetailsV2Sections({
             </Card>
           )}
 
-          {/* Video Script */}
-          {details.artifacts.media.videoScript && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Video className="h-5 w-5 text-primary" />
-                  Roteiro de Clip
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-semibold mb-2">Hook (primeiros 3-5s):</h4>
-                  <p className="text-sm text-muted-foreground bg-muted p-3 rounded">
-                    {details.artifacts.media.videoScript.hook}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="font-semibold mb-2">Cenas:</h4>
-                  <ol className="list-decimal list-inside space-y-2">
-                    {details.artifacts.media.videoScript.scenes.map((scene, index) => (
-                      <li key={index} className="text-sm text-muted-foreground">
-                        <strong>Cena {scene.order}:</strong> {scene.description}
-                        {scene.durationSeconds && (
-                          <span className="text-xs ml-2">({scene.durationSeconds}s)</span>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
 

@@ -109,10 +109,7 @@ describe('AnalysisResponseBuilders', () => {
     });
 
     expect(actions.some((a) => a.actionKey === 'midia_video_clip')).toBe(false);
-    const manual = actions.find((a) => a.actionKey === 'midia_clip_manual_validation');
-    expect(manual).toBeDefined();
-    expect(manual?.priority).toBe('low');
-    expect(manual?.impact).toBe('low');
+    expect(actions.some((a) => /clip|video/i.test(`${a.title} ${a.summary} ${a.description}`))).toBe(false);
   });
 
   it('nao gera acao forte de benchmark quando benchmark unavailable', () => {
@@ -353,6 +350,40 @@ describe('buildExecutionRoadmap', () => {
       expect(roadmap[0].expectedImpact.length).toBeGreaterThan(0);
     }
   });
+
+  it('nao inclui acoes de clip no roadmap', () => {
+    const roadmap = buildExecutionRoadmap({
+      bottleneckDiagnosis: { primaryBottleneck: 'CLICK', explanation: 'x', recommendedFocus: 'y' },
+      growthHacks: [
+        {
+          id: 'midia_video_clip',
+          actionKey: 'midia_video_clip',
+          title: 'Publicar clip curto de demonstracao',
+          summary: 'Adicionar clip',
+          description: 'Adicionar video',
+          expectedImpact: '+10% CTR',
+          impact: 'medium',
+          priority: 'medium',
+          pillar: 'midia',
+        },
+        {
+          id: 'midia_gallery_upgrade',
+          actionKey: 'midia_gallery_upgrade',
+          title: 'Completar galeria com prova visual',
+          summary: 'Melhorar imagens',
+          description: 'Adicionar novas fotos',
+          expectedImpact: '+12% CTR',
+          impact: 'high',
+          priority: 'high',
+          pillar: 'midia',
+        },
+      ],
+    });
+
+    expect(roadmap).toHaveLength(1);
+    expect(roadmap[0]?.actionTitle.toLowerCase()).not.toContain('clip');
+    expect(roadmap[0]?.actionTitle.toLowerCase()).not.toContain('video');
+  });
 });
 
 describe('buildVerdictText', () => {
@@ -465,7 +496,7 @@ describe('buildVerdictText', () => {
     expect(noPromoZeroOrders).not.toBe(highVisitsLowCr);
   });
 
-  it('sinaliza clip inconclusivo sem afirmar presenca ou ausencia de clip', () => {
+  it('nao menciona clip no veredito mesmo com deteccao inconclusiva', () => {
     const text = buildVerdictText({
       listingTitle: 'Caixa de Som Bluetooth',
       metrics30d: { visits: 380, orders: 2, conversionRate: 0.0052 },
@@ -475,9 +506,25 @@ describe('buildVerdictText', () => {
       topActions: [{ title: 'Reforcar galeria com prova de uso' }],
     });
 
-    expect(text).toContain('status de clip está inconclusivo via API');
-    expect(text.toLowerCase()).not.toContain('clip já está ativo');
-    expect(text.toLowerCase()).not.toContain('clip ausente');
+    expect(text.toLowerCase()).not.toContain('clip');
+    expect(text.toLowerCase()).not.toContain('video');
+    expect(text.toLowerCase()).not.toContain('vídeo');
+  });
+
+  it('remove top actions de clip do veredito e usa fallback neutro', () => {
+    const text = buildVerdictText({
+      listingTitle: 'Luminaria de Mesa',
+      metrics30d: { visits: 210, orders: 2, conversionRate: 0.0095 },
+      hasPromotion: false,
+      topActions: [
+        { title: 'Publicar clip curto de demonstracao' },
+        { title: 'Adicionar video de uso' },
+      ],
+    });
+
+    expect(text.toLowerCase()).not.toContain('clip');
+    expect(text.toLowerCase()).not.toContain('video');
+    expect(text).toContain('priorizar o ajuste com maior evidência operacional');
   });
 
   it('inclui bloco estruturado de bottleneck e foco recomendado', () => {
