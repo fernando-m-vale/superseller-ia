@@ -32,7 +32,7 @@ export function explainScore(
   // Cadastro (0-20)
   const cadastroLost = 20 - scoreBreakdown.cadastro;
   if (cadastroLost > 0) {
-    explanations.push(`Você perdeu ${cadastroLost} ponto${cadastroLost > 1 ? 's' : ''} em Cadastro por informações incompletas no anúncio.`);
+    explanations.push(`Cadastro perdeu ${cadastroLost} ponto${cadastroLost > 1 ? 's' : ''} porque o anúncio ainda não organiza com clareza todas as informações decisivas da oferta.`);
   } else if (scoreBreakdown.cadastro === 20) {
     explanations.push('Cadastro está completo (20/20 pontos).');
   }
@@ -82,7 +82,7 @@ export function explainScore(
       const reasonText = reasons.length === 1 
         ? reasons[0]
         : reasons.slice(0, -1).join(', ') + ' e ' + reasons[reasons.length - 1];
-      explanations.push(`Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia por ${reasonText}.`);
+      explanations.push(`Mídia perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} porque a apresentação visual ainda sofre com ${reasonText}.`);
     }
   } else if (scoreBreakdown.midia === 20) {
     // Score máximo - usar MediaVerdict para mensagem
@@ -105,7 +105,7 @@ export function explainScore(
   } else {
     const performanceLost = 30 - scoreBreakdown.performance;
     if (performanceLost > 0) {
-      explanations.push(`Você perdeu ${performanceLost} ponto${performanceLost > 1 ? 's' : ''} em Performance. Melhorar visitas, conversão ou pedidos pode aumentar o score.`);
+      explanations.push(`Performance perdeu ${performanceLost} ponto${performanceLost > 1 ? 's' : ''}. O anúncio já mostra sinais mensuráveis, mas ainda não transforma descoberta em resultado comercial com consistência.`);
     } else if (scoreBreakdown.performance === 30) {
       explanations.push('Performance está excelente (30/30 pontos).');
     }
@@ -114,7 +114,7 @@ export function explainScore(
   // SEO (0-20)
   const seoLost = 20 - scoreBreakdown.seo;
   if (seoLost > 0) {
-    explanations.push(`SEO pode ser melhorado para aumentar o CTR nas buscas (${scoreBreakdown.seo}/20 pontos).`);
+    explanations.push(`SEO está em ${scoreBreakdown.seo}/20 e pode ser melhorado porque o anúncio ainda não compete tão bem nas buscas específicas nem traduz rápido os atributos procurados.`);
   } else if (scoreBreakdown.seo === 20) {
     explanations.push('SEO está otimizado (20/20 pontos).');
   }
@@ -122,7 +122,7 @@ export function explainScore(
   // Competitividade (0-10)
   const competitividadeLost = 10 - scoreBreakdown.competitividade;
   if (competitividadeLost > 0) {
-    explanations.push(`Competitividade pode ser melhorada através de preço e condições mais atraentes (${scoreBreakdown.competitividade}/10 pontos).`);
+    explanations.push(`Competitividade está em ${scoreBreakdown.competitividade}/10 porque a oferta ainda não sustenta com força suficiente sua posição comercial em preço, condição ou valor percebido.`);
   } else if (scoreBreakdown.competitividade === 10) {
     explanations.push('Competitividade está no máximo (10/10 pontos).');
   }

@@ -31,6 +31,18 @@ interface ActionCandidate {
 
 type FunnelStage = 'SEARCH' | 'CLICK' | 'CONVERSION';
 
+type DominantFailureType =
+  | 'título pouco buscável'
+  | 'categoria desalinhada'
+  | 'atributos pouco claros'
+  | 'imagem principal pouco clara'
+  | 'título pouco específico'
+  | 'promessa fraca'
+  | 'descrição pouco convincente'
+  | 'falta de confiança'
+  | 'dúvidas não respondidas'
+  | 'fricção de decisão';
+
 export interface DeterministicMvpActionsInput {
   listingIdExt?: string | null;
   listingTitle?: string | null;
@@ -87,6 +99,187 @@ export interface ExecutionRoadmapStep {
   actionTitle: string;
   reason: string;
   expectedImpact: string;
+}
+
+function normalizeText(value?: string | null): string {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function textHasAny(haystack: string, needles: string[]): boolean {
+  return needles.some((needle) => haystack.includes(needle));
+}
+
+function inferDominantFailure(input: {
+  stage: FunnelStage;
+  listingTitle?: string | null;
+  picturesCount?: number | null;
+  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
+  hasPromotion?: boolean | null;
+  discountPercent?: number | null;
+  mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  dataQualityWarnings?: string[] | null;
+  analysisV21?: {
+    title_fix?: { problem?: string | null } | null;
+    description_fix?: { diagnostic?: string | null } | null;
+    image_plan?: Array<{ action?: string | null }> | null;
+  } | null;
+  benchmark?: {
+    confidence?: string | null;
+    sampleSize?: number | null;
+    baselineConversionRate?: number | null;
+  } | null;
+}): DominantFailureType {
+  const titleProblem = normalizeText(input.analysisV21?.title_fix?.problem);
+  const descriptionDiagnostic = normalizeText(input.analysisV21?.description_fix?.diagnostic);
+  const warnings = normalizeText((input.dataQualityWarnings || []).join(' '));
+  const imagePlan = normalizeText((input.analysisV21?.image_plan || []).map((step) => step?.action || '').join(' '));
+  const listingTitle = normalizeText(input.listingTitle);
+  const picturesCount = input.picturesCount ?? 0;
+  const visits = input.metrics30d?.visits ?? 0;
+  const cr = input.metrics30d?.conversionRate ?? null;
+  const hasPromotion = input.hasPromotion === true;
+  const aggressivePromo = hasPromotion && (input.discountPercent ?? 0) >= 20;
+  const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark ?? undefined);
+
+  if (input.stage === 'SEARCH') {
+    if (
+      textHasAny(warnings, ['categoria', 'catalogo']) ||
+      textHasAny(titleProblem, ['categoria', 'segmento', 'catalogo']) ||
+      (textHasAny(listingTitle, ['kit', 'completo', 'premium']) && visits < 50)
+    ) {
+      return 'categoria desalinhada';
+    }
+
+    if (
+      textHasAny(titleProblem, ['atrib', 'especific', 'modelo', 'medida', 'compat', 'voltag', 'capacidade']) ||
+      textHasAny(warnings, ['atrib', 'ficha tecnica', 'variacao'])
+    ) {
+      return 'atributos pouco claros';
+    }
+
+    return 'título pouco buscável';
+  }
+
+  if (input.stage === 'CLICK') {
+    if (
+      (picturesCount > 0 && picturesCount < 5) ||
+      textHasAny(imagePlan, ['capa', 'principal', 'hero', 'imagem 1', 'foto 1']) ||
+      input.mediaVerdict?.hasClipDetected === false
+    ) {
+      return 'imagem principal pouco clara';
+    }
+
+    if (
+      textHasAny(titleProblem, ['generico', 'vago', 'narrativa', 'pouco especifico']) ||
+      textHasAny(listingTitle, ['incrivel', 'imperdivel', 'oferta'])
+    ) {
+      return 'título pouco específico';
+    }
+
+    return 'promessa fraca';
+  }
+
+  if (
+    textHasAny(descriptionDiagnostic, ['duvida', 'faq', 'compat', 'nao responde', 'objec']) ||
+    textHasAny(titleProblem, ['compat', 'duvida'])
+  ) {
+    return 'dúvidas não respondidas';
+  }
+
+  if (
+    (aggressivePromo && visits >= 120 && cr !== null && cr < 0.015) ||
+    (picturesCount > 0 && picturesCount < 4) ||
+    textHasAny(imagePlan, ['prova', 'uso', 'comparacao', 'detalhe'])
+  ) {
+    return 'falta de confiança';
+  }
+
+  if (textHasAny(descriptionDiagnostic, ['descricao', 'copy', 'beneficio', 'diferencial', 'convinc'])) {
+    return 'descrição pouco convincente';
+  }
+
+  if (benchmarkUnavailable && !hasPromotion && visits >= 100) {
+    return 'fricção de decisão';
+  }
+
+  return 'fricção de decisão';
+}
+
+function buildFailureNarrative(stage: FunnelStage, failure: DominantFailureType): {
+  explanation: string;
+  recommendedFocus: string;
+  hypothesis: string;
+} {
+  if (stage === 'SEARCH') {
+    if (failure === 'categoria desalinhada') {
+      return {
+        explanation: 'O anúncio tende a ser lido fora do contexto ideal de busca, o que reduz descoberta e qualificação antes mesmo do clique.',
+        recommendedFocus: 'revalidar enquadramento de categoria e sinais de indexação antes de buscar mais tráfego.',
+        hypothesis: 'A hipótese dominante é de enquadramento comercial: o produto existe, mas está mal posicionado para ser encontrado.',
+      };
+    }
+    if (failure === 'atributos pouco claros') {
+      return {
+        explanation: 'A busca perde eficiência quando modelo, compatibilidade e especificações não aparecem com nitidez logo na indexação.',
+        recommendedFocus: 'explicitar atributos decisivos no título e no cadastro para capturar buscas de maior intenção.',
+        hypothesis: 'A hipótese dominante é de leitura técnica fraca: o anúncio não traduz para a busca os atributos que o comprador filtra.',
+      };
+    }
+    return {
+      explanation: 'O anúncio perde tração ainda na busca porque o título atual não compete bem nas pesquisas específicas do comprador.',
+      recommendedFocus: 'reescrever o título com atributos procurados e ordem comercial mais buscável.',
+      hypothesis: 'A hipótese dominante é de baixa descoberta qualificada: o anúncio até pode ser relevante, mas não está entrando nas buscas certas.',
+    };
+  }
+
+  if (stage === 'CLICK') {
+    if (failure === 'imagem principal pouco clara') {
+      return {
+        explanation: 'O anúncio já tem chance de aparecer, mas a imagem principal não comunica com rapidez o diferencial da oferta e perde força no clique.',
+        recommendedFocus: 'atualizar a capa para leitura imediata de produto, contexto e diferencial visual.',
+        hypothesis: 'A hipótese dominante é de atrito visual: o anúncio entra no radar, mas não vence a comparação no grid.',
+      };
+    }
+    if (failure === 'título pouco específico') {
+      return {
+        explanation: 'Há exposição, mas o título ainda não entrega especificidade suficiente para transformar impressão em clique qualificado.',
+        recommendedFocus: 'deixar o título mais específico e menos genérico logo nas primeiras palavras.',
+        hypothesis: 'A hipótese dominante é de proposta pouco precisa: o comprador vê o anúncio, mas não entende rápido por que ele é a melhor opção.',
+      };
+    }
+    return {
+      explanation: 'O anúncio aparece, porém a proposta inicial ainda soa morna e não cria urgência ou diferenciação no momento do clique.',
+      recommendedFocus: 'fortalecer promessa comercial entre título e imagem principal antes de mexer em preço.',
+      hypothesis: 'A hipótese dominante é de mensagem fraca: o problema parece menos de alcance e mais de capacidade de chamar atenção certa.',
+    };
+  }
+
+  if (failure === 'descrição pouco convincente') {
+    return {
+      explanation: 'O anúncio já atrai visitas, mas perde força na decisão porque a página apresenta o produto sem sustentar bem seus diferenciais.',
+      recommendedFocus: 'reorganizar descrição e argumentos para defender valor, uso e diferencial com mais convicção.',
+      hypothesis: 'A hipótese dominante é de convencimento: há interesse inicial, mas a oferta ainda não fecha a lógica de compra.',
+    };
+  }
+  if (failure === 'falta de confiança') {
+    return {
+      explanation: 'Mesmo com tráfego ativo, a decisão trava porque a página ainda não entrega prova visual e segurança suficientes para fechar o pedido.',
+      recommendedFocus: 'reforçar prova visual, contexto de uso e sinais de confiança antes de aprofundar desconto.',
+      hypothesis: 'A hipótese dominante é de confiança: o problema parece menos de preço e mais de segurança para decidir agora.',
+    };
+  }
+  if (failure === 'dúvidas não respondidas') {
+    return {
+      explanation: 'O tráfego chega, mas a conversão fica presa porque compatibilidade, uso e objeções práticas ainda não estão resolvidos na página.',
+      recommendedFocus: 'responder dúvidas críticas com FAQ, especificações objetivas e evidências de uso.',
+      hypothesis: 'A hipótese dominante é de objeção aberta: o comprador considera o produto, mas ainda encontra perguntas sem resposta.',
+    };
+  }
+  return {
+    explanation: 'Há interesse suficiente para gerar visita, porém a jornada final ainda exige esforço demais para o comprador concluir a compra.',
+    recommendedFocus: 'simplificar a decisão com hierarquia melhor de oferta, prova e argumentos de fechamento.',
+    hypothesis: 'A hipótese dominante é de atrito final: existe intenção, mas a página não conduz a decisão com firmeza.',
+  };
 }
 
 function normalizeMlbId(listingIdExt?: string | null): string | null {
@@ -234,8 +427,8 @@ function buildImpactReason(
   const cr = input.metrics30d?.conversionRate ?? null;
   const crText = cr !== null ? `${(cr * 100).toFixed(2)}%` : 'indisponível';
   const bottleneckLine = isPrimaryBottleneck
-    ? 'Esta ação ataca o gargalo primário do funil e recebeu multiplicador de impacto.'
-    : 'Esta ação melhora uma etapa complementar do funil.';
+    ? 'Esta é a primeira alavanca agora porque atua no gargalo primário do funil.'
+    : 'Esta ação funciona como suporte e melhora uma etapa complementar do funil.';
 
   if (stage === 'SEARCH') {
     return `${listingRef}, a fricção de descoberta limita alcance qualificado (visitas 30d: ${visits}). ${bottleneckLine}`;
@@ -330,11 +523,14 @@ export function buildExecutionRoadmap(input: {
   return ranked.map((entry, index) => ({
     stepNumber: index + 1,
     actionTitle: entry.action.title,
-    reason: entry.action.impactReason
-      ? entry.action.impactReason
-      : entry.solvesPrimaryBottleneck
-      ? `Esta ação ataca diretamente o gargalo primário de ${primaryBottleneck}.`
-      : `Esta ação reforça a etapa ${entry.stage} para melhorar performance do funil.`,
+    reason:
+      index === 0
+        ? `Ação principal. ${entry.action.impactReason || `Esta é a primeira alavanca porque ataca diretamente o gargalo primário de ${primaryBottleneck}.`}`
+        : index === 1
+        ? `Ação de suporte. ${entry.action.impactReason || `Ela reforça a etapa ${entry.stage} e aumenta a chance de a ação principal capturar resultado.`}`
+        : entry.action.impactReason
+        ? entry.action.impactReason
+        : `Esta ação reforça a etapa ${entry.stage} para melhorar performance do funil.`,
     expectedImpact: entry.action.impactEstimate || entry.action.expectedImpact || 'Impacto estimado indisponível.',
   }));
 }
@@ -616,6 +812,14 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
   const primaryBottleneck = buildFunnelBottleneckDiagnosis({
     metrics30d: input.metrics30d,
+    listingTitle: input.listingTitle,
+    picturesCount: input.picturesCount,
+    hasPromotion: input.hasPromotion,
+    discountPercent: input.discountPercent,
+    mediaVerdict: input.mediaVerdict,
+    dataQualityWarnings: input.dataQualityWarnings,
+    analysisV21: input.analysisV21,
+    benchmark: input.benchmark,
   }).primaryBottleneck;
 
   const candidatesByKey = new Map<string, ActionCandidate>();
@@ -732,13 +936,10 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
 
   const sorted = Array.from(candidatesByKey.values())
     .sort((a, b) => {
-      const stageOrder: Record<FunnelStage, number> = {
-        SEARCH: 3,
-        CLICK: 2,
-        CONVERSION: 1,
-      };
-      if (stageOrder[b.funnelStage] !== stageOrder[a.funnelStage]) {
-        return stageOrder[b.funnelStage] - stageOrder[a.funnelStage];
+      const aPrimary = a.funnelStage === primaryBottleneck;
+      const bPrimary = b.funnelStage === primaryBottleneck;
+      if (aPrimary !== bPrimary) {
+        return aPrimary ? -1 : 1;
       }
       if (b.score !== a.score) return b.score - a.score;
       if (b.evidenceScore !== a.evidenceScore) return b.evidenceScore - a.evidenceScore;
@@ -777,6 +978,14 @@ export function buildVerdictText(input: {
 }): string {
   const funnelDiagnosis = buildFunnelBottleneckDiagnosis({
     metrics30d: input.metrics30d,
+    listingTitle: input.listingTitle,
+    picturesCount: input.picturesCount,
+    hasPromotion: input.hasPromotion,
+    discountPercent: input.discountPercent,
+    mediaVerdict: input.mediaVerdict,
+    dataQualityWarnings: input.dataQualityWarnings,
+    analysisV21: input.analysisV21,
+    benchmark: input.benchmark,
   });
   const raw = (input.rawVerdict || '').trim();
   if (raw.length >= 280) {
@@ -911,7 +1120,7 @@ export function buildVerdictText(input: {
     diagnosisLines.push(`Evidência operacional de mídia: ${imageHint}.`);
   }
   if (benchmarkUnavailable) {
-    diagnosisLines.push('Benchmark externo está indisponível no momento, então a leitura competitiva fica restrita aos sinais internos do anúncio.');
+    diagnosisLines.push('Benchmark externo está indisponível no momento, então a leitura foi ancorada nos sinais internos de oferta, clareza e estrutura do anúncio.');
   }
 
   const priorityReason = (() => {
@@ -973,51 +1182,59 @@ export function buildVerdictText(input: {
 
 export function buildFunnelBottleneckDiagnosis(input: {
   metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
+  listingTitle?: string | null;
+  picturesCount?: number | null;
+  hasPromotion?: boolean | null;
+  discountPercent?: number | null;
+  mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  dataQualityWarnings?: string[] | null;
+  analysisV21?: {
+    title_fix?: { problem?: string | null } | null;
+    description_fix?: { diagnostic?: string | null } | null;
+    image_plan?: Array<{ action?: string | null }> | null;
+  } | null;
+  benchmark?: {
+    confidence?: string | null;
+    sampleSize?: number | null;
+    baselineConversionRate?: number | null;
+  } | null;
 }): FunnelBottleneckDiagnosis {
   const visits = input.metrics30d?.visits ?? 0;
   const conversionRate = input.metrics30d?.conversionRate ?? null;
   const hasAcceptableConversion = conversionRate !== null && conversionRate >= 0.025;
-
-  if (visits < 80) {
-    return {
-      primaryBottleneck: 'SEARCH',
-      explanation:
-        'O anúncio tem baixo volume de visitas, sinal de baixa visibilidade em busca e baixa aderência de indexação.',
-      recommendedFocus: 'otimizar título com atributos buscáveis e alinhar categoria/palavras-chave.',
-    };
-  }
-
-  if (visits > 100 && conversionRate !== null && conversionRate < 0.025) {
-    return {
-      primaryBottleneck: 'CONVERSION',
-      explanation:
-        'O anúncio já recebe tráfego, mas a taxa de conversão indica hesitação na decisão de compra.',
-      recommendedFocus: 'melhorar clareza de produto com descrição, FAQ e imagens de demonstração.',
-    };
-  }
-
-  if (visits >= 80 && visits <= 200 && hasAcceptableConversion) {
-    return {
-      primaryBottleneck: 'CLICK',
-      explanation:
-        'O anúncio aparece para compradores, mas ainda perde eficiência na etapa de clique.',
-      recommendedFocus: 'aumentar clareza do título e força visual da imagem principal.',
-    };
-  }
-
-  if (conversionRate !== null && conversionRate < 0.025) {
-    return {
-      primaryBottleneck: 'CONVERSION',
-      explanation:
-        'Existe tráfego no anúncio, porém a conversão continua abaixo do esperado para o volume de visitas.',
-      recommendedFocus: 'reduzir objeções com especificações claras, FAQ objetivo e prova visual de uso.',
-    };
-  }
+  const stage: FunnelStage =
+    visits < 80
+      ? 'SEARCH'
+      : visits > 100 && conversionRate !== null && conversionRate < 0.025
+      ? 'CONVERSION'
+      : visits >= 80 && visits <= 200 && hasAcceptableConversion
+      ? 'CLICK'
+      : conversionRate !== null && conversionRate < 0.025
+      ? 'CONVERSION'
+      : 'CLICK';
+  const failure = inferDominantFailure({
+    stage,
+    listingTitle: input.listingTitle,
+    picturesCount: input.picturesCount,
+    metrics30d: input.metrics30d,
+    hasPromotion: input.hasPromotion,
+    discountPercent: input.discountPercent,
+    mediaVerdict: input.mediaVerdict,
+    dataQualityWarnings: input.dataQualityWarnings,
+    analysisV21: input.analysisV21,
+    benchmark: input.benchmark,
+  });
+  const narrative = buildFailureNarrative(stage, failure);
 
   return {
-    primaryBottleneck: 'CLICK',
-    explanation:
-      'O funil tem descoberta ativa, então o principal ganho incremental está em aumentar taxa de clique qualificado.',
-    recommendedFocus: 'refinar identificação imediata do produto no título e na imagem principal.',
+    primaryBottleneck: stage,
+    explanation: `${narrative.explanation} Falha dominante: ${failure}. ${narrative.hypothesis}`,
+    recommendedFocus: `${narrative.recommendedFocus} ${
+      stage === 'CONVERSION' && input.hasPromotion
+        ? 'Antes de mexer em preço, vale resolver clareza e prova da oferta.'
+        : stage === 'SEARCH'
+        ? 'Esta frente vem primeiro porque influencia descoberta e qualidade do clique.'
+        : 'Esta frente vem primeiro porque melhora a resposta comercial já na próxima leitura do anúncio.'
+    }`,
   };
 }
