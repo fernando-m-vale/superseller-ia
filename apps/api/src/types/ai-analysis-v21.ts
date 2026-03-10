@@ -262,7 +262,7 @@ export function createFallbackAnalysisV21(
           : listingData.has_clips 
             ? 'Vídeo presente'
             : 'Sem vídeo',
-        recommendation: listingData.has_clips === false ? 'Adicionar vídeo pode aumentar conversão' : null,
+        recommendation: listingData.has_clips === false ? 'Adicionar clip pode aumentar conversão' : null,
       },
     },
     price_analysis: {

@@ -37,6 +37,24 @@ function hasNonEmptyValue(value: unknown): boolean {
   return value !== null && value !== undefined;
 }
 
+function hasVideoInNestedMedia(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+
+  const obj = value as Record<string, unknown>;
+  const type = String(obj.type ?? '').toLowerCase();
+
+  return (
+    type === 'video' ||
+    type === 'clip' ||
+    hasNonEmptyValue(obj.video) ||
+    hasNonEmptyValue(obj.video_url) ||
+    hasNonEmptyValue(obj.video_id) ||
+    hasNonEmptyValue(obj.clip) ||
+    hasNonEmptyValue(obj.clip_url) ||
+    hasNonEmptyValue(obj.clip_id)
+  );
+}
+
 /**
  * Classifica status de clip de forma determinística com ordem de prioridade.
  */
@@ -63,6 +81,12 @@ export function classifyMlClipStatus(
       metadataSignals.push(`metadata:${key}`);
     }
   }
+  if (hasVideoInNestedMedia(itemObj.pictures)) {
+    metadataSignals.push('metadata:pictures.video');
+  }
+  if (hasVideoInNestedMedia(itemObj.media)) {
+    metadataSignals.push('metadata:media.type');
+  }
   if (metadataSignals.length > 0) {
     return {
       clipStatus: 'HAS_CLIP',
@@ -77,23 +101,9 @@ export function classifyMlClipStatus(
   const mediaCollections = ['pictures', 'gallery', 'media', 'videos'];
   for (const collectionKey of mediaCollections) {
     const collection = itemObj[collectionKey];
-    if (!Array.isArray(collection)) continue;
-    const hasVideoPreview = collection.some((entry) => {
-      if (!entry || typeof entry !== 'object') return false;
-      const obj = entry as Record<string, unknown>;
-      const type = String(obj.type || '').toLowerCase();
-      return (
-        type === 'video' ||
-        type === 'clip' ||
-        hasNonEmptyValue(obj.video) ||
-        hasNonEmptyValue(obj.video_url) ||
-        hasNonEmptyValue(obj.video_thumbnail) ||
-        hasNonEmptyValue(obj.clip) ||
-        hasNonEmptyValue(obj.clip_url) ||
-        hasNonEmptyValue(obj.video_id) ||
-        hasNonEmptyValue(obj.clip_id)
-      );
-    });
+    const hasVideoPreview = Array.isArray(collection)
+      ? collection.some((entry) => hasVideoInNestedMedia(entry))
+      : hasVideoInNestedMedia(collection);
     if (hasVideoPreview) {
       structureSignals.push(`structure:${collectionKey}`);
     }

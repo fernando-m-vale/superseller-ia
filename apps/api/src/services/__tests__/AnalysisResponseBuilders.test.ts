@@ -176,7 +176,7 @@ describe('AnalysisResponseBuilders', () => {
     });
 
     expect(actions[0]?.actionKey).toBe('midia_gallery_upgrade');
-    expect(actions[0]?.summary).toContain('Funnel Stage:');
+    expect(actions[0]?.summary).toContain('Estágio do funil:');
     expect(actions[0]?.impactEstimate).toContain('CTR');
   });
 
@@ -472,8 +472,8 @@ describe('buildVerdictText', () => {
       },
     });
 
-    expect(text).toContain('Primary Bottleneck:');
-    expect(text).toContain('Recommended focus:');
+    expect(text).toContain('Gargalo principal:');
+    expect(text).toContain('Foco desta rodada:');
     expect(text.length).toBeLessThan(1400);
   });
 
@@ -498,8 +498,8 @@ describe('buildVerdictText', () => {
       topActions: [{ title: 'Atualizar galeria com provas de uso real' }],
       scoreBreakdown: { seo: 68, midia: 26, cadastro: 64, competitividade: 58, performance: 61 },
     });
-    expect(seoCase).toContain('Primary Bottleneck: SEARCH');
-    expect(mediaCase).toContain('Primary Bottleneck: CLICK');
+    expect(seoCase).toContain('Gargalo principal: SEARCH');
+    expect(mediaCase).toContain('Gargalo principal: CLICK');
   });
 });
 

@@ -85,7 +85,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
       case 'low':
         return 'Baixo'
       default:
-        return impact
+        return impact.includes('%') || impact.includes('+') ? `📈 ${impact}` : impact
     }
   }
 

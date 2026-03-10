@@ -39,28 +39,13 @@ export type ActionDetailsResponse = {
   version?: 'action_details_v1' | 'action_details_v2'
 }
 
-function extractListingId(url: string): string | null {
-  const match = url.match(/\/listings\/([^/]+)\/actions\//)
-  return match?.[1] ?? null
+type AnalysisStatusResponse = {
+  analysis?: {
+    status?: string
+  }
 }
 
 const fetcher = async (url: string): Promise<ActionDetailsResponse> => {
-  const listingId = extractListingId(url)
-
-  if (listingId) {
-    try {
-      const statusRes = await api.get(`/ai/analyze/${listingId}/status`)
-      const status = statusRes?.data?.analysis?.status
-      if (status === 'generating') {
-        throw new ActionDetailsGeneratingError()
-      }
-    } catch (error) {
-      if (error instanceof ActionDetailsGeneratingError) {
-        throw error
-      }
-    }
-  }
-
   const res = await api.get(url)
   
   if (res.status === 202) {
@@ -73,6 +58,11 @@ const fetcher = async (url: string): Promise<ActionDetailsResponse> => {
   
   // Backend retorna { data: {...}, cached: boolean, version?: string }
   return res.data as ActionDetailsResponse
+}
+
+const fetchAnalysisStatus = async (url: string): Promise<AnalysisStatusResponse> => {
+  const res = await api.get(url)
+  return res.data as AnalysisStatusResponse
 }
 
 export function useActionDetails(
@@ -88,23 +78,56 @@ export function useActionDetails(
     listingId && actionId
       ? `/listings/${listingId}/actions/${actionId}/details?schema=${effectiveSchema}`
       : null
-  
-  const { data, error, isLoading, mutate } = useSWR<ActionDetailsResponse, Error>(
-    url,
-    fetcher,
+
+  const statusUrl = listingId && actionId ? `/ai/analyze/${listingId}/status` : null
+
+  const {
+    data: analysisStatusData,
+    isLoading: statusLoading,
+  } = useSWR<AnalysisStatusResponse, Error>(
+    statusUrl,
+    fetchAnalysisStatus,
     {
       revalidateOnFocus: false,
+      refreshInterval: (data) => {
+        const status = data?.analysis?.status?.toLowerCase()
+        return status === 'generating' ? 2000 : 0
+      },
     },
   )
 
-  const isGenerating = error instanceof ActionDetailsGeneratingError
+  const analysisStatus = analysisStatusData?.analysis?.status?.toLowerCase() ?? null
+  const shouldWaitForAnalysis = Boolean(listingId && actionId && analysisStatus === 'generating')
+  const shouldFetchDetails = Boolean(url && !shouldWaitForAnalysis)
+
+  const { data, error, isLoading, mutate } = useSWR<ActionDetailsResponse, Error>(
+    shouldFetchDetails ? url : null,
+    fetcher,
+    {
+      revalidateOnFocus: false,
+      shouldRetryOnError: true,
+      errorRetryInterval: 2000,
+      onErrorRetry: (error, _key, _config, revalidate, context) => {
+        if (!(error instanceof ActionDetailsGeneratingError) || context.retryCount >= 15) {
+          return
+        }
+
+        setTimeout(() => {
+          revalidate({ retryCount: context.retryCount + 1 })
+        }, 2000)
+      },
+    },
+  )
+
+  const isGenerating = shouldWaitForAnalysis || error instanceof ActionDetailsGeneratingError
+  const combinedLoading = Boolean((statusUrl && statusLoading && analysisStatus === null) || isLoading || isGenerating)
 
   return {
     data: data?.data,
     version: data?.version || (effectiveSchema === 'v2' ? 'action_details_v2' : 'action_details_v1'),
     cached: data?.cached ?? false,
     error: isGenerating ? null : error,
-    isLoading,
+    isLoading: combinedLoading,
     isGenerating,
     refetch: mutate,
   }

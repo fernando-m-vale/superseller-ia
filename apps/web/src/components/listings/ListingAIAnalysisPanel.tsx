@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent } from '@/lib/ai/normalizeAiAnalyze'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 import { useToast } from '@/hooks/use-toast'
-import { OpportunityBlock } from './OpportunityBlock'
 import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
@@ -121,51 +120,16 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
   const pendingActions = actions.filter((a) => a.status === 'A_IMPLEMENTAR')
   
   // Lógica inteligente para próxima ação recomendada
-  const getNextRecommendedAction = useMemo(() => {
-    if (pendingActions.length === 0) return null
-
-    // 1) Buscar primeira ação pendente com priority=Alta/HIGH
-    const highPriorityAction = pendingActions.find(
-      (a) => a.priority && (a.priority.toLowerCase() === 'alta' || a.priority.toUpperCase() === 'HIGH')
-    )
-    if (highPriorityAction) {
-      return { title: highPriorityAction.title, isUncertain: false }
-    }
-
-    // 2) Buscar primeira pendente que NÃO seja "validação/sem dados"
-    const descriptionLower = (desc: string) => desc.toLowerCase()
-    const isUncertainAction = (action: typeof pendingActions[0]) => {
-      const desc = descriptionLower(action.description || '')
-      return (
-        desc.includes('sem dados') ||
-        desc.includes('insuficiente') ||
-        desc.includes('validar') ||
-        desc.includes('dados insuficientes')
-      )
-    }
-
-    const certainAction = pendingActions.find((a) => !isUncertainAction(a))
-    if (certainAction) {
-      return { title: certainAction.title, isUncertain: false }
-    }
-
-    // 3) Se só restarem ações incertas, retornar primeira com aviso
-    if (pendingActions.length > 0) {
-      return {
-        title: `${pendingActions[0].title} (recomendação com dados insuficientes)`,
-        isUncertain: true,
-      }
-    }
-
-    return null
-  }, [pendingActions])
-
-  const nextAction = getNextRecommendedAction?.title || null
-  const priority = pendingActions[0]?.priority || (pendingActions.length > 0 ? 'Alta' : null)
   const bottleneckLabel = {
-    SEARCH: 'Busca',
-    CLICK: 'Clique',
-    CONVERSION: 'Conversão',
+    SEARCH: 'BUSCA',
+    CLICK: 'CLIQUE',
+    CONVERSION: 'CONVERSÃO',
+  } as const
+
+  const bottleneckBadgeClass = {
+    SEARCH: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+    CLICK: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+    CONVERSION: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
   } as const
 
   const roundOpportunity = useMemo(() => {
@@ -211,6 +175,14 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       expectedGains,
     }
   }, [props.funnelDiagnosis, props.executionRoadmap, pendingActions])
+
+  const formatVisualImpact = (impact: string) => {
+    const normalized = impact.trim()
+    if (/^\+/.test(normalized) || normalized.includes('%')) {
+      return `📈 ${normalized}`
+    }
+    return normalized
+  }
 
   const pendingCount = actions.filter((a) => a.status === 'A_IMPLEMENTAR').length
   const appliedCount = actions.filter((a) => a.status === 'IMPLEMENTADO').length
@@ -377,7 +349,9 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p className="text-foreground">
               <strong>Gargalo principal do anúncio:</strong>{' '}
-              <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              <span
+                className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-wide ${bottleneckBadgeClass[props.funnelDiagnosis.primaryBottleneck]}`}
+              >
                 {bottleneckLabel[props.funnelDiagnosis.primaryBottleneck]}
               </span>
             </p>
@@ -438,18 +412,21 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
             {props.executionRoadmap.map((step) => (
               <div key={step.stepNumber} className="rounded-md border p-3 space-y-2">
                 <p className="text-sm font-semibold flex items-center gap-2">
-                  <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-bold text-primary">
-                    {step.stepNumber}
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-primary">
+                    Passo {step.stepNumber}
                   </span>
                   <span>
-                    Passo {step.stepNumber} - {step.actionTitle}
+                    {step.actionTitle}
                   </span>
                 </p>
                 <p className="text-sm text-muted-foreground line-clamp-2" title={step.reason}>
                   <strong>Por que agora:</strong> {step.reason}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  <strong>Impacto esperado:</strong> {step.expectedImpact}
+                  <strong>Impacto estimado:</strong>{' '}
+                  <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    {formatVisualImpact(step.expectedImpact)}
+                  </span>
                 </p>
               </div>
             ))}
@@ -457,23 +434,14 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </Card>
       )}
 
-      {/* D) BLOCO OPORTUNIDADE */}
-      <OpportunityBlock
-        score={props.score || 0}
-        priority={priority}
-        nextAction={nextAction}
-        hasActions={actions.length > 0}
-        isUncertain={getNextRecommendedAction?.isUncertain || false}
-      />
-
-      {/* E) PROGRESSO DE EXECUÇÃO */}
+      {/* D) PROGRESSO DE EXECUÇÃO */}
       <ExecutionProgress
         pending={pendingCount}
         applied={appliedCount}
         dismissed={dismissedCount}
       />
 
-      {/* F) KANBAN SIMPLES */}
+      {/* E) KANBAN SIMPLES */}
       <div>
         <h3 className="text-lg font-semibold mb-4">Ações Recomendadas</h3>
         {actionsLoading ? (

@@ -27,6 +27,26 @@ describe('ml-video-extractor', () => {
       expect(result.reason).toBe('MEDIA_STRUCTURE');
     });
 
+    it('classifica HAS_CLIP quando pictures.video existe no payload', () => {
+      const result = classifyMlClipStatus({
+        id: 'MLB1',
+        pictures: { video: 'https://cdn.example.com/clip.mp4' },
+      }, 200);
+      expect(result.clipStatus).toBe('HAS_CLIP');
+      expect(result.hasClips).toBe(true);
+      expect(result.reason).toBe('MEDIA_METADATA');
+    });
+
+    it('classifica HAS_CLIP quando media.type é video em objeto único', () => {
+      const result = classifyMlClipStatus({
+        id: 'MLB1',
+        media: { type: 'video' },
+      }, 200);
+      expect(result.clipStatus).toBe('HAS_CLIP');
+      expect(result.hasClips).toBe(true);
+      expect(result.reason).toBe('MEDIA_METADATA');
+    });
+
     it('classifica INCONCLUSIVE quando API não permite determinar', () => {
       const result = classifyMlClipStatus({ id: 'MLB1' }, 403);
       expect(result.clipStatus).toBe('INCONCLUSIVE');

@@ -196,9 +196,9 @@ function inferFunnelStage(action: MvpActionItem): FunnelStage {
 
 function attachFunnelDiagnosis(action: MvpActionItem): MvpActionItem {
   const stage = inferFunnelStage(action);
-  const summary = action.summary.includes('Funnel Stage:')
+  const summary = action.summary.includes('Estágio do funil:')
     ? action.summary
-    : `Funnel Stage: ${stage}. ${action.summary}`;
+    : `Estágio do funil: ${stage}. ${action.summary}`;
   return { ...action, summary };
 }
 
@@ -210,12 +210,12 @@ function getFunnelStageWeight(stage: FunnelStage): number {
 
 function formatImpactRange(stage: FunnelStage, minValue: number, maxValue: number): string {
   if (stage === 'CONVERSION') {
-    return `+${minValue.toFixed(2)}% to +${maxValue.toFixed(2)}% conversion rate`;
+    return `+${minValue.toFixed(2)}% a +${maxValue.toFixed(2)}% na conversão`;
   }
   const roundedMin = Math.round(minValue);
   const roundedMax = Math.round(maxValue);
-  const metric = stage === 'SEARCH' ? 'visits' : 'CTR';
-  return `+${roundedMin}% to +${roundedMax}% ${metric}`;
+  const metric = stage === 'SEARCH' ? 'visitas' : 'CTR';
+  return `+${roundedMin}% a +${roundedMax}% ${metric}`;
 }
 
 function getImpactRangeByStage(stage: FunnelStage): { min: number; max: number } {
@@ -1001,9 +1001,9 @@ export function buildVerdictText(input: {
   }
 
   const bottleneckBlock = [
-    `Primary Bottleneck: ${funnelDiagnosis.primaryBottleneck}`,
+    `Gargalo principal: ${funnelDiagnosis.primaryBottleneck}`,
     funnelDiagnosis.explanation,
-    `Recommended focus: ${funnelDiagnosis.recommendedFocus}`,
+    `Foco desta rodada: ${funnelDiagnosis.recommendedFocus}`,
   ].join('\n\n');
 
   const auditBlock = [
