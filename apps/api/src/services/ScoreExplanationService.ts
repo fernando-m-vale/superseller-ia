@@ -55,7 +55,7 @@ export function explainScore(
       }
     } else if (verdict.hasClipDetected === false) {
       // Não tem clip (certeza) - pode mencionar
-      reasons.push('não ter clip (vídeo)');
+      reasons.push('não ter clip');
       if (picturesCount < 6) {
         reasons.push(`poucas imagens (${picturesCount})`);
       }
@@ -91,7 +91,7 @@ export function explainScore(
     const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
     
     if (verdict.hasClipDetected === true && picturesCount >= 6) {
-      explanations.push('Mídia está forte: fotos e clip (vídeo) presentes.');
+      explanations.push('Mídia está forte: fotos e clip presentes.');
     } else if (picturesCount >= 8) {
       explanations.push(`Mídia está boa em fotos (${picturesCount}).`);
     } else {
@@ -134,4 +134,3 @@ export function explainScore(
 
   return explanations;
 }
-

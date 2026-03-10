@@ -2,7 +2,7 @@
  * Generated Content Service
  * 
  * Gera conteúdo acionável (títulos, bullets, descrição SEO) orientado por dados e gaps.
- * NÃO promete o que não existe. NÃO assume vídeo se não há vídeo.
+ * NÃO promete o que não existe. NÃO assume clip se não há clip confirmado.
  * Conteúdo é sugestão assistiva (copy & paste).
  */
 
@@ -145,11 +145,11 @@ function generateBullets(
     bullets.push('Veja imagens detalhadas do produto');
   }
 
-  // Bullet sobre vídeo (só se tiver certeza que há vídeo)
+  // Bullet sobre clip (só se tiver certeza que há clip)
   if (listing.hasClips === true) {
-    bullets.push('Vídeo demonstrativo disponível');
+    bullets.push('Clip demonstrativo disponível');
   } else if (criticalGaps.some(g => g.dimension === 'video')) {
-    // Não mencionar vídeo se não houver certeza
+    // Não mencionar clip se não houver certeza
   }
 
   // Bullet sobre promoção (HOTFIX P0: sem "Oferta especial", usar texto mais neutro)
@@ -202,7 +202,7 @@ function generateSeoDescription(
     long += `• Veja ${listing.picturesCount} imagens detalhadas do produto\n`;
   }
   if (listing.hasClips === true) {
-    long += '• Video demonstrativo disponivel\n';
+    long += '• Clip demonstrativo disponível\n';
   }
   if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
     long += `• ${listing.discountPercent}% de desconto\n`;

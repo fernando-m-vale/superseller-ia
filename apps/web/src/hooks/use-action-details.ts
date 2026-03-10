@@ -1,6 +1,7 @@
 'use client'
 
 import useSWR from 'swr'
+import { isAxiosError } from 'axios'
 import { api } from '@/lib/axios'
 import type { ActionDetailsV2 } from '@/types/action-details-v2'
 
@@ -33,6 +34,15 @@ export class ActionDetailsGeneratingError extends Error {
   }
 }
 
+export class ActionDetailsPendingError extends Error {
+  readonly status = 'PENDING' as const
+
+  constructor(message = 'Os detalhes da ação ainda estão sincronizando.') {
+    super(message)
+    this.name = 'ActionDetailsPendingError'
+  }
+}
+
 export type ActionDetailsResponse = {
   data: ActionDetailsV1 | ActionDetailsV2
   cached: boolean
@@ -46,18 +56,30 @@ type AnalysisStatusResponse = {
 }
 
 const fetcher = async (url: string): Promise<ActionDetailsResponse> => {
-  const res = await api.get(url)
+  try {
+    const res = await api.get(url)
   
-  if (res.status === 202) {
-    throw new ActionDetailsGeneratingError()
-  }
+    if (res.status === 202) {
+      throw new ActionDetailsGeneratingError()
+    }
 
-  if (res.data?.status === 'generating' || res.data?.status === 'GENERATING') {
-    throw new ActionDetailsGeneratingError()
-  }
+    if (res.data?.status === 'generating' || res.data?.status === 'GENERATING') {
+      throw new ActionDetailsGeneratingError()
+    }
   
-  // Backend retorna { data: {...}, cached: boolean, version?: string }
-  return res.data as ActionDetailsResponse
+    return res.data as ActionDetailsResponse
+  } catch (error) {
+    if (isAxiosError(error)) {
+      const status = error.response?.status
+      if (status === 202) {
+        throw new ActionDetailsGeneratingError()
+      }
+      if (status === 404 || status === 409 || status === 425 || status === 500 || status === 503) {
+        throw new ActionDetailsPendingError()
+      }
+    }
+    throw error
+  }
 }
 
 const fetchAnalysisStatus = async (url: string): Promise<AnalysisStatusResponse> => {
@@ -97,8 +119,8 @@ export function useActionDetails(
   )
 
   const analysisStatus = analysisStatusData?.analysis?.status?.toLowerCase() ?? null
-  const shouldWaitForAnalysis = Boolean(listingId && actionId && analysisStatus === 'generating')
-  const shouldFetchDetails = Boolean(url && !shouldWaitForAnalysis)
+  const shouldWaitForAnalysis = Boolean(listingId && actionId && analysisStatus !== 'completed')
+  const shouldFetchDetails = Boolean(url && analysisStatus === 'completed')
 
   const { data, error, isLoading, mutate } = useSWR<ActionDetailsResponse, Error>(
     shouldFetchDetails ? url : null,
@@ -108,7 +130,13 @@ export function useActionDetails(
       shouldRetryOnError: true,
       errorRetryInterval: 2000,
       onErrorRetry: (error, _key, _config, revalidate, context) => {
-        if (!(error instanceof ActionDetailsGeneratingError) || context.retryCount >= 15) {
+        if (
+          !(
+            error instanceof ActionDetailsGeneratingError ||
+            error instanceof ActionDetailsPendingError
+          ) ||
+          context.retryCount >= 15
+        ) {
           return
         }
 
@@ -119,7 +147,10 @@ export function useActionDetails(
     },
   )
 
-  const isGenerating = shouldWaitForAnalysis || error instanceof ActionDetailsGeneratingError
+  const isGenerating =
+    shouldWaitForAnalysis ||
+    error instanceof ActionDetailsGeneratingError ||
+    error instanceof ActionDetailsPendingError
   const combinedLoading = Boolean((statusUrl && statusLoading && analysisStatus === null) || isLoading || isGenerating)
 
   return {

@@ -37,22 +37,71 @@ function hasNonEmptyValue(value: unknown): boolean {
   return value !== null && value !== undefined;
 }
 
-function hasVideoInNestedMedia(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
+function isMp4Url(value: unknown): boolean {
+  return typeof value === 'string' && value.toLowerCase().includes('.mp4');
+}
 
-  const obj = value as Record<string, unknown>;
-  const type = String(obj.type ?? '').toLowerCase();
+function hasReliableObjectShape(itemObj: Record<string, unknown>): boolean {
+  if (Object.keys(itemObj).length === 0) return false;
+  if ('html' in itemObj) return false;
+  return true;
+}
 
-  return (
-    type === 'video' ||
-    type === 'clip' ||
-    hasNonEmptyValue(obj.video) ||
-    hasNonEmptyValue(obj.video_url) ||
-    hasNonEmptyValue(obj.video_id) ||
-    hasNonEmptyValue(obj.clip) ||
-    hasNonEmptyValue(obj.clip_url) ||
-    hasNonEmptyValue(obj.clip_id)
-  );
+function collectClipEvidence(itemObj: Record<string, unknown>): string[] {
+  const signals: string[] = [];
+  const pushIfUnique = (signal: string) => {
+    if (!signals.includes(signal)) {
+      signals.push(signal);
+    }
+  };
+  const collectPictureEvidence = (picture: unknown, indexLabel: string) => {
+    if (!picture || typeof picture !== 'object') return;
+    const pictureObj = picture as Record<string, unknown>;
+
+    if (hasNonEmptyValue(pictureObj.video)) {
+      pushIfUnique(`pictures[${indexLabel}].video`);
+    }
+
+    if (isMp4Url(pictureObj.url)) {
+      pushIfUnique(`pictures[${indexLabel}].url.mp4`);
+    }
+  };
+  const collectMediaEvidence = (mediaItem: unknown, indexLabel: string) => {
+    if (!mediaItem || typeof mediaItem !== 'object') return;
+    const mediaObj = mediaItem as Record<string, unknown>;
+    const type = String(mediaObj.type ?? '').toLowerCase();
+    const subtype = String(mediaObj.subtype ?? '').toLowerCase();
+
+    if (type === 'video') {
+      pushIfUnique(`media[${indexLabel}].type=video`);
+    }
+
+    if (subtype === 'video') {
+      pushIfUnique(`media[${indexLabel}].subtype=video`);
+    }
+  };
+
+  if (hasNonEmptyValue(itemObj.video_id)) {
+    pushIfUnique('item.video_id');
+  }
+
+  if (hasNonEmptyValue(itemObj.video_url)) {
+    pushIfUnique('item.video_url');
+  }
+
+  if (Array.isArray(itemObj.pictures)) {
+    itemObj.pictures.forEach((picture, index) => collectPictureEvidence(picture, String(index)));
+  } else {
+    collectPictureEvidence(itemObj.pictures, '0');
+  }
+
+  if (Array.isArray(itemObj.media)) {
+    itemObj.media.forEach((mediaItem, index) => collectMediaEvidence(mediaItem, String(index)));
+  } else {
+    collectMediaEvidence(itemObj.media, '0');
+  }
+
+  return Array.from(new Set(signals));
 }
 
 /**
@@ -72,52 +121,31 @@ export function classifyMlClipStatus(
   }
 
   const itemObj = item as Record<string, unknown>;
-
-  // 1) MEDIA METADATA
-  const metadataSignals: string[] = [];
-  const metadataKeys = ['video', 'clip', 'video_url', 'video_thumbnail', 'video_id', 'clip_url', 'clip_id'];
-  for (const key of metadataKeys) {
-    if (hasNonEmptyValue(itemObj[key])) {
-      metadataSignals.push(`metadata:${key}`);
-    }
-  }
-  if (hasVideoInNestedMedia(itemObj.pictures)) {
-    metadataSignals.push('metadata:pictures.video');
-  }
-  if (hasVideoInNestedMedia(itemObj.media)) {
-    metadataSignals.push('metadata:media.type');
-  }
-  if (metadataSignals.length > 0) {
+  if (!hasReliableObjectShape(itemObj)) {
     return {
-      clipStatus: 'HAS_CLIP',
-      hasClips: true,
-      reason: 'MEDIA_METADATA',
-      signals: metadataSignals,
+      clipStatus: 'INCONCLUSIVE',
+      hasClips: null,
+      reason: 'API_LIMITATION',
+      signals: ['payload_unreliable'],
     };
   }
 
-  // 2) MEDIA STRUCTURE (gallery/pictures/videos com preview de vídeo)
-  const structureSignals: string[] = [];
-  const mediaCollections = ['pictures', 'gallery', 'media', 'videos'];
-  for (const collectionKey of mediaCollections) {
-    const collection = itemObj[collectionKey];
-    const hasVideoPreview = Array.isArray(collection)
-      ? collection.some((entry) => hasVideoInNestedMedia(entry))
-      : hasVideoInNestedMedia(collection);
-    if (hasVideoPreview) {
-      structureSignals.push(`structure:${collectionKey}`);
-    }
-  }
-  if (structureSignals.length > 0) {
+  const evidenceSignals = collectClipEvidence(itemObj);
+  if (evidenceSignals.length > 0) {
+    const mediaComesFromArray = Array.isArray(itemObj.media);
+    const mediaReason =
+      evidenceSignals.some((signal) => signal.startsWith('media[')) && mediaComesFromArray
+        ? 'MEDIA_STRUCTURE'
+        : 'MEDIA_METADATA';
+
     return {
       clipStatus: 'HAS_CLIP',
       hasClips: true,
-      reason: 'MEDIA_STRUCTURE',
-      signals: structureSignals,
+      reason: mediaReason,
+      signals: evidenceSignals,
     };
   }
 
-  // 3) API LIMITATION
   if (httpStatus !== undefined && httpStatus !== null && httpStatus !== 200) {
     return {
       clipStatus: 'INCONCLUSIVE',
@@ -127,12 +155,11 @@ export function classifyMlClipStatus(
     };
   }
 
-  // 4) CONFIRMED ABSENCE
   return {
     clipStatus: 'NO_CLIP',
     hasClips: false,
     reason: 'CONFIRMED_ABSENCE',
-    signals: ['no_video_metadata', 'no_video_preview'],
+    signals: ['no_clip_evidence'],
   };
 }
 

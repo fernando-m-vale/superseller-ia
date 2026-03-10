@@ -59,6 +59,27 @@ describe('AnalysisResponseBuilders', () => {
     expect(actions.some((a) => a.actionKey === 'midia_video_clip')).toBe(false);
   });
 
+  it('nunca sugere adicionar clip quando hasClipDetected=true', () => {
+    const actions = buildDeterministicMvpActions({
+      listingIdExt: 'MLB123456789',
+      picturesCount: 3,
+      metrics30d: {
+        visits: 300,
+        orders: 2,
+        conversionRate: 0.01,
+      },
+      hasPromotion: false,
+      mediaVerdict: { canSuggestClip: false, hasClipDetected: true },
+      benchmark: {
+        confidence: 'high',
+        sampleSize: 120,
+      },
+    });
+
+    expect(actions.some((a) => a.title.toLowerCase().includes('adicionar clip'))).toBe(false);
+    expect(actions.some((a) => a.actionKey === 'midia_video_clip')).toBe(false);
+  });
+
   it('nao gera clip automatico quando deteccao e inconclusiva via warning da API', () => {
     const actions = buildDeterministicMvpActions({
       listingIdExt: 'MLB123456789',
@@ -444,7 +465,7 @@ describe('buildVerdictText', () => {
     expect(noPromoZeroOrders).not.toBe(highVisitsLowCr);
   });
 
-  it('sinaliza clip inconclusivo sem afirmar presenca ou ausencia de video', () => {
+  it('sinaliza clip inconclusivo sem afirmar presenca ou ausencia de clip', () => {
     const text = buildVerdictText({
       listingTitle: 'Caixa de Som Bluetooth',
       metrics30d: { visits: 380, orders: 2, conversionRate: 0.0052 },

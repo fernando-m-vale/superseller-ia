@@ -147,7 +147,7 @@ export function ActionDetailsV2Sections({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-primary" />
-                  Bullet Points
+                  Bullets sugeridos
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -246,7 +246,7 @@ export function ActionDetailsV2Sections({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Video className="h-5 w-5 text-primary" />
-                  Roteiro de Vídeo
+                  Roteiro de Clip
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">

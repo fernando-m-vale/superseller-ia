@@ -953,7 +953,7 @@ export function buildVerdictText(input: {
     diagnosisLines.push(`Evidência operacional de mídia: ${imageHint}.`);
   }
   if (clipInconclusive) {
-    diagnosisLines.push('O status de clip está inconclusivo via API; qualquer decisão sobre vídeo depende de validação manual.');
+    diagnosisLines.push('O status de clip está inconclusivo via API; qualquer decisão sobre clip depende de validação manual.');
   }
   if (benchmarkUnavailable) {
     diagnosisLines.push('Benchmark externo está indisponível no momento, então a leitura competitiva fica restrita aos sinais internos do anúncio.');

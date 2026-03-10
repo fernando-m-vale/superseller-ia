@@ -327,21 +327,21 @@ function generateWhyThisMatters(
     if (verdict.hasClipDetected === true) {
       // Tem clip detectado
       if (picturesCount >= 8) {
-        text = 'Mídia está completa com fotos e clip (vídeo).';
+        text = 'Mídia está completa com fotos e clip.';
       } else {
         text = 'Anúncios com mais imagens tendem a gerar maior engajamento e conversão.';
       }
     } else if (verdict.hasClipDetected === false) {
       // Não tem clip (certeza) - pode sugerir
       if (picturesCount >= 8) {
-        text = 'Anúncios com clip (vídeo) tendem a gerar maior engajamento e conversão.';
+        text = 'Anúncios com clip tendem a gerar maior engajamento e conversão.';
       } else {
-        text = 'Anúncios com mídia mais completa (fotos e clip/vídeo) tendem a gerar maior engajamento e conversão.';
+        text = 'Anúncios com mídia mais completa, com fotos e clip, tendem a gerar maior engajamento e conversão.';
       }
     } else {
       // hasClips === null: usar mensagem do verdict (sempre condicional)
       if (picturesCount >= 8) {
-        text = `Anúncios com clip (vídeo) tendem a gerar maior engajamento. ${verdict.message}`;
+        text = `Anúncios com clip tendem a gerar maior engajamento. ${verdict.message}`;
       } else {
         text = `Anúncios com mídia mais completa tendem a gerar maior engajamento e conversão. ${verdict.message}`;
       }

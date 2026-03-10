@@ -128,7 +128,7 @@ export interface PhotosAnalysisV21 {
 }
 
 /**
- * Análise de vídeo
+ * Análise de clip
  */
 export interface VideoAnalysisV21 {
   has_video: boolean | null;

@@ -18,13 +18,21 @@ describe('ml-video-extractor', () => {
       expect(result.reason).toBe('MEDIA_METADATA');
     });
 
+    it('classifica HAS_CLIP quando item.video_id existe', () => {
+      const result = classifyMlClipStatus({ id: 'MLB1', video_id: 'abc123' }, 200);
+      expect(result.clipStatus).toBe('HAS_CLIP');
+      expect(result.hasClips).toBe(true);
+      expect(result.signals).toContain('item.video_id');
+    });
+
     it('classifica HAS_CLIP por estrutura de mídia', () => {
       const result = classifyMlClipStatus({
         id: 'MLB1',
-        pictures: [{ id: '1', type: 'video' }],
+        media: [{ id: '1', type: 'video' }],
       }, 200);
       expect(result.clipStatus).toBe('HAS_CLIP');
       expect(result.reason).toBe('MEDIA_STRUCTURE');
+      expect(result.signals).toContain('media[0].type=video');
     });
 
     it('classifica HAS_CLIP quando pictures.video existe no payload', () => {
@@ -59,6 +67,15 @@ describe('ml-video-extractor', () => {
       expect(result.clipStatus).toBe('NO_CLIP');
       expect(result.hasClips).toBe(false);
       expect(result.reason).toBe('CONFIRMED_ABSENCE');
+    });
+
+    it('classifica HAS_CLIP quando pictures.url aponta para mp4', () => {
+      const result = classifyMlClipStatus({
+        id: 'MLB1',
+        pictures: [{ url: 'https://cdn.example.com/demo.mp4' }],
+      }, 200);
+      expect(result.clipStatus).toBe('HAS_CLIP');
+      expect(result.signals).toContain('pictures[0].url.mp4');
     });
   });
 

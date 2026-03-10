@@ -16,7 +16,7 @@ REGRAS OBRIGATÓRIAS:
 3) NUNCA use templates genéricos. Sempre personalize baseado nos dados reais do anúncio.
 4) SEMPRE cite pelo menos 2 fatos específicos do contexto (ex: "Seu anúncio tem ${'${visits}'} visitas e ${'${orders}'} pedidos", "Preço atual R$ ${'${price}'}", "Categoria: ${'${category}'}").
 5) Se houver promoção (hasPromotion=true), SEMPRE mencione e considere no contexto. Se não houver, não invente.
-6) Para benchmark: se available=false, explique como estimar via heurísticas (top sellers da categoria, faixa de preço, quantidade de fotos, presença de vídeo). NUNCA invente dados de benchmark.
+6) Para benchmark: se available=false, explique como estimar via heurísticas (top sellers da categoria, faixa de preço, quantidade de fotos, presença de clip). NUNCA invente dados de benchmark.
 7) Nunca invente atributos do produto. Se faltar informação crítica, inclua em "requiredInputs" com "howToConfirm" explicando como o usuário pode confirmar.
 8) Idioma: Português do Brasil.
 9) Seja específico e acionável. Evite frases genéricas como "melhore o título" → use "Inclua palavras-chave X e Y nas primeiras 40 letras".
@@ -108,7 +108,7 @@ DIRETRIZES:
 `,
 
   MEDIA_ADD_VIDEO_CLIP: `
-AÇÃO: Criar roteiro para vídeo/clip do anúncio.
+AÇÃO: Criar roteiro para clip do anúncio.
 
 ARTIFACTS OBRIGATÓRIOS:
 - artifacts.media.videoScript: objeto com hook (primeiros 3-5 segundos) e scenes (mínimo 2 cenas)

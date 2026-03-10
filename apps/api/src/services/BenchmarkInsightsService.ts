@@ -162,16 +162,16 @@ export function rankGaps(
     });
   }
 
-  // 2. Gap de vídeo (categoria tem alta % com vídeo e listing sem clip detectável)
+  // 2. Gap de clip (categoria tem alta % com clip e listing sem clip detectável)
   if (stats.percentageWithVideo > 50) {
-    // HOTFIX: Só sugerir vídeo se hasClips === false (confirmado que não tem)
+    // HOTFIX: Só sugerir clip se hasClips === false (confirmado que não tem)
     // Se hasClips === null (não detectável), não acusar falta
     if (listing.hasClips === false) {
       gaps.push({
         id: 'gap_video',
         dimension: 'video',
-        title: 'Adicionar vídeo para aumentar confiança e engajamento',
-        whyItMatters: `${Math.round(stats.percentageWithVideo)}% dos concorrentes têm vídeo. Vídeos aumentam confiança e conversão.`,
+        title: 'Adicionar clip para aumentar confiança e engajamento',
+        whyItMatters: `${Math.round(stats.percentageWithVideo)}% dos concorrentes têm clip. Clips aumentam confiança e conversão.`,
         impact: 'high',
         effort: 'medium',
         confidence: stats.sampleSize >= 10 ? 'high' : 'medium',
@@ -319,7 +319,7 @@ function generateFallbackGaps(
 ): CriticalGap[] {
   const gaps: CriticalGap[] = [];
 
-  // 1. Gap de vídeo (se não há vídeo e pode sugerir)
+  // 1. Gap de clip (se não há clip e pode sugerir)
   if (
     listing.hasClips === false &&
     fallbackData?.mediaVerdict?.canSuggestClip === true
@@ -327,8 +327,8 @@ function generateFallbackGaps(
     gaps.push({
       id: 'gap_video_fallback',
       dimension: 'video',
-      title: 'Adicionar vídeo para aumentar confiança e engajamento',
-      whyItMatters: 'Vídeos aumentam a confiança do comprador e podem melhorar a conversão.',
+      title: 'Adicionar clip para aumentar confiança e engajamento',
+      whyItMatters: 'Clips aumentam a confiança do comprador e podem melhorar a conversão.',
       impact: 'high',
       effort: 'medium',
       confidence: 'medium',

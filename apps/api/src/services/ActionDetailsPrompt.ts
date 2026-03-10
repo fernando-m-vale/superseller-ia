@@ -68,7 +68,7 @@ Regras obrigatórias:
 3) Sempre inclua "howToSteps" (3-7 passos práticos).
 4) Sempre inclua "doThisNow" (3-6 itens de checklist acionável).
 5) Para ações de SEO/título/descrição: inclua SEMPRE "titleSuggestions" (3 opções) e "descriptionTemplateBlocks".
-6) Em benchmark sem dados: benchmark.available=false + explique como estimar via heurísticas (top sellers da categoria, faixa de preço, quantidade de fotos, presença de vídeo).
+6) Em benchmark sem dados: benchmark.available=false + explique como estimar via heurísticas (top sellers da categoria, faixa de preço, quantidade de fotos, presença de clip).
 7) Nunca invente atributos do produto. Se faltar info, inclua em "confirmBeforeApplying" frases como "confirmar X antes".
 8) Idioma: Português do Brasil.
 

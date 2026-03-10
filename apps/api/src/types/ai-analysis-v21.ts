@@ -11,10 +11,10 @@ import { z } from 'zod';
  * Ação concreta e acionável para melhorar o anúncio
  */
 export const ActionItemV21Schema = z.object({
-  id: z.string().describe('Identificador único da ação (ex: "add_video", "improve_title")'),
+  id: z.string().describe('Identificador único da ação (ex: "add_clip", "improve_title")'),
   type: z.enum(['title', 'description', 'media', 'price', 'stock', 'seo', 'promotion']).describe('Tipo da ação'),
   priority: z.enum(['critical', 'high', 'medium', 'low']).describe('Prioridade da ação'),
-  title: z.string().describe('Título curto da ação (ex: "Adicionar vídeo ao anúncio")'),
+  title: z.string().describe('Título curto da ação (ex: "Adicionar clip ao anúncio")'),
   description: z.string().describe('Descrição detalhada do problema e solução'),
   impact: z.object({
     metric: z.string().describe('Métrica impactada (ex: "conversão", "tráfego", "score")'),
@@ -71,7 +71,7 @@ export const DescriptionAnalysisV21Schema = z.object({
 export type DescriptionAnalysisV21 = z.infer<typeof DescriptionAnalysisV21Schema>;
 
 /**
- * Análise de mídia (fotos e vídeos)
+ * Análise de mídia (fotos e clips)
  */
 export const MediaAnalysisV21Schema = z.object({
   photos: z.object({
@@ -82,10 +82,10 @@ export const MediaAnalysisV21Schema = z.object({
     recommendations: z.array(z.string()).describe('Recomendações de melhoria'),
   }),
   video: z.object({
-    has_video: z.boolean().nullable().describe('Se tem vídeo (null = não detectável)'),
-    can_suggest: z.boolean().describe('Se pode sugerir adicionar vídeo'),
-    status_message: z.string().describe('Mensagem sobre status do vídeo'),
-    recommendation: z.string().nullable().describe('Recomendação sobre vídeo (se aplicável)'),
+    has_video: z.boolean().nullable().describe('Se tem clip (null = não detectável)'),
+    can_suggest: z.boolean().describe('Se pode sugerir adicionar clip'),
+    status_message: z.string().describe('Mensagem sobre status do clip'),
+    recommendation: z.string().nullable().describe('Recomendação sobre clip (se aplicável)'),
   }),
 });
 
@@ -258,10 +258,10 @@ export function createFallbackAnalysisV21(
         has_video: listingData.has_clips,
         can_suggest: listingData.has_clips === false,
         status_message: listingData.has_clips === null 
-          ? 'Status do vídeo não detectável via API'
+          ? 'Status do clip não detectável via API'
           : listingData.has_clips 
-            ? 'Vídeo presente'
-            : 'Sem vídeo',
+            ? 'Anúncio possui clip'
+            : 'Sem clip',
         recommendation: listingData.has_clips === false ? 'Adicionar clip pode aumentar conversão' : null,
       },
     },

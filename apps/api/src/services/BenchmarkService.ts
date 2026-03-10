@@ -308,18 +308,18 @@ export class BenchmarkService {
       recommendations.push(`Adicionar ${gap} imagens para alcançar a média da categoria`);
     }
 
-    // 2. Vídeo/Clips
+    // 2. Clip
     if (stats.percentageWithVideo > 50) {
-      // Maioria dos concorrentes tem vídeo
+      // Maioria dos concorrentes tem clip
       if (listing.hasClips === true) {
-        youWinHere.push(`Você tem vídeo, como ${Math.round(stats.percentageWithVideo)}% dos concorrentes`);
+        youWinHere.push(`Seu anúncio possui clip, como ${Math.round(stats.percentageWithVideo)}% dos concorrentes`);
       } else if (listing.hasClips === false) {
-        youLoseHere.push(`${Math.round(stats.percentageWithVideo)}% dos concorrentes têm vídeo, você não`);
-        recommendations.push('Adicionar vídeo para aumentar confiança e engajamento');
+        youLoseHere.push(`${Math.round(stats.percentageWithVideo)}% dos concorrentes têm clip e seu anúncio ainda não possui clip`);
+        recommendations.push('Adicionar clip para aumentar confiança e engajamento');
       } else {
         // null = não detectável
-        youLoseHere.push(`${Math.round(stats.percentageWithVideo)}% dos concorrentes têm vídeo detectável`);
-        recommendations.push('Verificar se há vídeo no anúncio; se não houver, considere adicionar');
+        youLoseHere.push(`${Math.round(stats.percentageWithVideo)}% dos concorrentes têm clip detectável`);
+        recommendations.push('Verificar se o anúncio possui clip; se não possuir, considere adicionar');
       }
     }
 
