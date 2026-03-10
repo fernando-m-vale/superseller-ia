@@ -6,6 +6,7 @@
  */
 
 import { Marketplace, ListingStatus } from '@prisma/client';
+import type { ListingPersonalizationContext } from '../services/ListingPersonalizationEngine';
 
 /**
  * Metadados da requisição de análise
@@ -130,5 +131,5 @@ export interface AIAnalyzeInputV21 {
   media: AIAnalyzeInputMedia;
   performance: AIAnalyzeInputPerformance;
   dataQuality: AIAnalyzeInputDataQualityV21;
+  personalization?: ListingPersonalizationContext;
 }
-

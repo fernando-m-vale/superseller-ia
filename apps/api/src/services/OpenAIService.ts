@@ -41,6 +41,11 @@ import {
   buildMLExpertV22UserPrompt,
 } from '@superseller/ai/prompts/mlExpertV22';
 import { sanitizeExpertAnalysis } from '@superseller/core';
+import { getCategoryBreadcrumb } from './CategoryBreadcrumbService';
+import {
+  applyPersonalizationToExpertAnalysis,
+  buildListingPersonalizationContext,
+} from './ListingPersonalizationEngine';
 
 const prisma = new PrismaClient();
 
@@ -901,6 +906,36 @@ export class OpenAIService {
       visitsStatus = 'ok';
     }
 
+    let categoryPath: string[] = [];
+    let categoryLabel: string | null = listing.category;
+    try {
+      const categoryInfo = await getCategoryBreadcrumb(listing.category);
+      if (categoryInfo?.breadcrumb?.length) {
+        categoryPath = categoryInfo.breadcrumb;
+        categoryLabel = categoryInfo.breadcrumb[categoryInfo.breadcrumb.length - 1] || categoryLabel;
+      }
+    } catch (error) {
+      console.warn('[OPENAI-SERVICE-EXPERT] Failed to resolve category breadcrumb for personalization', {
+        listingId,
+        categoryId: listing.category,
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
+    }
+
+    const personalization = buildListingPersonalizationContext({
+      title: v1Input.listing.title,
+      description: v1Input.listing.description,
+      categoryLabel,
+      categoryPath,
+      price: priceBase,
+      priceFinal,
+      hasPromotion,
+      discountPercent,
+      visits: v1Input.performance.visits,
+      conversionRate: v1Input.performance.conversionRate,
+      stock: v1Input.listing.stock,
+    });
+
     return {
       meta: v1Input.meta,
       listing: {
@@ -917,6 +952,7 @@ export class OpenAIService {
         ...v1Input.dataQuality,
         visits_status: visitsStatus,
       },
+      personalization,
     };
   }
 
@@ -1340,7 +1376,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
               requestId,
               listingId: input.meta.listingId,
             });
-            const result = retryParseResult.data;
+            const result = applyPersonalizationToExpertAnalysis(input, retryParseResult.data);
             if (!result.meta.processing_time_ms) {
               result.meta.processing_time_ms = Date.now() - startTime;
             }
@@ -1352,7 +1388,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
               listingId: input.meta.listingId,
               issues: retryQualityIssues,
             });
-            const result = retryParseResult.data;
+            const result = applyPersonalizationToExpertAnalysis(input, retryParseResult.data);
             if (!result.meta.processing_time_ms) {
               result.meta.processing_time_ms = Date.now() - startTime;
             }
@@ -1387,7 +1423,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
       }
 
       // Inject processing time if not present
-      const result = parseResult.data;
+      const result = applyPersonalizationToExpertAnalysis(input, parseResult.data);
       if (!result.meta.processing_time_ms) {
         result.meta.processing_time_ms = processingTimeMs;
       }

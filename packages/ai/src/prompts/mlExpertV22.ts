@@ -115,6 +115,21 @@ REGRAS OBRIGATORIAS DE QUALIDADE (HARD CONSTRAINTS):
    - DEVE dizer: "Nao foi possivel confirmar via API"
    - NAO sugerir adicionar clip se canSuggestClip=false
 
+8. Personalizacao obrigatoria:
+   - Voce DEVE usar o bloco personalization do payload.
+   - Analise o titulo atual considerando termos fortes, termos faltantes, repeticao e termos genericos.
+   - title_fix.problem DEVE incluir exatamente 3 variacoes rotuladas:
+     * SEO: "..."
+     * Conversao: "..."
+     * Oferta: "..."
+   - As 3 variacoes precisam soar como estrategias diferentes, nao apenas trocar palavras.
+   - title_fix.after deve escolher a melhor variacao para o contexto do produto.
+   - description_fix.optimized_copy DEVE seguir a ordem: posicionamento, beneficios, diferenciais e informacoes praticas.
+   - PROIBIDO abrir a descricao com frases genericas como "Este produto e ideal para...".
+   - Produto infantil pede copy mais emocional.
+   - Produto tecnico pede copy mais informativo.
+   - Produto com promocao ativa pede destaque comercial sem colocar preco no titulo.
+
 === EXEMPLO DE RESPOSTA (few-shot) ===
 
 Para um produto com promocao ativa de R$ 60,00 por R$ 32,00 (47% de desconto):
@@ -191,6 +206,8 @@ REGRAS OBRIGATORIAS (HARD CONSTRAINTS):
 - image_plan DEVE ter min(6, pictures_count) itens quando pictures_count >= 6.
 - Se hasClips e null, diga "Nao foi possivel confirmar via API" (nao afirme que nao tem).
 - TODOS os textos devem ser compativeis com Mercado Livre (sem emojis, sem markdown).
+- Voce DEVE usar personalization.currentTitleAnalysis, personalization.titleStrategies e personalization.descriptionGuidance.
+- Nao repita aberturas genericas de descricao entre produtos diferentes.
 
 Siga OBRIGATORIAMENTE o formato de resposta definido.
 Nao adicione secoes extras.
@@ -224,7 +241,7 @@ FORMATO DE RESPOSTA (JSON OBRIGATORIO - SEM TEXTO EXTRA - SEM EMOJIS - SEM MARKD
 {
   "verdict": "Frase curta, direta e incomoda sobre o anuncio (SEM emojis)",
   "title_fix": {
-    "problem": "Onde o titulo atual falha para o algoritmo do Mercado Livre",
+    "problem": "Onde o titulo atual falha para o algoritmo do Mercado Livre, com termos fortes, faltantes, repeticao/genericos e 3 variacoes rotuladas SEO, Conversao e Oferta",
     "impact": "Qual sinal algoritmico esta sendo perdido",
     "before": "Titulo atual exatamente como esta no anuncio",
     "after": "Titulo otimizado pronto para copiar e colar (55-60 chars, keyword principal + 2-4 atributos)"
@@ -236,7 +253,7 @@ FORMATO DE RESPOSTA (JSON OBRIGATORIO - SEM TEXTO EXTRA - SEM EMOJIS - SEM MARKD
   ],
   "description_fix": {
     "diagnostic": "Problema real da descricao atual",
-    "optimized_copy": "Descricao completa pronta para colar no Mercado Livre (>=900 chars, estrutura completa com secoes, SEM EMOJIS, SEM MARKDOWN)"
+    "optimized_copy": "Descricao completa pronta para colar no Mercado Livre (>=900 chars, com posicionamento, beneficios, diferenciais e informacoes praticas, SEM EMOJIS, SEM MARKDOWN)"
   },
   "price_fix": {
     "diagnostic": "Avaliacao do preco considerando preco final e promocoes",

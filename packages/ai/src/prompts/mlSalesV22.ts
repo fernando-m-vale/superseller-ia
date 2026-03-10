@@ -84,6 +84,18 @@ REGRAS OBRIGATÓRIAS DE QUALIDADE (HARD CONSTRAINTS):
    - "o que medir" (CTR, conv, vendas)
    - "qual sinal de melhora" (ex: "CTR aumenta 15% em 7 dias")
 
+10. Personalizacao obrigatoria:
+   - Voce DEVE usar o bloco personalization do payload.
+   - Analise o titulo atual considerando termos fortes, faltantes, repeticao e excesso de termos genericos.
+   - title_fix.problem DEVE incluir exatamente 3 variacoes rotuladas SEO, Conversao e Oferta.
+   - Essas 3 variacoes precisam parecer estrategias diferentes, nao apenas sinonimos.
+   - title_fix.after deve escolher a melhor variacao para o contexto do produto.
+   - description_fix.optimized_copy DEVE seguir a ordem: posicionamento, beneficios, diferenciais e informacoes praticas.
+   - Evite frases genericas como "Este produto e ideal para...".
+   - Produto infantil pede copy mais emocional.
+   - Produto tecnico pede copy mais informativo.
+   - Produto promocional pede destaque comercial sem colocar preco no titulo.
+
 IMPORTANTE: Você DEVE retornar APENAS JSON válido, sem markdown, sem texto antes ou depois.
 O JSON deve começar com { e terminar com }.
 NÃO use \`\`\`json ou qualquer formatação markdown.
@@ -138,6 +150,8 @@ REGRAS OBRIGATÓRIAS (HARD CONSTRAINTS):
 - final_action_plan DEVE ter exatamente 7 itens (D0, D1, D2, D3, D4, D5, D6).
 - image_plan DEVE ter min(6, pictures_count) itens quando pictures_count >= 6.
 - Se hasClips é null, diga "Não foi possível confirmar via API".
+- Use personalization.currentTitleAnalysis, personalization.titleStrategies e personalization.descriptionGuidance.
+- Faça os títulos parecerem realmente diferentes entre si.
 
 Siga OBRIGATORIAMENTE o formato de resposta definido.
 Não adicione seções extras.
@@ -171,7 +185,7 @@ FORMATO DE RESPOSTA (JSON OBRIGATÓRIO - SEM TEXTO EXTRA):
 {
   "verdict": "Frase curta orientada a RECEITA (ex: 'alavanca principal é X, estimativa de ganho vem de Y')",
   "title_fix": {
-    "problem": "Onde o título atual falha para o algoritmo do Mercado Livre",
+    "problem": "Onde o título atual falha para o algoritmo do Mercado Livre, com termos fortes, faltantes, repetição/genericos e 3 variações rotuladas SEO, Conversao e Oferta",
     "impact": "Qual sinal algorítmico está sendo perdido",
     "before": "Título atual exatamente como está no anúncio",
     "after": "Título otimizado pronto para copiar e colar (55-60 chars)",
@@ -183,7 +197,7 @@ FORMATO DE RESPOSTA (JSON OBRIGATÓRIO - SEM TEXTO EXTRA):
   ],
   "description_fix": {
     "diagnostic": "Problema real da descrição atual",
-    "optimized_copy": "Descrição completa pronta para colar (>=900 chars)",
+    "optimized_copy": "Descrição completa pronta para colar (>=900 chars, com posicionamento, benefícios, diferenciais e informações práticas)",
     "hypothesis": "Por que isso aumenta venda",
     "how_to_execute_today": ["Passo 1", "Passo 2", "Passo 3"]
   },
