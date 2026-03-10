@@ -2,6 +2,48 @@
 
 ---
 
+## ✅ Dia 09 — Painel de análise (funil + gargalo + impacto + roadmap) — 2026-03-09
+
+**Status:** ✅ Concluído (pronto para validação final no Dia 10)
+
+### Entregas de hoje
+
+1) **Consultant Engine V3**
+- Diagnóstico baseado no funil **SEARCH → CLICK → CONVERSION**
+- Melhoria do **veredito** (mais claro e acionável)
+- Priorização por **estágio do funil**
+
+2) **Bottleneck Diagnosis**
+- Identificação do **gargalo principal** do anúncio
+- Classificação do gargalo: **SEARCH / CLICK / CONVERSION**
+- Explicação do gargalo + **foco recomendado**
+
+3) **Opportunity Impact Engine**
+- **Impacto estimado** por ação
+- Ranges de impacto por estágio do funil
+- **Multiplicador** quando a ação resolve o gargalo principal
+
+4) **Execution Roadmap**
+- Plano de execução em **3 passos**
+- Ordenação por **gargalo + impacto + esforço**
+
+5) **Polimento final de UX**
+- Remoção de termos em inglês
+- Badge visual de **gargalo**
+- Roadmap mais **escaneável**
+- Destaque visual para **impacto estimado**
+
+6) **Correções técnicas**
+- Clip detection **determinístico**
+- Uso de **múltiplas fontes** do payload do ML
+- Fix do modal **Action Details** usando `analysis.status`
+
+### Próximo passo (Dia 10)
+
+Executar o checklist de validação final do painel em `docs/NEXT_SESSION_PLAN.md`. Se tudo passar, seguir para **Dia 11**.
+
+---
+
 ## 🔥 Incidente V2 Action Details — 2026-03-05
 
 **Data/Hora:** 2026-03-05 (Tarde)  

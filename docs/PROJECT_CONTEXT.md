@@ -1,5 +1,5 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-02-02 (Início do Dia 3)
+Atualizado em: 2026-03-09
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
@@ -67,12 +67,41 @@ O foco não é "IA bonita", mas decisões confiáveis, acionáveis e escaláveis
 - **Normalização snake_case → camelCase:** Frontend usa dados normalizados para facilitar uso
 - **Preparação para IA visual futura:** Armazenar `pictures_json`, `pictures_count` sem análise visual por IA neste momento (decisão consciente para evitar complexidade prematura)
 
+## 📐 Fluxo atual da análise de anúncio
+
+```
+Veredito
+    ↓
+Diagnóstico do funil (SEARCH → CLICK → CONVERSION)
+    ↓
+Ganho potencial da rodada
+    ↓
+Plano de execução recomendado (3 passos)
+    ↓
+Cards de ação
+    ↓
+Detalhes executáveis (modal sob demanda)
+```
+
+| Bloco | Propósito |
+|-------|-----------|
+| **Veredito** | Resumo claro e acionável do estado do anúncio |
+| **Diagnóstico do funil** | Identifica em qual estágio (busca, clique, conversão) está o gargalo |
+| **Ganho potencial** | Estimativa de impacto da rodada de melhorias |
+| **Plano de execução** | 3 passos ordenados por gargalo + impacto + esforço |
+| **Cards de ação** | Ações priorizadas com badge de gargalo e impacto estimado |
+| **Detalhes executáveis** | Conteúdo operacional (como fazer, copy, checklist) sob demanda |
+
+---
+
 ## 🧭 Roadmap (alto nível)
+
+➡️ **Referência ativa:** `docs/ROADMAP.md`
+
 - ✅ ONDA 1/2: Score V2 + UX (concluído)
 - ✅ ONDA 3: IA como amplificador (concluído)
-  - ✅ Análise IA Expert (ml-expert-v1) — **FUNCIONAL**
-  - ✅ Benchmark → Action Engine → Conteúdo Gerado — **CONCLUÍDO (Dia 5)**
-- 🚀 Próxima fase: Execução Assistida + Jobs Automáticos + Hacks ML Contextuais (Dia 06-10)
+- ✅ Dia 09: Consultant Engine V3 + Bottleneck + Opportunity Impact + Execution Roadmap
+- 🚀 **Próximo:** Dia 10 (validação UX) → Dia 11 (Jobs automáticos)
 
 ---
 
