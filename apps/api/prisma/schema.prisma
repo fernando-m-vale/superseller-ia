@@ -113,6 +113,10 @@ enum SyncStatus {
 enum SyncJobType {
   TENANT_SYNC
   LISTING_SYNC
+  SYNC_VISITS
+  SYNC_ORDERS
+  SYNC_PROMOTIONS
+  SYNC_PRICE
 }
 
 enum SyncJobStatus {
@@ -169,6 +173,10 @@ model Tenant {
   applied_actions         AppliedAction[]
   sync_jobs               SyncJob[]
   ListingHack             ListingHack[]
+  visits_history          ListingVisitsHistory[]
+  orders_history          ListingOrdersHistory[]
+  price_history           ListingPriceHistory[]
+  promotions_history      ListingPromotionHistory[]
 
   @@map("tenants")
 }
@@ -230,6 +238,18 @@ model Listing {
   stock                     Int
   status                    ListingStatus
   category                  String?
+  category_id               String?
+  attributes_json           Json?
+  variations_json           Json?
+  shipping_json             Json?
+  logistic_type             String?
+  tags_json                 Json?
+  installments_json         Json?
+  promotions_json           Json?
+  reputation_json           Json?
+  questions_count           Int?
+  reviews_count             Int?
+  rating_average            Decimal?            @db.Decimal(4, 2)
   health_score              Float?              @default(0) // Score legado da API do ML (0-100)
   super_seller_score        Int?                @default(0) // Super Seller Score proprietário (0-100)
   score_breakdown           Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
@@ -265,6 +285,10 @@ model Listing {
   applied_actions         AppliedAction[]
   listing_hacks           ListingHack[]
   listing_actions         ListingAction[]
+  visits_history          ListingVisitsHistory[]
+  orders_history          ListingOrdersHistory[]
+  price_history           ListingPriceHistory[]
+  promotions_history      ListingPromotionHistory[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -349,6 +373,87 @@ model ListingMetricsDaily {
   @@index([listing_id])
   @@index([date])
   @@map("listing_metrics_daily")
+}
+
+model ListingVisitsHistory {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  listing_id  String
+  period_days Int      @default(30)
+  visits      Int?
+  captured_at DateTime @default(now()) @db.Timestamptz(3)
+  source      String?
+  metadata    Json?
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, captured_at(sort: Desc)])
+  @@index([listing_id, captured_at(sort: Desc)])
+  @@map("listing_visits_history")
+}
+
+model ListingOrdersHistory {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  listing_id  String
+  date_from   DateTime @db.Date
+  date_to     DateTime @db.Date
+  orders      Int      @default(0)
+  gmv         Decimal  @db.Decimal(10, 2)
+  captured_at DateTime @default(now()) @db.Timestamptz(3)
+  source      String?
+  metadata    Json?
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, captured_at(sort: Desc)])
+  @@index([listing_id, captured_at(sort: Desc)])
+  @@map("listing_orders_history")
+}
+
+model ListingPriceHistory {
+  id               String    @id @default(uuid())
+  tenant_id        String
+  listing_id       String
+  price            Decimal   @db.Decimal(10, 2)
+  price_final      Decimal?  @db.Decimal(10, 2)
+  original_price   Decimal?  @db.Decimal(10, 2)
+  discount_percent Int?
+  promotion_type   String?
+  captured_at      DateTime  @default(now()) @db.Timestamptz(3)
+  source           String?
+  metadata         Json?
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, captured_at(sort: Desc)])
+  @@index([listing_id, captured_at(sort: Desc)])
+  @@map("listing_price_history")
+}
+
+model ListingPromotionHistory {
+  id               String    @id @default(uuid())
+  tenant_id        String
+  listing_id       String
+  has_promotion    Boolean   @default(false)
+  promotion_type   String?
+  discount_percent Int?
+  original_price   Decimal?  @db.Decimal(10, 2)
+  price_final      Decimal?  @db.Decimal(10, 2)
+  promotions_json  Json?
+  captured_at      DateTime  @default(now()) @db.Timestamptz(3)
+  source           String?
+  metadata         Json?
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, captured_at(sort: Desc)])
+  @@index([listing_id, captured_at(sort: Desc)])
+  @@map("listing_promotions_history")
 }
 
 model AiModelMetric {

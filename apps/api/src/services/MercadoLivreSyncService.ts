@@ -34,7 +34,18 @@ interface MercadoLivreItem {
   shipping?: {
     free_shipping?: boolean;
     mode?: string;
+    logistic_type?: string;
+    [key: string]: unknown;
   };
+  logistic_type?: string;
+  tags?: string[];
+  installments?: {
+    quantity?: number;
+    amount?: number;
+    rate?: number;
+    currency_id?: string;
+    [key: string]: unknown;
+  } | null;
   // Campos adicionais para Super Seller Score
   sold_quantity?: number;
   visits?: number;
@@ -85,6 +96,18 @@ interface MercadoLivreItem {
   }>;
   deal_ids?: string[];
   variations?: Array<{ id?: string; [key: string]: any }>; // Variações do anúncio (cores, tamanhos, etc)
+  questions?: {
+    total?: number;
+    unanswered?: number;
+    [key: string]: unknown;
+  } | null;
+  reviews?: {
+    total?: number;
+    rating_average?: number;
+    [key: string]: unknown;
+  } | null;
+  rating?: number | null;
+  seller_reputation?: Record<string, unknown> | null;
   _enrichmentMeta?: {
     endpointUsed: 'prices' | 'items' | 'none';
     statusCode: number;
@@ -1445,9 +1468,89 @@ export class MercadoLivreSyncService {
           } as any, // Cast para InputJsonValue do Prisma
         };
 
-        // Atualizar category apenas se vier da API
+        // Atualizar category/category_id apenas se vier da API
         if (item.category_id) {
           listingData.category = item.category_id;
+          listingData.category_id = item.category_id;
+        }
+
+        if (Array.isArray(item.attributes)) {
+          listingData.attributes_json = item.attributes as any;
+        } else if (!existing) {
+          listingData.attributes_json = null;
+        }
+
+        if (Array.isArray(item.variations)) {
+          listingData.variations_json = item.variations as any;
+        } else if (!existing) {
+          listingData.variations_json = null;
+        }
+
+        if (item.shipping && typeof item.shipping === 'object') {
+          listingData.shipping_json = item.shipping as any;
+        } else if (!existing) {
+          listingData.shipping_json = null;
+        }
+
+        const logisticType =
+          item.logistic_type ||
+          (typeof item.shipping?.logistic_type === 'string' ? item.shipping.logistic_type : null);
+        if (logisticType) {
+          listingData.logistic_type = logisticType;
+        } else if (!existing) {
+          listingData.logistic_type = null;
+        }
+
+        if (Array.isArray(item.tags)) {
+          listingData.tags_json = item.tags as any;
+        } else if (!existing) {
+          listingData.tags_json = null;
+        }
+
+        if (item.installments && typeof item.installments === 'object') {
+          listingData.installments_json = item.installments as any;
+        } else if (!existing) {
+          listingData.installments_json = null;
+        }
+
+        const questionsCount =
+          item.questions?.total ??
+          (typeof (item as any).questions_count === 'number' ? (item as any).questions_count : null);
+        if (questionsCount !== null && questionsCount !== undefined) {
+          listingData.questions_count = questionsCount;
+        } else if (!existing) {
+          listingData.questions_count = null;
+        }
+
+        const reviewsCount =
+          item.reviews?.total ??
+          (typeof (item as any).reviews_count === 'number' ? (item as any).reviews_count : null);
+        if (reviewsCount !== null && reviewsCount !== undefined) {
+          listingData.reviews_count = reviewsCount;
+        } else if (!existing) {
+          listingData.reviews_count = null;
+        }
+
+        const ratingAverage =
+          item.reviews?.rating_average ??
+          item.rating ??
+          (typeof (item as any).rating_average === 'number' ? (item as any).rating_average : null);
+        if (ratingAverage !== null && ratingAverage !== undefined) {
+          listingData.rating_average = Number(ratingAverage);
+        } else if (!existing) {
+          listingData.rating_average = null;
+        }
+
+        const reputationPayload = {
+          questions: item.questions ?? null,
+          reviews: item.reviews ?? null,
+          rating: item.rating ?? null,
+          seller_reputation: item.seller_reputation ?? null,
+        };
+        if (Object.values(reputationPayload).some((value) => value !== null)) {
+          listingData.reputation_json = reputationPayload as any;
+        } else if (!existing) {
+          listingData.reputation_json = null;
         }
 
         // Atualizar description apenas se vier string não vazia da API
@@ -1749,6 +1852,13 @@ export class MercadoLivreSyncService {
         listingData.original_price = originalPrice;
         listingData.discount_percent = discountPercent;
         listingData.promotion_type = promotionType;
+        listingData.promotions_json = item.promotions && Array.isArray(item.promotions)
+          ? item.promotions as any
+          : item.deals && Array.isArray(item.deals)
+            ? item.deals as any
+            : existing
+              ? undefined
+              : null;
         // Atualizar promotion_checked_at apenas se buscamos /prices (shouldFetch) ou se nunca foi verificado
         if (shouldFetch || !existing?.promotion_checked_at) {
           listingData.promotion_checked_at = now;

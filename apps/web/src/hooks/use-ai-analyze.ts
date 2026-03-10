@@ -177,6 +177,7 @@ interface AIAnalysisApiResponse {
     reason: string
     expectedImpact: string
   }>
+  dataFreshness?: string | null
 }
 
 // Interface adaptada para o frontend
@@ -348,6 +349,7 @@ export interface AIAnalysisResponse {
     reason: string
     expectedImpact: string
   }>
+  dataFreshness?: string | null
 }
 
 /**
@@ -408,6 +410,7 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     verdictText: apiResponse.verdictText,
     funnelDiagnosis: apiResponse.funnelDiagnosis,
     executionRoadmap: apiResponse.executionRoadmap,
+    dataFreshness: apiResponse.dataFreshness,
   }
 }
 

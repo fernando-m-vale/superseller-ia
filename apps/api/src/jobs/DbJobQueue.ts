@@ -12,28 +12,24 @@ const prisma = new PrismaClient();
 
 export class DbJobQueue implements JobQueue {
   async enqueue(job: EnqueueJobInput): Promise<{ jobId: string }> {
-    // HOTFIX: Dedupe de TENANT_SYNC - verificar se já existe job ativo com mesmo lock_key
-    if (job.type === 'TENANT_SYNC') {
-      const existingJob = await prisma.syncJob.findFirst({
-        where: {
-          lock_key: job.lockKey,
-          status: {
-            in: [SyncJobStatus.queued, SyncJobStatus.running],
-          },
+    const existingJob = await prisma.syncJob.findFirst({
+      where: {
+        lock_key: job.lockKey,
+        status: {
+          in: [SyncJobStatus.queued, SyncJobStatus.running],
         },
-        select: {
-          id: true,
-        },
-      });
+      },
+      select: {
+        id: true,
+      },
+    });
 
-      if (existingJob) {
-        // Job já existe, retornar ID existente
-        const debug = process.env.DEBUG === '1' || process.env.NODE_ENV === 'development';
-        if (debug) {
-          console.log(`[DB_QUEUE] Job duplicado evitado: lock_key=${job.lockKey}, jobId existente=${existingJob.id}`);
-        }
-        return { jobId: existingJob.id };
+    if (existingJob) {
+      const debug = process.env.DEBUG === '1' || process.env.NODE_ENV === 'development';
+      if (debug) {
+        console.log(`[DB_QUEUE] Job duplicado evitado: lock_key=${job.lockKey}, jobId existente=${existingJob.id}`);
       }
+      return { jobId: existingJob.id };
     }
 
     const syncJob = await prisma.syncJob.create({

@@ -7,7 +7,13 @@
  */
 
 export type JobPriority = 'interactive' | 'background';
-export type JobType = 'TENANT_SYNC' | 'LISTING_SYNC';
+export type JobType =
+  | 'TENANT_SYNC'
+  | 'LISTING_SYNC'
+  | 'SYNC_VISITS'
+  | 'SYNC_ORDERS'
+  | 'SYNC_PROMOTIONS'
+  | 'SYNC_PRICE';
 
 export interface EnqueueJobInput {
   tenantId: string;

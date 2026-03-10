@@ -10,6 +10,12 @@
 import { getJobQueue } from './jobQueueFactory';
 import { handleTenantSync } from './handlers/TenantSyncOrchestrator';
 import { handleListingSync } from './handlers/ListingSyncWorker';
+import {
+  handleSyncOrders,
+  handleSyncPrice,
+  handleSyncPromotions,
+  handleSyncVisits,
+} from './handlers/MarketplaceDataSyncWorker';
 
 const POLL_INTERVAL_MS = 3000; // 3 segundos
 const MAX_RETRIES = 3;
@@ -115,6 +121,26 @@ async function processNextJob(): Promise<void> {
 
       case 'LISTING_SYNC':
         await handleListingSync(job.tenantId, job.payload);
+        await queue.markSuccess(job.jobId);
+        break;
+
+      case 'SYNC_VISITS':
+        await handleSyncVisits(job.tenantId, job.payload);
+        await queue.markSuccess(job.jobId);
+        break;
+
+      case 'SYNC_ORDERS':
+        await handleSyncOrders(job.tenantId, job.payload);
+        await queue.markSuccess(job.jobId);
+        break;
+
+      case 'SYNC_PROMOTIONS':
+        await handleSyncPromotions(job.tenantId, job.payload);
+        await queue.markSuccess(job.jobId);
+        break;
+
+      case 'SYNC_PRICE':
+        await handleSyncPrice(job.tenantId, job.payload);
         await queue.markSuccess(job.jobId);
         break;
 

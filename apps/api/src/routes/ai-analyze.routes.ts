@@ -120,6 +120,40 @@ function setVersionHeader(reply: FastifyReply): void {
   }
 }
 
+function formatRelativeFreshness(date: Date): string {
+  const diffMs = Math.max(0, Date.now() - date.getTime());
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+
+  if (diffMinutes < 1) {
+    return 'Dados atualizados agora mesmo';
+  }
+
+  if (diffMinutes < 60) {
+    return `Dados atualizados há ${diffMinutes} minuto${diffMinutes === 1 ? '' : 's'}`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `Dados atualizados há ${diffHours} hora${diffHours === 1 ? '' : 's'}`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `Dados atualizados há ${diffDays} dia${diffDays === 1 ? '' : 's'}`;
+}
+
+function buildDataFreshness(listing: {
+  last_synced_at?: Date | null;
+  promotion_checked_at?: Date | null;
+  updated_at?: Date | null;
+}): string | null {
+  const freshnessDate = listing.last_synced_at || listing.promotion_checked_at || listing.updated_at || null;
+  if (!freshnessDate) {
+    return null;
+  }
+
+  return formatRelativeFreshness(freshnessDate);
+}
+
 export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
   /**
    * POST /api/v1/ai/analyze/:listingId
@@ -1271,6 +1305,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           };
 
           // Adicionar benchmarkInsights e generatedContent ao responseData (já calculados acima)
+          responseData.dataFreshness = buildDataFreshness(listing);
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
 
@@ -1936,6 +1971,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         };
 
         // Benchmark Insights (Dia 05) - insights acionáveis do benchmark
+        cacheResponseData.dataFreshness = buildDataFreshness(listing);
         cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
         // Generated Content (Dia 05) - conteúdo pronto para copy/paste
         cacheResponseData.generatedContent = cacheGeneratedContent;
@@ -2860,6 +2896,7 @@ if (enableAIPing) {
         };
 
         // Adicionar benchmarkInsights e generatedContent
+        responseData.dataFreshness = buildDataFreshness(listing);
         responseData.benchmarkInsights = cacheBenchmarkInsights;
         responseData.generatedContent = cacheGeneratedContent;
 

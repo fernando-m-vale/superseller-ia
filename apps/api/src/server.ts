@@ -18,6 +18,7 @@ import { metaRoutes } from './routes/meta.routes';
 import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
+import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
 
 const app = fastify({ logger: loggerConfig });
 
@@ -132,6 +133,10 @@ async function main() {
       startJobRunner().catch((err: unknown) => {
         app.log.error({ err }, 'Error starting JobRunner');
       });
+    }
+
+    if (process.env.ENABLE_MARKETPLACE_DATA_SCHEDULER !== 'false') {
+      scheduleMarketplaceDataJobs(app);
     }
   } catch (err) {
     app.log.fatal({ err }, 'FATAL ERROR STARTING SERVER');
