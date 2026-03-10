@@ -282,6 +282,9 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   growthHacksMeta={aiAnalysis.growthHacksMeta}
                   funnelDiagnosis={aiAnalysis.funnelDiagnosis}
                   executionRoadmap={aiAnalysis.executionRoadmap}
+                  visualScore={aiAnalysis.visualScore}
+                  visualAnalysis={aiAnalysis.visualAnalysis}
+                  dataFreshness={aiAnalysis.dataFreshness}
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
                   score={aiAnalysis.score}

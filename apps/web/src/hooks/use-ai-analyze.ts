@@ -177,6 +177,20 @@ interface AIAnalysisApiResponse {
     reason: string
     expectedImpact: string
   }>
+  visualScore?: number | null
+  visualAnalysis?: {
+    visual_score: number
+    summary: string
+    clarity: { score: number; assessment: string }
+    contrast: { score: number; assessment: string }
+    visual_pollution: { score: number; assessment: string }
+    excessive_text: { score: number; assessment: string }
+    differentiation: { score: number; assessment: string }
+    main_improvements: string[]
+    main_image_url: string | null
+    analyzed_at: string
+    model: string
+  }
   dataFreshness?: string | null
 }
 
@@ -349,6 +363,20 @@ export interface AIAnalysisResponse {
     reason: string
     expectedImpact: string
   }>
+  visualScore?: number | null
+  visualAnalysis?: {
+    visual_score: number
+    summary: string
+    clarity: { score: number; assessment: string }
+    contrast: { score: number; assessment: string }
+    visual_pollution: { score: number; assessment: string }
+    excessive_text: { score: number; assessment: string }
+    differentiation: { score: number; assessment: string }
+    main_improvements: string[]
+    main_image_url: string | null
+    analyzed_at: string
+    model: string
+  }
   dataFreshness?: string | null
 }
 
@@ -405,14 +433,16 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     // Benchmark Insights (Dia 05) - será preenchido diretamente do response
     benchmarkInsights: apiResponse.benchmarkInsights,
     // Generated Content (Dia 05) - será preenchido diretamente do response
-    generatedContent: apiResponse.generatedContent,
-    // DIA 10: verdictText completo gerado pelo backend
-    verdictText: apiResponse.verdictText,
-    funnelDiagnosis: apiResponse.funnelDiagnosis,
-    executionRoadmap: apiResponse.executionRoadmap,
-    dataFreshness: apiResponse.dataFreshness,
+      generatedContent: apiResponse.generatedContent,
+      // DIA 10: verdictText completo gerado pelo backend
+      verdictText: apiResponse.verdictText,
+      funnelDiagnosis: apiResponse.funnelDiagnosis,
+      executionRoadmap: apiResponse.executionRoadmap,
+      visualScore: apiResponse.visualScore,
+      visualAnalysis: apiResponse.visualAnalysis,
+      dataFreshness: apiResponse.dataFreshness,
+    }
   }
-}
 
 export interface AIAnalysisState {
   data: NormalizedAIAnalysisResponse | null

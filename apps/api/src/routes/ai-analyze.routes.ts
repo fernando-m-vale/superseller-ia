@@ -35,6 +35,8 @@ import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 import { randomUUID } from 'crypto';
 import { buildDeterministicMvpActions, buildExecutionRoadmap, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../services/AnalysisResponseBuilders';
 import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
+import { VisualAnalysisService } from '../services/VisualAnalysisService';
+import type { ListingVisualAnalysis } from '../types/visual-analysis';
 
 const prisma = new PrismaClient();
 
@@ -152,6 +154,27 @@ function buildDataFreshness(listing: {
   }
 
   return formatRelativeFreshness(freshnessDate);
+}
+
+async function buildVisualAnalysisForListing(
+  listing: {
+    title: string;
+    category?: string | null;
+    thumbnail_url?: string | null;
+    pictures_json?: Prisma.JsonValue | null;
+  },
+): Promise<ListingVisualAnalysis> {
+  const visualService = new VisualAnalysisService();
+  const mainImageUrl = visualService.resolveMainImageUrl({
+    thumbnail_url: listing.thumbnail_url,
+    pictures_json: listing.pictures_json,
+  });
+
+  return visualService.analyzeMainImage({
+    title: listing.title,
+    category: listing.category,
+    mainImageUrl,
+  });
 }
 
 export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
@@ -540,6 +563,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           savedRecommendations: number;
           // Expert fields (obrigatório)
           analysisV21?: AIAnalysisResultExpert;
+          visualAnalysis?: ListingVisualAnalysis;
         };
 
         let cachedResult: CachedAnalysisResult | null = null;
@@ -758,6 +782,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               message: 'Análise não foi gerada corretamente',
             });
           }
+
+          const visualAnalysis = await buildVisualAnalysisForListing(listing);
 
           // Generate action plan and score explanation (IA Score V2)
           const dataQualityForActions: DataQuality = {
@@ -1097,11 +1123,11 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }
 
             // Sempre incluir Expert se disponível (obrigatório)
-            if (analysisV21) {
-              // Normalizar meta.prompt_version e meta.version antes de salvar no cache
-              const normalizedAnalysisV21 = { ...analysisV21 };
-              if (normalizedAnalysisV21.meta) {
-                normalizedAnalysisV21.meta.prompt_version = PROMPT_VERSION as any;
+              if (analysisV21) {
+                // Normalizar meta.prompt_version e meta.version antes de salvar no cache
+                const normalizedAnalysisV21 = { ...analysisV21 };
+                if (normalizedAnalysisV21.meta) {
+                  normalizedAnalysisV21.meta.prompt_version = PROMPT_VERSION as any;
                 normalizedAnalysisV21.meta.version = PROMPT_VERSION as any;
               } else {
                 // Se meta não existir, criar com campos mínimos necessários
@@ -1111,14 +1137,15 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                   version: PROMPT_VERSION as any,
                   model: analysisV21.meta?.model || 'gpt-4o',
                   analyzed_at: analysisV21.meta?.analyzed_at || new Date().toISOString(),
-                };
-              }
-              cachePayload.analysisV21 = normalizedAnalysisV21;
-            } else {
-              // Se não tiver analysisV21, logar warning mas continuar
-              request.log.warn(
-                {
-                  requestId,
+                  };
+                }
+                cachePayload.analysisV21 = normalizedAnalysisV21;
+                cachePayload.visualAnalysis = visualAnalysis;
+              } else {
+                // Se não tiver analysisV21, logar warning mas continuar
+                request.log.warn(
+                  {
+                    requestId,
                   listingId,
                   tenantId,
                 },
@@ -1306,6 +1333,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
           // Adicionar benchmarkInsights e generatedContent ao responseData (já calculados acima)
           responseData.dataFreshness = buildDataFreshness(listing);
+          responseData.visualScore = visualAnalysis.visual_score;
+          responseData.visualAnalysis = visualAnalysis;
           responseData.benchmarkInsights = benchmarkInsights;
           responseData.generatedContent = generatedContent;
 
@@ -1903,10 +1932,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         );
 
         // Gerar conteúdo acionável (Dia 05) - também para cache
-        const cacheGeneratedContent = generateListingContent(
-          {
-            title: listing.title || '',
-            description: listing.description,
+          const cacheGeneratedContent = generateListingContent(
+            {
+              title: listing.title || '',
+              description: listing.description,
             picturesCount: listing.pictures_count || 0,
             hasClips: listing.has_clips ?? null,
             hasPromotion: listing.has_promotion ?? false,
@@ -1914,9 +1943,17 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             price: Number(listing.price),
             originalPrice: listing.original_price ? Number(listing.original_price) : null,
             category: listing.category,
-          },
-          cacheBenchmarkInsights.criticalGaps
-        );
+            },
+            cacheBenchmarkInsights.criticalGaps
+          );
+
+          const latestVisualAnalysis =
+            cachedResult.visualAnalysis ||
+            await buildVisualAnalysisForListing(listing);
+
+          const cacheVisualAnalysis =
+            cachedResult.visualAnalysis ||
+            await buildVisualAnalysisForListing(listing);
 
         // Preparar resposta do cache incluindo Expert se disponível
         const cacheResponseData: any = {
@@ -1970,11 +2007,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           },
         };
 
-        // Benchmark Insights (Dia 05) - insights acionáveis do benchmark
-        cacheResponseData.dataFreshness = buildDataFreshness(listing);
-        cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
-        // Generated Content (Dia 05) - conteúdo pronto para copy/paste
-        cacheResponseData.generatedContent = cacheGeneratedContent;
+          // Benchmark Insights (Dia 05) - insights acionáveis do benchmark
+          cacheResponseData.dataFreshness = buildDataFreshness(listing);
+          cacheResponseData.visualScore = cacheVisualAnalysis.visual_score;
+          cacheResponseData.visualAnalysis = cacheVisualAnalysis;
+          cacheResponseData.benchmarkInsights = cacheBenchmarkInsights;
+          // Generated Content (Dia 05) - conteúdo pronto para copy/paste
+          cacheResponseData.generatedContent = cacheGeneratedContent;
         // HOTFIX: Normalizar preços para cache response SEM fallback perigoso
         let cacheResponseOriginalPriceForDisplay: number | null = null;
         if (listing.original_price) {
@@ -2684,6 +2723,7 @@ if (enableAIPing) {
           analysis: resultJson.analysis || resultJson.analysisV21,
           analysisV21: resultJson.analysisV21 || resultJson.analysis,
           savedRecommendations: resultJson.savedRecommendations || 0,
+          visualAnalysis: resultJson.visualAnalysis,
         };
         
         // Calcular score para incluir na resposta
@@ -2843,12 +2883,16 @@ if (enableAIPing) {
             price: Number(listing.price),
             originalPrice: listing.original_price ? Number(listing.original_price) : null,
             category: listing.category,
-          },
-          cacheBenchmarkInsights.criticalGaps
-        );
+            },
+            cacheBenchmarkInsights.criticalGaps
+          );
 
-        // Construir resposta completa (MESMO FORMATO do cache response do POST)
-        const responseData: any = {
+          const latestVisualAnalysis =
+            cachedResult.visualAnalysis ||
+            await buildVisualAnalysisForListing(listing);
+
+          // Construir resposta completa (MESMO FORMATO do cache response do POST)
+          const responseData: any = {
           listingId, // HOTFIX 09.4: Sempre incluir listingId
           score: scoreResult.score.final,
           scoreBreakdown: scoreResult.score.breakdown,
@@ -2895,10 +2939,12 @@ if (enableAIPing) {
           },
         };
 
-        // Adicionar benchmarkInsights e generatedContent
-        responseData.dataFreshness = buildDataFreshness(listing);
-        responseData.benchmarkInsights = cacheBenchmarkInsights;
-        responseData.generatedContent = cacheGeneratedContent;
+          // Adicionar benchmarkInsights e generatedContent
+          responseData.dataFreshness = buildDataFreshness(listing);
+          responseData.visualScore = latestVisualAnalysis.visual_score;
+          responseData.visualAnalysis = latestVisualAnalysis;
+          responseData.benchmarkInsights = cacheBenchmarkInsights;
+          responseData.generatedContent = cacheGeneratedContent;
 
         // Normalizar preços
         let cacheResponseOriginalPriceForDisplay: number | null = null;

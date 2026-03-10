@@ -1,10 +1,10 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { AlertTriangle, ExternalLink, Flame, Sparkles, Target, TrendingUp } from 'lucide-react'
+import { AlertTriangle, ExternalLink, Flame, Image as ImageIcon, Sparkles, Target, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent } from '@/lib/ai/normalizeAiAnalyze'
+import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent, NormalizedVisualAnalysis } from '@/lib/ai/normalizeAiAnalyze'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 import { useToast } from '@/hooks/use-toast'
 import { ExecutionProgress } from './ExecutionProgress'
@@ -103,6 +103,9 @@ interface ListingAIAnalysisPanelProps {
     reason: string
     expectedImpact: string
   }>
+  visualScore?: number | null
+  visualAnalysis?: NormalizedVisualAnalysis
+  dataFreshness?: string | null
 }
 
 export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
@@ -339,6 +342,71 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      {props.visualAnalysis && (
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-primary/10">
+                  <ImageIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Qualidade visual do anúncio</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Análise da imagem principal do anúncio
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold">{props.visualAnalysis.visualScore}</div>
+                <div className="text-xs text-muted-foreground">score visual</div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">{props.visualAnalysis.summary}</p>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Clareza</p>
+                <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.clarity.score}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.clarity.assessment}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contraste</p>
+                <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.contrast.score}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.contrast.assessment}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Poluição visual</p>
+                <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.visualPollution.score}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.visualPollution.assessment}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Texto excessivo</p>
+                <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.excessiveText.score}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.excessiveText.assessment}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Diferenciação</p>
+                <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.differentiation.score}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.differentiation.assessment}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-semibold mb-2">Principais melhorias</p>
+              <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                {props.visualAnalysis.mainImprovements.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            {props.dataFreshness && (
+              <p className="text-xs text-muted-foreground">{props.dataFreshness}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* B) DIAGNÓSTICO DE FUNIL */}
       {props.funnelDiagnosis && (

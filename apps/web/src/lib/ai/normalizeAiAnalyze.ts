@@ -51,11 +51,26 @@ export interface NormalizedAIAnalysisV21 {
   }
 }
 
+export interface NormalizedVisualAnalysis {
+  visualScore: number
+  summary: string
+  clarity: { score: number; assessment: string }
+  contrast: { score: number; assessment: string }
+  visualPollution: { score: number; assessment: string }
+  excessiveText: { score: number; assessment: string }
+  differentiation: { score: number; assessment: string }
+  mainImprovements: string[]
+  mainImageUrl: string | null
+  analyzedAt: string
+  model: string
+}
+
 /**
  * Tipo completo normalizado incluindo dados V1
  */
-export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark' | 'benchmarkInsights' | 'generatedContent' | 'growthHacks' | 'growthHacksMeta'> {
+export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark' | 'benchmarkInsights' | 'generatedContent' | 'growthHacks' | 'growthHacksMeta' | 'visualAnalysis' | 'visualScore'> {
   analysisV21?: NormalizedAIAnalysisV21
+  visualAnalysis?: NormalizedVisualAnalysis
   seoSuggestions?: {
     suggestedTitle?: string
     suggestedDescriptionPoints?: string[]
@@ -92,7 +107,40 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   growthHacksMeta?: AIAnalysisResponse['growthHacksMeta']
   // DIA 10: verdictText completo gerado pelo backend
   verdictText?: string
+  visualScore?: number | null
   dataFreshness?: string | null
+}
+
+function normalizeVisualAnalysis(raw: unknown): NormalizedVisualAnalysis | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+
+  const rawObj = raw as Record<string, unknown>
+
+  if ('visualScore' in rawObj && 'mainImprovements' in rawObj) {
+    return rawObj as unknown as NormalizedVisualAnalysis
+  }
+
+  const normalizeCriterion = (value: unknown) => {
+    const criterion = (value || {}) as Record<string, unknown>
+    return {
+      score: Number(criterion.score || 0),
+      assessment: String(criterion.assessment || ''),
+    }
+  }
+
+  return {
+    visualScore: Number(rawObj.visual_score || rawObj.visualScore || 0),
+    summary: String(rawObj.summary || ''),
+    clarity: normalizeCriterion(rawObj.clarity),
+    contrast: normalizeCriterion(rawObj.contrast),
+    visualPollution: normalizeCriterion(rawObj.visual_pollution || rawObj.visualPollution),
+    excessiveText: normalizeCriterion(rawObj.excessive_text || rawObj.excessiveText),
+    differentiation: normalizeCriterion(rawObj.differentiation),
+    mainImprovements: ((rawObj.main_improvements || rawObj.mainImprovements) as string[] | undefined) || [],
+    mainImageUrl: (rawObj.main_image_url as string) || (rawObj.mainImageUrl as string) || null,
+    analyzedAt: (rawObj.analyzed_at as string) || (rawObj.analyzedAt as string) || '',
+    model: (rawObj.model as string) || 'gpt-4o',
+  }
 }
 
 /**
@@ -279,6 +327,8 @@ export function normalizeAiAnalyzeResponse(
     growthHacksMeta: response.growthHacksMeta,
     // DIA 10: verdictText completo gerado pelo backend
     verdictText: response.verdictText,
+    visualScore: response.visualScore,
+    visualAnalysis: normalizeVisualAnalysis(response.visualAnalysis),
     dataFreshness: response.dataFreshness,
   }
 
