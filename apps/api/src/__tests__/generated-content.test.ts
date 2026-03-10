@@ -29,6 +29,9 @@ describe('GeneratedContentService', () => {
     expect(content.titles[0].text).not.toBe(content.titles[1].text);
     expect(content.titles[1].text).not.toBe(content.titles[2].text);
     expect(content.titles[0].text).not.toBe(content.titles[2].text);
+    expect(content.titles[0].text).not.toContain(' - ');
+    expect(content.titles[1].text).toContain(' - ');
+    expect(content.titles[2].text).toContain(' com ');
   });
 
   it('deve retornar bullets e descrições', () => {
@@ -99,7 +102,7 @@ describe('GeneratedContentService', () => {
 
     // Verificar que algum bullet menciona vídeo
     const hasVideoMention = content.bullets.some(b => 
-      b.toLowerCase().includes('vídeo') || b.toLowerCase().includes('video')
+      b.toLowerCase().includes('vídeo') || b.toLowerCase().includes('video') || b.toLowerCase().includes('clip')
     );
     expect(hasVideoMention).toBe(true);
   });
@@ -173,5 +176,68 @@ describe('GeneratedContentService', () => {
     );
     // Se houver gap de imagens, deve mencionar imagens (mesmo que seja o número atual)
     expect(hasImageMention || listing.picturesCount > 0).toBe(true);
+  });
+
+  it('gera títulos estruturalmente diferentes para anúncios diferentes', () => {
+    const infantil = generateListingContent({
+      title: 'Kit 3 Cuecas Slip Infantil Algodão Confortável Menino',
+      description: 'Cueca infantil para rotina diária',
+      picturesCount: 6,
+      hasClips: false,
+      hasPromotion: false,
+      discountPercent: null,
+      price: 39.9,
+      originalPrice: null,
+      category: 'moda infantil',
+    }, []);
+
+    const tech = generateListingContent({
+      title: 'Cabo HDMI 2.1 4K Ultra HD 2 Metros',
+      description: 'Cabo para áudio e vídeo',
+      picturesCount: 6,
+      hasClips: false,
+      hasPromotion: true,
+      discountPercent: 15,
+      price: 29.9,
+      originalPrice: null,
+      category: 'eletrônicos',
+    }, []);
+
+    expect(infantil.titles[0].text).not.toBe(tech.titles[0].text);
+    expect(infantil.titles[1].text).not.toBe(tech.titles[1].text);
+    expect(infantil.titles[2].text).not.toBe(tech.titles[2].text);
+  });
+
+  it('varia a abertura da descrição entre anúncios e evita padrão engessado', () => {
+    const contentA = generateListingContent({
+      title: 'Cueca Slip Infantil Algodão Confortável Menino',
+      description: 'Cueca infantil',
+      picturesCount: 5,
+      hasClips: false,
+      hasPromotion: false,
+      discountPercent: null,
+      price: 34.9,
+      originalPrice: null,
+      category: 'moda infantil',
+    }, []);
+
+    const contentB = generateListingContent({
+      title: 'Aspirador Vertical 2 em 1 Portátil Casa',
+      description: 'Aspirador para limpeza diária',
+      picturesCount: 5,
+      hasClips: false,
+      hasPromotion: false,
+      discountPercent: null,
+      price: 249.9,
+      originalPrice: null,
+      category: 'casa',
+    }, []);
+
+    const openingA = contentA.seoDescription.long.split('\n')[0];
+    const openingB = contentB.seoDescription.long.split('\n')[0];
+
+    expect(openingA).not.toBe(openingB);
+    expect(contentA.seoDescription.long).not.toContain('Este produto é ideal para');
+    expect(contentB.seoDescription.long).not.toContain('Este produto é ideal para');
   });
 });

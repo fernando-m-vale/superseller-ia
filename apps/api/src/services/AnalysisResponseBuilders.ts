@@ -20,6 +20,7 @@ export interface MvpActionItem {
 interface ActionCandidate {
   action: MvpActionItem;
   funnelStage: FunnelStage;
+  source: 'core' | 'hack';
   score: number;
   evidenceScore: number;
   impactScore: number;
@@ -307,6 +308,11 @@ function normalizeImpact(value?: string): 'high' | 'medium' | 'low' {
   return normalizePriority(value);
 }
 
+function softenPriority(value: 'high' | 'medium' | 'low'): 'medium' | 'low' {
+  if (value === 'high') return 'medium';
+  return 'low';
+}
+
 function getImpactScore(impact: 'high' | 'medium' | 'low'): number {
   if (impact === 'high') return 35;
   if (impact === 'medium') return 22;
@@ -345,15 +351,38 @@ function isBenchmarkUnavailable(benchmark?: DeterministicMvpActionsInput['benchm
 
 function isBenchmarkDependent(action: MvpActionItem): boolean {
   const haystack = `${action.id} ${action.actionKey} ${action.title} ${action.summary} ${action.description}`.toLowerCase();
-  if (haystack.includes('benchmark') || haystack.includes('concorr') || haystack.includes('categoria')) {
+  if (haystack.includes('benchmark') || haystack.includes('concorr')) {
     return true;
   }
-  return action.pillar === 'competitividade' && (haystack.includes('preço') || haystack.includes('compet'));
+  return action.pillar === 'competitividade' && haystack.includes('preço');
 }
 
 function isManualValidationAction(action: MvpActionItem): boolean {
   const haystack = `${action.title} ${action.summary} ${action.description}`.toLowerCase();
   return haystack.includes('validar') || haystack.includes('verificar') || haystack.includes('validação manual');
+}
+
+function classifyFailureType(input: {
+  stage: FunnelStage;
+  listingTitle?: string | null;
+  picturesCount?: number | null;
+  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
+  hasPromotion?: boolean | null;
+  discountPercent?: number | null;
+  mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  dataQualityWarnings?: string[] | null;
+  analysisV21?: {
+    title_fix?: { problem?: string | null } | null;
+    description_fix?: { diagnostic?: string | null } | null;
+    image_plan?: Array<{ action?: string | null }> | null;
+  } | null;
+  benchmark?: {
+    confidence?: string | null;
+    sampleSize?: number | null;
+    baselineConversionRate?: number | null;
+  } | null;
+}): DominantFailureType {
+  return inferDominantFailure(input);
 }
 
 function inferFunnelStage(action: MvpActionItem): FunnelStage {
@@ -362,6 +391,8 @@ function inferFunnelStage(action: MvpActionItem): FunnelStage {
     haystack.includes('seo_title') ||
     haystack.includes('título') ||
     haystack.includes('titulo') ||
+    haystack.includes('categoria') ||
+    haystack.includes('classifica') ||
     haystack.includes('busca') ||
     haystack.includes('palavras-chave')
   ) {
@@ -459,6 +490,23 @@ function enrichActionWithOpportunityImpact(
     expectedImpact: impactEstimate,
     impactEstimate,
     impactReason,
+  };
+}
+
+function decorateHackAsExtra(action: MvpActionItem): MvpActionItem {
+  const summary = action.summary.toLowerCase().includes('oportunidade extra')
+    ? action.summary
+    : `Oportunidade extra complementar. ${action.summary}`;
+  const description = action.description.toLowerCase().includes('oportunidade extra')
+    ? action.description
+    : `${action.description} Use esta frente depois das ações principais ou em paralelo com menor prioridade.`;
+
+  return {
+    ...action,
+    summary,
+    description,
+    impact: action.impact === 'high' ? 'medium' : action.impact,
+    priority: softenPriority(action.priority),
   };
 }
 
@@ -587,6 +635,127 @@ function shouldAddEvidenceDrivenAction(actionKey: string, input: DeterministicMv
   if (actionKey === 'midia_gallery_upgrade') return hasConcreteImageEvidence(input) || hasMediaImprovementEvidence(input);
   if (actionKey === 'compet_price_positioning') return hasConcretePriceEvidence(input);
   return true;
+}
+
+function buildMandatoryActionsForFailure(
+  input: DeterministicMvpActionsInput,
+  failure: DominantFailureType,
+  editUrl: string | null
+): MvpActionItem[] {
+  const titleProblem = input.analysisV21?.title_fix?.problem?.trim();
+  const descriptionDiagnostic = input.analysisV21?.description_fix?.diagnostic?.trim();
+  const firstImageAction = input.analysisV21?.image_plan?.find((step) => step?.action?.trim())?.action?.trim();
+
+  if (failure === 'categoria desalinhada') {
+    return [{
+      id: 'compet_category_alignment',
+      actionKey: 'compet_category_alignment',
+      title: 'Revisar classificação ou categoria do anúncio',
+      summary: 'O veredito aponta desalinhamento de categoria como prioridade desta rodada.',
+      description: titleProblem
+        ? `Sinal principal do diagnóstico: ${titleProblem}`
+        : 'Validar enquadramento do produto, categoria e sinais de catálogo para melhorar descoberta qualificada.',
+      expectedImpact: 'Mais aderência de busca e qualificação antes do clique.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'competitividade',
+    }];
+  }
+
+  if (failure === 'título pouco buscável' || failure === 'atributos pouco claros' || failure === 'título pouco específico') {
+    return [{
+      id: 'seo_title_clarity_alignment',
+      actionKey: 'seo_title_clarity_alignment',
+      title: 'Reescrever título com mais clareza de busca',
+      summary: 'O veredito indica que título e indexação ainda não traduzem bem a intenção de compra.',
+      description: titleProblem
+        ? `Sinal principal do diagnóstico: ${titleProblem}`
+        : 'Explicitar produto, modelo, atributo e contexto comercial nas primeiras palavras do título.',
+      expectedImpact: 'Mais CTR qualificado e melhor entrada no funil.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'seo',
+    }];
+  }
+
+  if (failure === 'imagem principal pouco clara') {
+    return [{
+      id: 'midia_primary_image_revision',
+      actionKey: 'midia_primary_image_revision',
+      title: 'Revisar imagem principal e prova visual do anúncio',
+      summary: 'O veredito sinaliza atrito visual logo na leitura inicial da oferta.',
+      description: firstImageAction || 'Atualizar capa, contexto de uso e diferenciais visuais para melhorar clique e confiança.',
+      expectedImpact: 'Mais clique qualificado e menor fricção na comparação.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'midia',
+    }];
+  }
+
+  if (failure === 'descrição pouco convincente') {
+    return [{
+      id: 'seo_description_reinforcement',
+      actionKey: 'seo_description_reinforcement',
+      title: 'Reforçar descrição com benefícios e diferenciais',
+      summary: 'O veredito aponta baixa capacidade de convencimento na página.',
+      description: descriptionDiagnostic || 'Reorganizar descrição para defender valor percebido, uso e diferencial da oferta.',
+      expectedImpact: 'Mais clareza de oferta e avanço na decisão de compra.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'seo',
+    }];
+  }
+
+  if (failure === 'dúvidas não respondidas') {
+    return [{
+      id: 'performance_faq_alignment',
+      actionKey: 'performance_faq_alignment',
+      title: 'Transformar dúvidas do comprador em FAQ visível',
+      summary: 'O veredito mostra objeções práticas abertas na página do anúncio.',
+      description: descriptionDiagnostic || 'Responder compatibilidade, uso, prazo e objeções principais em bloco objetivo.',
+      expectedImpact: 'Menos objeção e melhor conversão com o tráfego atual.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'performance',
+    }];
+  }
+
+  if (failure === 'promessa fraca') {
+    return [{
+      id: 'performance_offer_message',
+      actionKey: 'performance_offer_message',
+      title: 'Melhorar comunicação da oferta no anúncio',
+      summary: 'O veredito indica proposta inicial morna para disputar atenção no clique.',
+      description: 'Ajustar promessa principal entre título, imagem e argumento de valor para diferenciar a oferta.',
+      expectedImpact: 'Mais atenção qualificada e melhor leitura comercial.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'performance',
+    }];
+  }
+
+  if (failure === 'falta de confiança' || failure === 'fricção de decisão') {
+    return [{
+      id: 'performance_offer_trust',
+      actionKey: 'performance_offer_trust',
+      title: 'Melhorar comunicação da oferta e provas de confiança',
+      summary: 'O veredito sinaliza atrito na decisão final da compra.',
+      description: descriptionDiagnostic || firstImageAction || 'Reforçar provas, contexto de uso, garantias e clareza da oferta antes de insistir em preço.',
+      expectedImpact: 'Mais segurança para comprar e ganho de conversão.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'performance',
+    }];
+  }
+
+  return [];
 }
 
 function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: string | null): MvpActionItem[] {
@@ -810,7 +979,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
   const maxItems = Math.min(15, Math.max(1, input.maxItems ?? 15));
   const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
-  const primaryBottleneck = buildFunnelBottleneckDiagnosis({
+  const diagnosisInput = {
     metrics30d: input.metrics30d,
     listingTitle: input.listingTitle,
     picturesCount: input.picturesCount,
@@ -820,16 +989,22 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     dataQualityWarnings: input.dataQualityWarnings,
     analysisV21: input.analysisV21,
     benchmark: input.benchmark,
-  }).primaryBottleneck;
+  };
+  const primaryBottleneck = buildFunnelBottleneckDiagnosis(diagnosisInput).primaryBottleneck;
+  const dominantFailure = classifyFailureType({
+    ...diagnosisInput,
+    stage: primaryBottleneck,
+  });
 
   const candidatesByKey = new Map<string, ActionCandidate>();
 
   const upsertCandidate = (
     action: MvpActionItem,
-    extra?: { confidence?: number; evidenceCount?: number; hardPenalty?: number }
+    extra?: { confidence?: number; evidenceCount?: number; hardPenalty?: number; source?: 'core' | 'hack' }
   ): void => {
     let normalizedAction = attachFunnelDiagnosis(action);
     const funnelStage = inferFunnelStage(normalizedAction);
+    const source = extra?.source || 'core';
 
     if (isClipAction(normalizedAction)) {
       return;
@@ -879,6 +1054,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
       candidatesByKey.set(normalizedAction.actionKey, {
         action: normalizedAction,
         funnelStage,
+        source,
         score,
         evidenceScore,
         impactScore,
@@ -907,6 +1083,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
             : 'seo';
 
     upsertCandidate(
+      decorateHackAsExtra(
       {
         id,
         actionKey: id,
@@ -918,24 +1095,32 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
         priority: normalizePriority(String(rawHack.priority || rawHack.impact || 'medium')),
         suggestedActionUrl: rawHack.suggestedActionUrl ?? editUrl,
         pillar,
-      },
+      }),
       {
         confidence: rawHack.confidence,
         evidenceCount: rawHack.evidence?.length,
+        source: 'hack',
       }
     );
   }
 
+  for (const action of buildMandatoryActionsForFailure(input, dominantFailure, editUrl)) {
+    upsertCandidate(action, { hardPenalty: -12, source: 'core' });
+  }
+
   for (const template of buildEvidenceTemplates(input, editUrl)) {
-    upsertCandidate(template, { hardPenalty: -6 });
+    upsertCandidate(template, { hardPenalty: -6, source: 'core' });
   }
 
   for (const template of buildTemplates(input, editUrl)) {
-    upsertCandidate(template);
+    upsertCandidate(template, { source: 'core' });
   }
 
-  const sorted = Array.from(candidatesByKey.values())
+  const ranked = Array.from(candidatesByKey.values())
     .sort((a, b) => {
+      if (a.source !== b.source) {
+        return a.source === 'core' ? -1 : 1;
+      }
       const aPrimary = a.funnelStage === primaryBottleneck;
       const bPrimary = b.funnelStage === primaryBottleneck;
       if (aPrimary !== bPrimary) {
@@ -944,11 +1129,20 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
       if (b.score !== a.score) return b.score - a.score;
       if (b.evidenceScore !== a.evidenceScore) return b.evidenceScore - a.evidenceScore;
       return b.impactScore - a.impactScore;
-    })
-    .slice(0, maxItems)
-    .map((candidate) =>
-      enrichActionWithOpportunityImpact(candidate.action, candidate.funnelStage, primaryBottleneck, input)
-    );
+    });
+
+  const coreCandidates = ranked.filter((candidate) => candidate.source === 'core');
+  const hackCandidates = ranked.filter((candidate) => candidate.source === 'hack');
+  const reserveHackSlot = hackCandidates.length > 0 && maxItems > 1 ? 1 : 0;
+  const coreLimit = Math.max(1, maxItems - reserveHackSlot);
+  const selectedCandidates = [
+    ...coreCandidates.slice(0, coreLimit),
+    ...hackCandidates.slice(0, maxItems - Math.min(coreCandidates.length, coreLimit)),
+  ].slice(0, maxItems);
+
+  const sorted = selectedCandidates.map((candidate) =>
+    enrichActionWithOpportunityImpact(candidate.action, candidate.funnelStage, primaryBottleneck, input)
+  );
 
   return sorted;
 }

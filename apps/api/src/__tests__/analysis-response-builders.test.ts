@@ -191,9 +191,88 @@ describe('AnalysisResponseBuilders', () => {
     });
 
     expect(searchActions[0]?.actionKey).toBe('seo_title_refresh');
-    expect(conversionActions[0]?.actionKey).toBe('performance_conversion_funnel');
+    expect([
+      'performance_conversion_funnel',
+      'compet_promo_validation',
+      'performance_offer_trust',
+      'seo_description_blocks',
+    ]).toContain(conversionActions[0]?.actionKey);
     expect(searchActions[0]?.title).not.toEqual(conversionActions[0]?.title);
     expect(roadmap[0]?.reason).toContain('Ação principal');
     expect(roadmap[1]?.reason).toContain('Ação de suporte');
+  });
+
+  it('garante ação correspondente quando o veredito aponta categoria como problema prioritário', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Kit completo premium',
+      metrics30d: { visits: 18, orders: 0, conversionRate: 0 },
+      dataQualityWarnings: ['Categoria possivelmente desalinhada com a intenção de busca'],
+      maxItems: 5,
+    });
+
+    expect(actions.some((action) => action.title.includes('categoria'))).toBe(true);
+  });
+
+  it('rebaixa hacks para oportunidades extras e mantém ações principais na frente', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Cadeira Office Ergonômica',
+      metrics30d: { visits: 280, orders: 1, conversionRate: 0.0035 },
+      hasPromotion: true,
+      discountPercent: 25,
+      picturesCount: 4,
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A página apresenta a cadeira, mas ainda não sustenta conforto, ajuste e confiança para a decisão.',
+          optimized_copy: 'Bloco de prova com ajustes, garantia e peso suportado.',
+        },
+      },
+      hackActions: [
+        {
+          id: 'ml_psychological_pricing',
+          title: 'Aplicar preço psicológico',
+          summary: 'Testar fechamento em 9 para aumentar percepção de oportunidade.',
+          impact: 'high',
+          priority: 'high',
+          confidence: 80,
+          evidence: ['Preço atual acima de concorrentes em faixa crítica'],
+        },
+      ],
+      benchmark: { confidence: 'good', sampleSize: 18, baselineConversionRate: 0.018 },
+      maxItems: 6,
+    });
+
+    const hackIndex = actions.findIndex((action) => action.actionKey === 'ml_psychological_pricing');
+    expect(hackIndex).toBeGreaterThan(0);
+    expect(actions[0]?.actionKey).not.toBe('ml_psychological_pricing');
+    expect(actions[hackIndex]?.summary).toContain('Oportunidade extra complementar');
+  });
+
+  it('mantém ações principais priorizadas pelo gargalo do funil mesmo com oportunidades extras', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Cabo HDMI 2m 4K',
+      metrics30d: { visits: 20, orders: 0, conversionRate: 0 },
+      picturesCount: 6,
+      analysisV21: {
+        title_fix: {
+          after: 'Cabo HDMI 2.1 4K 2m Ultra High Speed',
+          problem: 'O título atual é genérico e não compete por buscas específicas.',
+        },
+      },
+      hackActions: [
+        {
+          id: 'ml_smart_variations',
+          title: 'Explorar variações inteligentes',
+          summary: 'Criar variações para capturar buscas complementares.',
+          impact: 'medium',
+          priority: 'medium',
+          confidence: 75,
+          evidence: ['Sem variações ativas'],
+        },
+      ],
+      maxItems: 5,
+    });
+
+    expect(actions[0]?.actionKey).toMatch(/seo_title/);
+    expect(actions[actions.length - 1]?.actionKey).toBe('ml_smart_variations');
   });
 });

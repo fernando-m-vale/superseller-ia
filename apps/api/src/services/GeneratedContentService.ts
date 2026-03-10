@@ -1,6 +1,6 @@
 /**
  * Generated Content Service
- * 
+ *
  * Gera conteúdo acionável (títulos, bullets, descrição SEO) orientado por dados e gaps.
  * NÃO promete o que não existe. NÃO assume clip se não há clip confirmado.
  * Conteúdo é sugestão assistiva (copy & paste).
@@ -22,48 +22,69 @@ export interface GeneratedContent {
   };
 }
 
+type ListingInput = {
+  title: string;
+  description?: string | null;
+  picturesCount: number;
+  hasClips: boolean | null;
+  hasPromotion: boolean;
+  discountPercent: number | null;
+  price: number;
+  originalPrice?: number | null;
+  category?: string | null;
+};
+
+type ListingProfile = {
+  tokens: string[];
+  normalizedTitle: string;
+  productLabel: string;
+  seoLabel: string;
+  categoryLabel: string;
+  audienceLabel: string;
+  audienceContext: string;
+  benefitLabel: string;
+  useContext: string;
+  offerHook: string;
+  detailLabel: string;
+  openingStyle: 0 | 1 | 2 | 3;
+};
+
+const STOP_WORDS = new Set([
+  'a',
+  'as',
+  'o',
+  'os',
+  'de',
+  'do',
+  'da',
+  'dos',
+  'das',
+  'e',
+  'em',
+  'para',
+  'por',
+  'com',
+  'sem',
+  'no',
+  'na',
+  'nos',
+  'nas',
+  'um',
+  'uma',
+  'kit',
+]);
+
 /**
  * Gera conteúdo para um listing baseado em dados reais e criticalGaps
  */
 export function generateListingContent(
-  listing: {
-    title: string;
-    description?: string | null;
-    picturesCount: number;
-    hasClips: boolean | null;
-    hasPromotion: boolean;
-    discountPercent: number | null;
-    price: number;
-    originalPrice?: number | null;
-    category?: string | null;
-  },
+  listing: ListingInput,
   criticalGaps: CriticalGap[]
 ): GeneratedContent {
-  // Extrair palavras-chave do título atual
-  const titleWords = listing.title.split(/\s+/).filter(w => w.length > 2);
-  const mainKeywords = titleWords.slice(0, 5).join(' ');
-
-  // Gerar 3 títulos diferentes (A/B/C)
-  const titles: GeneratedTitle[] = [
-    {
-      variation: 'A',
-      text: generateTitleVariation({ ...listing, picturesCount: listing.picturesCount }, criticalGaps, 'A', mainKeywords),
-    },
-    {
-      variation: 'B',
-      text: generateTitleVariation({ ...listing, picturesCount: listing.picturesCount }, criticalGaps, 'B', mainKeywords),
-    },
-    {
-      variation: 'C',
-      text: generateTitleVariation({ ...listing, picturesCount: listing.picturesCount }, criticalGaps, 'C', mainKeywords),
-    },
-  ];
-
-  // Gerar bullets baseados em gaps e dados reais
-  const bullets = generateBullets(listing, criticalGaps);
-
-  // Gerar descrição SEO (short e long)
-  const seoDescription = generateSeoDescription(listing, criticalGaps);
+  const profile = buildListingProfile(listing);
+  const titles = generateDistinctTitles(listing, criticalGaps, profile);
+  const bullets = generateBullets(listing, criticalGaps, profile);
+  const seoDescription = generateSeoDescription(listing, criticalGaps, profile);
 
   return {
     titles,
@@ -72,161 +93,253 @@ export function generateListingContent(
   };
 }
 
-/**
- * Gera variação de título (A/B/C)
- */
-function generateTitleVariation(
-  listing: { 
-    title: string; 
-    hasPromotion: boolean; 
-    discountPercent: number | null;
-    picturesCount?: number;
-  },
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function truncateTitle(value: string, max = 60): string {
+  const clean = normalizeWhitespace(value);
+  if (clean.length <= max) return clean;
+  return clean.slice(0, max).trimEnd();
+}
+
+function uniqueTokens(tokens: string[]): string[] {
+  const seen = new Set<string>();
+  return tokens.filter((token) => {
+    const normalized = token.toLowerCase();
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function extractTokens(title: string): string[] {
+  return uniqueTokens(
+    title
+      .split(/[^\p{L}\p{N}%]+/u)
+      .map((token) => token.trim())
+      .filter((token) => token.length >= 2)
+  );
+}
+
+function buildListingProfile(listing: ListingInput): ListingProfile {
+  const tokens = extractTokens(listing.title);
+  const normalizedTitle = listing.title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const semanticTokens = tokens.filter((token) => !STOP_WORDS.has(token.toLowerCase()));
+  const baseTokens = semanticTokens.length > 0 ? semanticTokens : tokens;
+  const productLabel = normalizeWhitespace(baseTokens.slice(0, 4).join(' ')) || normalizeWhitespace(listing.title);
+  const seoLabel = normalizeWhitespace(baseTokens.slice(0, 6).join(' ')) || productLabel;
+  const categoryLabel = inferCategoryLabel(normalizedTitle, baseTokens);
+  const audienceLabel = inferAudienceLabel(normalizedTitle);
+  const audienceContext = inferAudienceContext(audienceLabel);
+  const benefitLabel = inferBenefitLabel(normalizedTitle);
+  const useContext = inferUseContext(normalizedTitle, audienceContext);
+  const offerHook = inferOfferHook(listing, normalizedTitle);
+  const detailLabel = normalizeWhitespace(baseTokens.slice(1, 5).join(' ')) || productLabel;
+  const openingStyle = (normalizedTitle.length % 4) as 0 | 1 | 2 | 3;
+
+  return {
+    tokens: baseTokens,
+    normalizedTitle,
+    productLabel,
+    seoLabel,
+    categoryLabel,
+    audienceLabel,
+    audienceContext,
+    benefitLabel,
+    useContext,
+    offerHook,
+    detailLabel,
+    openingStyle,
+  };
+}
+
+function inferAudienceLabel(normalizedTitle: string): string {
+  if (/(infantil|crianca|criancas|menino|menina|bebe)/.test(normalizedTitle)) return 'infantil';
+  if (/(masculin|homem)/.test(normalizedTitle)) return 'masculino';
+  if (/(feminin|mulher)/.test(normalizedTitle)) return 'feminino';
+  if (/(unissex)/.test(normalizedTitle)) return 'unissex';
+  if (/(profission|premium)/.test(normalizedTitle)) return 'profissional';
+  return 'geral';
+}
+
+function inferAudienceContext(audienceLabel: string): string {
+  if (audienceLabel === 'infantil') return 'o dia a dia das crianças';
+  if (audienceLabel === 'masculino') return 'a rotina masculina';
+  if (audienceLabel === 'feminino') return 'a rotina feminina';
+  if (audienceLabel === 'profissional') return 'uso profissional';
+  return 'uso diário';
+}
+
+function inferCategoryLabel(normalizedTitle: string, tokens: string[]): string {
+  if (/(cueca|calcinha|camiseta|meia|tenis|sapato|vestido|jaqueta|calca)/.test(normalizedTitle)) return 'moda';
+  if (/(cabo|fone|caixa de som|bluetooth|hdmi|carregador|notebook|mouse|teclado)/.test(normalizedTitle)) return 'eletrônicos';
+  if (/(cadeira|aspirador|purificador|panela|cozinha|almofada)/.test(normalizedTitle)) return 'casa';
+  return normalizeWhitespace(tokens.slice(0, 2).join(' ')) || 'produto';
+}
+
+function inferBenefitLabel(normalizedTitle: string): string {
+  if (/(algod|maci|confort|ergonom|respir)/.test(normalizedTitle)) return 'conforto e ajuste';
+  if (/(durav|reforc|resistent)/.test(normalizedTitle)) return 'durabilidade no uso';
+  if (/(4k|ultra|potenc|rapido|speed|pro)/.test(normalizedTitle)) return 'desempenho consistente';
+  if (/(leve|portat|compact)/.test(normalizedTitle)) return 'praticidade no dia a dia';
+  return 'bom desempenho no uso diário';
+}
+
+function inferUseContext(normalizedTitle: string, audienceContext: string): string {
+  if (/(escola|infantil|crianca)/.test(normalizedTitle)) return 'na escola, em casa e na rotina';
+  if (/(corrida|treino|academia|esporte)/.test(normalizedTitle)) return 'na rotina de treino e movimento';
+  if (/(casa|cozinha|office|escritorio)/.test(normalizedTitle)) return 'na rotina da casa ou do trabalho';
+  if (/(cabo|fone|bluetooth|hdmi|carregador)/.test(normalizedTitle)) return 'na instalação e no uso diário';
+  return `em ${audienceContext}`;
+}
+
+function inferOfferHook(listing: ListingInput, normalizedTitle: string): string {
+  if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
+    return `condição especial com ${listing.discountPercent}% de desconto`;
+  }
+  if (/\bkit\b/.test(normalizedTitle)) return 'kit com melhor custo-benefício';
+  if (/(premium|pro|profission)/.test(normalizedTitle)) return 'valor percebido de linha premium';
+  return 'ótimo custo-benefício';
+}
+
+function generateDistinctTitles(
+  listing: ListingInput,
   criticalGaps: CriticalGap[],
-  variation: 'A' | 'B' | 'C',
-  mainKeywords: string
+  profile: ListingProfile
+): GeneratedTitle[] {
+  const seoTitle = truncateTitle([
+    profile.seoLabel,
+    profile.audienceLabel !== 'geral' ? profile.audienceLabel : '',
+  ].filter(Boolean).join(' '));
+
+  const conversionLead = profile.benefitLabel.charAt(0).toUpperCase() + profile.benefitLabel.slice(1);
+  const conversionTitle = truncateTitle(
+    `${conversionLead} para ${profile.audienceContext} - ${profile.productLabel}`
+  );
+
+  const offerSuffix = buildOfferSuffix(listing, criticalGaps, profile);
+  const offerTitle = truncateTitle(`${profile.productLabel} com ${offerSuffix}`);
+
+  return [
+    { variation: 'A', text: seoTitle },
+    { variation: 'B', text: conversionTitle },
+    { variation: 'C', text: offerTitle },
+  ];
+}
+
+function buildOfferSuffix(
+  listing: ListingInput,
+  criticalGaps: CriticalGap[],
+  profile: ListingProfile
 ): string {
-  // Base: título atual (limitado a 60 caracteres para ML)
-  const baseTitle = listing.title.length > 60 ? listing.title.substring(0, 57) + '...' : listing.title;
-
-  // Variação A: Foco em benefícios principais (HOTFIX P0: sem OFF/Oferta)
-  if (variation === 'A') {
-    // NUNCA usar "OFF" ou "Oferta Especial" no título (proibido pelo ML)
-    if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 30) {
-      // Mencionar promoção sem números no título (SEO-friendly)
-      return `${mainKeywords} - Promoção Especial`;
-    }
-    return `${mainKeywords} - Qualidade e Confiança`;
+  if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
+    return `${listing.discountPercent}% de desconto e ${profile.offerHook}`;
   }
-
-  // Variação B: Foco em características/diferenciais (HOTFIX P0: não inventar números)
-  if (variation === 'B') {
-    const imageGap = criticalGaps.find(g => g.dimension === 'images');
-    // Só mencionar número de imagens se tiver certeza (não inventar)
-    if (imageGap && imageGap.metrics?.median && typeof imageGap.metrics.median === 'number') {
-      return `${mainKeywords} - Veja ${imageGap.metrics.median} imagens detalhadas`;
-    }
-    // Se não tiver gap mas tiver picturesCount real, usar ele
-    if (listing.picturesCount && listing.picturesCount > 0 && listing.picturesCount >= 5) {
-      return `${mainKeywords} - Veja ${listing.picturesCount} imagens detalhadas`;
-    }
-    return `${mainKeywords} - Detalhes Completos`;
+  if (criticalGaps.some((gap) => gap.dimension === 'price' || gap.id.includes('promo'))) {
+    return 'estratégia de oferta mais forte';
   }
-
-  // Variação C: Foco em SEO/visibilidade
-  if (variation === 'C') {
-    return `${mainKeywords} - Envio Rápido e Seguro`;
-  }
-
-  // Fallback
-  return baseTitle;
+  return profile.offerHook;
 }
 
 /**
  * Gera bullets baseados em gaps e dados reais
  */
 function generateBullets(
-  listing: {
-    picturesCount: number;
-    hasClips: boolean | null;
-    hasPromotion: boolean;
-    discountPercent: number | null;
-  },
-  criticalGaps: CriticalGap[]
+  listing: ListingInput,
+  criticalGaps: CriticalGap[],
+  profile: ListingProfile
 ): string[] {
   const bullets: string[] = [];
 
-  // Bullet sobre imagens (HOTFIX P0: só mencionar se tiver certeza do número)
   if (listing.picturesCount > 0 && listing.picturesCount >= 5) {
-    // Só mencionar número se tiver certeza (não inventar)
-    bullets.push(`Veja ${listing.picturesCount} imagens detalhadas do produto`);
-  } else if (criticalGaps.some(g => g.dimension === 'images')) {
-    // Se houver gap mas não tiver número certo, usar texto genérico
-    bullets.push('Veja imagens detalhadas do produto');
+    bullets.push(`Galeria com ${listing.picturesCount} imagens para apoiar a decisão`);
+  } else if (criticalGaps.some((g) => g.dimension === 'images')) {
+    bullets.push('Conteúdo visual pronto para explicar melhor o produto');
   }
 
-  // Bullet sobre clip (só se tiver certeza que há clip)
   if (listing.hasClips === true) {
     bullets.push('Clip demonstrativo disponível');
-  } else if (criticalGaps.some(g => g.dimension === 'video')) {
-    // Não mencionar clip se não houver certeza
   }
 
-  // Bullet sobre promoção (HOTFIX P0: sem "Oferta especial", usar texto mais neutro)
   if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
-    bullets.push(`${listing.discountPercent}% de desconto`);
+    bullets.push(`${listing.discountPercent}% de desconto aplicado na oferta`);
   }
 
-  // Bullet genérico sobre qualidade/confiança
-  bullets.push('Produto de qualidade com garantia');
-
-  // Bullet sobre entrega (genérico, sempre útil)
+  bullets.push(`${profile.benefitLabel.charAt(0).toUpperCase() + profile.benefitLabel.slice(1)} para ${profile.audienceContext}`);
+  bullets.push(`Categoria ${profile.categoryLabel} com foco em ${profile.useContext}`);
   bullets.push('Envio rápido e seguro para todo o Brasil');
 
-  // Limitar a 5 bullets
   return bullets.slice(0, 5);
+}
+
+function buildOpening(profile: ListingProfile): string {
+  if (profile.openingStyle === 0) {
+    return `${profile.productLabel} para ${profile.audienceContext}, com foco em ${profile.benefitLabel}.`;
+  }
+  if (profile.openingStyle === 1) {
+    return `Buscando mais ${profile.benefitLabel} em ${profile.useContext}? ${profile.productLabel} entra como uma opção prática.`;
+  }
+  if (profile.openingStyle === 2) {
+    return `${profile.benefitLabel.charAt(0).toUpperCase() + profile.benefitLabel.slice(1)} é o diferencial que faz ${profile.productLabel} ganhar força na categoria ${profile.categoryLabel}.`;
+  }
+  return `${profile.useContext.charAt(0).toUpperCase() + profile.useContext.slice(1)} pedem um produto com leitura clara, e ${profile.productLabel} responde bem a esse cenário.`;
 }
 
 /**
  * Gera descrição SEO (short e long)
  */
 function generateSeoDescription(
-  listing: {
-    title: string;
-    description?: string | null;
-    picturesCount: number;
-    hasClips: boolean | null;
-    hasPromotion: boolean;
-    discountPercent: number | null;
-  },
-  criticalGaps: CriticalGap[]
+  listing: ListingInput,
+  criticalGaps: CriticalGap[],
+  profile: ListingProfile
 ): { short: string; long: string } {
-  const titleWords = listing.title.split(/\s+/).filter(w => w.length > 2);
-  const mainKeywords = titleWords.slice(0, 5).join(' ');
+  const opening = buildOpening(profile);
+  const promoLine = listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20
+    ? ` Oferta com ${listing.discountPercent}% de desconto para aumentar o valor percebido.`
+    : '';
+  const trustLine = listing.hasClips === true
+    ? ' Clip demonstrativo e galeria ajudam a validar a compra.'
+    : ' A descrição prioriza clareza para acelerar a decisão.';
 
-  // Short description (até 200 caracteres) (HOTFIX P0: sem "Oferta especial")
-  let short = `${mainKeywords}. `;
-  if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
-    short += `${listing.discountPercent}% de desconto. `;
-  }
-  short += 'Qualidade garantida, envio rápido.';
-  short = short.substring(0, 200);
+  const short = normalizeWhitespace(`${opening}${promoLine}${trustLine}`).slice(0, 200);
 
-  // Long description (até 1000 caracteres)
-  // DIA 06.1: SEM emojis (removidos)
-  let long = `${mainKeywords}.\n\n`;
-  
-  // Seção de benefícios (sem emojis)
-  long += 'BENEFICIOS:\n';
+  const sections: string[] = [];
+  sections.push(opening);
+  sections.push(
+    `Na categoria ${profile.categoryLabel}, este anúncio conversa com ${profile.audienceContext} e destaca ${profile.detailLabel} com linguagem mais consultiva.`
+  );
+
+  const benefits: string[] = [
+    `Foco em ${profile.benefitLabel}`,
+    `Uso pensado para ${profile.useContext}`,
+  ];
   if (listing.picturesCount >= 5) {
-    long += `• Veja ${listing.picturesCount} imagens detalhadas do produto\n`;
+    benefits.push(`Galeria com ${listing.picturesCount} imagens para apoiar a análise do comprador`);
   }
   if (listing.hasClips === true) {
-    long += '• Clip demonstrativo disponível\n';
+    benefits.push('Clip demonstrativo disponível para reforçar contexto de uso');
   }
   if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
-    long += `• ${listing.discountPercent}% de desconto\n`;
-  }
-  long += '• Produto de qualidade com garantia\n';
-  long += '• Envio rapido e seguro para todo o Brasil\n\n';
-
-  // Seção de informações adicionais (baseado em gaps)
-  const conversionGap = criticalGaps.find(g => g.id === 'gap_conversion_vs_promo');
-  if (conversionGap) {
-    long += 'DICA: Este produto esta em promocao. Aproveite enquanto dura!\n\n';
+    benefits.push(`Oferta ativa com ${listing.discountPercent}% de desconto`);
   }
 
-  // Seção de confiança (sem emojis)
-  long += 'COMPRE COM CONFIANCA:\n';
-  long += '• Produto original e de qualidade\n';
-  long += '• Atendimento especializado\n';
-  long += '• Garantia do vendedor\n\n';
+  sections.push(`BENEFICIOS:\n• ${benefits.join('\n• ')}`);
 
-  // CTA (sem emojis)
-  long += 'Nao perca esta oportunidade! Adicione ao carrinho agora.';
+  if (criticalGaps.some((gap) => gap.id === 'gap_conversion_vs_promo')) {
+    sections.push('OPORTUNIDADE:\n• Reforçar a leitura da oferta para transformar interesse em pedido com mais consistência.');
+  }
 
-  // Limitar a 1000 caracteres
-  long = long.substring(0, 1000);
+  sections.push(
+    'COMPRE COM CONFIANCA:\n• Produto com comunicação mais clara de uso e diferencial\n• Atendimento para apoiar dúvidas principais\n• Estrutura pensada para reduzir objeções antes da compra'
+  );
+  sections.push(`Fechamento: ${profile.productLabel} entrega ${profile.offerHook} sem perder clareza comercial.`);
 
-  return { short, long };
+  return {
+    short,
+    long: sections.join('\n\n').slice(0, 1000),
+  };
 }
