@@ -1,5 +1,5 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-03-09
+Atualizado em: 2026-03-10
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
@@ -92,6 +92,44 @@ Detalhes executáveis (modal sob demanda)
 | **Cards de ação** | Ações priorizadas com badge de gargalo e impacto estimado |
 | **Detalhes executáveis** | Conteúdo operacional (como fazer, copy, checklist) sob demanda |
 
+### Capacidades atuais
+
+- Diagnóstico de gargalo **SEARCH / CLICK / CONVERSION**
+- Hipótese consultiva do problema dominante
+- Plano de execução com priorização (gargalo + impacto + esforço)
+- Estimativa de impacto por ação (com multiplicador quando resolve o gargalo)
+- Geração de títulos sugeridos
+- Geração de descrição sugerida
+- Oportunidades extras (hacks Mercado Livre)
+
+### Decisão recente — Clip fora da experiência do usuário
+
+A **análise automática de clip foi removida da experiência do usuário** por inconsistências na detecção. O sistema pode manter detecção interna para outros fins, mas **não exibe nem recomenda clip** no produto.
+
+---
+
+## Limitações atuais da análise
+
+1. **IA ainda não possui análise real de imagens** — avaliação visual será tratada no Dia 12 (IA Visual MVP).
+2. **IA não possui dados completos do marketplace** — mais dados serão coletados no Dia 11 (Data Layer + Jobs).
+3. **Personalização de título e descrição** ainda pode parecer similar entre anúncios, por limitação de sinais disponíveis.
+
+**Conclusão registrada:** Melhorar inteligência sem aumentar os sinais disponíveis gera ganhos limitados. A estratégia passa a priorizar **coleta de mais dados** e **novos tipos de análise**.
+
+---
+
+## Nova direção estratégica — Três pilares
+
+A evolução do SuperSeller IA foca em **três pilares principais** de sucesso em marketplace:
+
+| Pilar | Responsabilidade |
+|-------|------------------|
+| **TÍTULO** | Descoberta nas buscas |
+| **IMAGEM** | Clique no anúncio |
+| **DESCRIÇÃO** | Decisão de compra e SEO interno |
+
+Outros fatores continuam relevantes (categoria, preço, promoções, logística, atributos), mas **só impactam depois** que os três pilares estão bem estruturados.
+
 ---
 
 ## 🧭 Roadmap (alto nível)
@@ -101,30 +139,30 @@ Detalhes executáveis (modal sob demanda)
 - ✅ ONDA 1/2: Score V2 + UX (concluído)
 - ✅ ONDA 3: IA como amplificador (concluído)
 - ✅ Dia 09: Consultant Engine V3 + Bottleneck + Opportunity Impact + Execution Roadmap
-- 🚀 **Próximo:** Dia 10 (validação UX) → Dia 11 (Jobs automáticos)
+- ✅ **Dia 10 — UX Premium:** CONCLUÍDO (produto parecer profissional em 2 minutos)
+- 🚀 **Próximo:** Dia 11 — Data Layer + Jobs Automáticos
+
+Referência completa: `docs/ROADMAP.md`
 
 ---
 
 ## Estado Atual do Produto
 
-### Engine
-- ✅ **ScoreActionEngine ativo:** Geração determinística de ações implementada
-- ✅ **ActionDetailsV2 implementado (behind flag):** Schema JSON-safe, artifacts tipados, validação obrigatória
-- ✅ **Rollout paralelo:** V1 (default) e V2 (behind flags) coexistem sem conflito
+### Funcionalidades implementadas
 
-### UX
-- ✅ **Kanban funcional:** Cards compactos com status (A_IMPLEMENTAR/IMPLEMENTADO/DESCARTADO)
-- ✅ **Modal V1/V2 condicional:** Detecção automática via campo `version`, renderização apropriada
-- ✅ **Artifacts copyáveis:** Quando V2 ativo, artifacts prontos para copiar (títulos, descrições, bullets, etc.)
+- **Painel de análise** com fluxo completo: Veredito → Diagnóstico do funil → Ganho potencial → Plano de execução → Cards de ação → Detalhes executáveis
+- **Diagnóstico de gargalo** SEARCH / CLICK / CONVERSION com hipótese consultiva
+- **Plano de execução** priorizado (3 passos) e **estimativa de impacto**
+- **Geração de conteúdo:** títulos sugeridos, descrição sugerida
+- **Oportunidades extras (hacks)** Mercado Livre
+- **ScoreActionEngine** e **ActionDetails** (V1/V2) com artifacts copyáveis
+- **Clip:** não exibido nem recomendado na UX (decisão por inconsistência na detecção)
 
-### Estratégia
-**Produto em transição de:**
-- **Diagnóstico estático** → **Execução Assistida com artifacts prontos**
+### Engine / UX
 
-**Status atual:**
-- Estrutura técnica concluída (V2 implementado e corrigido)
-- Pendente: validação qualitativa em produção
-- Próximo passo: ativar flags e validar qualidade dos artifacts
+- Score e ações determinísticos; IA explica e gera copy
+- Kanban com cards e modal de detalhes sob demanda
+- Rollout paralelo V1/V2; cache e controle de custo LLM
 
 ---
 

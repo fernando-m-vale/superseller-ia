@@ -1,5 +1,5 @@
 # ROADMAP — SuperSeller IA
-Atualizado em: 2026-03-09
+Atualizado em: 2026-03-10
 
 Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 
@@ -7,40 +7,94 @@ Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 
 ## Estado atual
 
-- **Hoje:** entregas de Dia 09 (painel de análise com funil + gargalo + impacto + roadmap) concluídas
-- **Próxima sessão:** **Dia 10 — UX Premium** (validação final de estabilidade e experiência)
-
-Checklist do Dia 10: `docs/NEXT_SESSION_PLAN.md`
+- **Dia 10 — UX Premium:** ✅ CONCLUÍDO (produto parecer profissional em 2 minutos)
+- **Próxima sessão:** **Dia 11 — Data Layer + Jobs Automáticos**
 
 ---
 
-## FASE 1 — Produto Vendável
+## DIA 10 — UX Premium ✅ CONCLUÍDO
 
-### Dia 10 — UX Premium
-- Polimento final do painel (linguagem, escaneabilidade, hierarquia visual)
-- Validação de estabilidade (clip detection, Action Details, roadmap, impacto estimado)
+**Objetivo:** Produto parecer profissional em 2 minutos.
 
-### Dia 11 — Jobs automáticos
-- Jobs recorrentes para manter dados atualizados e reduzir fricção operacional
-
-### Dia 12 — Onboarding inteligente
-- Primeiro valor rápido guiado (primeira vitória) e orientação contextual
-
-### Dia 13 — Landing comercial
-- Página comercial clara para aquisição e conversão
+**Status:** CONCLUÍDO.
 
 ---
 
-## FASE 2 — Diferenciação Forte
+## DIA 11 — Data Layer + Jobs Automáticos
 
-### Dia 14 — IA Visual (MVP)
-- MVP de avaliação visual (sem gerar imagem automaticamente nesta fase)
+**Objetivo:** Persistir o máximo possível de dados da API do Mercado Livre; esses dados alimentarão futuras análises da IA.
 
-### Dia 15 — Ads Intelligence
-- Diagnóstico e recomendações acionáveis para campanhas
+**Implementar:**
 
-### Dia 16–18 — Execução real no Mercado Livre
-- Execução via API (com consentimento explícito)
-- Histórico/auditoria e rollback
-- Feature premium
+- Sync automático de visitas
+- Sync automático de pedidos
+- Sync automático de promoções
+- Sync automático de preço
 
+---
+
+## DIA 12 — IA Visual (MVP)
+
+**Objetivo:** Análise da imagem principal do anúncio.
+
+**Avaliar:**
+
+- Clareza
+- Contraste
+- Presença do produto
+- Poluição visual
+- Diferenciação em relação a concorrentes
+
+**Output:** score visual + sugestões de melhoria. **Sem geração de imagens** neste momento.
+
+---
+
+## DIA 13 — Ads Intelligence
+
+**Objetivo:** Analisar campanhas de anúncios patrocinados.
+
+**Métricas:** CTR, CPC, ROAS, conversão.
+
+**Output:** recomendações simples.
+
+---
+
+## DIA 14 — Refinamento da IA
+
+**Objetivo:** Com novos dados disponíveis (Data Layer, IA Visual, Ads), melhorar:
+
+- Diagnóstico
+- Consultoria
+- Priorização de ações
+
+---
+
+## DIA 15 — Onboarding inteligente
+
+**Fluxo ideal:**
+
+```
+login → conectar Mercado Livre → escolher anúncio → primeira vitória
+```
+
+---
+
+## DIA 16 — Landing comercial
+
+**Objetivo:** Página pública do produto com:
+
+- Proposta de valor
+- Planos
+- Lista de espera
+
+---
+
+## DIA 17–19 — Execução real via API
+
+**Objetivo:** Permitir que o sistema aplique mudanças diretamente no anúncio:
+
+- Alterar título
+- Alterar descrição
+- Alterar preço
+
+**Requisitos:** confirmação, log de alterações, rollback.

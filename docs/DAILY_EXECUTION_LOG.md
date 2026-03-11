@@ -2,6 +2,21 @@
 
 ---
 
+## 📋 Atualização de documentação e estratégia — 2026-03-10
+
+**Objetivo:** Alinhar documentação ao estado real do produto e à nova direção estratégica.
+
+### Registrado
+
+- **Estado atual do produto:** fluxo do painel, capacidades (diagnóstico de gargalo, plano de execução, impacto, títulos/descrição, hacks), decisão de **remover clip da UX** (inconsistência na detecção).
+- **Limitações atuais:** (1) IA sem análise real de imagens, (2) IA sem dados completos do marketplace, (3) personalização pode parecer similar entre anúncios. Conclusão: ganhos limitados sem mais dados; priorizar coleta de dados e novos tipos de análise.
+- **Nova direção estratégica:** três pilares — **Título** (descoberta), **Imagem** (clique), **Descrição** (decisão de compra e SEO). Outros fatores (categoria, preço, promo, logística) vêm depois.
+- **Roadmap atualizado:** Dia 10 CONCLUÍDO; ordem Dias 11–19: Data Layer + Jobs → IA Visual MVP → Ads Intelligence → Refinamento IA → Onboarding → Landing → Execução real via API.
+
+**Arquivos alterados:** `PROJECT_CONTEXT.md`, `DAILY_EXECUTION_LOG.md`, `NEXT_SESSION_PLAN.md`, `ROADMAP.md`, `ROADMAP_OFICIAL.md`.
+
+---
+
 ## ✅ Dia 09 — Painel de análise (funil + gargalo + impacto + roadmap) — 2026-03-09
 
 **Status:** ✅ Concluído (pronto para validação final no Dia 10)
