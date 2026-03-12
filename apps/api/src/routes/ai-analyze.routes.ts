@@ -38,6 +38,7 @@ import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
 import type { ListingVisualAnalysis } from '../types/visual-analysis';
 import { VisualAnalysisOrchestrator } from '../services/visual/VisualAnalysisOrchestrator';
 import { VisualAnalysisRepository } from '../services/visual/VisualAnalysisRepository';
+import { attachAdsIntelligenceToPayload } from '../services/ads/attachAdsIntelligence';
 
 const prisma = new PrismaClient();
 const visualAnalysisOrchestrator = new VisualAnalysisOrchestrator(
@@ -1785,6 +1786,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             },
           });
 
+          await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
+
           // Adicionar header com commit SHA
           setVersionHeader(reply);
           analysisStatusTracker.setStatus(tenantId, listingId, 'completed');
@@ -2467,6 +2470,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
           },
         });
+
+        await attachAdsIntelligenceToPayload(cacheResponseData, tenantId, listingId, request.log);
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
@@ -3256,6 +3261,8 @@ if (enableAIPing) {
             baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
           },
         });
+
+        await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);

@@ -285,6 +285,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
                   visualScore={aiAnalysis.visualScore}
                   visualAnalysis={aiAnalysis.visualAnalysis}
                   dataFreshness={aiAnalysis.dataFreshness}
+                  adsIntelligence={aiAnalysis.adsIntelligence}
                   onRegenerate={handleRegenerateAnalysis}
                   isRegenerating={aiLoading}
                   score={aiAnalysis.score}

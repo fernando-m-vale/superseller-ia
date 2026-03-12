@@ -6,6 +6,44 @@ import { getAccessToken } from '@/lib/auth'
 import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
 import type { NormalizedAIAnalysisResponse } from '@/lib/ai/normalizeAiAnalyze'
 
+export interface AdsIntelligencePayload {
+  status: 'available' | 'partial' | 'unavailable'
+  adsScore: number | null
+  summary: string
+  diagnosis: string
+  metrics: {
+    impressions: number | null
+    clicks: number | null
+    ctr: number | null
+    cpc: number | null
+    spend: number | null
+    ordersAttributed: number | null
+    revenueAttributed: number | null
+    roas: number | null
+    conversionRateAds: number | null
+  }
+  signals: {
+    hasTrafficFromAds: boolean
+    hasClicksFromAds: boolean
+    hasAttributedSales: boolean
+    adsEfficiencyLevel: 'strong' | 'moderate' | 'weak' | 'unknown'
+    adsConversionHealth: 'strong' | 'moderate' | 'weak' | 'unknown'
+    adsProfitabilitySignal: 'positive' | 'mixed' | 'negative' | 'unknown'
+  }
+  recommendations: string[]
+  opportunities: string[]
+  analyzedAt: string
+  source: {
+    provider: string
+    integration: string
+    mode: 'historical_snapshot'
+    snapshotDate: string | null
+    metricsAvailable: string[]
+    metricsUnavailable: string[]
+    note: string | null
+  }
+}
+
 // Interface da resposta da API (formato bruto)
 interface AIAnalysisApiResponse {
   listingId: string
@@ -210,6 +248,7 @@ interface AIAnalysisApiResponse {
     }
   }
   dataFreshness?: string | null
+  adsIntelligence?: AdsIntelligencePayload
 }
 
 // Interface adaptada para o frontend
@@ -396,6 +435,7 @@ export interface AIAnalysisResponse {
     model: string
   }
   dataFreshness?: string | null
+  adsIntelligence?: AdsIntelligencePayload
 }
 
 /**
@@ -459,6 +499,7 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
       visualScore: apiResponse.visualScore,
       visualAnalysis: apiResponse.visualAnalysis,
       dataFreshness: apiResponse.dataFreshness,
+      adsIntelligence: apiResponse.adsIntelligence,
     }
   }
 

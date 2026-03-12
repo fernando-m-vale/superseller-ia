@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent, NormalizedVisualAnalysis } from '@/lib/ai/normalizeAiAnalyze'
 import { buildMercadoLivreListingUrl } from '@/lib/mercadolivre-url'
 import { useToast } from '@/hooks/use-toast'
+import type { AdsIntelligencePayload } from '@/hooks/use-ai-analyze'
 import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
@@ -106,6 +107,7 @@ interface ListingAIAnalysisPanelProps {
   visualScore?: number | null
   visualAnalysis?: NormalizedVisualAnalysis
   dataFreshness?: string | null
+  adsIntelligence?: AdsIntelligencePayload
 }
 
 export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
@@ -254,6 +256,12 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
     })
   }
 
+  const adsStatusTone = props.adsIntelligence?.status === 'available'
+    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    : props.adsIntelligence?.status === 'partial'
+      ? 'text-amber-700 bg-amber-50 border-amber-200'
+      : 'text-slate-700 bg-slate-50 border-slate-200'
+
   return (
     <div className="space-y-6 p-6 bg-background">
       {/* Header com resumo e ações */}
@@ -342,6 +350,114 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      {props.adsIntelligence && (
+        <Card className="border border-primary/20">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-primary/10">
+                  <Target className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <CardTitle>Ads Intelligence</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">Saúde dos anúncios patrocinados</p>
+                </div>
+              </div>
+              <div className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${adsStatusTone}`}>
+                {props.adsIntelligence.status}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ads Score</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {props.adsIntelligence.adsScore ?? '—'}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CTR</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {props.adsIntelligence.metrics.ctr !== null ? `${(props.adsIntelligence.metrics.ctr * 100).toFixed(2)}%` : '—'}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">ROAS</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {props.adsIntelligence.metrics.roas !== null ? props.adsIntelligence.metrics.roas.toFixed(2) : '—'}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Spend</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {props.adsIntelligence.metrics.spend !== null ? `R$ ${props.adsIntelligence.metrics.spend.toFixed(2)}` : '—'}
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-foreground">{props.adsIntelligence.summary}</p>
+              {props.adsIntelligence.source.note && (
+                <p className="mt-1 text-sm text-muted-foreground">{props.adsIntelligence.source.note}</p>
+              )}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Impressões</p>
+                <p className="mt-1 text-lg font-semibold">{props.adsIntelligence.metrics.impressions ?? '—'}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cliques</p>
+                <p className="mt-1 text-lg font-semibold">{props.adsIntelligence.metrics.clicks ?? '—'}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CPC</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {props.adsIntelligence.metrics.cpc !== null ? `R$ ${props.adsIntelligence.metrics.cpc.toFixed(2)}` : '—'}
+                </p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pedidos atribuídos</p>
+                <p className="mt-1 text-lg font-semibold">{props.adsIntelligence.metrics.ordersAttributed ?? '—'}</p>
+              </div>
+              <div className="rounded-lg border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Receita atribuída</p>
+                <p className="mt-1 text-lg font-semibold">
+                  {props.adsIntelligence.metrics.revenueAttributed !== null ? `R$ ${props.adsIntelligence.metrics.revenueAttributed.toFixed(2)}` : '—'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div>
+                <p className="text-sm font-semibold mb-2">Recomendações</p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {props.adsIntelligence.recommendations.map((recommendation) => (
+                    <li key={recommendation} className="rounded-lg border p-3">
+                      {recommendation}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {props.adsIntelligence.opportunities.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold mb-2">Oportunidades</p>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    {props.adsIntelligence.opportunities.map((opportunity) => (
+                      <li key={opportunity} className="rounded-lg border p-3">
+                        {opportunity}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {props.visualAnalysis && (
         <Card>

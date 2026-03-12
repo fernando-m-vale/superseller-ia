@@ -5,7 +5,7 @@
  * Mantém compatibilidade se já vier camelCase
  */
 
-import type { AIAnalysisResponse } from '@/hooks/use-ai-analyze'
+import type { AIAnalysisResponse, AdsIntelligencePayload } from '@/hooks/use-ai-analyze'
 
 /**
  * Tipos exportados para uso em componentes
@@ -89,6 +89,7 @@ export interface NormalizedVisualAnalysis {
 export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, 'analysisV21' | 'seoSuggestions' | 'actionPlan' | 'benchmark' | 'benchmarkInsights' | 'generatedContent' | 'growthHacks' | 'growthHacksMeta' | 'visualAnalysis' | 'visualScore'> {
   analysisV21?: NormalizedAIAnalysisV21
   visualAnalysis?: NormalizedVisualAnalysis
+  adsIntelligence?: AdsIntelligencePayload
   seoSuggestions?: {
     suggestedTitle?: string
     suggestedDescriptionPoints?: string[]
