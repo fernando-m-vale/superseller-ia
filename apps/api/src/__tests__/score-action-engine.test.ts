@@ -239,6 +239,39 @@ describe('ScoreActionEngine', () => {
         expect(performanceAction.whyThisMatters).toContain('33%');
       }
     });
+
+    it('should add consultive guidance for missing commercial attributes in cadastro', () => {
+      const actionPlan = generateActionPlan(baseScoreBreakdown, {
+        ...baseDataQuality,
+        warnings: [
+          'brand_missing_or_unstructured',
+          'gtin_missing_or_unstructured',
+          'warranty_missing_or_unstructured',
+        ],
+      });
+
+      const cadastroAction = actionPlan.find((a) => a.dimension === 'cadastro');
+      expect(cadastroAction?.whyThisMatters).toContain('marca');
+      expect(cadastroAction?.whyThisMatters).toContain('GTIN');
+      expect(cadastroAction?.whyThisMatters).toContain('garantia');
+    });
+
+    it('should mention logistics and social proof context in competitividade when warnings exist', () => {
+      const actionPlan = generateActionPlan(baseScoreBreakdown, {
+        ...baseDataQuality,
+        warnings: [
+          'free_shipping_not_active',
+          'full_eligible_detected',
+          'rating_below_4',
+          'high_questions_volume',
+        ],
+      });
+
+      const competitividadeAction = actionPlan.find((a) => a.dimension === 'competitividade');
+      expect(competitividadeAction?.whyThisMatters).toContain('Frete grátis ausente');
+      expect(competitividadeAction?.whyThisMatters).toContain('Full');
+      expect(competitividadeAction?.whyThisMatters).toContain('Prova social');
+    });
   });
 
   describe('detectPromoAggressiveLowCR', () => {
@@ -551,4 +584,3 @@ describe('ScoreActionEngine', () => {
     });
   });
 });
-

@@ -756,6 +756,40 @@ export class OpenAIService {
       missing.push('images');
     }
 
+    if (!listing.brand) {
+      warnings.push('brand_missing_or_unstructured');
+    }
+
+    if (!listing.model) {
+      warnings.push('model_missing_or_unstructured');
+    }
+
+    if (!listing.gtin) {
+      warnings.push('gtin_missing_or_unstructured');
+    }
+
+    if (!listing.warranty) {
+      warnings.push('warranty_missing_or_unstructured');
+    }
+
+    if (listing.is_full_eligible === true) {
+      warnings.push('full_eligible_detected');
+    } else if (listing.is_free_shipping === false) {
+      warnings.push('free_shipping_not_active');
+    }
+
+    if ((listing.questions_count ?? 0) >= 5) {
+      warnings.push('high_questions_volume');
+    }
+
+    if (listing.rating_average && Number(listing.rating_average) < 4) {
+      warnings.push('rating_below_4');
+    }
+
+    if (listing.quality_grade || listing.moderation_status || listing.moderation_sub_status) {
+      warnings.push('quality_signals_available');
+    }
+
     // Adicionar métricas indisponíveis (null) em missing
     if (hasDailyMetrics) {
       const hasAnyImpressions = dailyMetrics.some(m => m.impressions !== null);
@@ -886,8 +920,10 @@ export class OpenAIService {
     const v1Input = await this.buildAIAnalyzeInput(listingId, userId, requestId, periodDays);
 
     // Calculate price fields
-    const priceBase = Number(listing.price);
-    const priceFinal = listing.price_final ? Number(listing.price_final) : priceBase;
+    const priceBase = listing.price_base ? Number(listing.price_base) : (listing.original_price ? Number(listing.original_price) : Number(listing.price));
+    const priceFinal = listing.price_effective
+      ? Number(listing.price_effective)
+      : (listing.price_final ? Number(listing.price_final) : Number(listing.price));
     const hasPromotion = listing.has_promotion ?? false;
     const discountPercent = listing.discount_percent ?? null;
 
@@ -942,9 +978,52 @@ export class OpenAIService {
         ...v1Input.listing,
         price_base: priceBase,
         price_final: priceFinal,
+        price_effective: priceFinal,
         has_promotion: hasPromotion,
         discount_percent: discountPercent,
         description_length: descriptionLength,
+        listing_type_id: listing.listing_type_id ?? null,
+        brand: listing.brand ?? null,
+        model: listing.model ?? null,
+        gtin: listing.gtin ?? null,
+        condition: listing.condition ?? null,
+        warranty: listing.warranty ?? null,
+        has_brand: Boolean(listing.brand),
+        has_model: Boolean(listing.model),
+        has_gtin: Boolean(listing.gtin),
+        has_warranty: Boolean(listing.warranty),
+        logistics: {
+          is_free_shipping: listing.is_free_shipping ?? null,
+          shipping_mode: listing.shipping_mode ?? null,
+          is_full_eligible: listing.is_full_eligible ?? null,
+          logistic_type: listing.logistic_type ?? null,
+        },
+        reputation: {
+          questions_count: listing.questions_count ?? null,
+          reviews_count: listing.reviews_count ?? null,
+          rating_average: listing.rating_average ? Number(listing.rating_average) : null,
+          review_health:
+            listing.rating_average && Number(listing.rating_average) >= 4.5 && (listing.reviews_count ?? 0) >= 20
+              ? 'strong'
+              : listing.rating_average && Number(listing.rating_average) < 4
+                ? 'risk'
+                : (listing.reviews_count ?? 0) > 0
+                  ? 'weak'
+                  : 'unknown',
+          social_proof_strength:
+            (listing.reviews_count ?? 0) >= 50
+              ? 'strong'
+              : (listing.reviews_count ?? 0) >= 10 || (listing.questions_count ?? 0) >= 5
+                ? 'moderate'
+                : (listing.reviews_count ?? 0) > 0 || (listing.questions_count ?? 0) > 0
+                  ? 'weak'
+                  : 'unknown',
+        },
+        quality: {
+          quality_grade: listing.quality_grade ?? null,
+          moderation_status: listing.moderation_status ?? null,
+          moderation_sub_status: listing.moderation_sub_status ?? null,
+        },
       },
       media: v1Input.media,
       performance: v1Input.performance,

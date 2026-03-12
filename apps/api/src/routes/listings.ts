@@ -125,8 +125,8 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
           createdAt: listing.created_at,
           updatedAt: listing.updated_at,
           // Campos de promoção
-          priceBase: listing.original_price ? Number(listing.original_price) : Number(listing.price),
-          priceFinal: listing.price_final ? Number(listing.price_final) : Number(listing.price),
+          priceBase: listing.price_base ? Number(listing.price_base) : (listing.original_price ? Number(listing.original_price) : Number(listing.price)),
+          priceFinal: listing.price_effective ? Number(listing.price_effective) : (listing.price_final ? Number(listing.price_final) : Number(listing.price)),
           hasPromotion: listing.has_promotion ?? false,
           discountPercent: listing.discount_percent ?? null,
           // Campos de análise

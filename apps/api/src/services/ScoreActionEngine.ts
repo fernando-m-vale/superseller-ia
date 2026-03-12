@@ -348,6 +348,29 @@ function generateWhyThisMatters(
     }
   }
 
+  if (dimension === 'cadastro' && dataQuality.warnings?.length) {
+    const advisoryHints: string[] = [];
+    if (dataQuality.warnings.includes('brand_missing_or_unstructured')) advisoryHints.push('marca');
+    if (dataQuality.warnings.includes('model_missing_or_unstructured')) advisoryHints.push('modelo');
+    if (dataQuality.warnings.includes('gtin_missing_or_unstructured')) advisoryHints.push('GTIN');
+    if (dataQuality.warnings.includes('warranty_missing_or_unstructured')) advisoryHints.push('garantia');
+    if (advisoryHints.length > 0) {
+      text += ` Hoje há oportunidade objetiva de estruturar ${advisoryHints.join(', ')} no cadastro.`;
+    }
+  }
+
+  if (dimension === 'competitividade' && dataQuality.warnings?.length) {
+    if (dataQuality.warnings.includes('free_shipping_not_active')) {
+      text += ' Frete grátis ausente pode reduzir competitividade em categorias sensíveis a conversão.';
+    }
+    if (dataQuality.warnings.includes('full_eligible_detected')) {
+      text += ' Elegibilidade para Full é um diferencial comercial que merece ser ativado ou destacado.';
+    }
+    if (dataQuality.warnings.includes('rating_below_4') || dataQuality.warnings.includes('high_questions_volume')) {
+      text += ' Prova social e fricções de atendimento também estão influenciando a competitividade percebida.';
+    }
+  }
+
   // Adicionar contexto de potencial de ganho se disponível
   if (potentialGain) {
     text += ` Potencial de ganho: ${potentialGain} pontos no score.`;

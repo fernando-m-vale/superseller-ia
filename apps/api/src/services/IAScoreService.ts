@@ -5,7 +5,7 @@
  * Score explicável, determinístico, sem alucinação.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -169,7 +169,7 @@ export class IAScoreService {
       midia: this.clampScore(this.calculateMidiaScore(listing), 0, 20),
       performance: this.clampScore(performanceScore, 0, 30),
       seo: this.clampScore(this.calculateSEOScore(avgCtr), 0, 20),
-      competitividade: this.clampScore(this.calculateCompetitividadeScore(), 0, 10), // Placeholder V1: 5 (50% do máximo)
+      competitividade: this.clampScore(this.calculateCompetitividadeScore(listing), 0, 10),
     };
 
     // Calcular score final (soma ponderada) e garantir clamp <= 100
@@ -233,6 +233,10 @@ export class IAScoreService {
     description: string | null;
     category: string | null;
     status: string;
+    brand?: string | null;
+    model?: string | null;
+    gtin?: string | null;
+    warranty?: string | null;
   }): number {
     let score = 0;
 
@@ -254,6 +258,22 @@ export class IAScoreService {
     // Status ativo
     if (listing.status === 'active') {
       score += 5;
+    }
+
+    if (listing.brand) {
+      score += 2;
+    }
+
+    if (listing.model) {
+      score += 1;
+    }
+
+    if (listing.gtin) {
+      score += 1;
+    }
+
+    if (listing.warranty) {
+      score += 1;
     }
 
     return score;
@@ -375,9 +395,27 @@ export class IAScoreService {
    * V2: benchmark por categoria
    * V3: comparação com concorrentes
    */
-  private calculateCompetitividadeScore(): number {
-    // Placeholder V1: 50% do máximo (5/10)
-    return 5;
+  private calculateCompetitividadeScore(listing: {
+    is_free_shipping?: boolean | null;
+    is_full_eligible?: boolean | null;
+    reviews_count?: number | null;
+    rating_average?: Prisma.Decimal | number | null;
+  }): number {
+    let score = 3;
+
+    if (listing.is_free_shipping === true) {
+      score += 3;
+    }
+
+    if (listing.is_full_eligible === true) {
+      score += 2;
+    }
+
+    if ((listing.reviews_count ?? 0) >= 20 && listing.rating_average && Number(listing.rating_average) >= 4.5) {
+      score += 2;
+    }
+
+    return score;
   }
 
   /**
@@ -495,4 +533,3 @@ export class IAScoreService {
     return score;
   }
 }
-

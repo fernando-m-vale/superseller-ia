@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import { PrismaClient, Marketplace, ConnectionStatus, ListingStatus, OrderStatus, ListingAccessStatus } from '@prisma/client';
+import { createHash } from 'crypto';
 import { ScoreCalculator } from './ScoreCalculator';
 import { RecommendationService } from './RecommendationService';
 import { classifyMlClipStatus, extractHasVideoFromMlItem } from '../utils/ml-video-extractor';
@@ -26,6 +27,9 @@ interface MercadoLivreItem {
   health?: number; // 0.0-1.0 (qualidade geral)
   quality_grade?: string; // "good", "regular", "bad" - fallback para health
   listing_type_id?: string; // gold_special, gold_pro, etc
+  condition?: string;
+  sub_status?: string[] | string | null;
+  warranty?: string | null;
   pictures?: Array<{ id: string; url?: string; secure_url?: string; size?: string }>;
   attributes?: Array<{ id: string; value_name: string }>;
   video_id?: string | null;
@@ -113,6 +117,121 @@ interface MercadoLivreItem {
     statusCode: number;
     payloadSize: number;
     reason?: 'ttl_not_expired' | 'flag_off' | 'promo_not_effective' | 'fetch_failed' | 'no_prices_available';
+  };
+}
+
+type StructuredAttributes = {
+  brand: string | null;
+  model: string | null;
+  gtin: string | null;
+  warranty: string | null;
+  condition: string | null;
+};
+
+type StructuredShipping = {
+  isFreeShipping: boolean | null;
+  shippingMode: string | null;
+  logisticType: string | null;
+  isFullEligible: boolean | null;
+};
+
+function normalizeNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function buildAttributeLookup(attributes?: Array<{ id: string; value_name: string }>): Map<string, string> {
+  const lookup = new Map<string, string>();
+  for (const attribute of attributes || []) {
+    const key = normalizeNullableString(attribute?.id)?.toUpperCase();
+    const value = normalizeNullableString(attribute?.value_name);
+    if (key && value) {
+      lookup.set(key, value);
+    }
+  }
+  return lookup;
+}
+
+function pickAttribute(lookup: Map<string, string>, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = lookup.get(key.toUpperCase());
+    if (value) return value;
+  }
+  return null;
+}
+
+function extractStructuredAttributes(item: MercadoLivreItem): StructuredAttributes {
+  const lookup = buildAttributeLookup(item.attributes);
+  const condition = normalizeNullableString(item.condition) ?? pickAttribute(lookup, 'ITEM_CONDITION', 'CONDITION');
+  const warranty =
+    normalizeNullableString(item.warranty) ??
+    pickAttribute(lookup, 'WARRANTY_TYPE', 'WARRANTY_TIME', 'WARRANTY', 'SELLER_WARRANTY');
+
+  return {
+    brand: pickAttribute(lookup, 'BRAND', 'MARCA'),
+    model: pickAttribute(lookup, 'MODEL', 'MODEL_NAME', 'LINE', 'MODELO'),
+    gtin: pickAttribute(lookup, 'GTIN', 'EAN', 'UPC', 'ISBN'),
+    warranty,
+    condition,
+  };
+}
+
+function extractStructuredShipping(item: MercadoLivreItem): StructuredShipping {
+  const shippingMode = normalizeNullableString(item.shipping?.mode);
+  const logisticType =
+    normalizeNullableString(item.logistic_type) ??
+    normalizeNullableString(item.shipping?.logistic_type);
+  const tags = Array.isArray(item.tags) ? item.tags.map((tag) => String(tag).toLowerCase()) : [];
+
+  let isFullEligible: boolean | null = null;
+  if (
+    shippingMode?.toLowerCase().includes('full') ||
+    logisticType?.toLowerCase().includes('full') ||
+    logisticType?.toLowerCase().includes('fulfillment') ||
+    tags.includes('fulfillment')
+  ) {
+    isFullEligible = true;
+  }
+
+  return {
+    isFreeShipping: typeof item.shipping?.free_shipping === 'boolean' ? item.shipping.free_shipping : null,
+    shippingMode,
+    logisticType,
+    isFullEligible,
+  };
+}
+
+function extractPromotionWindow(item: MercadoLivreItem): {
+  promoId: string | null;
+  promoStartAt: Date | null;
+  promoEndAt: Date | null;
+} {
+  const promoSource = item.promotions?.[0] ?? item.deals?.[0] ?? null;
+  const startValue = promoSource?.start_date ?? null;
+  const endValue = promoSource?.end_date ?? null;
+  return {
+    promoId: normalizeNullableString(promoSource?.id),
+    promoStartAt: startValue ? new Date(startValue) : null,
+    promoEndAt: endValue ? new Date(endValue) : null,
+  };
+}
+
+function extractModerationSignals(item: MercadoLivreItem): {
+  qualityGrade: string | null;
+  moderationStatus: string | null;
+  moderationSubStatus: string | null;
+} {
+  const subStatusRaw = Array.isArray(item.sub_status)
+    ? item.sub_status.filter((value) => typeof value === 'string' && value.trim().length > 0)
+    : typeof item.sub_status === 'string'
+      ? [item.sub_status]
+      : [];
+
+  return {
+    qualityGrade: normalizeNullableString(item.quality_grade),
+    moderationStatus: normalizeNullableString(item.status),
+    moderationSubStatus: subStatusRaw.length > 0 ? subStatusRaw.join(', ') : null,
   };
 }
 
@@ -1395,6 +1514,17 @@ export class MercadoLivreSyncService {
             access_blocked_reason: true,
             has_clips: true, // HOTFIX: Incluir para regra "true é sticky"
             has_video: true, // HOTFIX: Incluir para regra "true é sticky"
+            description: true,
+            pictures_count: true,
+            thumbnail_url: true,
+            category: true,
+            category_id: true,
+            brand: true,
+            model: true,
+            gtin: true,
+            is_free_shipping: true,
+            shipping_mode: true,
+            is_full_eligible: true,
           },
         });
 
@@ -1467,6 +1597,9 @@ export class MercadoLivreSyncService {
             details: scoreResult.details,
           } as any, // Cast para InputJsonValue do Prisma
         };
+        const structuredAttributes = extractStructuredAttributes(item);
+        const structuredShipping = extractStructuredShipping(item);
+        const moderationSignals = extractModerationSignals(item);
 
         // Atualizar category/category_id apenas se vier da API
         if (item.category_id) {
@@ -1493,13 +1626,27 @@ export class MercadoLivreSyncService {
         }
 
         const logisticType =
-          item.logistic_type ||
-          (typeof item.shipping?.logistic_type === 'string' ? item.shipping.logistic_type : null);
+          structuredShipping.logisticType;
         if (logisticType) {
           listingData.logistic_type = logisticType;
         } else if (!existing) {
           listingData.logistic_type = null;
         }
+
+        listingData.is_free_shipping = structuredShipping.isFreeShipping;
+        listingData.shipping_mode = structuredShipping.shippingMode;
+        listingData.is_full_eligible = structuredShipping.isFullEligible;
+
+        listingData.listing_type_id = normalizeNullableString(item.listing_type_id);
+        listingData.brand = structuredAttributes.brand;
+        listingData.model = structuredAttributes.model;
+        listingData.gtin = structuredAttributes.gtin;
+        listingData.condition = structuredAttributes.condition;
+        listingData.warranty = structuredAttributes.warranty;
+
+        listingData.quality_grade = moderationSignals.qualityGrade;
+        listingData.moderation_status = moderationSignals.moderationStatus;
+        listingData.moderation_sub_status = moderationSignals.moderationSubStatus;
 
         if (Array.isArray(item.tags)) {
           listingData.tags_json = item.tags as any;
@@ -1847,11 +1994,19 @@ export class MercadoLivreSyncService {
 
         // Atualizar campos de promoção (sempre persistir, mesmo sem promoção)
         // IMPORTANTE: Se shouldFetch foi true, atualizar promotion_checked_at para registrar que verificamos
+        const priceBase = originalPrice ?? currentPrice;
+        const priceEffective = hasPromotion ? priceFinal : currentPrice;
+        const promotionWindow = extractPromotionWindow(item);
         listingData.has_promotion = hasPromotion;
         listingData.price_final = priceFinal;
         listingData.original_price = originalPrice;
         listingData.discount_percent = discountPercent;
         listingData.promotion_type = promotionType;
+        listingData.price_base = priceBase;
+        listingData.price_effective = priceEffective;
+        listingData.promo_id = promotionWindow.promoId;
+        listingData.promo_start_at = promotionWindow.promoStartAt;
+        listingData.promo_end_at = promotionWindow.promoEndAt;
         listingData.promotions_json = item.promotions && Array.isArray(item.promotions)
           ? item.promotions as any
           : item.deals && Array.isArray(item.deals)
@@ -1867,9 +2022,8 @@ export class MercadoLivreSyncService {
           listingData.promotion_checked_at = existing.promotion_checked_at;
         }
         
-        // IMPORTANTE: price também deve refletir o preço atual do comprador (price_final se houver promoção)
-        // Isso garante que a UI do grid mostre o preço correto
-        listingData.price = hasPromotion ? priceFinal : currentPrice;
+        // Compat layer temporária: manter listing.price como preço efetivo atual para não quebrar UI/contratos existentes.
+        listingData.price = priceEffective;
         
         // Log estruturado para debug (sem expor tokens) - já logado acima no resultado final
 
@@ -2033,29 +2187,107 @@ export class MercadoLivreSyncService {
         const updatedFields = Object.keys(listingData).filter(k => k !== 'score_breakdown');
         console.log(`[ML-SYNC] Listing ${item.id} (${existing ? 'updated' : 'created'}): fields=${updatedFields.join(',')} source=${source || 'null'} discoveryBlocked=${discoveryBlocked}`);
 
+        let persistedListingId: string;
         if (existing) {
-          await prisma.listing.update({
+          const updatedListing = await prisma.listing.update({
             where: { id: existing.id },
             data: listingData,
+            select: { id: true },
           });
+          persistedListingId = updatedListing.id;
           updated++;
         } else {
-          await prisma.listing.create({
+          const createdListing = await prisma.listing.create({
             data: {
               tenant_id: this.tenantId,
               marketplace: Marketplace.mercadolivre,
               listing_id_ext: item.id,
               ...listingData,
             },
+            select: { id: true },
           });
+          persistedListingId = createdListing.id;
           created++;
         }
+
+        await this.createListingContentSnapshot(persistedListingId, {
+          title: item.title,
+          description: descriptionFromAPI ?? existing?.description ?? null,
+          picturesCount: picturesCountFromAPI ?? existing?.pictures_count ?? null,
+          mainImageUrl:
+            item.pictures?.[0]?.secure_url ??
+            item.pictures?.[0]?.url ??
+            item.thumbnail ??
+            existing?.thumbnail_url ??
+            null,
+          hasClips:
+            listingData.has_clips !== undefined
+              ? listingData.has_clips
+              : (existing?.has_clips ?? null),
+          categoryId: item.category_id ?? existing?.category_id ?? existing?.category ?? null,
+          brand: structuredAttributes.brand ?? existing?.brand ?? null,
+          model: structuredAttributes.model ?? existing?.model ?? null,
+          gtin: structuredAttributes.gtin ?? existing?.gtin ?? null,
+          isFreeShipping:
+            listingData.is_free_shipping !== undefined
+              ? listingData.is_free_shipping
+              : (existing?.is_free_shipping ?? null),
+          shippingMode:
+            listingData.shipping_mode !== undefined
+              ? listingData.shipping_mode
+              : (existing?.shipping_mode ?? null),
+          isFullEligible:
+            listingData.is_full_eligible !== undefined
+              ? listingData.is_full_eligible
+              : (existing?.is_full_eligible ?? null),
+        });
       } catch (error) {
         console.error(`[ML-SYNC] Erro ao salvar item ${item.id}:`, error);
       }
     }
 
     return { created, updated };
+  }
+
+  private async createListingContentSnapshot(
+    listingId: string,
+    snapshot: {
+      title: string;
+      description: string | null;
+      picturesCount: number | null;
+      mainImageUrl: string | null;
+      hasClips: boolean | null;
+      categoryId: string | null;
+      brand: string | null;
+      model: string | null;
+      gtin: string | null;
+      isFreeShipping: boolean | null;
+      shippingMode: string | null;
+      isFullEligible: boolean | null;
+    },
+  ): Promise<void> {
+    const descriptionHash = snapshot.description
+      ? createHash('sha1').update(snapshot.description.trim()).digest('hex')
+      : null;
+
+    await prisma.listingContentHistory.create({
+      data: {
+        tenant_id: this.tenantId,
+        listing_id: listingId,
+        title: snapshot.title,
+        description_hash: descriptionHash,
+        pictures_count: snapshot.picturesCount,
+        main_image_url: snapshot.mainImageUrl,
+        has_clips: snapshot.hasClips,
+        category_id: snapshot.categoryId,
+        brand: snapshot.brand,
+        model: snapshot.model,
+        gtin: snapshot.gtin,
+        is_free_shipping: snapshot.isFreeShipping,
+        shipping_mode: snapshot.shippingMode,
+        is_full_eligible: snapshot.isFullEligible,
+      },
+    });
   }
 
   /**

@@ -160,6 +160,99 @@ function buildDataFreshness(listing: {
   return formatRelativeFreshness(freshnessDate);
 }
 
+function getListingPriceBase(listing: {
+  price: Prisma.Decimal | number;
+  price_base?: Prisma.Decimal | number | null;
+  original_price?: Prisma.Decimal | number | null;
+}): number {
+  if (listing.price_base) {
+    return Number(listing.price_base);
+  }
+  if (listing.original_price) {
+    return Number(listing.original_price);
+  }
+  return Number(listing.price);
+}
+
+function getListingPriceEffective(listing: {
+  price: Prisma.Decimal | number;
+  price_effective?: Prisma.Decimal | number | null;
+  price_final?: Prisma.Decimal | number | null;
+}): number {
+  if (listing.price_effective) {
+    return Number(listing.price_effective);
+  }
+  if (listing.price_final) {
+    return Number(listing.price_final);
+  }
+  return Number(listing.price);
+}
+
+function buildSignalShipping(listing: {
+  shipping_mode?: string | null;
+  is_free_shipping?: boolean | null;
+  is_full_eligible?: boolean | null;
+  logistic_type?: string | null;
+}) {
+  return {
+    mode: listing.shipping_mode ?? null,
+    freeShipping: listing.is_free_shipping ?? null,
+    fullEligible: listing.is_full_eligible ?? null,
+    logisticType: listing.logistic_type ?? null,
+  };
+}
+
+function buildListingWarnings(listing: {
+  brand?: string | null;
+  model?: string | null;
+  gtin?: string | null;
+  warranty?: string | null;
+  is_free_shipping?: boolean | null;
+  is_full_eligible?: boolean | null;
+  reviews_count?: number | null;
+  questions_count?: number | null;
+  rating_average?: Prisma.Decimal | number | null;
+  quality_grade?: string | null;
+  moderation_status?: string | null;
+  moderation_sub_status?: string | null;
+}): string[] {
+  const warnings: string[] = [];
+
+  if (!listing.brand) warnings.push('brand_missing_or_unstructured');
+  if (!listing.model) warnings.push('model_missing_or_unstructured');
+  if (!listing.gtin) warnings.push('gtin_missing_or_unstructured');
+  if (!listing.warranty) warnings.push('warranty_missing_or_unstructured');
+  if (listing.is_free_shipping === false) warnings.push('free_shipping_not_active');
+  if (listing.is_full_eligible === true) warnings.push('full_eligible_detected');
+  if ((listing.questions_count ?? 0) >= 5) warnings.push('high_questions_volume');
+  if (listing.rating_average && Number(listing.rating_average) < 4) warnings.push('rating_below_4');
+  if (listing.quality_grade || listing.moderation_status || listing.moderation_sub_status) {
+    warnings.push('quality_signals_available');
+  }
+
+  return warnings;
+}
+
+function mergeListingWarnings(
+  existingWarnings: string[] | undefined,
+  listing: {
+    brand?: string | null;
+    model?: string | null;
+    gtin?: string | null;
+    warranty?: string | null;
+    is_free_shipping?: boolean | null;
+    is_full_eligible?: boolean | null;
+    reviews_count?: number | null;
+    questions_count?: number | null;
+    rating_average?: Prisma.Decimal | number | null;
+    quality_grade?: string | null;
+    moderation_status?: string | null;
+    moderation_sub_status?: string | null;
+  },
+): string[] {
+  return Array.from(new Set([...(existingWarnings ?? []), ...buildListingWarnings(listing)]));
+}
+
 async function buildVisualAnalysisForListing(
   listing: {
     id: string;
@@ -795,6 +888,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             performanceAvailable: result.dataQuality.performanceAvailable,
             visitsCoverage: result.dataQuality.visitsCoverage,
             videoStatusKnown: listing.has_video !== null, // false quando has_video = null (não detectável via API)
+            warnings: mergeListingWarnings(
+              (result.dataQuality as { warnings?: string[] }).warnings,
+              listing,
+            ),
           };
           const actionPlan = generateActionPlan(
             result.score.score.breakdown,
@@ -1037,7 +1134,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               hasPromotion: listing.has_promotion ?? false,
               discountPercent: listing.discount_percent,
               price: Number(listing.price),
-              originalPrice: listing.original_price ? Number(listing.original_price) : null,
+              originalPrice: listing.has_promotion ? getListingPriceBase(listing) : null,
               category: listing.category,
             },
             benchmarkInsights.criticalGaps
@@ -1055,16 +1152,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 listing,
                 categoryPath: categoryInfo.breadcrumb,
                 pricing: {
-                  originalPrice: listing.original_price ? Number(listing.original_price) : null,
-                  promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+                  originalPrice: getListingPriceBase(listing),
+                  promotionalPrice: getListingPriceEffective(listing),
                   hasPromotion: listing.has_promotion ?? false,
                   discountPercent: listing.discount_percent ?? null,
                 },
-                shipping: {
-                  mode: null,
-                  freeShipping: false,
-                  fullEligible: null,
-                },
+                shipping: buildSignalShipping(listing),
                 metrics30d: {
                   visits: result.score.metrics_30d.visits,
                   orders: result.score.metrics_30d.orders,
@@ -1192,16 +1285,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             }
 
             // HOTFIX: Normalizar preços para cache SEM fallback perigoso
-            let cacheOriginalPriceForDisplay: number | null = null;
-            if (listing.original_price) {
-              cacheOriginalPriceForDisplay = Number(listing.original_price);
-            }
-            // NUNCA fazer: cacheOriginalPriceForDisplay = listing.price quando hasPromotion
-            
-            let cacheFinalPriceForDisplay: number = Number(listing.price);
-            if (listing.has_promotion && listing.price_final) {
-              cacheFinalPriceForDisplay = Number(listing.price_final);
-            }
+            const cacheOriginalPriceForDisplay: number | null = getListingPriceBase(listing);
+            const cacheFinalPriceForDisplay: number = getListingPriceEffective(listing);
 
             // DIA 06.1: Calcular promoText determinístico para cache usando preços normalizados
             const cachePromoText = buildPromoText({
@@ -1239,8 +1324,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               : (listing.promotion_checked_at?.toISOString() || listing.updated_at?.toISOString() || null);
             cachePayload.promo = {
               hasPromotion: listing.has_promotion ?? false,
-              originalPrice: listing.original_price ? Number(listing.original_price) : null,
-              finalPrice: listing.price_final ? Number(listing.price_final) : null,
+              originalPrice: cacheOriginalPriceForDisplay,
+              finalPrice: cacheFinalPriceForDisplay,
               discountPercent: listing.discount_percent,
               promoText: cachePromoText, // DIA 06.1: texto determinístico
               source: 'listing_db_or_ml_prices',
@@ -1346,16 +1431,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // HOTFIX: Normalizar preços SEM fallback perigoso
           // Regra de ouro: NUNCA usar price como original quando hasPromotion=true
           // Se não tiver original_price da fonte, não inventar "de X por Y"
-          let originalPriceForDisplay: number | null = null;
-          if (listing.original_price) {
-            originalPriceForDisplay = Number(listing.original_price);
-          }
-          // NUNCA fazer: originalPriceForDisplay = listing.price quando hasPromotion
-          
-          let finalPriceForDisplay: number = Number(listing.price);
-          if (listing.has_promotion && listing.price_final) {
-            finalPriceForDisplay = Number(listing.price_final);
-          }
+          const originalPriceForDisplay: number | null = getListingPriceBase(listing);
+          const finalPriceForDisplay: number = getListingPriceEffective(listing);
 
           // DIA 06.1: Calcular promoText determinístico usando preços normalizados
           const promoText = buildPromoText({
@@ -1379,8 +1456,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Adicionar objeto promo estruturado (HOTFIX P0 + DIA 06.1 + DIA 06.2)
           responseData.promo = {
             hasPromotion: listing.has_promotion ?? false,
-            originalPrice: listing.original_price ? Number(listing.original_price) : null,
-            finalPrice: listing.price_final ? Number(listing.price_final) : null,
+            originalPrice: originalPriceForDisplay,
+            finalPrice: finalPriceForDisplay,
             discountPercent: listing.discount_percent,
             promoText, // DIA 06.1: texto determinístico de promoção
             source: 'listing_db_or_ml_prices',
@@ -1537,17 +1614,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               listing,
               categoryPath: categoryInfo.breadcrumb,
               pricing: {
-                originalPrice: listing.original_price ? Number(listing.original_price) : null,
-                // HOTFIX 09.10: Preço promocional (preço efetivo atual)
-                promotionalPrice: listing.has_promotion && listing.price_final ? Number(listing.price_final) : (listing.has_promotion ? Number(listing.price) : null),
+                originalPrice: getListingPriceBase(listing),
+                promotionalPrice: getListingPriceEffective(listing),
                 hasPromotion: listing.has_promotion ?? false,
                 discountPercent: listing.discount_percent ?? null,
               },
-              shipping: {
-                mode: null, // TODO: extrair de listing se disponível
-                freeShipping: false, // TODO: extrair de listing se disponível
-                fullEligible: null, // TODO: extrair de listing se disponível
-              },
+              shipping: buildSignalShipping(listing),
               metrics30d: {
                 visits: result.score.metrics_30d.visits,
                 orders: result.score.metrics_30d.orders,
@@ -1598,7 +1670,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
                 hasClipDetected: mediaVerdict?.hasClipDetected,
               },
-              dataQualityWarnings: result.dataQuality?.warnings ?? [],
+              dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
               analysisV21,
               seoSuggestions: {
                 suggestedTitle: analysisV21?.title_fix?.after,
@@ -1649,7 +1721,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
                 hasClipDetected: mediaVerdict?.hasClipDetected,
               },
-              dataQualityWarnings: result.dataQuality?.warnings ?? [],
+              dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
               analysisV21,
               seoSuggestions: {
                 suggestedTitle: analysisV21?.title_fix?.after,
@@ -1702,7 +1774,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
-            dataQualityWarnings: result.dataQuality?.warnings ?? [],
+            dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
             analysisV21,
             scoreBreakdown: result.score.score.breakdown as any,
             potentialGain: result.score.score.potential_gain as unknown as Record<string, unknown>,
@@ -1739,6 +1811,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           performanceAvailable: scoreResult.dataQuality.performanceAvailable,
           visitsCoverage: scoreResult.dataQuality.visitsCoverage,
           videoStatusKnown: listing.has_video !== null, // false quando has_video = null (não detectável via API)
+          warnings: mergeListingWarnings(
+            (scoreResult.dataQuality as { warnings?: string[] }).warnings,
+            listing,
+          ),
         };
         const actionPlan = generateActionPlan(
           scoreResult.score.breakdown,
@@ -1941,13 +2017,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             {
               title: listing.title || '',
               description: listing.description,
-            picturesCount: listing.pictures_count || 0,
-            hasClips: listing.has_clips ?? null,
-            hasPromotion: listing.has_promotion ?? false,
-            discountPercent: listing.discount_percent,
-            price: Number(listing.price),
-            originalPrice: listing.original_price ? Number(listing.original_price) : null,
-            category: listing.category,
+              picturesCount: listing.pictures_count || 0,
+              hasClips: listing.has_clips ?? null,
+              hasPromotion: listing.has_promotion ?? false,
+              discountPercent: listing.discount_percent,
+              price: Number(listing.price),
+              originalPrice: listing.has_promotion ? getListingPriceBase(listing) : null,
+              category: listing.category,
             },
             cacheBenchmarkInsights.criticalGaps
           );
@@ -2016,16 +2092,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           // Generated Content (Dia 05) - conteúdo pronto para copy/paste
           cacheResponseData.generatedContent = cacheGeneratedContent;
         // HOTFIX: Normalizar preços para cache response SEM fallback perigoso
-        let cacheResponseOriginalPriceForDisplay: number | null = null;
-        if (listing.original_price) {
-          cacheResponseOriginalPriceForDisplay = Number(listing.original_price);
-        }
-        // NUNCA fazer: cacheResponseOriginalPriceForDisplay = listing.price quando hasPromotion
-        
-        let cacheResponseFinalPriceForDisplay: number = Number(listing.price);
-        if (listing.has_promotion && listing.price_final) {
-          cacheResponseFinalPriceForDisplay = Number(listing.price_final);
-        }
+        const cacheResponseOriginalPriceForDisplay: number | null = getListingPriceBase(listing);
+        const cacheResponseFinalPriceForDisplay: number = getListingPriceEffective(listing);
 
         // DIA 06.1: Calcular promoText determinístico para cache response usando preços normalizados
         const cacheResponsePromoText = buildPromoText({
@@ -2061,8 +2129,8 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           || null;
         cacheResponseData.promo = {
           hasPromotion: listing.has_promotion ?? false,
-          originalPrice: listing.original_price ? Number(listing.original_price) : null,
-          finalPrice: listing.price_final ? Number(listing.price_final) : null,
+          originalPrice: cacheResponseOriginalPriceForDisplay,
+          finalPrice: cacheResponseFinalPriceForDisplay,
           discountPercent: listing.discount_percent,
           promoText: cacheResponsePromoText, // DIA 06.1: texto determinístico
           source: 'listing_db_or_ml_prices',
@@ -2225,16 +2293,12 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             listing,
             categoryPath: categoryInfo.breadcrumb,
             pricing: {
-              originalPrice: listing.original_price ? Number(listing.original_price) : null,
-              promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+              originalPrice: getListingPriceBase(listing),
+              promotionalPrice: getListingPriceEffective(listing),
               hasPromotion: listing.has_promotion ?? false,
               discountPercent: listing.discount_percent ?? null,
             },
-            shipping: {
-              mode: null, // TODO: extrair de listing se disponível
-              freeShipping: false, // TODO: extrair de listing se disponível
-              fullEligible: null, // TODO: extrair de listing se disponível
-            },
+            shipping: buildSignalShipping(listing),
             metrics30d: {
               visits: scoreResult.metrics_30d.visits,
               orders: scoreResult.metrics_30d.orders,
@@ -2285,7 +2349,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
-            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            dataQualityWarnings: mergeListingWarnings(
+              ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+              listing,
+            ),
             analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
             seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
             generatedContent: cacheGeneratedContent as any,
@@ -2333,7 +2400,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
-            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            dataQualityWarnings: mergeListingWarnings(
+              ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+              listing,
+            ),
             analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
             seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
             generatedContent: cacheGeneratedContent as any,
@@ -2384,7 +2454,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             canSuggestClip: mediaVerdict?.canSuggestClip,
             hasClipDetected: mediaVerdict?.hasClipDetected,
           },
-          dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+          dataQualityWarnings: mergeListingWarnings(
+            ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            listing,
+          ),
           analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
           scoreBreakdown: scoreResult.score.breakdown as any,
           potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
@@ -2736,6 +2809,10 @@ if (enableAIPing) {
           performanceAvailable: scoreResult.dataQuality.performanceAvailable,
           visitsCoverage: scoreResult.dataQuality.visitsCoverage,
           videoStatusKnown: listing.has_video !== null,
+          warnings: mergeListingWarnings(
+            (scoreResult.dataQuality as { warnings?: string[] }).warnings,
+            listing,
+          ),
         };
         const actionPlan = generateActionPlan(
           scoreResult.score.breakdown,
@@ -2882,7 +2959,7 @@ if (enableAIPing) {
             hasPromotion: listing.has_promotion ?? false,
             discountPercent: listing.discount_percent,
             price: Number(listing.price),
-            originalPrice: listing.original_price ? Number(listing.original_price) : null,
+            originalPrice: listing.has_promotion ? getListingPriceBase(listing) : null,
             category: listing.category,
             },
             cacheBenchmarkInsights.criticalGaps
@@ -2946,14 +3023,8 @@ if (enableAIPing) {
           responseData.generatedContent = cacheGeneratedContent;
 
         // Normalizar preços
-        let cacheResponseOriginalPriceForDisplay: number | null = null;
-        if (listing.original_price) {
-          cacheResponseOriginalPriceForDisplay = Number(listing.original_price);
-        }
-        let cacheResponseFinalPriceForDisplay: number = Number(listing.price);
-        if (listing.has_promotion && listing.price_final) {
-          cacheResponseFinalPriceForDisplay = Number(listing.price_final);
-        }
+        const cacheResponseOriginalPriceForDisplay: number | null = getListingPriceBase(listing);
+        const cacheResponseFinalPriceForDisplay: number = getListingPriceEffective(listing);
 
         // Calcular promoText
         const cacheResponsePromoText = buildPromoText({
@@ -2985,8 +3056,8 @@ if (enableAIPing) {
           || null;
         responseData.promo = {
           hasPromotion: listing.has_promotion ?? false,
-          originalPrice: listing.original_price ? Number(listing.original_price) : null,
-          finalPrice: listing.price_final ? Number(listing.price_final) : null,
+          originalPrice: cacheResponseOriginalPriceForDisplay,
+          finalPrice: cacheResponseFinalPriceForDisplay,
           discountPercent: listing.discount_percent,
           promoText: cacheResponsePromoText,
           source: 'listing_db_or_ml_prices',
@@ -3019,16 +3090,12 @@ if (enableAIPing) {
             listing,
             categoryPath: categoryInfo.breadcrumb,
             pricing: {
-              originalPrice: listing.original_price ? Number(listing.original_price) : null,
-              promotionalPrice: listing.price_final ? Number(listing.price_final) : null,
+              originalPrice: getListingPriceBase(listing),
+              promotionalPrice: getListingPriceEffective(listing),
               hasPromotion: listing.has_promotion ?? false,
               discountPercent: listing.discount_percent ?? null,
             },
-            shipping: {
-              mode: null,
-              freeShipping: false,
-              fullEligible: null,
-            },
+            shipping: buildSignalShipping(listing),
             metrics30d: {
               visits: scoreResult.metrics_30d.visits,
               orders: scoreResult.metrics_30d.orders,
@@ -3075,7 +3142,10 @@ if (enableAIPing) {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
-            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            dataQualityWarnings: mergeListingWarnings(
+              ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+              listing,
+            ),
             analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
             seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
             generatedContent: cacheGeneratedContent as any,
@@ -3113,7 +3183,10 @@ if (enableAIPing) {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
-            dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            dataQualityWarnings: mergeListingWarnings(
+              ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+              listing,
+            ),
             analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
             seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
             generatedContent: cacheGeneratedContent as any,
@@ -3170,7 +3243,10 @@ if (enableAIPing) {
             canSuggestClip: mediaVerdict?.canSuggestClip,
             hasClipDetected: mediaVerdict?.hasClipDetected,
           },
-          dataQualityWarnings: ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+          dataQualityWarnings: mergeListingWarnings(
+            ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            listing,
+          ),
           analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
           scoreBreakdown: scoreResult.score.breakdown as any,
           potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,

@@ -178,6 +178,7 @@ model Tenant {
   orders_history          ListingOrdersHistory[]
   price_history           ListingPriceHistory[]
   promotions_history      ListingPromotionHistory[]
+  content_history         ListingContentHistory[]
 
   @@map("tenants")
 }
@@ -243,15 +244,27 @@ model Listing {
   attributes_json           Json?
   variations_json           Json?
   shipping_json             Json?
+  is_free_shipping          Boolean?
+  shipping_mode             String?
+  is_full_eligible          Boolean?
   logistic_type             String?
   tags_json                 Json?
   installments_json         Json?
   promotions_json           Json?
+  listing_type_id           String?
+  brand                     String?
+  model                     String?
+  gtin                      String?
+  condition                 String?
+  warranty                  String?
   reputation_json           Json?
   questions_count           Int?
   reviews_count             Int?
   rating_average            Decimal?            @db.Decimal(4, 2)
   health_score              Float?              @default(0) // Score legado da API do ML (0-100)
+  quality_grade             String?
+  moderation_status         String?
+  moderation_sub_status     String?
   super_seller_score        Int?                @default(0) // Super Seller Score proprietário (0-100)
   score_breakdown           Json? // Detalhamento: { cadastro: 25, trafego: 20, disponibilidade: 35 }
   thumbnail_url             String? // URL da imagem principal
@@ -273,6 +286,11 @@ model Listing {
   last_synced_at            DateTime?           @db.Timestamptz(3)
   last_sync_status          SyncStatus          @default(idle)
   last_sync_error           String?             @db.Text
+  price_base               Decimal?            @db.Decimal(10, 2)
+  price_effective          Decimal?            @db.Decimal(10, 2)
+  promo_id                 String?
+  promo_start_at           DateTime?           @db.Timestamptz(3)
+  promo_end_at             DateTime?           @db.Timestamptz(3)
   created_at                DateTime            @default(now())
   updated_at                DateTime            @updatedAt
 
@@ -291,6 +309,7 @@ model Listing {
   orders_history          ListingOrdersHistory[]
   price_history           ListingPriceHistory[]
   promotions_history      ListingPromotionHistory[]
+  content_history         ListingContentHistory[]
 
   @@unique([tenant_id, marketplace, listing_id_ext])
   @@index([tenant_id])
@@ -484,6 +503,32 @@ model ListingPromotionHistory {
   @@index([tenant_id, captured_at(sort: Desc)])
   @@index([listing_id, captured_at(sort: Desc)])
   @@map("listing_promotions_history")
+}
+
+model ListingContentHistory {
+  id                String   @id @default(uuid())
+  tenant_id         String
+  listing_id        String
+  title             String
+  description_hash  String?
+  pictures_count    Int?
+  main_image_url    String?
+  has_clips         Boolean?
+  category_id       String?
+  brand             String?
+  model             String?
+  gtin              String?
+  is_free_shipping  Boolean?
+  shipping_mode     String?
+  is_full_eligible  Boolean?
+  created_at        DateTime @default(now()) @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listing_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id, created_at(sort: Desc)])
+  @@index([listing_id, created_at(sort: Desc)])
+  @@map("listing_content_history")
 }
 
 model AiModelMetric {

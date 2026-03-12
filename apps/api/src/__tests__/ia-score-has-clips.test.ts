@@ -39,6 +39,14 @@ function createMockListing(overrides: {
   has_clips?: boolean | null;
   has_video?: boolean | null;
   pictures_count?: number | null;
+  is_free_shipping?: boolean | null;
+  is_full_eligible?: boolean | null;
+  reviews_count?: number | null;
+  rating_average?: number | null;
+  brand?: string | null;
+  model?: string | null;
+  gtin?: string | null;
+  warranty?: string | null;
 }) {
   return {
     id: 'test-listing-id',
@@ -51,6 +59,8 @@ function createMockListing(overrides: {
     category: 'MLB1234',
     price: 100,
     original_price: null,
+    price_base: null,
+    price_effective: null,
     has_promotion: false,
     discount_percent: null,
     stock: 10,
@@ -58,6 +68,14 @@ function createMockListing(overrides: {
     has_video: overrides.has_video ?? null,
     has_clips: overrides.has_clips ?? null,
     variations_count: 0,
+    is_free_shipping: overrides.is_free_shipping ?? null,
+    is_full_eligible: overrides.is_full_eligible ?? null,
+    reviews_count: overrides.reviews_count ?? null,
+    rating_average: overrides.rating_average ?? null,
+    brand: overrides.brand ?? null,
+    model: overrides.model ?? null,
+    gtin: overrides.gtin ?? null,
+    warranty: overrides.warranty ?? null,
     visits_last_7d: 100,
     sales_last_7d: 5,
     created_at: new Date(),
@@ -167,5 +185,27 @@ describe('IAScoreService - has_clips como fonte de verdade para midia', () => {
     expect(result.score.potential_gain.midia).toBeDefined();
     expect(result.score.potential_gain.midia).toContain('+10');
     expect(result.score.potential_gain.midia).toContain('clip');
+  });
+
+  it('incorpora logística real, prova social e atributos comerciais no score', async () => {
+    const listing = createMockListing({
+      has_clips: true,
+      pictures_count: 8,
+      is_free_shipping: true,
+      is_full_eligible: true,
+      reviews_count: 40,
+      rating_average: 4.9,
+      brand: 'Acme',
+      model: 'Turbo X',
+      gtin: '7890000000001',
+      warranty: '12 meses',
+    });
+    mockFindFirst.mockResolvedValue(listing);
+
+    const service = new IAScoreService(tenantId);
+    const result = await service.calculateScore('test-listing-id');
+
+    expect(result.score.breakdown.cadastro).toBe(20);
+    expect(result.score.breakdown.competitividade).toBe(10);
   });
 });

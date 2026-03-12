@@ -47,6 +47,35 @@ export interface AIAnalyzeInputListingV21 extends AIAnalyzeInputListing {
   has_promotion: boolean;  // Tem promoção ativa?
   discount_percent: number | null; // Percentual de desconto (0-100)
   description_length: number; // Comprimento da descrição em caracteres
+  price_effective?: number | null;
+  listing_type_id?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  gtin?: string | null;
+  condition?: string | null;
+  warranty?: string | null;
+  has_brand?: boolean;
+  has_model?: boolean;
+  has_gtin?: boolean;
+  has_warranty?: boolean;
+  logistics?: {
+    is_free_shipping?: boolean | null;
+    shipping_mode?: string | null;
+    is_full_eligible?: boolean | null;
+    logistic_type?: string | null;
+  };
+  reputation?: {
+    questions_count?: number | null;
+    reviews_count?: number | null;
+    rating_average?: number | null;
+    review_health?: 'strong' | 'weak' | 'risk' | 'unknown';
+    social_proof_strength?: 'strong' | 'moderate' | 'weak' | 'unknown';
+  };
+  quality?: {
+    quality_grade?: string | null;
+    moderation_status?: string | null;
+    moderation_sub_status?: string | null;
+  };
 }
 
 /**

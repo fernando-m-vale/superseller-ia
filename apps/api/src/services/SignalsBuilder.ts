@@ -26,7 +26,8 @@ export interface ListingSignals {
 
   shippingMode?: 'full' | 'flex' | 'me2' | 'unknown';
   isFreeShipping?: boolean;
-  isFullEligible?: boolean;
+  isFullEligible?: boolean | null;
+  logisticType?: string | null;
 
   picturesCount?: number;
   hasVideo?: boolean;
@@ -36,6 +37,24 @@ export interface ListingSignals {
   variationsCount?: number;
   hasVariations?: boolean;
   isKitHeuristic?: boolean;
+  listingTypeId?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  gtin?: string | null;
+  condition?: string | null;
+  warranty?: string | null;
+  hasBrand?: boolean;
+  hasModel?: boolean;
+  hasGtin?: boolean;
+  hasWarranty?: boolean;
+  questionsCount?: number | null;
+  reviewsCount?: number | null;
+  ratingAverage?: number | null;
+  reviewHealth?: 'strong' | 'weak' | 'risk' | 'unknown';
+  socialProofStrength?: 'strong' | 'moderate' | 'weak' | 'unknown';
+  moderationStatus?: string | null;
+  moderationSubStatus?: string | null;
+  qualityGrade?: string | null;
 
   metrics30d?: {
     visits?: number | null;
@@ -70,6 +89,7 @@ export interface SignalsBuilderInput {
     mode?: string | null;
     freeShipping?: boolean | null;
     fullEligible?: boolean | null;
+    logisticType?: string | null;
   };
   metrics30d?: {
     visits?: number | null;
@@ -135,6 +155,26 @@ function parseShippingMode(mode?: string | null): 'full' | 'flex' | 'me2' | 'unk
   return 'unknown';
 }
 
+function getReviewHealth(listing: Listing): 'strong' | 'weak' | 'risk' | 'unknown' {
+  const ratingAverage = listing.rating_average ? Number(listing.rating_average) : null;
+  const reviewsCount = listing.reviews_count ?? 0;
+
+  if (!reviewsCount || reviewsCount <= 0 || ratingAverage === null) return 'unknown';
+  if (ratingAverage < 4) return 'risk';
+  if (ratingAverage >= 4.5 && reviewsCount >= 20) return 'strong';
+  return 'weak';
+}
+
+function getSocialProofStrength(listing: Listing): 'strong' | 'moderate' | 'weak' | 'unknown' {
+  const reviewsCount = listing.reviews_count ?? 0;
+  const questionsCount = listing.questions_count ?? 0;
+
+  if (reviewsCount >= 50) return 'strong';
+  if (reviewsCount >= 10 || questionsCount >= 5) return 'moderate';
+  if (reviewsCount > 0 || questionsCount > 0) return 'weak';
+  return 'unknown';
+}
+
 /**
  * Constrói signals determinísticos a partir de um listing e dados relacionados.
  */
@@ -155,9 +195,9 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   
   // Pricing
   const price = Number(listing.price);
-  const originalPrice = pricing?.originalPrice ?? listing.original_price ? Number(listing.original_price) : null;
+  const originalPrice = pricing?.originalPrice ?? (listing.original_price ? Number(listing.original_price) : (listing.price_base ? Number(listing.price_base) : null));
   // HOTFIX 09.10: Preço promocional (preço efetivo atual, com promoção se aplicável)
-  const promotionalPrice = pricing?.promotionalPrice ?? (listing.has_promotion && listing.price_final ? Number(listing.price_final) : null);
+  const promotionalPrice = pricing?.promotionalPrice ?? (listing.price_effective ? Number(listing.price_effective) : (listing.has_promotion && listing.price_final ? Number(listing.price_final) : null));
   const hasPromotion = pricing?.hasPromotion ?? listing.has_promotion ?? false;
   const discountPercent = pricing?.discountPercent ?? listing.discount_percent ?? null;
   
@@ -166,9 +206,10 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   const isOutOfStock = (listing.stock ?? 0) <= 0;
   
   // Shipping
-  const shippingMode = parseShippingMode(shipping?.mode);
-  const isFreeShipping = shipping?.freeShipping ?? false;
-  const isFullEligible = shipping?.fullEligible ?? false;
+  const shippingMode = parseShippingMode(shipping?.mode ?? listing.shipping_mode);
+  const isFreeShipping = shipping?.freeShipping ?? listing.is_free_shipping ?? false;
+  const isFullEligible = shipping?.fullEligible ?? listing.is_full_eligible ?? null;
+  const logisticType = shipping?.logisticType ?? listing.logistic_type ?? null;
   
   // Media
   const picturesCount = listing.pictures_count ?? 0;
@@ -220,6 +261,20 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
   // Fonte de verdade: listing.variations_count (extraído do item.variations no sync ML)
   const variationsCount = listing.variations_count ?? 0;
   const hasVariations = variationsCount > 0;
+  const listingTypeId = listing.listing_type_id ?? null;
+  const brand = listing.brand ?? null;
+  const model = listing.model ?? null;
+  const gtin = listing.gtin ?? null;
+  const condition = listing.condition ?? null;
+  const warranty = listing.warranty ?? null;
+  const questionsCount = listing.questions_count ?? null;
+  const reviewsCount = listing.reviews_count ?? null;
+  const ratingAverage = listing.rating_average ? Number(listing.rating_average) : null;
+  const reviewHealth = getReviewHealth(listing);
+  const socialProofStrength = getSocialProofStrength(listing);
+  const moderationStatus = listing.moderation_status ?? null;
+  const moderationSubStatus = listing.moderation_sub_status ?? null;
+  const qualityGrade = listing.quality_grade ?? null;
   
   // Kit heuristic
   const isKitHeuristicValue = isKitHeuristic(listing, variationsCount);
@@ -261,7 +316,8 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
     shippingMode,
     isFreeShipping,
     isFullEligible,
-    
+    logisticType,
+
     picturesCount,
     hasVideo,
     hasClips,
@@ -269,6 +325,24 @@ export function buildSignals(input: SignalsBuilderInput): ListingSignals {
     variationsCount: variationsCount ?? undefined,
     hasVariations,
     isKitHeuristic: isKitHeuristicValue,
+    listingTypeId,
+    brand,
+    model,
+    gtin,
+    condition,
+    warranty,
+    hasBrand: Boolean(brand),
+    hasModel: Boolean(model),
+    hasGtin: Boolean(gtin),
+    hasWarranty: Boolean(warranty),
+    questionsCount,
+    reviewsCount,
+    ratingAverage,
+    reviewHealth,
+    socialProofStrength,
+    moderationStatus,
+    moderationSubStatus,
+    qualityGrade,
     
     metrics30d: metrics,
     benchmark: benchmarkData,
