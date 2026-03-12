@@ -1,5 +1,5 @@
 # ROADMAP — SuperSeller IA
-Atualizado em: 2026-03-11
+Atualizado em: 2026-03-12
 
 Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 
@@ -8,7 +8,8 @@ Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 ## Estado atual
 
 - **Dias 11, 12 e 13:** ✅ CONCLUÍDOS (validados em produção — 21/21 testes PASS, tenant RB Store)
-- **Dia 14 — Refinamento da IA:** 🚀 EM ANDAMENTO / PRÓXIMO FOCO
+- **Dia 14 — Refinamento da IA:** 🔄 IMPLEMENTADO NO BACKEND, EM REFINAMENTO (camada de ação/consultoria)
+- **Dia 14.1 — Action Layer Refinement:** 🎯 Próxima etapa imediata
 
 ---
 
@@ -42,16 +43,21 @@ Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 
 ---
 
-## DIA 14 — Refinamento da IA 🚀 EM ANDAMENTO
+## DIA 14 — Refinamento da IA 🔄 EM REFINAMENTO
 
-**Objetivo:** Com os novos sinais já disponíveis (imagem, ads, dados comerciais, atributos, reputação), melhorar a inteligência do sistema para:
+**Status:** Backend implementado (RootCauseEngine, AnalyzeConsultingEnricher, novos campos no analyze). **Dia 14 ainda NÃO encerrado** — camada de ação/consultoria em refinamento (Dia 14.1).
 
-- Encontrar **causa raiz principal** do problema do anúncio
-- Elevar a **qualidade da consultoria**
-- **Priorizar ações** com confiança
-- **Reduzir recomendações genéricas**
+**Implementado:** diagnosisRootCause, rootCauseConfidence, rootCauseStage, rootCauseSummary, signalsUsed, estimatedImpact, primaryRecommendation, recommendationPriority; integração em analyze fresh, cache hit, GET latest. Validação funcional inicial: causa raiz mais coerente, uso real de sinais; pendências: confiança mais realista, texto/linguagem, cards alinhados à causa raiz, clip rebaixado da UX.
 
-**Foco:** correlação de sinais, root cause engine, confidence score, prioridade principal de ação. Não é sobre novas integrações grandes nem execução automática. Ver `docs/DIA14_REFINEMENT_CONTEXT.md`.
+**Próximo passo:** Dia 14.1 — Action Layer Refinement. Ver `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
+
+---
+
+## DIA 14.1 — Action Layer Refinement 🎯 PRÓXIMA ETAPA IMEDIATA
+
+**Objetivo:** Transformar o bom diagnóstico do backend em resposta mais clara, direta, priorizada e acionável na UX.
+
+**Escopo:** alinhar diagnóstico/verdict/cards/roadmap; reduzir redundância entre cards; separar Fazer agora / Melhorias de suporte / Boas práticas; cards objetivos e executáveis; linguagem para seller; confiança mais realista quando dados ausentes; clip rebaixado da UX principal; ligação causa raiz ↔ ação prioritária. Ver `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md` e `docs/NEXT_SESSION_PLAN.md`.
 
 ---
 

@@ -1,26 +1,29 @@
 # NEXT SESSION PLAN — SuperSeller IA
-Atualizado em: 2026-03-11
+Atualizado em: 2026-03-12
 
-## Próxima sessão — Dia 14: Refinamento da IA
+## Próxima sessão — Validar Dia 14.1 (Action Layer Refinement)
 
-**Objetivo:** Implementar o motor de refinamento da IA com correlação de sinais e detecção de causa raiz, elevando a qualidade da consultoria.
+**Objetivo:** Validar a implementação do Dia 14.1 feita pelo Codex e confirmar se a camada de ação/consultoria está pronta para considerar o Dia 14 encerrado.
 
 ---
 
-## Entregas esperadas (Dia 14)
+## Checklist de validação (Dia 14.1)
 
-- [ ] **Root cause engine** — detecção da causa raiz principal do problema do anúncio
-- [ ] **Correlation of signals** — uso correlacionado de sinais de imagem, ads, pricing, atributos e reputação
-- [ ] **Confidence score** — confiança do diagnóstico
-- [ ] **Prioridade principal de ação** — uma ação mais importante claramente destacada
-- [ ] **Melhor consultoria no analyze** — menos recomendações genéricas, mais específicas
-- [ ] **Payload enriquecido** — causa raiz, confiança e impacto estimado no response do analyze
+- [ ] **Cards mais objetivos** — menos redundância, mais executáveis
+- [ ] **Diagnóstico amarrado às ações** — causa raiz refletida na ação prioritária e nos cards
+- [ ] **Confiança mais realista** — reduzida quando dados-chave estiverem ausentes
+- [ ] **Linguagem mais natural para o seller** — menos interna/técnica
+- [ ] **Clip rebaixado da UX principal** — escondido ou rebaixado conforme decisão anterior
+- [ ] **Separação clara de camadas** — Fazer agora / Melhorias de suporte / Boas práticas
+
+Se todos os itens forem confirmados, **considerar o Dia 14 oficialmente encerrado**.
 
 ---
 
 ## Referências
 
-- Contexto do Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`
+- Escopo Dia 14.1: `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`
+- Contexto Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`
 - Roadmap: `docs/ROADMAP.md`
-- Contexto do produto e engines: `docs/PROJECT_CONTEXT.md`
+- Contexto do produto: `docs/PROJECT_CONTEXT.md`
 - Validação Dias 11–13: `docs/VALIDATION_DAY11_DAY12_DAY13.md`

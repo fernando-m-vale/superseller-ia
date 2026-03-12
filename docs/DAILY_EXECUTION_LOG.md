@@ -2,6 +2,55 @@
 
 ---
 
+## ✅ Validação oficial Dias 11–13 + Estado Dia 14 + Formalização Dia 14.1 — 2026-03-12
+
+**Objetivo:** Registrar validação em produção dos Dias 11–13, estado atual do Dia 14, decisão estratégica e próxima etapa (Dia 14.1).
+
+### Validação em produção — Dias 11, 12 e 13
+
+**Resultado oficial:** 21/21 testes PASS (tenant RB Store, produção).
+
+| Dia | Feature | Resultado |
+|-----|---------|-----------|
+| 11 | Data Layer + Jobs | PASS (7/7) |
+| 12 | IA Visual | PASS (7/7) |
+| 13 | Ads Intelligence | PASS (7/7) |
+
+**Confirmado:** Data Layer operacional, IA Visual operacional, Ads Intelligence operacional.
+
+**Pontos menores (não bloqueadores):** discovery endpoint bloqueado em alguns fluxos (fallback por orders); atributos comerciais ausentes em parte dos anúncios da categoria; score visual concentrado em faixa alta no conjunto testado; oportunidade futura de alertas de ROAS negativo.
+
+### Estado do Dia 14
+
+**Dia 14 ainda NÃO está oficialmente encerrado.**
+
+**Status:** IMPLEMENTADO NO BACKEND, EM REFINAMENTO DE CAMADA DE AÇÃO/CONSULTORIA.
+
+**Implementado no backend:**
+- RootCauseEngine
+- AnalyzeConsultingEnricher
+- Novos campos no analyze: diagnosisRootCause, rootCauseConfidence, rootCauseStage, rootCauseSummary, signalsUsed, estimatedImpact, primaryRecommendation, recommendationPriority
+- Nova camada integrada em: analyze fresh, cache hit, GET latest
+
+**Validação funcional inicial (exemplos reais):**
+
+- **Pontos positivos:** causa raiz mais coerente; uso real de sinais de imagem, ads, pricing, atributos e reputação; payload enriquecido; verdictText mais específico que antes.
+- **Pontos ainda não resolvidos:** confiança alta demais em alguns cenários; texto ainda longo/repetitivo em alguns casos; linguagem excessivamente interna para usuário final; cards ainda redundantes e pouco alinhados com a causa raiz; falta de distinção clara entre ação imediata, melhoria de suporte e boa prática; clip ainda aparece em alguns blocos (decisão anterior: rebaixar/remover da UX principal).
+
+### Decisão estratégica
+
+**O problema atual do produto não é mais falta de dados.** O principal gap está em transformar a inteligência já existente em: ações claras, cards mais diretos, linguagem mais útil para o seller, priorização real na tela.
+
+**Dia 14.1 — Action Layer Refinement** foi formalizado como próxima etapa imediata. Objetivo: transformar o bom diagnóstico do backend em resposta mais clara, direta, priorizada e acionável na UX. Escopo: alinhar diagnóstico/verdict/cards/roadmap; reduzir redundância; separar Fazer agora / Melhorias de suporte / Boas práticas; cards objetivos e executáveis; linguagem para seller; confiança mais realista; clip rebaixado da UX principal; ligação causa raiz ↔ ação prioritária. Foco imediato não é 1-Click Fix; antes disso é necessário melhorar a camada de ação e tornar a consultoria mais convincente na tela (“o que fazer primeiro”).
+
+### Próxima sessão
+
+Validar a implementação do Dia 14.1 (feita pelo Codex) e confirmar se cards, diagnóstico, confiança, linguagem e clip estão alinhados; então considerar Dia 14 encerrado. Ver `docs/NEXT_SESSION_PLAN.md` e `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
+
+**Arquivos atualizados/criados:** PROJECT_CONTEXT.md, DAILY_EXECUTION_LOG.md, NEXT_SESSION_PLAN.md, ROADMAP.md, ROADMAP_OFICIAL.md, DIA14_1_ACTION_LAYER_REFINEMENT.md (novo).
+
+---
+
 ## ✅ Fechamento Dias 11, 12 e 13 + Início Dia 14 — 2026-03-11
 
 **Objetivo:** Registrar conclusão e validação em produção dos Dias 11–13 e formalizar o início do Dia 14 (Refinamento da IA).

@@ -45,8 +45,15 @@
 
 ---
 
+## Próximo passo
+
+**Dia 14.1 — Action Layer Refinement:** refinamento da camada de ação/consultoria na UX (cards, linguagem, priorização, clip rebaixado). Ver `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
+
+---
+
 ## Referências
 
 - Roadmap: `docs/ROADMAP.md`
 - Plano da próxima sessão: `docs/NEXT_SESSION_PLAN.md`
+- Escopo Dia 14.1: `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`
 - Validação Dias 11–13: `docs/VALIDATION_DAY11_DAY12_DAY13.md`

@@ -1,5 +1,5 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-03-11
+Atualizado em: 2026-03-12
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
@@ -110,10 +110,8 @@ A **análise automática de clip foi removida da experiência do usuário** por 
 
 ## Limitações atuais da análise
 
-- **Personalização de título e descrição** ainda pode parecer similar entre anúncios; o **Dia 14 (Refinamento da IA)** visa priorizar causa raiz e reduzir recomendações genéricas.
-- **Discovery endpoint** de ads em alguns cenários bloqueado (uso de `orders_fallback` onde aplicável).
-- **Atributos comerciais** ausentes em algumas categorias do ML.
-- **Oportunidade futura:** alertas de ROAS negativo e refinamentos adicionais de Ads Intelligence.
+- **Personalização de título e descrição** — Dia 14 backend implementado (causa raiz, confiança, prioridade); **camada de ação/consultoria em refinamento** (Dia 14.1).
+- **Discovery endpoint** bloqueado em alguns fluxos (fallback por orders); **atributos comerciais** ausentes em parte dos anúncios da categoria; **score visual** concentrado em faixa alta no conjunto testado; **oportunidade futura:** alertas de ROAS negativo.
 
 ---
 
@@ -133,9 +131,7 @@ Outros fatores continuam relevantes (categoria, preço, promoções, logística,
 
 ## Visão estratégica — Execução Assistida / 1-Click Fix
 
-**Decisão estratégica:** O maior salto de valor do SuperSeller IA não virá de “mais análise”, e sim da transição **Diagnóstico → Conteúdo → Execução Assistida**.
-
-A feature de maior potencial de valor percebido e monetização futura é **Execução Assistida / 1-Click Fix**: capacidade de aplicar melhorias diretamente no anúncio via API (título, descrição, preço), com confirmação, log de alterações e rollback. Documentado como visão estratégica; roadmap imediato (Dias 14–19) permanece como definido.
+**Decisão estratégica:** O maior salto de valor futuro continua sendo **Execução Assistida / 1-Click Fix**. Antes disso, o produto precisa entregar de forma excelente: **diagnóstico**, **priorização**, **clareza** e **ação recomendada**. O gap atual não é falta de dados (Data/Visual/Ads Intelligence validados); é transformar a inteligência em ações claras, cards diretos e linguagem útil para o seller na tela.
 
 ---
 
@@ -147,18 +143,19 @@ A feature de maior potencial de valor percebido e monetização futura é **Exec
 - ✅ ONDA 3: IA como amplificador (concluído)
 - ✅ Dia 09: Consultant Engine V3 + Bottleneck + Opportunity Impact + Execution Roadmap
 - ✅ **Dia 10 — UX Premium:** CONCLUÍDO
-- ✅ **Dia 11 — Data Layer + Jobs:** CONCLUÍDO (validado em produção)
+- ✅ **Dia 11 — Data Layer + Jobs:** CONCLUÍDO (validado em produção — 21/21 testes PASS)
 - ✅ **Dia 12 — IA Visual:** CONCLUÍDO (validado em produção)
 - ✅ **Dia 13 — Ads Intelligence:** CONCLUÍDO (validado em produção)
-- 🚀 **Dia 14 — Refinamento da IA:** INICIADO (próximo foco)
+- 🔄 **Dia 14 — Refinamento da IA:** IMPLEMENTADO NO BACKEND, EM REFINAMENTO (camada de ação/consultoria)
+- 🎯 **Dia 14.1 — Action Layer Refinement:** Próxima etapa imediata
 
-Referência completa: `docs/ROADMAP.md`. Contexto do Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`.
+Referência completa: `docs/ROADMAP.md`. Contexto Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`. Escopo Dia 14.1: `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
 
 ---
 
 ## Estado Atual do Produto
 
-O produto possui **três engines** relevantes em operação, além do painel de análise unificado.
+O produto possui **Data Intelligence**, **Visual Intelligence**, **Ads Intelligence** e **Root Cause Intelligence** (backend implementado), com a **camada consultiva em refinamento** para UX e ação (Dia 14.1).
 
 ### Engine 1 — Data Intelligence
 
