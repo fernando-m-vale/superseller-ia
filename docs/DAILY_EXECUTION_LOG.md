@@ -2,6 +2,39 @@
 
 ---
 
+## ✅ Fechamento Dias 11, 12 e 13 + Início Dia 14 — 2026-03-11
+
+**Objetivo:** Registrar conclusão e validação em produção dos Dias 11–13 e formalizar o início do Dia 14 (Refinamento da IA).
+
+### Dias 11, 12 e 13 — CONCLUÍDOS
+
+**DIA 11 — Data Layer + Jobs Automáticos**  
+Implementados e validados: sync automático de visitas, pedidos, promoções e preço; dataFreshness no analyze; estruturação de logística real e atributos comerciais; semântica mais limpa de preço/promo; reputação/prova social na análise; histórico enxuto de conteúdo/mídia. Validação live: listings sincronizando, métricas persistidas, freshness e snapshots de conteúdo funcionando.
+
+**DIA 12 — IA Visual**  
+Implementados e validados: VisualAssetResolver, VisualSignalsBuilder, VisualAnalysisLLMService, VisualAnalysisNormalizer, VisualAnalysisRepository, VisualAnalysisOrchestrator; tabela própria de análise visual; cache por image_hash + prompt_version; score visual, critérios e melhorias; card no frontend; persistência e cache validados em produção.
+
+**DIA 13 — Ads Intelligence**  
+Implementados e validados: fundação de Ads Intelligence; investigação real de Mercado Ads; advertiser discovery real; Product Ads acessível com OAuth; associação item_id/listing_id; ingestão real de Product Ads; persistência em listing_ads_metrics_daily; bloco adsIntelligence no analyze; card Ads Intelligence no frontend; status available/partial/unavailable funcionando.
+
+### Validação em produção
+
+Validação automatizada em produção (tenant RB Store): **21/21 testes PASS** (Dia 11: 7/7, Dia 12: 7/7, Dia 13: 7/7). Confirmado: Data Layer operacional, IA Visual operacional, Ads Intelligence operacional.
+
+**Pontos menores (não bloqueadores):** discovery endpoint bloqueado em alguns cenários (uso de orders_fallback); atributos comerciais ausentes em algumas categorias; baixa variância visual no conjunto testado; oportunidade futura de alertas de ROAS negativo.
+
+### Dia 14 — Refinamento da IA — INICIADO
+
+Foco: correlacionar sinais (imagem, ads, pricing, atributos, reputação), detectar causa raiz principal, calcular confiança do diagnóstico, priorizar a ação mais importante, reduzir recomendações genéricas. Não é sobre novas integrações grandes, nova infra ou execução automática; é sobre inteligência, priorização, explicabilidade e qualidade da consultoria. Ver `docs/DIA14_REFINEMENT_CONTEXT.md` e `docs/NEXT_SESSION_PLAN.md`.
+
+### Decisão estratégica registrada
+
+Maior salto de valor: transição **Diagnóstico → Conteúdo → Execução Assistida**. Feature de maior potencial: **Execução Assistida / 1-Click Fix** (aplicar melhorias no anúncio via API, com log, confirmação e rollback). Documentado como visão estratégica; roadmap imediato inalterado.
+
+**Arquivos atualizados:** PROJECT_CONTEXT.md, DAILY_EXECUTION_LOG.md, NEXT_SESSION_PLAN.md, ROADMAP.md, ROADMAP_OFICIAL.md; criado DIA14_REFINEMENT_CONTEXT.md.
+
+---
+
 ## 📋 Atualização de documentação e estratégia — 2026-03-10
 
 **Objetivo:** Alinhar documentação ao estado real do produto e à nova direção estratégica.

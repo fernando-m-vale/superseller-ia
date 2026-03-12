@@ -1,5 +1,5 @@
 # PROJECT CONTEXT — SuperSeller IA
-Atualizado em: 2026-03-10
+Atualizado em: 2026-03-11
 
 ## 🧠 Visão do Produto
 SuperSeller IA é uma plataforma de inteligência aplicada para sellers de marketplace.
@@ -110,11 +110,10 @@ A **análise automática de clip foi removida da experiência do usuário** por 
 
 ## Limitações atuais da análise
 
-1. **IA ainda não possui análise real de imagens** — avaliação visual será tratada no Dia 12 (IA Visual MVP).
-2. **IA não possui dados completos do marketplace** — mais dados serão coletados no Dia 11 (Data Layer + Jobs).
-3. **Personalização de título e descrição** ainda pode parecer similar entre anúncios, por limitação de sinais disponíveis.
-
-**Conclusão registrada:** Melhorar inteligência sem aumentar os sinais disponíveis gera ganhos limitados. A estratégia passa a priorizar **coleta de mais dados** e **novos tipos de análise**.
+- **Personalização de título e descrição** ainda pode parecer similar entre anúncios; o **Dia 14 (Refinamento da IA)** visa priorizar causa raiz e reduzir recomendações genéricas.
+- **Discovery endpoint** de ads em alguns cenários bloqueado (uso de `orders_fallback` onde aplicável).
+- **Atributos comerciais** ausentes em algumas categorias do ML.
+- **Oportunidade futura:** alertas de ROAS negativo e refinamentos adicionais de Ads Intelligence.
 
 ---
 
@@ -132,6 +131,14 @@ Outros fatores continuam relevantes (categoria, preço, promoções, logística,
 
 ---
 
+## Visão estratégica — Execução Assistida / 1-Click Fix
+
+**Decisão estratégica:** O maior salto de valor do SuperSeller IA não virá de “mais análise”, e sim da transição **Diagnóstico → Conteúdo → Execução Assistida**.
+
+A feature de maior potencial de valor percebido e monetização futura é **Execução Assistida / 1-Click Fix**: capacidade de aplicar melhorias diretamente no anúncio via API (título, descrição, preço), com confirmação, log de alterações e rollback. Documentado como visão estratégica; roadmap imediato (Dias 14–19) permanece como definido.
+
+---
+
 ## 🧭 Roadmap (alto nível)
 
 ➡️ **Referência ativa:** `docs/ROADMAP.md`
@@ -139,30 +146,54 @@ Outros fatores continuam relevantes (categoria, preço, promoções, logística,
 - ✅ ONDA 1/2: Score V2 + UX (concluído)
 - ✅ ONDA 3: IA como amplificador (concluído)
 - ✅ Dia 09: Consultant Engine V3 + Bottleneck + Opportunity Impact + Execution Roadmap
-- ✅ **Dia 10 — UX Premium:** CONCLUÍDO (produto parecer profissional em 2 minutos)
-- 🚀 **Próximo:** Dia 11 — Data Layer + Jobs Automáticos
+- ✅ **Dia 10 — UX Premium:** CONCLUÍDO
+- ✅ **Dia 11 — Data Layer + Jobs:** CONCLUÍDO (validado em produção)
+- ✅ **Dia 12 — IA Visual:** CONCLUÍDO (validado em produção)
+- ✅ **Dia 13 — Ads Intelligence:** CONCLUÍDO (validado em produção)
+- 🚀 **Dia 14 — Refinamento da IA:** INICIADO (próximo foco)
 
-Referência completa: `docs/ROADMAP.md`
+Referência completa: `docs/ROADMAP.md`. Contexto do Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`.
 
 ---
 
 ## Estado Atual do Produto
 
-### Funcionalidades implementadas
+O produto possui **três engines** relevantes em operação, além do painel de análise unificado.
 
-- **Painel de análise** com fluxo completo: Veredito → Diagnóstico do funil → Ganho potencial → Plano de execução → Cards de ação → Detalhes executáveis
-- **Diagnóstico de gargalo** SEARCH / CLICK / CONVERSION com hipótese consultiva
-- **Plano de execução** priorizado (3 passos) e **estimativa de impacto**
-- **Geração de conteúdo:** títulos sugeridos, descrição sugerida
-- **Oportunidades extras (hacks)** Mercado Livre
-- **ScoreActionEngine** e **ActionDetails** (V1/V2) com artifacts copyáveis
-- **Clip:** não exibido nem recomendado na UX (decisão por inconsistência na detecção)
+### Engine 1 — Data Intelligence
 
-### Engine / UX
+- Sync de marketplace (visitas, pedidos, promoções, preço)
+- Métricas persistidas; dataFreshness no analyze
+- Estruturação de logística real, atributos comerciais, semântica de preço/promo
+- Reputação/prova social e histórico enxuto de conteúdo/mídia na análise
 
-- Score e ações determinísticos; IA explica e gera copy
-- Kanban com cards e modal de detalhes sob demanda
-- Rollout paralelo V1/V2; cache e controle de custo LLM
+### Engine 2 — Visual Intelligence
+
+- Análise da imagem principal (VisualAssetResolver, VisualSignalsBuilder, VisualAnalysisLLMService, VisualAnalysisNormalizer, VisualAnalysisRepository, VisualAnalysisOrchestrator)
+- Tabela própria de análise visual; cache por image_hash + prompt_version
+- Score visual, critérios e melhorias; card no frontend; persistência e cache validados em produção
+
+### Engine 3 — Ads Intelligence
+
+- Fundação de Ads Intelligence; investigação real de Mercado Ads
+- Advertiser discovery real; Product Ads acessível com OAuth; associação item_id/listing_id
+- Ingestão real de Product Ads; persistência em listing_ads_metrics_daily
+- Bloco adsIntelligence no analyze; card Ads Intelligence no frontend
+- Status available / partial / unavailable funcionando corretamente
+
+### Sinais disponíveis para a IA
+
+- **Sinais de imagem** (visual)
+- **Sinais de ads** (campanhas, métricas de ads)
+- **Sinais comerciais** (preço, promoções, atributos)
+- **Sinais de atributos** (comerciais por categoria)
+- **Sinais sociais** (reputação, prova social)
+- **Sinais de pricing/promotions** (semântica limpa)
+
+### Painel de análise (fluxo unificado)
+
+- Veredito → Diagnóstico do funil → Ganho potencial → Plano de execução → Cards de ação → Detalhes executáveis
+- Diagnóstico de gargalo SEARCH/CLICK/CONVERSION; plano priorizado; estimativa de impacto; geração de títulos e descrição; hacks ML; ScoreActionEngine e ActionDetails (V1/V2). Clip não exibido na UX (decisão por inconsistência na detecção).
 
 ---
 

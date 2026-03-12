@@ -1,24 +1,26 @@
 # NEXT SESSION PLAN — SuperSeller IA
-Atualizado em: 2026-03-10
+Atualizado em: 2026-03-11
 
-## Próxima sessão — Dia 11: Data Layer + Jobs Automáticos
+## Próxima sessão — Dia 14: Refinamento da IA
 
-**Objetivo:** Implementar sync automático e persistir o máximo possível de dados da API do Mercado Livre para alimentar futuras análises da IA.
+**Objetivo:** Implementar o motor de refinamento da IA com correlação de sinais e detecção de causa raiz, elevando a qualidade da consultoria.
 
 ---
 
-## Entregas esperadas (Dia 11)
+## Entregas esperadas (Dia 14)
 
-- [ ] **Sync automático de visitas** — jobs recorrentes, persistência em `listing_metrics_daily` (ou equivalente)
-- [ ] **Sync automático de pedidos** — atualização de métricas de vendas
-- [ ] **Sync automático de promoções** — dados de preço promocional atualizados
-- [ ] **Sync automático de preço** — preço atual persistido
-
-**Princípio:** Persistir no banco o máximo possível de dados da API do ML. Esses dados alimentarão o refinamento da IA (Dia 14) e outras análises.
+- [ ] **Root cause engine** — detecção da causa raiz principal do problema do anúncio
+- [ ] **Correlation of signals** — uso correlacionado de sinais de imagem, ads, pricing, atributos e reputação
+- [ ] **Confidence score** — confiança do diagnóstico
+- [ ] **Prioridade principal de ação** — uma ação mais importante claramente destacada
+- [ ] **Melhor consultoria no analyze** — menos recomendações genéricas, mais específicas
+- [ ] **Payload enriquecido** — causa raiz, confiança e impacto estimado no response do analyze
 
 ---
 
 ## Referências
 
-- Roadmap completo: `docs/ROADMAP.md`
-- Contexto do produto e limitações: `docs/PROJECT_CONTEXT.md`
+- Contexto do Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`
+- Roadmap: `docs/ROADMAP.md`
+- Contexto do produto e engines: `docs/PROJECT_CONTEXT.md`
+- Validação Dias 11–13: `docs/VALIDATION_DAY11_DAY12_DAY13.md`
