@@ -933,12 +933,15 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
   }
 
   if (visits >= 150 && cr !== null && cr < 0.015) {
+    const contentDriven = input.rootCause?.diagnosisRootCause === 'content_low_conversion';
     templates.push({
       id: 'performance_conversion_funnel',
       actionKey: 'performance_conversion_funnel',
-      title: 'Corrigir o que trava a decisão na página',
+      title: contentDriven ? 'Reescrever descrição e atributos que travam a decisão' : 'Corrigir o que trava a decisão na página',
       summary: `Há tráfego suficiente (${visits} visitas) com baixa conversão${crText ? ` (${crText})` : ''}.`,
-      description: 'Priorizar descrição, atributos, prova de confiança e dúvidas recorrentes que ainda impedem a compra.',
+      description: contentDriven
+        ? 'Priorizar descrição, atributos e dúvidas recorrentes que ainda impedem a compra.'
+        : 'Priorizar descrição, atributos, prova de confiança e dúvidas recorrentes que ainda impedem a compra.',
       expectedImpact: 'Ganho rápido de pedidos com o tráfego atual.',
       impact: 'high',
       priority: 'high',
@@ -1016,8 +1019,12 @@ function assignActionGroup(
 ): ActionGroup {
   const matchScore = scoreActionForRootCause(action, rootCause?.diagnosisRootCause);
   const highPriority = action.priority === 'high';
+  const hasRootCause = Boolean(rootCause?.diagnosisRootCause);
 
-  if (highPriority && (stage === primaryBottleneck || matchScore >= 6)) {
+  if (hasRootCause && matchScore >= 6) {
+    return 'immediate';
+  }
+  if (!hasRootCause && highPriority && stage === primaryBottleneck) {
     return 'immediate';
   }
   if (highPriority || matchScore >= 6 || stage === primaryBottleneck) {
