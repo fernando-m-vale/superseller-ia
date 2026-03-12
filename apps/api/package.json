@@ -19,7 +19,8 @@
     "db:up": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "investigate:mercado-ads": "tsx -r dotenv/config src/scripts/investigate-mercado-ads.ts"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.927.0",

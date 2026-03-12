@@ -181,7 +181,7 @@ export function buildAdsIntelligence(snapshot: AdsMetricsSnapshot, options?: {
   const unavailableMetrics = METRIC_KEYS.filter((metric) => !availableMetrics.includes(metric));
   const analyzedAt = new Date().toISOString();
 
-  if (snapshot.status === 'unavailable' || availableMetrics.length === 0) {
+  if (snapshot.status === 'unavailable') {
     return {
       status: 'unavailable',
       adsScore: null,
@@ -198,6 +198,32 @@ export function buildAdsIntelligence(snapshot: AdsMetricsSnapshot, options?: {
       source: {
         provider: options?.provider ?? 'unknown',
         integration: options?.integration ?? 'not_configured',
+        mode: 'historical_snapshot',
+        snapshotDate: snapshot.date ?? null,
+        metricsAvailable: availableMetrics,
+        metricsUnavailable: unavailableMetrics,
+        note: options?.note ?? null,
+      },
+    };
+  }
+
+  if (availableMetrics.length === 0) {
+    return {
+      status: 'partial',
+      adsScore: null,
+      summary: 'A integração de Ads respondeu, mas ainda não retornou métricas preenchidas para esta leitura.',
+      diagnosis: 'ads_partial_data',
+      metrics,
+      signals,
+      recommendations: [
+        'Mantenha a campanha monitorada e confira se o marketplace passa a preencher metrics para a janela consultada.',
+        'Evite decisões agressivas de orçamento enquanto cliques, gasto e retorno não vierem preenchidos juntos.',
+      ],
+      opportunities: [],
+      analyzedAt,
+      source: {
+        provider: options?.provider ?? 'unknown',
+        integration: options?.integration ?? 'manual_or_future',
         mode: 'historical_snapshot',
         snapshotDate: snapshot.date ?? null,
         metricsAvailable: availableMetrics,
