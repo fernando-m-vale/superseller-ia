@@ -186,10 +186,28 @@ interface AIAnalysisApiResponse {
     visual_pollution: { score: number; assessment: string }
     excessive_text: { score: number; assessment: string }
     differentiation: { score: number; assessment: string }
+    clickability?: { score: number; assessment: string }
+    criteria?: {
+      clarity: { score: number; assessment: string }
+      contrast: { score: number; assessment: string }
+      visual_pollution: { score: number; assessment: string }
+      excessive_text: { score: number; assessment: string }
+      differentiation: { score: number; assessment: string }
+      clickability?: { score: number; assessment: string }
+    }
     main_improvements: string[]
     main_image_url: string | null
     analyzed_at: string
     model: string
+    meta?: {
+      status: string
+      cache_hit: boolean
+      prompt_version: string
+      model: string
+      analyzed_at: string
+      image_hash: string | null
+      image_source: string
+    }
   }
   dataFreshness?: string | null
 }

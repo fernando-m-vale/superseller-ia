@@ -356,6 +356,11 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
                   <p className="text-sm text-muted-foreground mt-1">
                     Análise da imagem principal do anúncio
                   </p>
+                  {props.visualAnalysis.meta && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {props.visualAnalysis.meta.cacheHit ? 'Análise visual em cache' : 'Análise visual recém-processada'}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="text-right">
@@ -392,6 +397,13 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
                 <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.differentiation.score}</p>
                 <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.differentiation.assessment}</p>
               </div>
+              {props.visualAnalysis.clickability && (
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Clickability</p>
+                  <p className="mt-1 text-2xl font-semibold">{props.visualAnalysis.clickability.score}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{props.visualAnalysis.clickability.assessment}</p>
+                </div>
+              )}
             </div>
             <div>
               <p className="text-sm font-semibold mb-2">Principais melhorias</p>

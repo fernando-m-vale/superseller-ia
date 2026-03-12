@@ -59,10 +59,28 @@ export interface NormalizedVisualAnalysis {
   visualPollution: { score: number; assessment: string }
   excessiveText: { score: number; assessment: string }
   differentiation: { score: number; assessment: string }
+  clickability?: { score: number; assessment: string }
+  criteria?: {
+    clarity: { score: number; assessment: string }
+    contrast: { score: number; assessment: string }
+    visualPollution: { score: number; assessment: string }
+    excessiveText: { score: number; assessment: string }
+    differentiation: { score: number; assessment: string }
+    clickability?: { score: number; assessment: string }
+  }
   mainImprovements: string[]
   mainImageUrl: string | null
   analyzedAt: string
   model: string
+  meta?: {
+    status: string
+    cacheHit: boolean
+    promptVersion: string
+    model: string
+    analyzedAt: string
+    imageHash: string | null
+    imageSource: string
+  }
 }
 
 /**
@@ -136,10 +154,34 @@ function normalizeVisualAnalysis(raw: unknown): NormalizedVisualAnalysis | undef
     visualPollution: normalizeCriterion(rawObj.visual_pollution || rawObj.visualPollution),
     excessiveText: normalizeCriterion(rawObj.excessive_text || rawObj.excessiveText),
     differentiation: normalizeCriterion(rawObj.differentiation),
+    clickability: rawObj.clickability ? normalizeCriterion(rawObj.clickability) : undefined,
+    criteria: rawObj.criteria && typeof rawObj.criteria === 'object'
+      ? {
+          clarity: normalizeCriterion((rawObj.criteria as Record<string, unknown>).clarity),
+          contrast: normalizeCriterion((rawObj.criteria as Record<string, unknown>).contrast),
+          visualPollution: normalizeCriterion((rawObj.criteria as Record<string, unknown>).visual_pollution),
+          excessiveText: normalizeCriterion((rawObj.criteria as Record<string, unknown>).excessive_text),
+          differentiation: normalizeCriterion((rawObj.criteria as Record<string, unknown>).differentiation),
+          clickability: (rawObj.criteria as Record<string, unknown>).clickability
+            ? normalizeCriterion((rawObj.criteria as Record<string, unknown>).clickability)
+            : undefined,
+        }
+      : undefined,
     mainImprovements: ((rawObj.main_improvements || rawObj.mainImprovements) as string[] | undefined) || [],
     mainImageUrl: (rawObj.main_image_url as string) || (rawObj.mainImageUrl as string) || null,
     analyzedAt: (rawObj.analyzed_at as string) || (rawObj.analyzedAt as string) || '',
     model: (rawObj.model as string) || 'gpt-4o',
+    meta: rawObj.meta && typeof rawObj.meta === 'object'
+      ? {
+          status: String((rawObj.meta as Record<string, unknown>).status || ''),
+          cacheHit: Boolean((rawObj.meta as Record<string, unknown>).cache_hit ?? (rawObj.meta as Record<string, unknown>).cacheHit),
+          promptVersion: String((rawObj.meta as Record<string, unknown>).prompt_version || (rawObj.meta as Record<string, unknown>).promptVersion || ''),
+          model: String((rawObj.meta as Record<string, unknown>).model || rawObj.model || 'gpt-4o'),
+          analyzedAt: String((rawObj.meta as Record<string, unknown>).analyzed_at || (rawObj.meta as Record<string, unknown>).analyzedAt || rawObj.analyzed_at || rawObj.analyzedAt || ''),
+          imageHash: ((rawObj.meta as Record<string, unknown>).image_hash as string) || ((rawObj.meta as Record<string, unknown>).imageHash as string) || null,
+          imageSource: String((rawObj.meta as Record<string, unknown>).image_source || (rawObj.meta as Record<string, unknown>).imageSource || 'none'),
+        }
+      : undefined,
   }
 }
 

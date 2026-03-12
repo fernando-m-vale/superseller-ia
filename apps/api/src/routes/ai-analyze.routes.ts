@@ -35,10 +35,14 @@ import { getCategoryBreadcrumb } from '../services/CategoryBreadcrumbService';
 import { randomUUID } from 'crypto';
 import { buildDeterministicMvpActions, buildExecutionRoadmap, buildFunnelBottleneckDiagnosis, buildVerdictText } from '../services/AnalysisResponseBuilders';
 import { analysisStatusTracker } from '../services/AnalysisStatusTracker';
-import { VisualAnalysisService } from '../services/VisualAnalysisService';
 import type { ListingVisualAnalysis } from '../types/visual-analysis';
+import { VisualAnalysisOrchestrator } from '../services/visual/VisualAnalysisOrchestrator';
+import { VisualAnalysisRepository } from '../services/visual/VisualAnalysisRepository';
 
 const prisma = new PrismaClient();
+const visualAnalysisOrchestrator = new VisualAnalysisOrchestrator(
+  new VisualAnalysisRepository(prisma),
+);
 
 // HOTFIX 09.5: Resolver breadcrumb textual da categoria (nome + path), evitando exibir apenas MLBxxxx.
 // Usa endpoint público do Mercado Livre (sem auth) + cache in-memory por categoria para reduzir latência.
@@ -158,22 +162,23 @@ function buildDataFreshness(listing: {
 
 async function buildVisualAnalysisForListing(
   listing: {
+    id: string;
+    tenant_id: string;
     title: string;
     category?: string | null;
     thumbnail_url?: string | null;
     pictures_json?: Prisma.JsonValue | null;
+    pictures_count?: number | null;
   },
 ): Promise<ListingVisualAnalysis> {
-  const visualService = new VisualAnalysisService();
-  const mainImageUrl = visualService.resolveMainImageUrl({
-    thumbnail_url: listing.thumbnail_url,
-    pictures_json: listing.pictures_json,
-  });
-
-  return visualService.analyzeMainImage({
+  return visualAnalysisOrchestrator.analyzeListing({
+    tenantId: listing.tenant_id,
+    listingId: listing.id,
     title: listing.title,
     category: listing.category,
-    mainImageUrl,
+    thumbnail_url: listing.thumbnail_url,
+    pictures_json: listing.pictures_json,
+    pictures_count: listing.pictures_count,
   });
 }
 
@@ -1947,13 +1952,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             cacheBenchmarkInsights.criticalGaps
           );
 
-          const latestVisualAnalysis =
-            cachedResult.visualAnalysis ||
-            await buildVisualAnalysisForListing(listing);
+          const latestVisualAnalysis = await buildVisualAnalysisForListing(listing);
 
-          const cacheVisualAnalysis =
-            cachedResult.visualAnalysis ||
-            await buildVisualAnalysisForListing(listing);
+          const cacheVisualAnalysis = latestVisualAnalysis;
 
         // Preparar resposta do cache incluindo Expert se disponível
         const cacheResponseData: any = {
@@ -2887,9 +2888,7 @@ if (enableAIPing) {
             cacheBenchmarkInsights.criticalGaps
           );
 
-          const latestVisualAnalysis =
-            cachedResult.visualAnalysis ||
-            await buildVisualAnalysisForListing(listing);
+          const latestVisualAnalysis = await buildVisualAnalysisForListing(listing);
 
           // Construir resposta completa (MESMO FORMATO do cache response do POST)
           const responseData: any = {
