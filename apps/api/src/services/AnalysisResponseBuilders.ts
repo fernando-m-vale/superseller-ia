@@ -2,6 +2,7 @@ import { formatConversionRatePercent } from '../utils/percentage-format';
 import type { RootCauseDiagnosis } from './RootCauseEngine';
 
 export type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance';
+export type ActionGroup = 'immediate' | 'support' | 'best_practice';
 
 export interface MvpActionItem {
   id: string;
@@ -16,6 +17,8 @@ export interface MvpActionItem {
   priority: 'high' | 'medium' | 'low';
   suggestedActionUrl?: string | null;
   pillar: ActionPillar;
+  actionGroup?: ActionGroup;
+  rootCauseCode?: RootCauseDiagnosis['diagnosisRootCause'];
 }
 
 interface ActionCandidate {
@@ -87,6 +90,7 @@ export interface DeterministicMvpActionsInput {
     sampleSize?: number | null;
     baselineConversionRate?: number | null;
   };
+  rootCause?: Partial<RootCauseDiagnosis> | null;
   maxItems?: number;
 }
 
@@ -508,6 +512,7 @@ function decorateHackAsExtra(action: MvpActionItem): MvpActionItem {
     description,
     impact: action.impact === 'high' ? 'medium' : action.impact,
     priority: softenPriority(action.priority),
+    actionGroup: 'best_practice',
   };
 }
 
@@ -775,7 +780,7 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
     templates.push({
       id: 'seo_title_refresh',
       actionKey: 'seo_title_refresh',
-      title: 'Reescrever título com palavras-chave principais',
+      title: 'Reescrever título com busca real e atributos principais',
       summary: `Sugestão pronta de título: "${titleAfter.trim()}".`,
       description: titleProblem?.trim()
         ? `Motivo do ajuste: ${titleProblem.trim()}`
@@ -792,7 +797,7 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
     templates.push({
       id: 'seo_description_blocks',
       actionKey: 'seo_description_blocks',
-      title: 'Atualizar descrição com blocos prontos',
+      title: 'Reescrever descrição com benefícios e dúvidas respondidas',
       summary: 'Existe copy otimizada pronta no diagnóstico para reaproveitar imediatamente.',
       description: descriptionDiagnostic?.trim()
         ? descriptionDiagnostic.trim()
@@ -809,7 +814,7 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
     templates.push({
       id: 'midia_gallery_upgrade',
       actionKey: 'midia_gallery_upgrade',
-      title: 'Executar plano de imagens do diagnóstico',
+      title: 'Melhorar imagens com prova de uso e diferenciais',
       summary: `Plano concreto disponível com ${imagePlan.length} prioridades de imagem.`,
       description: imagePlan.map((step, index) => `${index + 1}. ${step.action?.trim()}`).join(' '),
       expectedImpact: 'Melhor prova visual e aumento de conversão.',
@@ -824,7 +829,7 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
     templates.push({
       id: 'compet_price_positioning',
       actionKey: 'compet_price_positioning',
-      title: 'Ajustar estratégia de preço/oferta',
+      title: 'Revisar preço e promoção da oferta',
       summary: 'Há recomendação concreta de preço/oferta no diagnóstico.',
       description: priceAction.trim(),
       expectedImpact: 'Melhor competitividade sem perder margem desnecessariamente.',
@@ -888,7 +893,7 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
       actionKey: 'seo_title_refresh',
       title: 'Reescrever título com busca real',
       summary: `Com ${visits} visitas e ${orders} pedidos em 30 dias${crText ? ` (CR ${crText})` : ''}, o título precisa ficar mais aderente à intenção de compra.`,
-      description: `Atualize as primeiras 60 letras${ref} com produto + marca + modelo + atributo principal para elevar CTR qualificado.`,
+      description: `Atualize as primeiras 60 letras${ref} com produto, modelo e atributo principal para atrair a busca certa.`,
       expectedImpact: 'Mais cliques qualificados e melhor entrada no funil.',
       impact: 'high',
       priority: 'high',
@@ -903,7 +908,7 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
       actionKey: 'midia_gallery_upgrade',
       title: 'Completar galeria com prova visual',
       summary: `Hoje o anúncio tem ${picturesCount} imagens. Aumentar para 8+ com contexto de uso tende a reduzir dúvida pré-compra.`,
-      description: 'Adicionar foto de contexto, close técnico e comparação direta com principal diferencial do produto.',
+      description: 'Adicionar imagem principal mais forte, foto de contexto, close técnico e prova visual do principal diferencial.',
       expectedImpact: 'Menor fricção na decisão e melhora de conversão.',
       impact: 'high',
       priority: 'high',
@@ -916,9 +921,9 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
     templates.push({
       id: 'compet_promo_validation',
       actionKey: 'compet_promo_validation',
-      title: 'Validar eficiência da promoção atual',
+      title: 'Revisar promoção antes de continuar forçando tráfego',
       summary: `Promo ativa com ${visits} visitas, ${orders} pedidos${crText ? ` e CR ${crText}` : ''} sugere revisar mensagem e ancoragem da oferta.`,
-      description: 'Testar nova comunicação da oferta (economia absoluta, prazo e condição) antes de aprofundar desconto.',
+      description: 'Destacar desconto, preço final e condição de compra antes de aprofundar desconto ou mais investimento.',
       expectedImpact: 'Recuperar conversão sem ampliar erosão de margem.',
       impact: 'high',
       priority: 'high',
@@ -931,9 +936,9 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
     templates.push({
       id: 'performance_conversion_funnel',
       actionKey: 'performance_conversion_funnel',
-      title: 'Corrigir fricções de conversão na página',
+      title: 'Corrigir o que trava a decisão na página',
       summary: `Há tráfego suficiente (${visits} visitas) com baixa conversão${crText ? ` (${crText})` : ''}.`,
-      description: 'Priorizar os 2 maiores pontos de atrito observáveis no anúncio: clareza de oferta, provas visuais e dúvidas recorrentes.',
+      description: 'Priorizar descrição, atributos, prova de confiança e dúvidas recorrentes que ainda impedem a compra.',
       expectedImpact: 'Ganho rápido de pedidos com o tráfego atual.',
       impact: 'high',
       priority: 'high',
@@ -948,7 +953,7 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
       actionKey: 'performance_questions_faq',
       title: 'Transformar dúvidas comuns em FAQ visível',
       summary: `Baixo volume de pedidos (${orders}) com tráfego existente (${visits}) indica dúvida não respondida no anúncio.`,
-      description: 'Adicionar bloco de FAQ com 5 respostas objetivas sobre compatibilidade, uso e pós-venda.',
+      description: 'Adicionar FAQ com respostas objetivas sobre compatibilidade, uso, medidas, prazo e pós-venda.',
       expectedImpact: 'Redução de objeções e melhora de conversão.',
       impact: 'medium',
       priority: 'medium',
@@ -962,7 +967,7 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
     templates.push({
       id: 'compet_price_positioning',
       actionKey: 'compet_price_positioning',
-      title: 'Recalibrar preço frente à categoria',
+      title: 'Comparar preço com concorrentes diretos',
       summary: `Conversão atual${crText ? ` (${crText})` : ''} abaixo do baseline da categoria pede revisão de posicionamento comercial.`,
       description: 'Comparar preço final e percepção de valor com concorrentes diretos para recuperar competitividade sem sacrificar margem.',
       expectedImpact: 'Recuperação de share e pedidos em buscas comparativas.',
@@ -974,6 +979,69 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
   }
 
   return templates;
+}
+
+function getRootCauseLeadMatchers(code?: RootCauseDiagnosis['diagnosisRootCause'] | null): string[] {
+  switch (code) {
+    case 'content_low_conversion':
+      return ['descricao', 'descrição', 'atribut', 'faq', 'duvida', 'dúvida'];
+    case 'ads_traffic_low_return':
+      return ['campanha', 'ads', 'promo', 'oferta'];
+    case 'visual_low_ctr':
+      return ['imagem principal', 'imagem', 'capa', 'galeria', 'foto'];
+    case 'seo_low_discovery':
+      return ['titulo', 'título', 'busca', 'atributo'];
+    case 'price_low_conversion':
+      return ['preco', 'preço', 'promo'];
+    case 'trust_low_conversion':
+      return ['confi', 'garantia', 'faq', 'prova'];
+    case 'logistics_low_conversion':
+      return ['frete', 'prazo', 'envio', 'logist'];
+    default:
+      return [];
+  }
+}
+
+function scoreActionForRootCause(action: MvpActionItem, code?: RootCauseDiagnosis['diagnosisRootCause'] | null): number {
+  if (!code) return 0;
+  const haystack = `${action.title} ${action.summary} ${action.description}`.toLowerCase();
+  return getRootCauseLeadMatchers(code).reduce((total, matcher) => total + (haystack.includes(matcher) ? 6 : 0), 0);
+}
+
+function assignActionGroup(
+  action: MvpActionItem,
+  stage: FunnelStage,
+  primaryBottleneck: FunnelStage,
+  rootCause?: Partial<RootCauseDiagnosis> | null,
+): ActionGroup {
+  const matchScore = scoreActionForRootCause(action, rootCause?.diagnosisRootCause);
+  const highPriority = action.priority === 'high';
+
+  if (highPriority && (stage === primaryBottleneck || matchScore >= 6)) {
+    return 'immediate';
+  }
+  if (highPriority || matchScore >= 6 || stage === primaryBottleneck) {
+    return 'support';
+  }
+  return 'best_practice';
+}
+
+function dedupeActions(actions: MvpActionItem[]): MvpActionItem[] {
+  const seen = new Set<string>();
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+  return actions.filter((action) => {
+    const fingerprint = normalize(`${action.pillar} ${action.title}`)
+      .split(' ')
+      .filter((token) => token.length > 3)
+      .slice(0, 6)
+      .join(' ');
+
+    if (!fingerprint) return true;
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
 }
 
 export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput): MvpActionItem[] {
@@ -1141,11 +1209,43 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     ...hackCandidates.slice(0, maxItems - Math.min(coreCandidates.length, coreLimit)),
   ].slice(0, maxItems);
 
-  const sorted = selectedCandidates.map((candidate) =>
-    enrichActionWithOpportunityImpact(candidate.action, candidate.funnelStage, primaryBottleneck, input)
-  );
+  const groupedCandidates = selectedCandidates.map((candidate) => {
+    const enriched = enrichActionWithOpportunityImpact(candidate.action, candidate.funnelStage, primaryBottleneck, input);
+    return {
+      ...candidate,
+      action: {
+        ...enriched,
+        actionGroup: assignActionGroup(enriched, candidate.funnelStage, primaryBottleneck, input.rootCause),
+        rootCauseCode: input.rootCause?.diagnosisRootCause,
+      },
+    };
+  });
 
-  return sorted;
+  const deduped = dedupeActions(groupedCandidates.map((candidate) => candidate.action));
+  const candidateById = new Map(groupedCandidates.map((candidate) => [candidate.action.id, candidate] as const));
+  const resolvedCandidates = deduped
+    .map((action) => candidateById.get(action.id))
+    .filter((candidate) => candidate !== undefined);
+
+  const immediate = resolvedCandidates
+    .filter((candidate) => candidate.action.actionGroup === 'immediate')
+    .sort((a, b) => {
+      const aMatch = scoreActionForRootCause(a.action, input.rootCause?.diagnosisRootCause);
+      const bMatch = scoreActionForRootCause(b.action, input.rootCause?.diagnosisRootCause);
+      if (bMatch !== aMatch) return bMatch - aMatch;
+      return b.score - a.score;
+    })
+    .slice(0, 3)
+    .map((candidate) => candidate.action);
+
+  const immediateIds = new Set(immediate.map((action) => action.id));
+  const remaining = deduped.filter((action) => !immediateIds.has(action.id));
+  const support = remaining.filter((action) => action.actionGroup === 'support');
+  const bestPractice = remaining
+    .filter((action) => action.actionGroup !== 'support')
+    .map((action) => ({ ...action, actionGroup: 'best_practice' as const }));
+
+  return [...immediate, ...support, ...bestPractice].slice(0, maxItems);
 }
 
 export function buildVerdictText(input: {
@@ -1172,17 +1272,6 @@ export function buildVerdictText(input: {
   } | null;
   rootCause?: Partial<RootCauseDiagnosis> | null;
 }): string {
-  const funnelDiagnosis = buildFunnelBottleneckDiagnosis({
-    metrics30d: input.metrics30d,
-    listingTitle: input.listingTitle,
-    picturesCount: input.picturesCount,
-    hasPromotion: input.hasPromotion,
-    discountPercent: input.discountPercent,
-    mediaVerdict: input.mediaVerdict,
-    dataQualityWarnings: input.dataQualityWarnings,
-    analysisV21: input.analysisV21,
-    benchmark: input.benchmark,
-  });
   const raw = (input.rawVerdict || '').trim();
   if (raw.length >= 280) {
     return raw;
@@ -1199,44 +1288,19 @@ export function buildVerdictText(input: {
     .slice(0, 3);
   const listingTitle = input.listingTitle?.trim();
   const listingRef = listingTitle ? `"${listingTitle}"` : 'este anúncio';
-  const lowVisits = visits < 80;
-  const highVisits = visits >= 250;
   const zeroOrders = orders === 0;
-  const weakConversion = typeof crValue === 'number' ? crValue < 0.01 : zeroOrders;
-  const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark ?? undefined);
-  const rootCauseSummary = String(input.rootCause?.rootCauseSummary || '').trim();
   const rootCauseCode = String(input.rootCause?.diagnosisRootCause || '').trim();
-  const rootCauseConfidence = input.rootCause?.rootCauseConfidence;
   const primaryRecommendation = String(input.rootCause?.primaryRecommendation || '').trim();
-  const mediaEvidence = input.analysisV21?.image_plan?.some((step) => Boolean(step?.action && step.action.trim().length > 0)) ?? false;
-  const mediaWeak = mediaEvidence || (((input.picturesCount ?? 0) > 0) && ((input.picturesCount ?? 0) < 6));
-  const seoEvidence = Boolean(
-    input.analysisV21?.title_fix?.problem ||
-    input.analysisV21?.title_fix?.after ||
-    input.analysisV21?.description_fix?.diagnostic ||
-    input.analysisV21?.description_fix?.optimized_copy
-  );
-  const hasPromotion = input.hasPromotion === true;
-  const promotionLine = hasPromotion
-    ? `Promoção ativa${typeof input.discountPercent === 'number' ? ` (~${input.discountPercent.toFixed(1)}% OFF)` : ''}.`
-    : 'Sem promoção ativa.';
-
-  const pillars: ActionPillar[] = ['seo', 'midia', 'cadastro', 'competitividade', 'performance'];
-  const breakdown = input.scoreBreakdown || {};
-  const availableScores = pillars
-    .map((pillar) => ({ pillar, value: breakdown[pillar] }))
-    .filter((entry): entry is { pillar: ActionPillar; value: number } => typeof entry.value === 'number' && Number.isFinite(entry.value));
-  const dominantPillar = availableScores.length > 0 ? availableScores.sort((a, b) => a.value - b.value)[0].pillar : null;
   const rootCauseLabelMap: Record<string, string> = {
-    visual_low_ctr: 'visual e atratividade de clique',
-    seo_low_discovery: 'descoberta e SEO',
-    price_low_conversion: 'preco e promocao',
-    trust_low_conversion: 'confianca e prova social',
-    logistics_low_conversion: 'logistica e frete',
-    ads_traffic_low_return: 'retorno de ads',
-    content_low_conversion: 'conteudo e cadastro',
-    mixed_signal: 'sinais mistos',
-    insufficient_data: 'dados insuficientes',
+    visual_low_ctr: 'a imagem principal ainda perde clique',
+    seo_low_discovery: 'o anúncio ainda aparece pouco nas buscas',
+    price_low_conversion: 'o preço ou a promoção ainda não convencem',
+    trust_low_conversion: 'faltam provas de confiança para fechar a compra',
+    logistics_low_conversion: 'frete e prazo ainda pesam contra a oferta',
+    ads_traffic_low_return: 'os ads estão trazendo retorno fraco',
+    content_low_conversion: 'descrição e atributos ainda não ajudam a decidir',
+    mixed_signal: 'há mais de um problema relevante ao mesmo tempo',
+    insufficient_data: 'ainda faltam sinais para cravar uma causa principal',
   };
 
   const summarize = (text?: string | null, max = 90): string | null => {
@@ -1246,160 +1310,34 @@ export function buildVerdictText(input: {
     return `${clean.slice(0, max - 1).trimEnd()}…`;
   };
 
-  const inferActionPillar = (title: string): ActionPillar | null => {
-    const value = title.toLowerCase();
-    if (value.includes('titulo') || value.includes('título') || value.includes('descricao') || value.includes('descrição') || value.includes('seo')) {
-      return 'seo';
-    }
-    if (value.includes('imagem') || value.includes('foto') || value.includes('galeria')) {
-      return 'midia';
-    }
-    if (value.includes('preco') || value.includes('preço') || value.includes('frete') || value.includes('compet')) {
-      return 'competitividade';
-    }
-    if (value.includes('varia') || value.includes('ficha') || value.includes('cadastro')) {
-      return 'cadastro';
-    }
-    if (value.includes('convers') || value.includes('funil') || value.includes('oferta')) {
-      return 'performance';
-    }
-    return null;
-  };
-
-  const inferMainProblem = (): 'descoberta' | 'conversao' | 'oferta' | 'clareza' | 'midia' | 'competitividade' | 'performance' => {
-    if (lowVisits) return 'descoberta';
-    if (highVisits && weakConversion) return 'conversao';
-    if (zeroOrders) return hasPromotion ? 'conversao' : 'oferta';
-    if (dominantPillar === 'seo') return 'clareza';
-    if (dominantPillar === 'midia') return 'midia';
-    if (dominantPillar === 'competitividade' && !benchmarkUnavailable) return 'competitividade';
-    if (dominantPillar === 'performance') return 'performance';
-    if (seoEvidence) return 'clareza';
-    if (mediaWeak) return 'midia';
-    return weakConversion ? 'conversao' : 'performance';
-  };
-
-  const mainProblem = inferMainProblem();
   const topAction = top[0] || 'priorizar o ajuste com maior evidência operacional';
-  const topActionPillar = inferActionPillar(topAction);
   const titleProblem = summarize(input.analysisV21?.title_fix?.problem, 96);
   const descriptionDiagnostic = summarize(input.analysisV21?.description_fix?.diagnostic, 96);
   const imageHint = summarize(
     (input.analysisV21?.image_plan || []).find((step) => typeof step?.action === 'string' && step.action.trim().length > 0)?.action,
     92
   );
+  const mainProblem = rootCauseCode
+    ? rootCauseLabelMap[rootCauseCode] || 'há um problema principal no anúncio'
+    : visits < 80
+      ? 'o anúncio ainda aparece pouco nas buscas'
+      : zeroOrders
+        ? 'o anúncio recebe visitas, mas não está virando pedido'
+        : 'o anúncio ainda não está convertendo como deveria';
+  const why =
+    descriptionDiagnostic ||
+    titleProblem ||
+    imageHint ||
+    (zeroOrders
+      ? `Nos últimos 30 dias, ${listingRef} teve ${visits} visitas e 0 pedidos.`
+      : `${listingRef} teve ${visits} visitas, ${orders} pedidos${cr ? ` e conversão de ${cr}` : ''}.`);
+  const firstAction = primaryRecommendation || topAction;
 
-  const executiveLines: string[] = [
-    `${listingRef} registrou ${visits} visitas e ${orders} pedidos nos últimos 30 dias${cr ? `, com conversão de ${cr}` : ''}.`,
-  ];
-  if (rootCauseCode) {
-    executiveLines.push(
-      `Causa raiz dominante: ${rootCauseLabelMap[rootCauseCode] || rootCauseCode}${typeof rootCauseConfidence === 'number' ? ` (${rootCauseConfidence}/100)` : ''}.`
-    );
-  }
-  if (hasPromotion || zeroOrders) {
-    executiveLines.push(`${promotionLine} ${zeroOrders ? 'Até aqui, o resultado é 0 pedidos.' : ''}`.trim());
-  }
-  if (mainProblem === 'descoberta') {
-    executiveLines.push('Leitura executiva: o gargalo dominante está em descoberta e tração qualificada.');
-  } else if (mainProblem === 'conversao') {
-    executiveLines.push('Leitura executiva: existe descoberta, mas o bloqueio principal está na conversão da visita em decisão.');
-  } else if (mainProblem === 'oferta') {
-    executiveLines.push('Leitura executiva: o ponto crítico está na força comercial da oferta para transformar interesse em pedido.');
-  } else if (mainProblem === 'clareza') {
-    executiveLines.push('Leitura executiva: o anúncio precisa de mais clareza de proposta para alinhar busca e decisão.');
-  } else if (mainProblem === 'midia') {
-    executiveLines.push('Leitura executiva: o principal limitador está em mídia e prova visual da oferta.');
-  } else if (mainProblem === 'competitividade') {
-    executiveLines.push('Leitura executiva: o risco dominante está em competitividade e posicionamento comercial.');
-  } else {
-    executiveLines.push('Leitura executiva: o funil tem base funcional, mas ainda com perda relevante na etapa final.');
-  }
-
-  const diagnosisLines: string[] = [];
-  if (rootCauseSummary) {
-    diagnosisLines.push(rootCauseSummary);
-  }
-  if (mainProblem === 'conversao' && hasPromotion) {
-    diagnosisLines.push('Como o desconto já está ativo, o bloqueio parece menos de preço e mais de convencimento, confiança e percepção de valor.');
-  } else if (mainProblem === 'descoberta') {
-    diagnosisLines.push('O volume atual limita aprendizado de escala, o que sugere baixa descoberta qualificada antes da etapa de fechamento.');
-  } else if (mainProblem === 'midia') {
-    diagnosisLines.push('Há sinais de interesse, mas a apresentação visual ainda não sustenta decisão com prova de uso e diferenciais claros.');
-  } else if (mainProblem === 'clareza') {
-    diagnosisLines.push('Os sinais de SEO e copy indicam desalinhamento entre intenção de busca e leitura comercial da página.');
-  } else if (mainProblem === 'oferta') {
-    diagnosisLines.push('Sem incentivo promocional, a conversão depende mais da clareza da proposta e da redução de objeções no anúncio.');
-  } else {
-    diagnosisLines.push('O anúncio já gera algum fluxo, mas perde eficiência ao transformar interesse em fechamento.');
-  }
-  if (titleProblem || descriptionDiagnostic) {
-    diagnosisLines.push(`Evidência direta do diagnóstico: ${titleProblem || descriptionDiagnostic}.`);
-  } else if (imageHint && mainProblem !== 'clareza') {
-    diagnosisLines.push(`Evidência operacional de mídia: ${imageHint}.`);
-  }
-  if (benchmarkUnavailable) {
-    diagnosisLines.push('Benchmark externo está indisponível no momento, então a leitura foi ancorada nos sinais internos de oferta, clareza e estrutura do anúncio.');
-  }
-
-  const priorityReason = (() => {
-    if (topActionPillar === 'seo') return 'Esse foco atua na entrada qualificada do funil e na clareza da decisão já na leitura do anúncio.';
-    if (topActionPillar === 'midia') return 'Esse foco reduz fricção visual no momento da decisão e tende a melhorar confiança para compra.';
-    if (topActionPillar === 'competitividade') {
-      return benchmarkUnavailable
-        ? 'Esse foco deve começar por validação interna de valor percebido antes de comparação externa mais assertiva.'
-        : 'Esse foco ataca diretamente o posicionamento comercial frente ao mercado.';
-    }
-    if (topActionPillar === 'cadastro') return 'Esse foco organiza a base do anúncio e reduz ruído operacional no funil.';
-    if (mainProblem === 'conversao') return 'Esse é o melhor ponto de alavanca agora porque atua no bloqueio entre interesse e pedido.';
-    if (mainProblem === 'descoberta') return 'Esse é o melhor ponto de alavanca agora porque acelera descoberta antes de otimizações finas.';
-    return 'Esse é o melhor ponto de alavanca agora porque concentra esforço no principal gargalo desta rodada.';
-  })();
-
-  const gainHint = topActionPillar && input.potentialGain?.[topActionPillar]
-    ? ` Há potencial de ganho reportado para esta frente (${String(input.potentialGain[topActionPillar])}).`
-    : '';
-
-  const priorityLines = [
-    `Prioridade operacional agora: ${topAction}.`,
-    `${priorityReason}${gainHint}`,
-  ];
-  if (primaryRecommendation) {
-    priorityLines.unshift(`Primeira ação recomendada: ${primaryRecommendation}`);
-  }
-
-  const expectedResult = (() => {
-    if (mainProblem === 'descoberta' || topActionPillar === 'seo') {
-      return 'Resultado esperado: aumentar CTR qualificado e elevar o volume de visitas com melhor aderência de busca.';
-    }
-    if (mainProblem === 'midia' || topActionPillar === 'midia') {
-      return 'Resultado esperado: melhorar percepção de valor e reduzir insegurança visual, elevando a taxa de decisão.';
-    }
-    if (mainProblem === 'oferta' || topActionPillar === 'competitividade') {
-      return 'Resultado esperado: fortalecer proposta comercial e converter melhor o interesse já gerado.';
-    }
-    return 'Resultado esperado: reduzir fricção no funil e aumentar conversão de visitas em pedidos de forma sustentada.';
-  })();
-
-  const resultLines = [expectedResult];
-  if (hasPromotion && weakConversion) {
-    resultLines.push('Com promoção já ativa, o ganho deve vir principalmente de melhor comunicação e prova da oferta, não de novo desconto.');
-  }
-
-  const bottleneckBlock = [
-    `Gargalo principal: ${funnelDiagnosis.primaryBottleneck}`,
-    funnelDiagnosis.explanation,
-    `Foco desta rodada: ${funnelDiagnosis.recommendedFocus}`,
-  ].join('\n\n');
-
-  const auditBlock = [
-    executiveLines.slice(0, 3).join(' '),
-    diagnosisLines.slice(0, 3).join(' '),
-    priorityLines.slice(0, 2).join(' '),
-    resultLines.slice(0, 2).join(' '),
-  ].join('\n\n');
-
-  return [bottleneckBlock, auditBlock].join('\n\n');
+  return [
+    `Problema principal: ${mainProblem}.`,
+    `Por que isso está acontecendo: ${why}`,
+    `O que fazer primeiro: ${firstAction}`,
+  ].join('\n');
 }
 
 export function buildFunnelBottleneckDiagnosis(input: {

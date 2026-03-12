@@ -599,49 +599,49 @@ function buildRecommendation(code: RootCauseCode): {
   switch (code) {
     case 'visual_low_ctr':
       return {
-        primaryRecommendation: 'Melhorar a imagem principal e o criativo de entrada antes de buscar mais tráfego.',
+        primaryRecommendation: 'Trocar a imagem principal e melhorar a capa antes de buscar mais tráfego.',
         recommendationPriority: 'high',
         estimatedImpact: 'high',
         rootCauseStage: 'click',
       };
     case 'seo_low_discovery':
       return {
-        primaryRecommendation: 'Reescrever o título com foco em busca real e atributos decisivos de descoberta.',
+        primaryRecommendation: 'Reescrever o título com termos de busca, modelo e atributos principais.',
         recommendationPriority: 'high',
         estimatedImpact: 'high',
         rootCauseStage: 'discovery',
       };
     case 'price_low_conversion':
       return {
-        primaryRecommendation: 'Ajustar preço e estratégia promocional para reduzir fricção de compra.',
+        primaryRecommendation: 'Revisar preço e promoção para ficar mais competitivo sem sacrificar margem à toa.',
         recommendationPriority: 'high',
         estimatedImpact: 'high',
         rootCauseStage: 'conversion',
       };
     case 'trust_low_conversion':
       return {
-        primaryRecommendation: 'Reforçar prova social, garantia e sinais de confiança antes de insistir em mais tráfego.',
+        primaryRecommendation: 'Reforçar prova de confiança, garantia e informações que deixem a compra mais segura.',
         recommendationPriority: 'high',
         estimatedImpact: 'medium',
         rootCauseStage: 'conversion',
       };
     case 'logistics_low_conversion':
       return {
-        primaryRecommendation: 'Melhorar frete/logística percebida para reduzir abandono na decisão final.',
+        primaryRecommendation: 'Melhorar frete e prazo percebido para reduzir desistência na reta final.',
         recommendationPriority: 'high',
         estimatedImpact: 'medium',
         rootCauseStage: 'conversion',
       };
     case 'ads_traffic_low_return':
       return {
-        primaryRecommendation: 'Revisar a campanha de ads e segurar escala até recuperar retorno e ROAS.',
+        primaryRecommendation: 'Revisar campanha, criativo e página antes de continuar investindo em ads.',
         recommendationPriority: 'high',
         estimatedImpact: 'high',
         rootCauseStage: 'ads',
       };
     case 'content_low_conversion':
       return {
-        primaryRecommendation: 'Reforçar descrição, atributos e argumentos de conversão para fechar melhor a decisão.',
+        primaryRecommendation: 'Reescrever descrição e atributos para responder dúvidas e ajudar o cliente a decidir.',
         recommendationPriority: 'high',
         estimatedImpact: 'medium',
         rootCauseStage: 'conversion',
@@ -671,19 +671,19 @@ function summarizeRootCause(
 ): string {
   switch (code) {
     case 'visual_low_ctr':
-      return `O principal gargalo parece estar no clique: o visual está fraco (${signals.visualScore ?? 'n/d'}) e os sinais de CTR não sustentam a entrada de tráfego. ${recommendation}`;
+      return `O principal problema parece estar no clique. A imagem principal e a capa ainda não chamam atenção suficiente. ${recommendation}`;
     case 'seo_low_discovery':
-      return `O anúncio parece converter melhor do que descobre: há pouco volume de visitas (${signals.visits ?? 'n/d'}) para um visual saudável, sugerindo baixa descoberta orgânica. ${recommendation}`;
+      return `O anúncio parece ter pouca descoberta. Há poucas visitas para o nível atual do anúncio, o que sugere problema de título, busca ou atributos. ${recommendation}`;
     case 'price_low_conversion':
-      return `O tráfego chega, mas preço e promoção ainda reduzem a conversão. O sinal competitivo está ${signals.priceCompetitiveSignal}. ${recommendation}`;
+      return `O tráfego chega, mas preço e promoção ainda não ajudam a fechar a compra. ${recommendation}`;
     case 'trust_low_conversion':
-      return `A conversão parece travar por confiança. Rating, reviews, dúvidas ou garantia não sustentam bem a decisão. ${recommendation}`;
+      return `A decisão parece travar por falta de confiança. Avaliações, garantia ou provas do anúncio ainda não passam segurança suficiente. ${recommendation}`;
     case 'logistics_low_conversion':
-      return `A oferta perde força na reta final por percepção logística. Frete e elegibilidade parecem abaixo do ideal. ${recommendation}`;
+      return `A oferta perde força na reta final por causa de frete, prazo ou percepção logística. ${recommendation}`;
     case 'ads_traffic_low_return':
-      return `O maior desperdício atual parece estar em mídia paga: há gasto em ads sem retorno proporcional em pedidos ou ROAS. ${recommendation}`;
+      return `O maior desperdício atual parece estar nos ads. Há investimento sem retorno proporcional em pedidos. ${recommendation}`;
     case 'content_low_conversion':
-      return `O clique existe, mas a página ainda não fecha a venda com clareza. Conteúdo, atributos e resposta a objeções seguem fracos. ${recommendation}`;
+      return `O clique existe, mas a página ainda não ajuda o cliente a decidir. Descrição, atributos e respostas às dúvidas seguem fracos. ${recommendation}`;
     case 'mixed_signal':
       return `Os sinais disponíveis apontam mais de um gargalo relevante ao mesmo tempo, então a leitura dominante ainda está mista. ${recommendation}`;
     case 'insufficient_data':
@@ -693,6 +693,7 @@ function summarizeRootCause(
 }
 
 function calculateConfidence(
+  input: RootCauseEngineInput,
   code: RootCauseCode,
   winner: CandidateScore | null,
   runnerUp: CandidateScore | null,
@@ -704,10 +705,47 @@ function calculateConfidence(
   const margin = winner.score - (runnerUp?.score ?? 0);
   const contradictions = winner.contradictions.length;
   const evidence = winner.evidence.length;
-  let confidence = 20 + winner.score * 0.35 + signalCount * 2 + evidence * 3 + Math.min(10, margin) - contradictions * 12;
+  const benchmarkConfidence = String(input.benchmark?.benchmarkSummary?.confidence || '').toLowerCase();
+  const adsStatus = input.adsIntelligence?.status ?? null;
+  let penalty = 0;
+
+  if (!input.benchmark?.benchmarkSummary || benchmarkConfidence === 'unavailable' || benchmarkConfidence === 'low') {
+    penalty += 8;
+  }
+  if (signals.trustSignal === 'unknown') {
+    penalty += code === 'trust_low_conversion' ? 10 : 4;
+  }
+  if (signals.logisticsSignal === 'unknown') {
+    penalty += code === 'logistics_low_conversion' ? 10 : 4;
+  }
+  if (adsStatus === 'partial') {
+    penalty += code === 'ads_traffic_low_return' ? 12 : 5;
+  }
+  if (!adsStatus || adsStatus === 'unavailable') {
+    penalty += code === 'ads_traffic_low_return' ? 14 : 0;
+  }
+  if (runnerUp) {
+    const distance = Math.abs(winner.score - runnerUp.score);
+    if (distance <= 3) penalty += 16;
+    else if (distance <= 6) penalty += 11;
+    else if (distance <= 10) penalty += 6;
+  }
+  if (signals.dataQualitySignal === 'weak') {
+    penalty += 8;
+  }
+  if (code === 'mixed_signal') {
+    penalty += 8;
+  }
+  if (code === 'insufficient_data') {
+    penalty += 10;
+  }
+
+  let confidence = 18 + winner.score * 0.33 + signalCount * 1.6 + evidence * 2.5 + Math.min(8, margin) - contradictions * 10 - penalty;
 
   if (code === 'mixed_signal') confidence = Math.min(confidence, 58);
   if (code === 'insufficient_data') confidence = Math.min(confidence, 34);
+  if (penalty >= 20) confidence = Math.min(confidence, 79);
+  if (penalty >= 28) confidence = Math.min(confidence, 72);
 
   return roundNumber(clamp(confidence, 12, 95));
 }
@@ -736,7 +774,7 @@ export function diagnoseRootCause(input: RootCauseEngineInput): RootCauseDiagnos
   if (!winner || winner.score < 38) {
     return {
       diagnosisRootCause: 'insufficient_data',
-      rootCauseConfidence: calculateConfidence('insufficient_data', winner, runnerUp, signals),
+      rootCauseConfidence: calculateConfidence(input, 'insufficient_data', winner, runnerUp, signals),
       rootCauseStage: fallback.rootCauseStage,
       rootCauseSummary: summarizeRootCause('insufficient_data', signals, fallback.primaryRecommendation),
       signalsUsed: signals,
@@ -757,7 +795,7 @@ export function diagnoseRootCause(input: RootCauseEngineInput): RootCauseDiagnos
 
   return {
     diagnosisRootCause: code,
-    rootCauseConfidence: calculateConfidence(code, winner, runnerUp, signals),
+    rootCauseConfidence: calculateConfidence(input, code, winner, runnerUp, signals),
     rootCauseStage: recommendation.rootCauseStage,
     rootCauseSummary: summarizeRootCause(code, signals, recommendation.primaryRecommendation),
     signalsUsed: signals,

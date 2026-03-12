@@ -75,6 +75,8 @@ interface AIAnalysisApiResponse {
     impactEstimate?: string
     impactReason?: string
     suggestedActionUrl?: string | null
+    actionGroup?: 'immediate' | 'support' | 'best_practice'
+    rootCauseCode?: 'visual_low_ctr' | 'seo_low_discovery' | 'price_low_conversion' | 'trust_low_conversion' | 'logistics_low_conversion' | 'ads_traffic_low_return' | 'content_low_conversion' | 'mixed_signal' | 'insufficient_data'
   }>
   growthHacksMeta?: {
     rulesEvaluated: number
@@ -290,6 +292,8 @@ export interface AIAnalysisResponse {
     impactEstimate?: string
     impactReason?: string
     suggestedActionUrl?: string | null
+    actionGroup?: 'immediate' | 'support' | 'best_practice'
+    rootCauseCode?: 'visual_low_ctr' | 'seo_low_discovery' | 'price_low_conversion' | 'trust_low_conversion' | 'logistics_low_conversion' | 'ads_traffic_low_return' | 'content_low_conversion' | 'mixed_signal' | 'insufficient_data'
   }>
   growthHacksMeta?: {
     rulesEvaluated: number

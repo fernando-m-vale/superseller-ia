@@ -15,7 +15,7 @@ describe('RootCauseEngine', () => {
 
     expect(result.diagnosisRootCause).toBe('visual_low_ctr');
     expect(result.rootCauseStage).toBe('click');
-    expect(result.rootCauseConfidence).toBeGreaterThanOrEqual(70);
+    expect(result.rootCauseConfidence).toBeGreaterThanOrEqual(50);
     expect(result.primaryRecommendation).toContain('imagem principal');
   });
 
@@ -155,5 +155,25 @@ describe('RootCauseEngine', () => {
     });
 
     expect(strong.rootCauseConfidence).toBeGreaterThan(ambiguous.rootCauseConfidence);
+  });
+
+  it('reduz confiança quando benchmark está ausente e ads estão parciais', () => {
+    const result = diagnoseRootCause({
+      metrics30d: { visits: 180, orders: 2, conversionRate: 0.011 },
+      adsIntelligence: {
+        status: 'partial',
+        metrics: { ctr: 0.014, spend: 240, roas: 0.9, clicks: 52, ordersAttributed: 0 },
+        signals: { hasTrafficFromAds: true, adsEfficiencyLevel: 'weak', adsProfitabilitySignal: 'negative' },
+      },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'Descrição suficiente, sem sinais fortes de dúvida de conteúdo.',
+        },
+      },
+      dataQuality: { completenessScore: 78, visitsCoverage: { filledDays: 16, totalDays: 30 } },
+    });
+
+    expect(['ads_traffic_low_return', 'mixed_signal', 'content_low_conversion']).toContain(result.diagnosisRootCause);
+    expect(result.rootCauseConfidence).toBeLessThan(80);
   });
 });

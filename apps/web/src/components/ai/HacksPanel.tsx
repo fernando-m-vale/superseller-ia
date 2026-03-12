@@ -19,6 +19,8 @@ export interface HackSuggestion {
   confidenceLevel: 'low' | 'medium' | 'high'
   evidence: string[]
   suggestedActionUrl?: string | null
+  actionGroup?: 'immediate' | 'support' | 'best_practice'
+  rootCauseCode?: 'visual_low_ctr' | 'seo_low_discovery' | 'price_low_conversion' | 'trust_low_conversion' | 'logistics_low_conversion' | 'ads_traffic_low_return' | 'content_low_conversion' | 'mixed_signal' | 'insufficient_data'
   // HOTFIX 09.8: categoryId para botão "Ver categoria"
   categoryId?: string | null
   // HOTFIX 09.10: Permalink oficial da categoria (ao invés de inventar URL)
@@ -132,10 +134,10 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
   })
   
   const confirmedHacks = sortedHacks.filter((h) => feedbackStatus[h.id] === 'confirmed')
-  
-  // Separar oportunidades em Top 3 e outros
-  const top3Hacks = opportunityHacks.slice(0, 3)
-  const otherHacks = opportunityHacks.slice(3)
+  const immediateHacks = opportunityHacks.filter((hack) => hack.actionGroup === 'immediate').slice(0, 3)
+  const immediateIds = new Set(immediateHacks.map((hack) => hack.id))
+  const supportHacks = opportunityHacks.filter((hack) => !immediateIds.has(hack.id) && hack.actionGroup === 'support')
+  const bestPracticeHacks = opportunityHacks.filter((hack) => !immediateIds.has(hack.id) && hack.actionGroup !== 'support')
 
   /**
    * Transforma evidence string[] em HackEvidenceItem[]
@@ -378,13 +380,12 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* HOTFIX 09.6: Top 3 Prioridades */}
-        {top3Hacks.length > 0 && (
+        {immediateHacks.length > 0 && (
           <div className="space-y-4">
             <div className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <span className="text-primary">🔥 Prioridades (Top 3)</span>
+              <span className="text-primary">Fazer agora</span>
             </div>
-            {top3Hacks.map((hack, idx) => (
+            {immediateHacks.map((hack, idx) => (
               <HackCardUX2
                 key={hack.id}
                 {...transformHackToCardProps(hack, idx + 1)}
@@ -393,18 +394,29 @@ export function HacksPanel({ hacks, listingId, onFeedback, metrics30d }: HacksPa
           </div>
         )}
 
-        {/* Outros hacks sugeridos */}
-        {otherHacks.length > 0 && (
+        {supportHacks.length > 0 && (
           <div className="space-y-4">
-            {top3Hacks.length > 0 && (
-              <div className="text-sm font-semibold text-muted-foreground flex items-center gap-2 mt-6">
-                <span>Outros hacks</span>
-              </div>
-            )}
-            {otherHacks.map((hack, idx) => (
+            <div className="text-sm font-semibold text-muted-foreground flex items-center gap-2 mt-6">
+              <span>Melhorias de suporte</span>
+            </div>
+            {supportHacks.map((hack, idx) => (
               <HackCardUX2
                 key={hack.id}
-                {...transformHackToCardProps(hack, top3Hacks.length + idx + 1)}
+                {...transformHackToCardProps(hack, immediateHacks.length + idx + 1)}
+              />
+            ))}
+          </div>
+        )}
+
+        {bestPracticeHacks.length > 0 && (
+          <div className="space-y-4">
+            <div className="text-sm font-semibold text-muted-foreground flex items-center gap-2 mt-6">
+              <span>Boas práticas</span>
+            </div>
+            {bestPracticeHacks.map((hack, idx) => (
+              <HackCardUX2
+                key={hack.id}
+                {...transformHackToCardProps(hack, immediateHacks.length + supportHacks.length + idx + 1)}
               />
             ))}
           </div>

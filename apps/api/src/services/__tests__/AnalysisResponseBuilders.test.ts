@@ -527,7 +527,7 @@ describe('buildVerdictText', () => {
     expect(text).toContain('priorizar o ajuste com maior evidência operacional');
   });
 
-  it('inclui bloco estruturado de bottleneck e foco recomendado', () => {
+  it('mantém verdict estruturado em problema, motivo e primeira ação', () => {
     const text = buildVerdictText({
       listingTitle: 'Mouse Vertical Ergonômico',
       metrics30d: { visits: 300, orders: 2, conversionRate: 0.0067 },
@@ -540,9 +540,10 @@ describe('buildVerdictText', () => {
       },
     });
 
-    expect(text).toContain('Gargalo principal:');
-    expect(text).toContain('Foco desta rodada:');
-    expect(text.length).toBeLessThan(1400);
+    expect(text).toContain('Problema principal:');
+    expect(text).toContain('Por que isso está acontecendo:');
+    expect(text).toContain('O que fazer primeiro:');
+    expect(text.length).toBeLessThan(420);
   });
 
   it('gera leitura executiva e diagnostico diferentes entre SEO e midia', () => {
@@ -566,8 +567,9 @@ describe('buildVerdictText', () => {
       topActions: [{ title: 'Atualizar galeria com provas de uso real' }],
       scoreBreakdown: { seo: 68, midia: 26, cadastro: 64, competitividade: 58, performance: 61 },
     });
-    expect(seoCase).toContain('Gargalo principal: SEARCH');
-    expect(mediaCase).toContain('Gargalo principal: CLICK');
+    expect(seoCase).not.toBe(mediaCase);
+    expect(seoCase).toContain('busca');
+    expect(mediaCase).toContain('galeria');
   });
 });
 

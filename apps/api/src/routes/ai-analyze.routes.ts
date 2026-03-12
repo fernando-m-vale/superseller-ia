@@ -1789,6 +1789,43 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
           await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
           enrichAnalyzeResponseWithConsultingIntelligence(responseData, { listing });
+          responseData.growthHacks = buildDeterministicMvpActions({
+            listingIdExt: listing.listing_id_ext,
+            listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
+            hackActions: responseData.growthHacks,
+            metrics30d: {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
+            },
+            dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
+            analysisV21,
+            seoSuggestions: {
+              suggestedTitle: analysisV21?.title_fix?.after,
+              titleRationale: analysisV21?.title_fix?.problem,
+            },
+            generatedContent,
+            scoreBreakdown: result.score.score.breakdown,
+            potentialGain: result.score.score.potential_gain as unknown as Record<string, unknown>,
+            benchmark: {
+              confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: benchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
+            rootCause: responseData,
+          });
+          responseData.actionsBatchId = await persistListingActionsBatch(listingId, responseData.growthHacks || []);
+          responseData.executionRoadmap = buildExecutionRoadmap({
+            bottleneckDiagnosis: responseData.funnelDiagnosis,
+            growthHacks: responseData.growthHacks || [],
+          });
           responseData.verdictText = buildVerdictText({
             rawVerdict: analysisV21?.verdict || responseData.critique,
             metrics30d: {
@@ -2502,6 +2539,43 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         await attachAdsIntelligenceToPayload(cacheResponseData, tenantId, listingId, request.log);
         enrichAnalyzeResponseWithConsultingIntelligence(cacheResponseData, { listing });
+        cacheResponseData.growthHacks = buildDeterministicMvpActions({
+          listingIdExt: listing.listing_id_ext,
+          listingTitle: listing.title,
+          picturesCount: listing.pictures_count,
+          hackActions: cacheResponseData.growthHacks,
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          hasPromotion: listing.has_promotion,
+          discountPercent: listing.discount_percent,
+          mediaVerdict: {
+            canSuggestClip: mediaVerdict?.canSuggestClip,
+            hasClipDetected: mediaVerdict?.hasClipDetected,
+          },
+          dataQualityWarnings: mergeListingWarnings(
+            ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            listing,
+          ),
+          analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+          seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
+          generatedContent: cacheGeneratedContent as any,
+          scoreBreakdown: scoreResult.score.breakdown as any,
+          potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
+          benchmark: {
+            confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+            sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+            baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+          },
+          rootCause: cacheResponseData,
+        });
+        cacheResponseData.actionsBatchId = await persistListingActionsBatch(listingId, cacheResponseData.growthHacks || []);
+        cacheResponseData.executionRoadmap = buildExecutionRoadmap({
+          bottleneckDiagnosis: cacheResponseData.funnelDiagnosis,
+          growthHacks: cacheResponseData.growthHacks || [],
+        });
         cacheResponseData.verdictText = buildVerdictText({
           rawVerdict: (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
             || cacheResponseData.critique,

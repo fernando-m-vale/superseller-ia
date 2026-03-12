@@ -79,9 +79,9 @@ describe('AnalysisResponseBuilders', () => {
       benchmark: { confidence: 'good', sampleSize: 22, baselineConversionRate: 0.018 },
     });
 
-    expect(verdict).toContain('Gargalo principal: CONVERSION');
-    expect(verdict).toContain('Antes de mexer em preço');
-    expect(verdict).toContain('menos de preço e mais de convencimento');
+    expect(verdict).toContain('Problema principal:');
+    expect(verdict).toContain('Por que isso está acontecendo:');
+    expect(verdict).toContain('O que fazer primeiro:');
   });
 
   it('mantém utilidade sem promoção e com baixa descoberta', () => {
@@ -98,9 +98,9 @@ describe('AnalysisResponseBuilders', () => {
       benchmark: { confidence: 'unavailable', sampleSize: 0, baselineConversionRate: null },
     });
 
-    expect(verdict).toContain('Gargalo principal: SEARCH');
-    expect(verdict).toContain('atributos pouco claros');
-    expect(verdict).toContain('descoberta');
+    expect(verdict).toContain('Problema principal:');
+    expect(verdict).toContain('modelo compatível');
+    expect(verdict).toContain('buscas');
   });
 
   it('incorpora causa raiz dominante e ação prioritária ao verdict textual', () => {
@@ -116,9 +116,8 @@ describe('AnalysisResponseBuilders', () => {
       },
     });
 
-    expect(verdict).toContain('Causa raiz dominante');
-    expect(verdict).toContain('visual e atratividade de clique');
-    expect(verdict).toContain('Primeira ação recomendada');
+    expect(verdict).toContain('Problema principal:');
+    expect(verdict).toContain('O que fazer primeiro:');
     expect(verdict).toContain('imagem principal');
   });
 
@@ -154,7 +153,7 @@ describe('AnalysisResponseBuilders', () => {
       benchmark: { confidence: 'unavailable', sampleSize: 0, baselineConversionRate: null },
     });
 
-    expect(verdict).toContain('sinais internos de oferta, clareza e estrutura');
+    expect(verdict).toContain('autonomia, ruído e uso em cantos');
     expect(actions.some((action) => action.actionKey === 'compet_price_positioning')).toBe(false);
   });
 
@@ -293,5 +292,74 @@ describe('AnalysisResponseBuilders', () => {
 
     expect(actions[0]?.actionKey).toMatch(/seo_title/);
     expect(actions[actions.length - 1]?.actionKey).toBe('ml_smart_variations');
+  });
+
+  it('agrupa cards em immediate, support e best_practice sem clip na prioridade principal', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Aspirador Vertical 2 em 1',
+      metrics30d: { visits: 210, orders: 2, conversionRate: 0.0095 },
+      picturesCount: 5,
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A descrição não responde autonomia, ruído e uso em cantos.',
+          optimized_copy: 'Blocos com autonomia, ruído e uso em canto.',
+        },
+        image_plan: [{ action: 'Destacar autonomia e bicos na imagem principal' }],
+      },
+      mediaVerdict: { canSuggestClip: false, hasClipDetected: null },
+      hackActions: [
+        {
+          id: 'support_check',
+          title: 'Reforçar FAQ com dúvidas de uso',
+          summary: 'Adicionar respostas rápidas para reduzir dúvidas secundárias.',
+          impact: 'medium',
+          priority: 'medium',
+          confidence: 72,
+          evidence: ['Dúvidas recorrentes'],
+        },
+        {
+          id: 'best_practice_check',
+          title: 'Padronizar checklist de revisão semanal',
+          summary: 'Boa prática para acompanhar o anúncio depois dos ajustes principais.',
+          impact: 'low',
+          priority: 'low',
+          confidence: 55,
+          evidence: ['Rotina operacional'],
+        },
+      ],
+      rootCause: {
+        diagnosisRootCause: 'content_low_conversion',
+        primaryRecommendation: 'Reescrever descrição e atributos para responder dúvidas e ajudar o cliente a decidir.',
+      },
+      maxItems: 6,
+    });
+
+    expect(actions.filter((action) => action.actionGroup === 'immediate').length).toBeLessThanOrEqual(3);
+    expect(actions[0]?.actionGroup).toBe('immediate');
+    expect(actions.some((action) => action.actionGroup === 'support')).toBe(true);
+    expect(actions.some((action) => action.actionGroup === 'best_practice' || action.actionGroup === 'support')).toBe(true);
+    expect(actions[0]?.title.toLowerCase()).toMatch(/descrição|atribut|dúvida|duvida/);
+    expect(actions[0]?.title.toLowerCase()).not.toContain('clip');
+  });
+
+  it('gera verdict mais curto e orientado a ação', () => {
+    const verdict = buildVerdictText({
+      listingTitle: 'Cadeira Office Ergonômica',
+      metrics30d: { visits: 280, orders: 1, conversionRate: 0.0035 },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A descrição ainda não explica ajuste lombar, peso suportado e garantia.',
+        },
+      },
+      rootCause: {
+        diagnosisRootCause: 'content_low_conversion',
+        primaryRecommendation: 'Reescrever descrição e atributos para responder dúvidas e ajudar o cliente a decidir.',
+      },
+      topActions: [{ title: 'Reescrever descrição com benefícios e dúvidas respondidas' }],
+    });
+
+    expect(verdict.split('\n')).toHaveLength(3);
+    expect(verdict.length).toBeLessThan(420);
+    expect(verdict).not.toMatch(/fricção de conversão|oportunidade complementar|estágio do funil/i);
   });
 });
