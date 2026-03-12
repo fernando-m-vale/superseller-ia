@@ -216,6 +216,14 @@ interface AIAnalysisApiResponse {
     expectedImpact: string
   }>
   visualScore?: number | null
+  diagnosisRootCause?: 'visual_low_ctr' | 'seo_low_discovery' | 'price_low_conversion' | 'trust_low_conversion' | 'logistics_low_conversion' | 'ads_traffic_low_return' | 'content_low_conversion' | 'mixed_signal' | 'insufficient_data'
+  rootCauseConfidence?: number
+  rootCauseStage?: 'discovery' | 'click' | 'conversion' | 'ads' | 'mixed' | 'unknown'
+  rootCauseSummary?: string
+  signalsUsed?: Record<string, unknown>
+  estimatedImpact?: 'low' | 'medium' | 'high'
+  primaryRecommendation?: string
+  recommendationPriority?: 'high' | 'medium' | 'low'
   visualAnalysis?: {
     visual_score: number
     summary: string
@@ -421,6 +429,14 @@ export interface AIAnalysisResponse {
     expectedImpact: string
   }>
   visualScore?: number | null
+  diagnosisRootCause?: 'visual_low_ctr' | 'seo_low_discovery' | 'price_low_conversion' | 'trust_low_conversion' | 'logistics_low_conversion' | 'ads_traffic_low_return' | 'content_low_conversion' | 'mixed_signal' | 'insufficient_data'
+  rootCauseConfidence?: number
+  rootCauseStage?: 'discovery' | 'click' | 'conversion' | 'ads' | 'mixed' | 'unknown'
+  rootCauseSummary?: string
+  signalsUsed?: Record<string, unknown>
+  estimatedImpact?: 'low' | 'medium' | 'high'
+  primaryRecommendation?: string
+  recommendationPriority?: 'high' | 'medium' | 'low'
   visualAnalysis?: {
     visual_score: number
     summary: string
@@ -497,6 +513,14 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
       funnelDiagnosis: apiResponse.funnelDiagnosis,
       executionRoadmap: apiResponse.executionRoadmap,
       visualScore: apiResponse.visualScore,
+      diagnosisRootCause: apiResponse.diagnosisRootCause,
+      rootCauseConfidence: apiResponse.rootCauseConfidence,
+      rootCauseStage: apiResponse.rootCauseStage,
+      rootCauseSummary: apiResponse.rootCauseSummary,
+      signalsUsed: apiResponse.signalsUsed,
+      estimatedImpact: apiResponse.estimatedImpact,
+      primaryRecommendation: apiResponse.primaryRecommendation,
+      recommendationPriority: apiResponse.recommendationPriority,
       visualAnalysis: apiResponse.visualAnalysis,
       dataFreshness: apiResponse.dataFreshness,
       adsIntelligence: apiResponse.adsIntelligence,

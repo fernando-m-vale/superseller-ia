@@ -103,6 +103,25 @@ describe('AnalysisResponseBuilders', () => {
     expect(verdict).toContain('descoberta');
   });
 
+  it('incorpora causa raiz dominante e ação prioritária ao verdict textual', () => {
+    const verdict = buildVerdictText({
+      listingTitle: 'Fone Bluetooth X',
+      metrics30d: { visits: 52, orders: 0, conversionRate: 0.004 },
+      topActions: [{ title: 'Trocar imagem principal' }],
+      rootCause: {
+        diagnosisRootCause: 'visual_low_ctr',
+        rootCauseConfidence: 82,
+        rootCauseSummary: 'O principal gargalo parece estar no clique por fragilidade visual e CTR baixo.',
+        primaryRecommendation: 'Melhorar a imagem principal antes de aumentar verba.',
+      },
+    });
+
+    expect(verdict).toContain('Causa raiz dominante');
+    expect(verdict).toContain('visual e atratividade de clique');
+    expect(verdict).toContain('Primeira ação recomendada');
+    expect(verdict).toContain('imagem principal');
+  });
+
   it('evita depender de benchmark unavailable e prioriza sinais internos', () => {
     const verdict = buildVerdictText({
       listingTitle: 'Aspirador Vertical 2 em 1',

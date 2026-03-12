@@ -39,6 +39,7 @@ import type { ListingVisualAnalysis } from '../types/visual-analysis';
 import { VisualAnalysisOrchestrator } from '../services/visual/VisualAnalysisOrchestrator';
 import { VisualAnalysisRepository } from '../services/visual/VisualAnalysisRepository';
 import { attachAdsIntelligenceToPayload } from '../services/ads/attachAdsIntelligence';
+import { enrichAnalyzeResponseWithConsultingIntelligence } from '../services/AnalyzeConsultingEnricher';
 
 const prisma = new PrismaClient();
 const visualAnalysisOrchestrator = new VisualAnalysisOrchestrator(
@@ -1787,6 +1788,34 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
 
           await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
+          enrichAnalyzeResponseWithConsultingIntelligence(responseData, { listing });
+          responseData.verdictText = buildVerdictText({
+            rawVerdict: analysisV21?.verdict || responseData.critique,
+            metrics30d: {
+              visits: result.score.metrics_30d.visits,
+              orders: result.score.metrics_30d.orders,
+              conversionRate: result.score.metrics_30d.conversionRate,
+            },
+            hasPromotion: listing.has_promotion,
+            discountPercent: listing.discount_percent,
+            topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+            listingTitle: listing.title,
+            picturesCount: listing.pictures_count,
+            mediaVerdict: {
+              canSuggestClip: mediaVerdict?.canSuggestClip,
+              hasClipDetected: mediaVerdict?.hasClipDetected,
+            },
+            dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
+            analysisV21: analysisV21 as any,
+            scoreBreakdown: result.score.score.breakdown as any,
+            potentialGain: result.score.score.potential_gain as unknown as Record<string, unknown>,
+            benchmark: {
+              confidence: benchmarkResult?.benchmarkSummary?.confidence ?? null,
+              sampleSize: benchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+              baselineConversionRate: benchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+            },
+            rootCause: responseData,
+          });
 
           // Adicionar header com commit SHA
           setVersionHeader(reply);
@@ -2472,6 +2501,38 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         });
 
         await attachAdsIntelligenceToPayload(cacheResponseData, tenantId, listingId, request.log);
+        enrichAnalyzeResponseWithConsultingIntelligence(cacheResponseData, { listing });
+        cacheResponseData.verdictText = buildVerdictText({
+          rawVerdict: (cacheResponseData.analysisV21 as AIAnalysisResultExpert | undefined)?.verdict
+            || cacheResponseData.critique,
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          hasPromotion: listing.has_promotion,
+          discountPercent: listing.discount_percent,
+          topActions: (cacheResponseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+          listingTitle: listing.title,
+          picturesCount: listing.pictures_count,
+          mediaVerdict: {
+            canSuggestClip: mediaVerdict?.canSuggestClip,
+            hasClipDetected: mediaVerdict?.hasClipDetected,
+          },
+          dataQualityWarnings: mergeListingWarnings(
+            ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            listing,
+          ),
+          analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+          scoreBreakdown: scoreResult.score.breakdown as any,
+          potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
+          benchmark: {
+            confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+            sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+            baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+          },
+          rootCause: cacheResponseData,
+        });
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);
@@ -3263,6 +3324,37 @@ if (enableAIPing) {
         });
 
         await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
+        enrichAnalyzeResponseWithConsultingIntelligence(responseData, { listing });
+        responseData.verdictText = buildVerdictText({
+          rawVerdict: responseData.analysisV21?.verdict || responseData.critique,
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          hasPromotion: listing.has_promotion,
+          discountPercent: listing.discount_percent,
+          topActions: (responseData.growthHacks || []) as Array<{ title?: string; description?: string }>,
+          listingTitle: listing.title,
+          picturesCount: listing.pictures_count,
+          mediaVerdict: {
+            canSuggestClip: mediaVerdict?.canSuggestClip,
+            hasClipDetected: mediaVerdict?.hasClipDetected,
+          },
+          dataQualityWarnings: mergeListingWarnings(
+            ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            listing,
+          ),
+          analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+          scoreBreakdown: scoreResult.score.breakdown as any,
+          potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
+          benchmark: {
+            confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+            sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+            baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+          },
+          rootCause: responseData,
+        });
 
         // Adicionar header com commit SHA
         setVersionHeader(reply);

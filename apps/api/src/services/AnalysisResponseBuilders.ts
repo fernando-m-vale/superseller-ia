@@ -1,4 +1,5 @@
 import { formatConversionRatePercent } from '../utils/percentage-format';
+import type { RootCauseDiagnosis } from './RootCauseEngine';
 
 export type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance';
 
@@ -1169,6 +1170,7 @@ export function buildVerdictText(input: {
     sampleSize?: number | null;
     baselineConversionRate?: number | null;
   } | null;
+  rootCause?: Partial<RootCauseDiagnosis> | null;
 }): string {
   const funnelDiagnosis = buildFunnelBottleneckDiagnosis({
     metrics30d: input.metrics30d,
@@ -1202,6 +1204,10 @@ export function buildVerdictText(input: {
   const zeroOrders = orders === 0;
   const weakConversion = typeof crValue === 'number' ? crValue < 0.01 : zeroOrders;
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark ?? undefined);
+  const rootCauseSummary = String(input.rootCause?.rootCauseSummary || '').trim();
+  const rootCauseCode = String(input.rootCause?.diagnosisRootCause || '').trim();
+  const rootCauseConfidence = input.rootCause?.rootCauseConfidence;
+  const primaryRecommendation = String(input.rootCause?.primaryRecommendation || '').trim();
   const mediaEvidence = input.analysisV21?.image_plan?.some((step) => Boolean(step?.action && step.action.trim().length > 0)) ?? false;
   const mediaWeak = mediaEvidence || (((input.picturesCount ?? 0) > 0) && ((input.picturesCount ?? 0) < 6));
   const seoEvidence = Boolean(
@@ -1221,6 +1227,17 @@ export function buildVerdictText(input: {
     .map((pillar) => ({ pillar, value: breakdown[pillar] }))
     .filter((entry): entry is { pillar: ActionPillar; value: number } => typeof entry.value === 'number' && Number.isFinite(entry.value));
   const dominantPillar = availableScores.length > 0 ? availableScores.sort((a, b) => a.value - b.value)[0].pillar : null;
+  const rootCauseLabelMap: Record<string, string> = {
+    visual_low_ctr: 'visual e atratividade de clique',
+    seo_low_discovery: 'descoberta e SEO',
+    price_low_conversion: 'preco e promocao',
+    trust_low_conversion: 'confianca e prova social',
+    logistics_low_conversion: 'logistica e frete',
+    ads_traffic_low_return: 'retorno de ads',
+    content_low_conversion: 'conteudo e cadastro',
+    mixed_signal: 'sinais mistos',
+    insufficient_data: 'dados insuficientes',
+  };
 
   const summarize = (text?: string | null, max = 90): string | null => {
     const clean = String(text || '').replace(/\s+/g, ' ').trim();
@@ -1275,6 +1292,11 @@ export function buildVerdictText(input: {
   const executiveLines: string[] = [
     `${listingRef} registrou ${visits} visitas e ${orders} pedidos nos últimos 30 dias${cr ? `, com conversão de ${cr}` : ''}.`,
   ];
+  if (rootCauseCode) {
+    executiveLines.push(
+      `Causa raiz dominante: ${rootCauseLabelMap[rootCauseCode] || rootCauseCode}${typeof rootCauseConfidence === 'number' ? ` (${rootCauseConfidence}/100)` : ''}.`
+    );
+  }
   if (hasPromotion || zeroOrders) {
     executiveLines.push(`${promotionLine} ${zeroOrders ? 'Até aqui, o resultado é 0 pedidos.' : ''}`.trim());
   }
@@ -1295,6 +1317,9 @@ export function buildVerdictText(input: {
   }
 
   const diagnosisLines: string[] = [];
+  if (rootCauseSummary) {
+    diagnosisLines.push(rootCauseSummary);
+  }
   if (mainProblem === 'conversao' && hasPromotion) {
     diagnosisLines.push('Como o desconto já está ativo, o bloqueio parece menos de preço e mais de convencimento, confiança e percepção de valor.');
   } else if (mainProblem === 'descoberta') {
@@ -1339,6 +1364,9 @@ export function buildVerdictText(input: {
     `Prioridade operacional agora: ${topAction}.`,
     `${priorityReason}${gainHint}`,
   ];
+  if (primaryRecommendation) {
+    priorityLines.unshift(`Primeira ação recomendada: ${primaryRecommendation}`);
+  }
 
   const expectedResult = (() => {
     if (mainProblem === 'descoberta' || topActionPillar === 'seo') {

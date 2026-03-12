@@ -127,6 +127,14 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   // DIA 10: verdictText completo gerado pelo backend
   verdictText?: string
   visualScore?: number | null
+  diagnosisRootCause?: AIAnalysisResponse['diagnosisRootCause']
+  rootCauseConfidence?: number
+  rootCauseStage?: AIAnalysisResponse['rootCauseStage']
+  rootCauseSummary?: string
+  signalsUsed?: Record<string, unknown>
+  estimatedImpact?: AIAnalysisResponse['estimatedImpact']
+  primaryRecommendation?: string
+  recommendationPriority?: AIAnalysisResponse['recommendationPriority']
   dataFreshness?: string | null
 }
 
