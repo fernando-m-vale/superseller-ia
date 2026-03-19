@@ -109,9 +109,9 @@ A **análise automática de clip foi removida da experiência do usuário** por 
 ---
 
 ## Limitações atuais da análise
-
-- **Personalização de título e descrição** — Dia 14 backend implementado (causa raiz, confiança, prioridade); **camada de ação/consultoria em refinamento** (Dia 14.1).
+- **Personalização de título e descrição** — Dia 14 backend implementado (causa raiz, confiança, prioridade); **camada de ação/consultoria refinada e concluída como saneamento da Action Layer** (Dia 14.1).
 - **Discovery endpoint** bloqueado em alguns fluxos (fallback por orders); **atributos comerciais** ausentes em parte dos anúncios da categoria; **score visual** concentrado em faixa alta no conjunto testado; **oportunidade futura:** alertas de ROAS negativo.
+- **Operação — freshness/jobs**: investigação do comportamento real (lock_key/scheduler/JobRunner) concluída parcialmente; correção mínima segura ainda pendente de decisão.
 
 ---
 
@@ -146,8 +146,10 @@ Outros fatores continuam relevantes (categoria, preço, promoções, logística,
 - ✅ **Dia 11 — Data Layer + Jobs:** CONCLUÍDO (validado em produção — 21/21 testes PASS)
 - ✅ **Dia 12 — IA Visual:** CONCLUÍDO (validado em produção)
 - ✅ **Dia 13 — Ads Intelligence:** CONCLUÍDO (validado em produção)
-- 🔄 **Dia 14 — Refinamento da IA:** IMPLEMENTADO NO BACKEND, EM REFINAMENTO (camada de ação/consultoria)
-- 🎯 **Dia 14.1 — Action Layer Refinement:** Próxima etapa imediata
+- 🔄 **Dia 14 — Refinamento da IA:** IMPLEMENTADO NO BACKEND; fase de refinamento final na camada de ação/consultoria
+- ✅ **Dia 14.1 — Action Layer Refinement:** concluído como saneamento da Action Layer (seller-friendly + alinhamento end-to-end)
+
+**Próxima fase (pós-14.1):** Recommendation Engine V2 + validação real; paralelamente, tratar freshness/jobs como risco operacional
 
 Referência completa: `docs/ROADMAP.md`. Contexto Dia 14: `docs/DIA14_REFINEMENT_CONTEXT.md`. Escopo Dia 14.1: `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
 
@@ -155,7 +157,7 @@ Referência completa: `docs/ROADMAP.md`. Contexto Dia 14: `docs/DIA14_REFINEMENT
 
 ## Estado Atual do Produto
 
-O produto possui **Data Intelligence**, **Visual Intelligence**, **Ads Intelligence** e **Root Cause Intelligence** (backend implementado), com a **camada consultiva em refinamento** para UX e ação (Dia 14.1).
+O produto possui **Data Intelligence**, **Visual Intelligence**, **Ads Intelligence** e **Root Cause Intelligence** (backend implementado), com a **camada consultiva já refinada** (Dia 14.1 concluído como saneamento da Action Layer).
 
 ### Engine 1 — Data Intelligence
 

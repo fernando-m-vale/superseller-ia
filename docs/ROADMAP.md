@@ -1,5 +1,5 @@
 # ROADMAP — SuperSeller IA
-Atualizado em: 2026-03-12
+Atualizado em: 2026-03-19
 
 Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 
@@ -8,8 +8,9 @@ Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 ## Estado atual
 
 - **Dias 11, 12 e 13:** ✅ CONCLUÍDOS (validados em produção — 21/21 testes PASS, tenant RB Store)
-- **Dia 14 — Refinamento da IA:** 🔄 IMPLEMENTADO NO BACKEND, EM REFINAMENTO (camada de ação/consultoria)
-- **Dia 14.1 — Action Layer Refinement:** 🎯 Próxima etapa imediata
+- **Dia 14 — Refinamento da IA:** 🔄 IMPLEMENTADO NO BACKEND (RootCauseEngine + AnalyzeConsultingEnricher); fase final na camada de ação/consultoria
+- **Dia 14.1 — Action Layer Refinement:** ✅ Concluído como saneamento da Action Layer
+- **Dia 15 — Recommendation Engine V2 + Freshness/Jobs:** 🔄 Backend implementado; aguardando validação real + decisão operacional
 
 ---
 
@@ -45,25 +46,27 @@ Este é o roadmap **ativo** do projeto (referência para as próximas sessões).
 
 ## DIA 14 — Refinamento da IA 🔄 EM REFINAMENTO
 
-**Status:** Backend implementado (RootCauseEngine, AnalyzeConsultingEnricher, novos campos no analyze). **Dia 14 ainda NÃO encerrado** — camada de ação/consultoria em refinamento (Dia 14.1).
+**Status:** Backend implementado (RootCauseEngine, AnalyzeConsultingEnricher, novos campos no analyze). Dia 14.1 já foi concluído como saneamento da camada de ação/consultoria.
 
 **Implementado:** diagnosisRootCause, rootCauseConfidence, rootCauseStage, rootCauseSummary, signalsUsed, estimatedImpact, primaryRecommendation, recommendationPriority; integração em analyze fresh, cache hit, GET latest. Validação funcional inicial: causa raiz mais coerente, uso real de sinais; pendências: confiança mais realista, texto/linguagem, cards alinhados à causa raiz, clip rebaixado da UX.
 
-**Próximo passo:** Dia 14.1 — Action Layer Refinement. Ver `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
+**Próximo passo:** Dia 15 — Recommendation Engine V2 + validação real; e freshness/jobs como risco operacional pendente.
 
 ---
 
 ## DIA 14.1 — Action Layer Refinement 🎯 PRÓXIMA ETAPA IMEDIATA
 
-**Objetivo:** Transformar o bom diagnóstico do backend em resposta mais clara, direta, priorizada e acionável na UX.
+**Objetivo (hoje concluído):** Transformar o bom diagnóstico do backend em resposta mais clara, direta, priorizada e acionável na UX (saneamento da Action Layer).
 
-**Escopo:** alinhar diagnóstico/verdict/cards/roadmap; reduzir redundância entre cards; separar Fazer agora / Melhorias de suporte / Boas práticas; cards objetivos e executáveis; linguagem para seller; confiança mais realista quando dados ausentes; clip rebaixado da UX principal; ligação causa raiz ↔ ação prioritária. Ver `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md` e `docs/NEXT_SESSION_PLAN.md`.
+**Escopo (concluído):** alinhar diagnóstico/verdict/cards/roadmap; reduzir redundância entre cards; separar Fazer agora / Melhorias de suporte / Boas práticas; linguagem para seller; expand/collapse do `verdictText`; evitar ruído de benchmark; clip rebaixado da UX principal; ligação causa raiz ↔ ação prioritária. Ver `docs/DIA14_1_ACTION_LAYER_REFINEMENT.md`.
 
 ---
 
-## DIA 15 — Onboarding inteligente
+## DIA 15 — Recommendation Engine V2 + Freshness/Jobs
 
-**Fluxo ideal:** login → conectar Mercado Livre → escolher anúncio → primeira vitória.
+**Objetivo:** Validar variedade/coerência da Recommendation Engine V2 em casos reais (menor sensação de template, evidência forte, Ads virando ação quando relevante e ausência de ruído técnico) e validar a frente de freshness/jobs (lock_key/scheduler/JobRunner) para decidir correção mínima segura.
+
+**Status:** BACKEND implementado; validação real pendente; UX ajustes somente se a validação apontar necessidade; correção operacional de freshness pendente de decisão.
 
 ---
 

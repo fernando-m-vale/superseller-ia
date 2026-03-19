@@ -2,6 +2,37 @@
 
 ---
 
+## ✅ Sessão de 2026-03-19 — Fechamento Dia 14.1 + validação futura (Recommendation Engine V2) + freshness/jobs
+
+**Objetivo da sessão:** Consolidar o fechamento do Dia 14.1 como saneamento da Action Layer, registrar a evolução para Recommendation Engine V2 implementada no backend e deixar documentada a frente operacional freshness/jobs (risco operacional pendente de decisão).
+
+## Resumo executivo
+1) Encerramos o Dia 14.1 como saneamento/refinamento da Action Layer (UX seller-friendly, coerência end-to-end, clip rebaixado na experiência principal e `verdictText` com expand/collapse real).  
+2) A prioridade evoluiu para Recommendation Engine V2 no backend (com testes atualizados), cujo próximo passo é validação em casos reais.  
+3) A investigação de freshness/jobs concluiu que é uma preocupação operacional real (lock_key/scheduler/JobRunner), com correção mínima segura pendente de evidência.
+
+## Principais decisões
+- **Dia 14.1:** concluído como saneamento da Action Layer (não mais “genérico” — base seller-friendly e coerente).
+- **Próximo foco:** validar Recommendation Engine V2 em produção/contas reais; ajustar UX somente se validação indicar necessidade.
+- **Freshness/jobs:** tratar como risco operacional pendente; decidir correção mínima segura amanhã após validação.
+
+## Implementado/atualizado nesta sessão
+- **Backend:** Recommendation Engine V2 implementada com testes atualizados.
+- **Frontend/UX:** ajustes de expand/collapse de `verdictText`, sanitização para evitar vazamento técnico e hierarquia seller-friendly; benchmark/clip rebaixados para reduzir ruído.
+
+## Validações executadas nesta sessão
+- **Frontend:** `pnpm -C apps/web lint` e `pnpm -C apps/web build`.
+- **Backend:** testes atualizados para a Recommendation Engine V2 (feito pelo Codex).
+
+## Status final do dia
+- **Recommendation Engine V2:** implementado no backend; validação real pendente.
+- **Frontend/UX:** ajustes seller-friendly consolidados como base para a validação da engine V2.
+- **Freshness/jobs:** investigado como risco operacional real; correção mínima segura pendente de decisão após evidência.
+
+## Pendências para amanhã
+1. Validar Recommendation Engine V2 em 2–3 listings reais (variedade de cards, evidência forte para categoria, Ads → ação quando relevante, coerência end-to-end e ausência de ruído técnico).
+2. Tratar freshness/jobs via checklist operacional (lock_key, status de scheduler e execução do JobRunner) e decidir correção mínima segura.
+
 ## ✅ Validação oficial Dias 11–13 + Estado Dia 14 + Formalização Dia 14.1 — 2026-03-12
 
 **Objetivo:** Registrar validação em produção dos Dias 11–13, estado atual do Dia 14, decisão estratégica e próxima etapa (Dia 14.1).
