@@ -57,6 +57,8 @@ describe('ScoreExplanationService', () => {
       const midiaExplanation = explanations.find((e) => e.includes('Mídia'));
       expect(midiaExplanation).toBeTruthy();
       expect(midiaExplanation).toContain('15');
+      expect(midiaExplanation?.toLowerCase()).not.toContain('clip');
+      expect(midiaExplanation?.toLowerCase()).not.toContain('video');
     });
 
     it('should explain performance when performanceAvailable=true', () => {

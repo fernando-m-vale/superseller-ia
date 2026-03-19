@@ -1116,14 +1116,65 @@ function assignActionGroup(
 
 function dedupeActions(actions: MvpActionItem[]): MvpActionItem[] {
   const seen = new Set<string>();
-  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const normalize = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const getSemanticFingerprint = (action: MvpActionItem): string => {
+    const haystack = normalize(`${action.title} ${action.summary} ${action.description}`);
 
-  return actions.filter((action) => {
-    const fingerprint = normalize(`${action.pillar} ${action.title}`)
+    if (
+      action.pillar === 'seo' &&
+      haystack.includes('titulo') &&
+      (
+        haystack.includes('reescrever') ||
+        haystack.includes('clareza') ||
+        haystack.includes('busca') ||
+        haystack.includes('atribut') ||
+        haystack.includes('modelo') ||
+        haystack.includes('index')
+      )
+    ) {
+      return 'seo:title_rewrite';
+    }
+
+    if (
+      action.pillar === 'seo' &&
+      (
+        haystack.includes('descricao') ||
+        haystack.includes('copy') ||
+        haystack.includes('beneficio') ||
+        haystack.includes('faq')
+      )
+    ) {
+      return 'seo:description_rewrite';
+    }
+
+    if (
+      action.pillar === 'midia' &&
+      (
+        haystack.includes('imagem') ||
+        haystack.includes('foto') ||
+        haystack.includes('galeria') ||
+        haystack.includes('capa') ||
+        haystack.includes('visual')
+      )
+    ) {
+      return 'midia:gallery_upgrade';
+    }
+
+    return normalize(`${action.pillar} ${action.title}`)
       .split(' ')
       .filter((token) => token.length > 3)
       .slice(0, 6)
       .join(' ');
+  };
+
+  return actions.filter((action) => {
+    const fingerprint = getSemanticFingerprint(action);
 
     if (!fingerprint) return true;
     if (seen.has(fingerprint)) return false;
@@ -1393,19 +1444,16 @@ export function buildVerdictText(input: {
     insufficient_data: 'ainda faltam sinais para cravar uma causa principal',
   };
 
-  const summarize = (text?: string | null, max = 90): string | null => {
+  const summarize = (text?: string | null): string | null => {
     const clean = String(text || '').replace(/\s+/g, ' ').trim();
-    if (!clean) return null;
-    if (clean.length <= max) return clean;
-    return `${clean.slice(0, max - 1).trimEnd()}…`;
+    return clean || null;
   };
 
   const topAction = top[0] || 'priorizar o ajuste com maior evidência operacional';
-  const titleProblem = summarize(input.analysisV21?.title_fix?.problem, 96);
-  const descriptionDiagnostic = summarize(input.analysisV21?.description_fix?.diagnostic, 96);
+  const titleProblem = summarize(input.analysisV21?.title_fix?.problem);
+  const descriptionDiagnostic = summarize(input.analysisV21?.description_fix?.diagnostic);
   const imageHint = summarize(
-    (input.analysisV21?.image_plan || []).find((step) => typeof step?.action === 'string' && step.action.trim().length > 0)?.action,
-    92
+    (input.analysisV21?.image_plan || []).find((step) => typeof step?.action === 'string' && step.action.trim().length > 0)?.action
   );
   const mainProblem = rootCauseCode
     ? rootCauseLabelMap[rootCauseCode] || 'há um problema principal no anúncio'

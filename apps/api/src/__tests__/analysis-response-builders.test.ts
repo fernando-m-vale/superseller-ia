@@ -474,4 +474,58 @@ describe('AnalysisResponseBuilders', () => {
     expect(descriptionAction?.executionPayload?.readyCopy).toContain('copy pronta');
     expect(descriptionAction?.executionPayload?.practicalApplication).toContain('FAQ');
   });
+
+  it('não trunca artificialmente o verdictText montado no backend', () => {
+    const longDiagnostic = 'A descrição atual não explica autonomia real, compatibilidade com acessórios, cenário de uso em apartamento, rotina de limpeza rápida e diferença prática entre os modos de potência para quem está comparando opções na categoria.';
+    const verdict = buildVerdictText({
+      listingTitle: 'Aspirador Vertical Turbo',
+      metrics30d: { visits: 210, orders: 1, conversionRate: 0.0047 },
+      analysisV21: {
+        description_fix: {
+          diagnostic: longDiagnostic,
+        },
+      },
+      topActions: [{ title: 'Reescrever descrição com benefícios, FAQ e aplicações reais' }],
+    });
+
+    expect(verdict).toContain(longDiagnostic);
+    expect(verdict).not.toContain('…');
+  });
+
+  it('colapsa ações semanticamente equivalentes de título em uma única ação principal', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Refil Purificador X200',
+      metrics30d: { visits: 28, orders: 0, conversionRate: 0 },
+      analysisV21: {
+        title_fix: {
+          after: 'Refil Purificador X200 Compatível 9 3/4 Pol',
+          problem: 'O título não deixa claro modelo compatível, medida e atributo principal de busca.',
+        },
+      },
+      hackActions: [
+        {
+          id: 'title_a',
+          title: 'Reescrever título com busca real e atributos principais',
+          summary: 'Deixar o título mais encontrável para buscas de alta intenção.',
+          impact: 'high',
+          priority: 'high',
+          confidence: 88,
+          evidence: ['Baixa descoberta'],
+        },
+        {
+          id: 'title_b',
+          title: 'Reescrever título com mais clareza de busca',
+          summary: 'Tornar o título mais específico para o comprador certo.',
+          impact: 'high',
+          priority: 'high',
+          confidence: 84,
+          evidence: ['Termos genéricos'],
+        },
+      ],
+      maxItems: 6,
+    });
+
+    const titleActions = actions.filter((action) => action.pillar === 'seo' && /titulo|título/i.test(action.title));
+    expect(titleActions).toHaveLength(1);
+  });
 });

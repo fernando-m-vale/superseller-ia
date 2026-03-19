@@ -1,14 +1,11 @@
 /**
- * IAScoreService - has_clips como fonte de verdade para midia score
+ * IAScoreService - clip não altera score seller-facing de mídia
  *
- * Valida que o cálculo de midia score e potential gain usam has_clips
- * (fonte de verdade) e NÃO has_video (legado).
+ * Valida que o cálculo seller-facing de mídia considera apenas a galeria.
  *
  * Cenários:
- * - Listing COM clip (has_clips=true): deve ganhar 10 pontos de vídeo
- * - Listing SEM clip (has_clips=false): deve perder 10 pontos de vídeo
- * - Listing com clip desconhecido (has_clips=null): deve perder 10 pontos de vídeo
- * - Divergência has_video vs has_clips: has_clips prevalece
+ * - has_clips não deve mudar o score exibido
+ * - has_video legado também não deve influenciar
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -95,7 +92,7 @@ function createMockListing(overrides: {
   };
 }
 
-describe('IAScoreService - has_clips como fonte de verdade para midia', () => {
+describe('IAScoreService - mídia seller-facing sem clip', () => {
   const tenantId = 'test-tenant';
 
   beforeEach(() => {
@@ -104,87 +101,71 @@ describe('IAScoreService - has_clips como fonte de verdade para midia', () => {
     mockFindMany.mockResolvedValue([]);
   });
 
-  it('Listing COM clip (has_clips=true): midia score inclui 10 pontos de vídeo', async () => {
+  it('Listing COM clip (has_clips=true): midia score depende só das fotos', async () => {
     const listing = createMockListing({ has_clips: true, has_video: true, pictures_count: 8 });
     mockFindFirst.mockResolvedValue(listing);
 
     const service = new IAScoreService(tenantId);
     const result = await service.calculateScore('test-listing-id');
 
-    // Midia: 10 (fotos >= 6) + 10 (has_clips = true) = 20
-    expect(result.score.breakdown.midia).toBe(20);
-    // Potential gain: sem ganho em midia (já está no máximo)
+    expect(result.score.breakdown.midia).toBe(10);
     expect(result.score.potential_gain.midia).toBeUndefined();
   });
 
-  it('Listing SEM clip (has_clips=false): midia score NÃO inclui pontos de vídeo', async () => {
+  it('Listing SEM clip (has_clips=false): midia score segue igual com fotos fortes', async () => {
     const listing = createMockListing({ has_clips: false, has_video: false, pictures_count: 8 });
     mockFindFirst.mockResolvedValue(listing);
 
     const service = new IAScoreService(tenantId);
     const result = await service.calculateScore('test-listing-id');
 
-    // Midia: 10 (fotos >= 6) + 0 (has_clips = false) = 10
     expect(result.score.breakdown.midia).toBe(10);
-    // Potential gain: +10 vídeo
-    expect(result.score.potential_gain.midia).toContain('+10');
+    expect(result.score.potential_gain.midia).toBeUndefined();
   });
 
-  it('Listing com clip desconhecido (has_clips=null): midia score NÃO inclui pontos de vídeo E NÃO mostra ganho potencial', async () => {
+  it('Listing com clip desconhecido (has_clips=null): midia score também não muda', async () => {
     const listing = createMockListing({ has_clips: null, has_video: null, pictures_count: 8 });
     mockFindFirst.mockResolvedValue(listing);
 
     const service = new IAScoreService(tenantId);
     const result = await service.calculateScore('test-listing-id');
 
-    // Midia: 10 (fotos >= 6) + 0 (has_clips = null, não é true) = 10
     expect(result.score.breakdown.midia).toBe(10);
-    // Potential gain: NÃO deve mostrar ganho de clip (null = não detectável via API, limitação da API)
-    // Se tem fotos suficientes, não deve mostrar ganho de clip
     expect(result.score.potential_gain.midia).toBeUndefined();
   });
 
-  it('DIVERGÊNCIA: has_video=true mas has_clips=false → has_clips prevalece (0 pontos vídeo)', async () => {
-    // Cenário de divergência: has_video ficou true (legado) mas has_clips é false (fonte de verdade)
+  it('DIVERGÊNCIA: has_video=true mas has_clips=false → score seller-facing permanece igual', async () => {
     const listing = createMockListing({ has_clips: false, has_video: true, pictures_count: 8 });
     mockFindFirst.mockResolvedValue(listing);
 
     const service = new IAScoreService(tenantId);
     const result = await service.calculateScore('test-listing-id');
 
-    // has_clips=false deve prevalecer → 0 pontos de vídeo
-    // Midia: 10 (fotos >= 6) + 0 (has_clips = false) = 10
     expect(result.score.breakdown.midia).toBe(10);
-    expect(result.score.potential_gain.midia).toContain('+10');
+    expect(result.score.potential_gain.midia).toBeUndefined();
   });
 
-  it('DIVERGÊNCIA: has_video=false mas has_clips=true → has_clips prevalece (10 pontos vídeo)', async () => {
-    // Cenário de divergência: has_video ficou false (legado) mas has_clips é true (fonte de verdade)
+  it('DIVERGÊNCIA: has_video=false mas has_clips=true → score seller-facing permanece igual', async () => {
     const listing = createMockListing({ has_clips: true, has_video: false, pictures_count: 8 });
     mockFindFirst.mockResolvedValue(listing);
 
     const service = new IAScoreService(tenantId);
     const result = await service.calculateScore('test-listing-id');
 
-    // has_clips=true deve prevalecer → 10 pontos de vídeo
-    // Midia: 10 (fotos >= 6) + 10 (has_clips = true) = 20
-    expect(result.score.breakdown.midia).toBe(20);
+    expect(result.score.breakdown.midia).toBe(10);
     expect(result.score.potential_gain.midia).toBeUndefined();
   });
 
-  it('Listing SEM clip + poucas fotos: midia score reflete ambos', async () => {
+  it('Listing com poucas fotos: midia score reflete só a galeria', async () => {
     const listing = createMockListing({ has_clips: false, has_video: false, pictures_count: 4 });
     mockFindFirst.mockResolvedValue(listing);
 
     const service = new IAScoreService(tenantId);
     const result = await service.calculateScore('test-listing-id');
 
-    // Midia: 5 (fotos >= 3) + 0 (has_clips = false) = 5
     expect(result.score.breakdown.midia).toBe(5);
-    // Potential gain: fotos + clip
-    expect(result.score.potential_gain.midia).toBeDefined();
     expect(result.score.potential_gain.midia).toContain('+10');
-    expect(result.score.potential_gain.midia).toContain('clip');
+    expect(result.score.potential_gain.midia?.toLowerCase()).not.toContain('clip');
   });
 
   it('incorpora logística real, prova social e atributos comerciais no score', async () => {

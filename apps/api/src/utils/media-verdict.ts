@@ -5,12 +5,10 @@
  * sobre clips (vídeo) de anúncios, garantindo que nunca afirmemos ausência
  * quando os dados são null ou true.
  * 
- * IMPORTANTE: No Mercado Livre, sellers têm "CLIP". Usar termo "clip" consistentemente.
- * 
  * REGRAS OBRIGATÓRIAS:
- * - hasClips === true  → canSuggestClip = false, message afirma presença
- * - hasClips === false → canSuggestClip = true, message sugere adicionar
- * - hasClips === null  → canSuggestClip = false, message SEMPRE condicional
+ * - hasClips continua existindo apenas como sinal interno
+ * - o seller-facing não recomenda nem exibe clip
+ * - a mensagem pública deve focar em leitura visual/galeria
  */
 
 export interface MediaVerdict {
@@ -18,9 +16,9 @@ export interface MediaVerdict {
   clipStatus: 'HAS_CLIP' | 'NO_CLIP' | 'INCONCLUSIVE';
   /** Se clip foi detectado via API (true) ou não (false) ou não detectável (null) */
   hasClipDetected: boolean | null;
-  /** Se é seguro sugerir adicionar clip (false quando já tem ou quando null) */
+  /** Mantido por compatibilidade; seller-facing não recomenda clip */
   canSuggestClip: boolean;
-  /** Mensagem determinística que pode ser usada em UI/IA */
+  /** Mensagem pública focada em galeria/qualidade visual */
   message: string;
   /** Mensagem curta para tooltips/badges */
   shortMessage: string;
@@ -37,52 +35,40 @@ export function getMediaVerdict(
   hasClips: boolean | null,
   picturesCount?: number | null
 ): MediaVerdict {
-  // REGRA 1: hasClips === true → NUNCA sugerir clip, SEMPRE afirmar presença
+  const picturesContext = picturesCount !== null && picturesCount !== undefined
+    ? picturesCount >= 8
+      ? ' Galeria já está robusta.'
+      : picturesCount >= 6
+      ? ' Galeria está suficiente.'
+      : ' Ainda vale ampliar a galeria com mais contexto visual.'
+    : '';
+
   if (hasClips === true) {
     return {
       clipStatus: 'HAS_CLIP',
       hasClipDetected: true,
       canSuggestClip: false,
-      message: 'O anúncio possui clip. Mídia está completa.',
-      shortMessage: 'Clip presente',
+      message: `A mídia do anúncio já conta com boa cobertura visual.${picturesContext}`,
+      shortMessage: 'Cobertura visual forte',
     };
   }
 
-  // REGRA 2: hasClips === false → PODE sugerir clip, afirmar ausência
   if (hasClips === false) {
-    const picturesContext = picturesCount !== null && picturesCount !== undefined
-      ? picturesCount >= 8
-        ? ' Imagens estão suficientes.'
-        : picturesCount >= 6
-        ? ' Considere adicionar mais imagens também.'
-        : ' Considere adicionar mais imagens e clip.'
-      : '';
-    
     return {
       clipStatus: 'NO_CLIP',
       hasClipDetected: false,
-      canSuggestClip: true,
-      message: `O anúncio não possui clip. Adicionar clip demonstrando o produto em uso pode melhorar engajamento e conversão.${picturesContext}`,
-      shortMessage: 'Sem clip',
+      canSuggestClip: false,
+      message: `A prioridade de mídia aqui é fortalecer a galeria e o contexto visual da oferta.${picturesContext}`,
+      shortMessage: 'Galeria pode evoluir',
     };
   }
 
-  // REGRA 3: hasClips === null → NUNCA sugerir clip, SEMPRE linguagem condicional
-  // IMPORTANTE: Para MLB, Clips não são detectáveis via API pública (limitação da API)
-  const picturesContext = picturesCount !== null && picturesCount !== undefined
-    ? picturesCount >= 8
-      ? ' Imagens estão boas.'
-      : picturesCount >= 6
-      ? ' Imagens estão suficientes.'
-      : ' Considere adicionar mais imagens.'
-    : '';
-  
   return {
     clipStatus: 'INCONCLUSIVE',
     hasClipDetected: null,
     canSuggestClip: false,
-    message: `Não foi possível determinar via API se o anúncio possui clip. Validar clip manualmente no anúncio.${picturesContext}`,
-    shortMessage: 'Não detectável via API',
+    message: `A leitura visual foi avaliada com base na galeria disponível.${picturesContext}`,
+    shortMessage: 'Leitura visual parcial',
   };
 }
 

@@ -308,22 +308,7 @@ export class BenchmarkService {
       recommendations.push(`Adicionar ${gap} imagens para alcançar a média da categoria`);
     }
 
-    // 2. Clip
-    if (stats.percentageWithVideo > 50) {
-      // Maioria dos concorrentes tem clip
-      if (listing.hasClips === true) {
-        youWinHere.push(`Seu anúncio possui clip, como ${Math.round(stats.percentageWithVideo)}% dos concorrentes`);
-      } else if (listing.hasClips === false) {
-        youLoseHere.push(`${Math.round(stats.percentageWithVideo)}% dos concorrentes têm clip e seu anúncio ainda não possui clip`);
-        recommendations.push('Adicionar clip para aumentar confiança e engajamento');
-      } else {
-        // null = não detectável
-        youLoseHere.push(`${Math.round(stats.percentageWithVideo)}% dos concorrentes têm clip detectável`);
-        recommendations.push('Verificar se o anúncio possui clip; se não possuir, considere adicionar');
-      }
-    }
-
-    // 3. Título
+    // 2. Título
     if (listing.titleLength >= stats.medianTitleLength) {
       youWinHere.push(`Seu título tem ${listing.titleLength} caracteres, acima da média de ${Math.round(stats.medianTitleLength)}`);
     } else if (listing.titleLength < stats.medianTitleLength) {
@@ -332,7 +317,7 @@ export class BenchmarkService {
       recommendations.push(`Expandir título em ${gap} caracteres para alcançar a média da categoria`);
     }
 
-    // 4. Competitividade de preço (apenas se não houver promo agressiva)
+    // 3. Competitividade de preço (apenas se não houver promo agressiva)
     if (stats.medianPrice > 0) {
       const priceDiff = ((listing.price - stats.medianPrice) / stats.medianPrice) * 100;
       if (priceDiff > 20 && !listing.hasPromotion) {
@@ -347,7 +332,7 @@ export class BenchmarkService {
       }
     }
 
-    // 5. Expected vs Actual Orders (se baseline disponível)
+    // 4. Expected vs Actual Orders (se baseline disponível)
     if (baselineConversion.conversionRate !== null && baselineConversion.confidence !== 'unavailable') {
       if (metrics30d.visits >= MIN_VISITS_FOR_CR_CONFIDENCE) {
         const expectedOrders = metrics30d.visits * baselineConversion.conversionRate;

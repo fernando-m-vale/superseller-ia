@@ -162,30 +162,7 @@ export function rankGaps(
     });
   }
 
-  // 2. Gap de clip (categoria tem alta % com clip e listing sem clip detectável)
-  if (stats.percentageWithVideo > 50) {
-    // HOTFIX: Só sugerir clip se hasClips === false (confirmado que não tem)
-    // Se hasClips === null (não detectável), não acusar falta
-    if (listing.hasClips === false) {
-      gaps.push({
-        id: 'gap_video',
-        dimension: 'video',
-        title: 'Adicionar clip para aumentar confiança e engajamento',
-        whyItMatters: `${Math.round(stats.percentageWithVideo)}% dos concorrentes têm clip. Clips aumentam confiança e conversão.`,
-        impact: 'high',
-        effort: 'medium',
-        confidence: stats.sampleSize >= 10 ? 'high' : 'medium',
-        metrics: {
-          competitorsWithVideo: Math.round(stats.percentageWithVideo),
-          hasVideo: 'false',
-        },
-      });
-    }
-    // HOTFIX: hasClips === null → não acusar falta, não adicionar gap
-    // O MediaVerdict já trata isso corretamente (canSuggestClip = false quando null)
-  }
-
-  // 3. Gap de título (titleLength muito fora da mediana)
+  // 2. Gap de título (titleLength muito fora da mediana)
   if (stats.medianTitleLength > 0) {
     const titleDiff = Math.abs(listing.titleLength - stats.medianTitleLength);
     const titleDiffPercent = (titleDiff / stats.medianTitleLength) * 100;
@@ -228,7 +205,7 @@ export function rankGaps(
     }
   }
 
-  // 4. Gap de conversão vs promo (promo ativa + CR abaixo do baseline)
+  // 3. Gap de conversão vs promo (promo ativa + CR abaixo do baseline)
   // Só gerar se baseline estiver disponível (não inventar números)
   if (
     listing.hasPromotion &&
@@ -319,28 +296,7 @@ function generateFallbackGaps(
 ): CriticalGap[] {
   const gaps: CriticalGap[] = [];
 
-  // 1. Gap de clip (se não há clip e pode sugerir)
-  if (
-    listing.hasClips === false &&
-    fallbackData?.mediaVerdict?.canSuggestClip === true
-  ) {
-    gaps.push({
-      id: 'gap_video_fallback',
-      dimension: 'video',
-      title: 'Adicionar clip para aumentar confiança e engajamento',
-      whyItMatters: 'Clips aumentam a confiança do comprador e podem melhorar a conversão.',
-      impact: 'high',
-      effort: 'medium',
-      confidence: 'medium',
-      metrics: {
-        hasVideo: 'false',
-        source: 'internal_heuristics',
-        fieldsUsed: 'hasClips,mediaVerdict.canSuggestClip',
-      },
-    });
-  }
-
-  // 2. Gap de título (se há sugestão de título ou problema detectado)
+  // 1. Gap de título (se há sugestão de título ou problema detectado)
   const analysisV21 = fallbackData?.analysisV21;
   const hasTitleProblem = analysisV21 && typeof analysisV21 === 'object' && 'titleFix' in analysisV21
     ? (analysisV21.titleFix as { problem?: string })?.problem
@@ -366,7 +322,7 @@ function generateFallbackGaps(
     });
   }
 
-  // 3. Gap de imagens (se tiver poucas imagens)
+  // 2. Gap de imagens (se tiver poucas imagens)
   if (listing.picturesCount < 5) {
     gaps.push({
       id: 'gap_images_fallback',
@@ -384,7 +340,7 @@ function generateFallbackGaps(
     });
   }
 
-  // 4. Gap de descrição (se há problema detectado)
+  // 3. Gap de descrição (se há problema detectado)
   const hasDescriptionProblem = analysisV21 && typeof analysisV21 === 'object' && 'descriptionFix' in analysisV21
     ? (analysisV21.descriptionFix as { diagnostic?: string })?.diagnostic
     : undefined;

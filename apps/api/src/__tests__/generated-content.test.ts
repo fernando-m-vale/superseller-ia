@@ -83,7 +83,7 @@ describe('GeneratedContentService', () => {
     expect(hasVideoMention).toBe(false);
   });
 
-  it('deve mencionar vídeo apenas se hasClips for true', () => {
+  it('não deve mencionar clip mesmo se hasClips for true', () => {
     const listing = {
       title: 'Produto Teste',
       description: 'Descrição',
@@ -100,11 +100,13 @@ describe('GeneratedContentService', () => {
 
     const content = generateListingContent(listing, criticalGaps);
 
-    // Verificar que algum bullet menciona vídeo
+    // A UX principal não deve exibir clip
     const hasVideoMention = content.bullets.some(b => 
       b.toLowerCase().includes('vídeo') || b.toLowerCase().includes('video') || b.toLowerCase().includes('clip')
     );
-    expect(hasVideoMention).toBe(true);
+    expect(hasVideoMention).toBe(false);
+    expect(content.seoDescription.short.toLowerCase()).not.toContain('clip');
+    expect(content.seoDescription.long.toLowerCase()).not.toContain('clip');
   });
 
   it('deve mencionar promoção quando hasPromotion=true e discountPercent>=20', () => {

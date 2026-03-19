@@ -285,9 +285,7 @@ export class IAScoreService {
    * Regras:
    * - pictures_count >= 3: 10 pontos (parcial)
    * - pictures_count >= 6: 10 pontos (ideal)
-   * - has_clips = true: 10 pontos (Clips do ML - curtos verticais)
-   * 
-   * IMPORTANTE: has_clips === null (não detectável via API) não penaliza (não subtrai pontos)
+   * IMPORTANTE: presença/ausência de clip não altera o score seller-facing
    */
   private calculateMidiaScore(listing: {
     pictures_count: number | null;
@@ -302,11 +300,6 @@ export class IAScoreService {
       score += 10; // Ideal
     } else if (picturesCount >= 3) {
       score += 5; // Parcial
-    }
-
-    // Clip (vídeo) — usar has_clips como fonte de verdade
-    if (listing.has_clips === true) {
-      score += 10;
     }
 
     return score;
@@ -447,12 +440,6 @@ export class IAScoreService {
         gain.midia = '+10';
       }
     }
-    // Só mostrar ganho de clip se has_clips === false (confirmado que não tem)
-    // Se has_clips === null (não detectável via API), não mostrar ganho (limitação da API)
-    if (listing.has_clips === false) {
-      gain.midia = gain.midia ? `${gain.midia} (+10 clip)` : '+10';
-    }
-
     // Performance
     if (breakdown.performance < 20) {
       const missing = 20 - breakdown.performance;

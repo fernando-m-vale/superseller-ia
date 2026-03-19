@@ -7,7 +7,6 @@
 
 import { IAScoreBreakdown } from './IAScoreService';
 import { DataQuality } from './ScoreActionEngine';
-import { getMediaVerdict } from '../utils/media-verdict';
 
 export interface MediaInfo {
   hasClips: boolean | null; // null = indisponível via API (no ML, clip = vídeo)
@@ -37,63 +36,33 @@ export function explainScore(
     explanations.push('Cadastro está completo (20/20 pontos).');
   }
 
-  // Mídia (0-20) - Usar MediaVerdict como fonte única de verdade (apenas hasClips)
+  // Mídia (0-20) - seller-facing focado em galeria, sem mencionar clip
   const midiaLost = 20 - scoreBreakdown.midia;
   if (midiaLost > 0) {
     const picturesCount = mediaInfo?.picturesCount ?? 0;
-    const hasClips = mediaInfo?.hasClips;
-    const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
-    
-    // Construir explicação baseada no MediaVerdict
     const reasons: string[] = [];
-    
-    // Se tem clip detectado, não mencionar falta de clip
-    if (verdict.hasClipDetected === true) {
-      // Tem clip, só mencionar imagens se necessário
-      if (picturesCount < 6) {
-        reasons.push(`poucas imagens (${picturesCount})`);
-      }
-    } else if (verdict.hasClipDetected === false) {
-      // Não tem clip (certeza) - pode mencionar
-      reasons.push('não ter clip');
-      if (picturesCount < 6) {
-        reasons.push(`poucas imagens (${picturesCount})`);
-      }
+
+    if (picturesCount < 6) {
+      reasons.push(`poucas imagens (${picturesCount})`);
+    } else if (picturesCount < 8) {
+      reasons.push(`galeria ainda curta para sustentar melhor a decisão (${picturesCount} imagens)`);
     } else {
-      // hasClips === null: usar mensagem do verdict (sempre condicional)
-      if (picturesCount >= 8) {
-        explanations.push(
-          `Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. ` +
-          `Fotos estão boas (${picturesCount}), mas ${verdict.message.toLowerCase()}`
-        );
-      } else if (picturesCount >= 6) {
-        explanations.push(
-          `Você perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} em Mídia. ` +
-          `Imagens estão suficientes (${picturesCount}), mas ${verdict.message.toLowerCase()}`
-        );
-      } else {
-        reasons.push(`poucas imagens (${picturesCount})`);
-        reasons.push(verdict.message.toLowerCase());
-      }
+      reasons.push('há espaço para melhorar contexto de uso, prova visual e ordem da galeria');
     }
-    
-    // Se já não gerou explicação acima, construir com reasons
-    if (reasons.length > 0 && !explanations.some(e => e.includes('Mídia'))) {
+
+    if (reasons.length > 0) {
       const reasonText = reasons.length === 1 
         ? reasons[0]
         : reasons.slice(0, -1).join(', ') + ' e ' + reasons[reasons.length - 1];
       explanations.push(`Mídia perdeu ${midiaLost} ponto${midiaLost > 1 ? 's' : ''} porque a apresentação visual ainda sofre com ${reasonText}.`);
     }
   } else if (scoreBreakdown.midia === 20) {
-    // Score máximo - usar MediaVerdict para mensagem
     const picturesCount = mediaInfo?.picturesCount ?? 0;
-    const hasClips = mediaInfo?.hasClips;
-    const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
-    
-    if (verdict.hasClipDetected === true && picturesCount >= 6) {
-      explanations.push('Mídia está forte: fotos e clip presentes.');
-    } else if (picturesCount >= 8) {
+
+    if (picturesCount >= 8) {
       explanations.push(`Mídia está boa em fotos (${picturesCount}).`);
+    } else if (picturesCount >= 6) {
+      explanations.push(`Mídia está forte com galeria suficiente (${picturesCount} imagens).`);
     } else {
       explanations.push('Mídia está completa (20/20 pontos).');
     }

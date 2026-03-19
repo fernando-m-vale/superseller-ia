@@ -261,10 +261,6 @@ function generateBullets(
     bullets.push('Conteúdo visual pronto para explicar melhor o produto');
   }
 
-  if (listing.hasClips === true) {
-    bullets.push('Clip demonstrativo disponível');
-  }
-
   if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
     bullets.push(`${listing.discountPercent}% de desconto aplicado na oferta`);
   }
@@ -301,9 +297,7 @@ function generateSeoDescription(
   const promoLine = listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20
     ? ` Oferta com ${listing.discountPercent}% de desconto para aumentar o valor percebido.`
     : '';
-  const trustLine = listing.hasClips === true
-    ? ' Clip demonstrativo e galeria ajudam a validar a compra.'
-    : ' A descrição prioriza clareza para acelerar a decisão.';
+  const trustLine = ' A descrição prioriza clareza para acelerar a decisão.';
 
   const short = normalizeWhitespace(`${opening}${promoLine}${trustLine}`).slice(0, 200);
 
@@ -319,9 +313,6 @@ function generateSeoDescription(
   ];
   if (listing.picturesCount >= 5) {
     benefits.push(`Galeria com ${listing.picturesCount} imagens para apoiar a análise do comprador`);
-  }
-  if (listing.hasClips === true) {
-    benefits.push('Clip demonstrativo disponível para reforçar contexto de uso');
   }
   if (listing.hasPromotion && listing.discountPercent !== null && listing.discountPercent >= 20) {
     benefits.push(`Oferta ativa com ${listing.discountPercent}% de desconto`);

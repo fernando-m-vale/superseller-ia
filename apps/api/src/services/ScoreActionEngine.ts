@@ -7,7 +7,6 @@
  */
 
 import { IAScoreBreakdown, IAScorePotentialGain } from './IAScoreService';
-import { getMediaVerdict } from '../utils/media-verdict';
 
 export type ActionDimension = 'cadastro' | 'midia' | 'performance' | 'seo' | 'competitividade';
 
@@ -177,20 +176,11 @@ export function generateActionPlan(
       continue;
     }
 
-    // MÍDIA: Usar MediaVerdict como fonte única de verdade (apenas hasClips)
+    // MÍDIA: seller-facing focado em galeria/contexto visual
     if (dimension === 'midia') {
-      const hasClips = mediaInfo?.hasClips;
       const picturesCount = mediaInfo?.picturesCount ?? 0;
-      const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
-      
-      // Se não pode sugerir clip (já tem ou null) e tem muitas imagens, não gerar ação
-      if (!verdict.canSuggestClip && picturesCount >= 8) {
-        // Mídia está completa, não gerar ação
-        continue;
-      }
-      
-      // Se tem clip detectado e imagens suficientes, não gerar ação
-      if (verdict.hasClipDetected === true && picturesCount >= 6) {
+
+      if (picturesCount >= 8) {
         continue;
       }
     }
@@ -317,34 +307,16 @@ function generateWhyThisMatters(
   // Texto base
   let text = WHY_THIS_MATTERS_BASE[dimension];
 
-  // MÍDIA: Usar MediaVerdict como fonte única de verdade (apenas hasClips)
+  // MÍDIA: seller-facing focado em galeria/contexto visual
   if (dimension === 'midia') {
-    const hasClips = mediaInfo?.hasClips;
     const picturesCount = mediaInfo?.picturesCount ?? 0;
-    const verdict = getMediaVerdict(hasClips ?? null, picturesCount);
-    
-    // Usar mensagem do MediaVerdict como base
-    if (verdict.hasClipDetected === true) {
-      // Tem clip detectado
-      if (picturesCount >= 8) {
-        text = 'Mídia está completa com fotos e clip.';
-      } else {
-        text = 'Anúncios com mais imagens tendem a gerar maior engajamento e conversão.';
-      }
-    } else if (verdict.hasClipDetected === false) {
-      // Não tem clip (certeza) - pode sugerir
-      if (picturesCount >= 8) {
-        text = 'Anúncios com clip tendem a gerar maior engajamento e conversão.';
-      } else {
-        text = 'Anúncios com mídia mais completa, com fotos e clip, tendem a gerar maior engajamento e conversão.';
-      }
+
+    if (picturesCount >= 8) {
+      text = 'A galeria já está robusta e ajuda o comprador a validar melhor a compra.';
+    } else if (picturesCount >= 6) {
+      text = 'Uma galeria mais bem distribuída, com contexto de uso e detalhes-chave, tende a gerar mais engajamento.';
     } else {
-      // hasClips === null: usar mensagem do verdict (sempre condicional)
-      if (picturesCount >= 8) {
-        text = `Anúncios com clip tendem a gerar maior engajamento. ${verdict.message}`;
-      } else {
-        text = `Anúncios com mídia mais completa tendem a gerar maior engajamento e conversão. ${verdict.message}`;
-      }
+      text = 'Anúncios com mais imagens e melhor contexto visual tendem a gerar maior engajamento e conversão.';
     }
   }
 

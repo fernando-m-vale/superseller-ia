@@ -104,7 +104,7 @@ describe('BenchmarkInsightsService', () => {
       expect(imageGap?.effort).toBe('low');
     });
 
-    it('deve retornar gap de vídeo quando categoria tem alta % com vídeo e listing sem clip', () => {
+    it('não deve retornar gap de vídeo mesmo quando categoria tem alta % com vídeo', () => {
       const listing = {
         picturesCount: 8,
         hasClips: false,
@@ -138,9 +138,7 @@ describe('BenchmarkInsightsService', () => {
       const gaps = rankGaps(listing, stats, baselineConversion, metrics30d);
 
       const videoGap = gaps.find(g => g.dimension === 'video');
-      expect(videoGap).toBeDefined();
-      expect(videoGap?.id).toBe('gap_video');
-      expect(videoGap?.impact).toBe('high');
+      expect(videoGap).toBeUndefined();
     });
 
     it('deve retornar gap de conversão vs promo quando promo ativa e CR abaixo do baseline', () => {
