@@ -1809,6 +1809,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
             visualAnalysis,
+            adsIntelligence: responseData.adsIntelligence as any,
             dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
             analysisV21,
             seoSuggestions: {
@@ -2562,6 +2563,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             canSuggestClip: mediaVerdict?.canSuggestClip,
             hasClipDetected: mediaVerdict?.hasClipDetected,
           },
+          adsIntelligence: cacheResponseData.adsIntelligence as any,
           dataQualityWarnings: mergeListingWarnings(
             ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
             listing,
@@ -3409,6 +3411,40 @@ if (enableAIPing) {
 
         await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
         enrichAnalyzeResponseWithConsultingIntelligence(responseData, { listing });
+        responseData.growthHacks = buildDeterministicMvpActions({
+          listingIdExt: listing.listing_id_ext,
+          listingTitle: listing.title,
+          picturesCount: listing.pictures_count,
+          hackActions: responseData.growthHacks,
+          metrics30d: {
+            visits: scoreResult.metrics_30d.visits,
+            orders: scoreResult.metrics_30d.orders,
+            conversionRate: scoreResult.metrics_30d.conversionRate,
+          },
+          hasPromotion: listing.has_promotion,
+          discountPercent: listing.discount_percent,
+          mediaVerdict: {
+            canSuggestClip: mediaVerdict?.canSuggestClip,
+            hasClipDetected: mediaVerdict?.hasClipDetected,
+          },
+          visualAnalysis: latestVisualAnalysis,
+          adsIntelligence: responseData.adsIntelligence as any,
+          dataQualityWarnings: mergeListingWarnings(
+            ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
+            listing,
+          ),
+          analysisV21: (cachedResult.analysisV21 as Record<string, unknown> | undefined) as any,
+          seoSuggestions: (cachedResult.analysis as Record<string, unknown> | undefined)?.seoSuggestions as any,
+          generatedContent: cacheGeneratedContent as any,
+          scoreBreakdown: scoreResult.score.breakdown as any,
+          potentialGain: scoreResult.score.potential_gain as unknown as Record<string, unknown>,
+          benchmark: {
+            confidence: cacheBenchmarkResult?.benchmarkSummary?.confidence ?? null,
+            sampleSize: cacheBenchmarkResult?.benchmarkSummary?.sampleSize ?? 0,
+            baselineConversionRate: cacheBenchmarkResult?.benchmarkSummary?.baselineConversion?.conversionRate ?? null,
+          },
+          rootCause: responseData,
+        });
         responseData.verdictText = buildVerdictText({
           rawVerdict: responseData.analysisV21?.verdict || responseData.critique,
           metrics30d: {

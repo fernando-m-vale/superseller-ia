@@ -1,7 +1,7 @@
 import { formatConversionRatePercent } from '../utils/percentage-format';
 import type { RootCauseDiagnosis } from './RootCauseEngine';
 
-export type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance';
+export type ActionPillar = 'seo' | 'midia' | 'cadastro' | 'competitividade' | 'performance' | 'ads';
 export type ActionGroup = 'immediate' | 'support' | 'best_practice';
 
 export interface MvpActionItem {
@@ -102,6 +102,35 @@ export interface DeterministicMvpActionsInput {
     sampleSize?: number | null;
     baselineConversionRate?: number | null;
   };
+  adsIntelligence?: {
+    status?: 'available' | 'partial' | 'unavailable' | null;
+    diagnosis?:
+      | 'ads_data_unavailable'
+      | 'ads_traffic_without_conversion'
+      | 'ads_spend_without_return'
+      | 'ads_low_ctr'
+      | 'ads_healthy'
+      | 'ads_partial_data'
+      | 'ads_mixed_signal'
+      | null;
+    metrics?: {
+      impressions?: number | null;
+      clicks?: number | null;
+      ctr?: number | null;
+      spend?: number | null;
+      roas?: number | null;
+      ordersAttributed?: number | null;
+      conversionRateAds?: number | null;
+    } | null;
+    signals?: {
+      hasTrafficFromAds?: boolean | null;
+      hasClicksFromAds?: boolean | null;
+      hasAttributedSales?: boolean | null;
+      adsEfficiencyLevel?: 'strong' | 'moderate' | 'weak' | 'unknown' | null;
+      adsConversionHealth?: 'strong' | 'moderate' | 'weak' | 'unknown' | null;
+      adsProfitabilitySignal?: 'positive' | 'mixed' | 'negative' | 'unknown' | null;
+    } | null;
+  } | null;
   rootCause?: Partial<RootCauseDiagnosis> | null;
   maxItems?: number;
 }
@@ -705,11 +734,158 @@ function hasMediaImprovementEvidence(input: DeterministicMvpActionsInput): boole
   return picturesCount < 6;
 }
 
+function hasStrongCategoryEvidence(input: DeterministicMvpActionsInput): boolean {
+  const warnings = normalizeText((input.dataQualityWarnings || []).join(' '));
+  const titleProblem = normalizeText(input.analysisV21?.title_fix?.problem);
+  const rootCause = input.rootCause?.diagnosisRootCause || null;
+  const visits = input.metrics30d?.visits ?? 0;
+  const seoScore = input.scoreBreakdown?.seo ?? null;
+  const competitivenessScore = input.scoreBreakdown?.competitividade ?? null;
+
+  const categorySignal =
+    textHasAny(warnings, ['categoria', 'classifica', 'catalogo', 'catalog']) ||
+    textHasAny(titleProblem, ['categoria', 'classifica', 'catalogo', 'catalog', 'indexa', 'enquadr']);
+  const weakDiscoverySignal =
+    visits < 80 ||
+    (typeof seoScore === 'number' && seoScore <= 10) ||
+    (typeof competitivenessScore === 'number' && competitivenessScore <= 4) ||
+    rootCause === 'seo_low_discovery';
+
+  return categorySignal && weakDiscoverySignal;
+}
+
+function inferTitleRewriteAngle(input: DeterministicMvpActionsInput): 'compatibility' | 'specs' | 'kit' | 'discovery' {
+  const problem = normalizeText(input.analysisV21?.title_fix?.problem || input.seoSuggestions?.titleRationale);
+  const listingTitle = normalizeText(input.listingTitle);
+
+  if (textHasAny(problem, ['compat', 'aplicacao', 'serve', 'modelo compat']) || textHasAny(listingTitle, ['compat', 'serve em'])) {
+    return 'compatibility';
+  }
+  if (textHasAny(problem, ['medida', 'capacidade', 'voltag', 'potencia', 'modelo', 'atrib'])) {
+    return 'specs';
+  }
+  if (textHasAny(problem, ['kit', 'variacao', 'varia', 'completo']) || textHasAny(listingTitle, ['kit', 'combo', 'completo'])) {
+    return 'kit';
+  }
+  return 'discovery';
+}
+
+function buildTitleActionCopy(input: DeterministicMvpActionsInput): {
+  title: string;
+  summary: string;
+  description: string;
+} {
+  const visits = input.metrics30d?.visits ?? 0;
+  const orders = input.metrics30d?.orders ?? 0;
+  const crText = formatConversionRatePercent(input.metrics30d?.conversionRate ?? null);
+  const suggestedTitle = input.analysisV21?.title_fix?.after?.trim() || input.seoSuggestions?.suggestedTitle?.trim() || null;
+  const titleProblem = input.analysisV21?.title_fix?.problem?.trim() || input.seoSuggestions?.titleRationale?.trim() || null;
+  const listingTitle = input.listingTitle?.trim() || 'o anúncio atual';
+  const angle = inferTitleRewriteAngle(input);
+
+  if (angle === 'compatibility') {
+    return {
+      title: 'Explicitar compatibilidade e modelo no título',
+      summary: `Com ${visits} visitas e ${orders} pedidos${crText ? ` (CR ${crText})` : ''}, ${listingTitle} ainda não comunica rápido para qual modelo ou aplicação ele serve.`,
+      description: suggestedTitle
+        ? `Use "${suggestedTitle}" como base e traga compatibilidade, modelo e aplicação nas primeiras palavras.`
+        : titleProblem || 'Reorganizar o título para deixar compatibilidade, modelo e aplicação evidentes logo no início.',
+    };
+  }
+
+  if (angle === 'specs') {
+    return {
+      title: 'Trazer atributos decisivos para o início do título',
+      summary: `O anúncio já recebe leitura suficiente para mostrar que faltam especificações que o comprador usa para filtrar a busca${crText ? ` (${crText})` : ''}.`,
+      description: suggestedTitle
+        ? `A nova linha sugerida é "${suggestedTitle}". Priorize medida, capacidade, voltagem ou modelo nas primeiras palavras.`
+        : titleProblem || 'Reescrever o título destacando medida, capacidade, voltagem ou modelo antes da narrativa comercial.',
+    };
+  }
+
+  if (angle === 'kit') {
+    return {
+      title: 'Deixar o título mais claro sobre o que vem na oferta',
+      summary: `Hoje a oferta parece ampla demais no grid, o que reduz clique qualificado e descoberta certa para ${listingTitle}.`,
+      description: suggestedTitle
+        ? `Use "${suggestedTitle}" como referência e deixe explícito no título o que compõe o kit, a variação ou o combo.`
+        : titleProblem || 'Explicar melhor no título o que acompanha a oferta e qual combinação está sendo vendida.',
+    };
+  }
+
+  return {
+    title: 'Reescrever título com busca real e contexto comercial',
+    summary: `Com ${visits} visitas e ${orders} pedidos${crText ? ` (CR ${crText})` : ''}, o título ainda não está capturando a busca certa com especificidade suficiente.`,
+    description: suggestedTitle
+      ? `Ajuste recomendado: "${suggestedTitle}". Use a estrutura sugerida para subir termos de busca, modelo e diferencial comercial.`
+      : titleProblem || 'Atualizar as primeiras palavras do título com produto, modelo, atributo e intenção de compra mais forte.',
+  };
+}
+
+function buildAdsAction(input: DeterministicMvpActionsInput, editUrl: string | null): MvpActionItem | null {
+  const ads = input.adsIntelligence;
+  if (!ads || !ads.status || ads.status === 'unavailable') {
+    return null;
+  }
+
+  const clicks = ads.metrics?.clicks ?? 0;
+  const spend = ads.metrics?.spend ?? 0;
+  const roas = ads.metrics?.roas ?? null;
+  const ordersAttributed = ads.metrics?.ordersAttributed ?? 0;
+  const crAds = ads.metrics?.conversionRateAds ?? null;
+  const diagnosis = ads.diagnosis ?? null;
+  const hasMeaningfulSpend = spend >= 80;
+  const hasMeaningfulTraffic = clicks >= 15 || ads.signals?.hasTrafficFromAds === true;
+  const unhealthy =
+    diagnosis === 'ads_spend_without_return' ||
+    diagnosis === 'ads_traffic_without_conversion' ||
+    diagnosis === 'ads_low_ctr' ||
+    input.rootCause?.diagnosisRootCause === 'ads_traffic_low_return';
+
+  if (!unhealthy || (!hasMeaningfulSpend && !hasMeaningfulTraffic)) {
+    return null;
+  }
+
+  if (diagnosis === 'ads_low_ctr' || ads.signals?.adsEfficiencyLevel === 'weak') {
+    return {
+      id: 'ads_creative_reset',
+      actionKey: 'ads_creative_reset',
+      title: 'Revisar criativo e promessa antes de insistir em Ads',
+      summary: `CTR de Ads ainda fraco${clicks > 0 ? ` com ${clicks} cliques pagos já observados` : ''}, sinalizando atratividade baixa no leilão.`,
+      description: 'Refaça capa, título e promessa principal do anúncio antes de aumentar verba. Quando o clique pago já nasce fraco, escalar mídia tende a amplificar desperdício.',
+      expectedImpact: 'Melhor eficiência do tráfego pago e menos desperdício por clique.',
+      impact: 'high',
+      priority: 'high',
+      suggestedActionUrl: editUrl,
+      pillar: 'ads',
+    };
+  }
+
+  return {
+    id: 'ads_budget_guardrail',
+    actionKey: 'ads_budget_guardrail',
+    title: ordersAttributed > 0
+      ? 'Reorganizar Ads antes de ampliar investimento'
+      : 'Segurar escala de Ads até corrigir conversão',
+    summary: `Ads já movimenta ${clicks} clique${clicks === 1 ? '' : 's'}${spend > 0 ? ` e R$ ${spend.toFixed(2)} de gasto` : ''}${roas !== null ? `, com ROAS ${roas.toFixed(2)}` : ''}.`,
+    description: ordersAttributed > 0
+      ? `O tráfego pago existe, mas a eficiência segue fraca${crAds !== null ? ` (CR Ads ${(crAds * 100).toFixed(2)}%)` : ''}. Rebalanceie campanha, criativo e página antes de escalar.`
+      : 'Há clique pago sem retorno proporcional. Corrija oferta, prova e página antes de colocar mais verba; caso contrário, Ads só acelera um anúncio que ainda não fecha venda.',
+    expectedImpact: 'Redução de desperdício em mídia e melhora da eficiência antes de escalar.',
+    impact: 'high',
+    priority: 'high',
+    suggestedActionUrl: editUrl,
+    pillar: 'ads',
+  };
+}
+
 function shouldAddEvidenceDrivenAction(actionKey: string, input: DeterministicMvpActionsInput): boolean {
   if (actionKey === 'seo_title_refresh') return hasConcreteTitleEvidence(input);
   if (actionKey === 'seo_description_blocks') return hasConcreteDescriptionEvidence(input);
   if (actionKey === 'midia_gallery_upgrade') return hasConcreteImageEvidence(input) || hasMediaImprovementEvidence(input);
   if (actionKey === 'compet_price_positioning') return hasConcretePriceEvidence(input);
+  if (actionKey === 'compet_category_alignment') return hasStrongCategoryEvidence(input);
+  if (actionKey === 'ads_budget_guardrail' || actionKey === 'ads_creative_reset') return buildAdsAction(input, null) !== null;
   return true;
 }
 
@@ -723,11 +899,14 @@ function buildMandatoryActionsForFailure(
   const firstImageAction = input.analysisV21?.image_plan?.find((step) => step?.action?.trim())?.action?.trim();
 
   if (failure === 'categoria desalinhada') {
+    if (!hasStrongCategoryEvidence(input)) {
+      return [];
+    }
     return [{
       id: 'compet_category_alignment',
       actionKey: 'compet_category_alignment',
       title: 'Revisar classificação ou categoria do anúncio',
-      summary: 'O veredito aponta desalinhamento de categoria como prioridade desta rodada.',
+      summary: 'Há sinal concreto de enquadramento incorreto ou categoria limitando a descoberta qualificada.',
       description: titleProblem
         ? `Sinal principal do diagnóstico: ${titleProblem}`
         : 'Validar enquadramento do produto, categoria e sinais de catálogo para melhorar descoberta qualificada.',
@@ -740,14 +919,16 @@ function buildMandatoryActionsForFailure(
   }
 
   if (failure === 'título pouco buscável' || failure === 'atributos pouco claros' || failure === 'título pouco específico') {
+    const copy = buildTitleActionCopy(input);
+    const suggestedTitle = input.analysisV21?.title_fix?.after?.trim() || input.seoSuggestions?.suggestedTitle?.trim() || null;
     return [{
-      id: 'seo_title_clarity_alignment',
-      actionKey: 'seo_title_clarity_alignment',
-      title: 'Reescrever título com mais clareza de busca',
-      summary: 'O veredito indica que título e indexação ainda não traduzem bem a intenção de compra.',
+      id: 'seo_title_refresh',
+      actionKey: 'seo_title_refresh',
+      title: copy.title,
+      summary: copy.summary,
       description: titleProblem
-        ? `Sinal principal do diagnóstico: ${titleProblem}`
-        : 'Explicitar produto, modelo, atributo e contexto comercial nas primeiras palavras do título.',
+        ? `${suggestedTitle ? `Referência de reescrita: "${suggestedTitle}". ` : ''}Sinal principal do diagnóstico: ${titleProblem}`
+        : copy.description,
       expectedImpact: 'Mais CTR qualificado e melhor entrada no funil.',
       impact: 'high',
       priority: 'high',
@@ -847,14 +1028,15 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
   const hasAggressivePromo = Boolean(input.hasPromotion && (input.discountPercent ?? 0) >= 30);
 
   if (titleAfter && titleAfter.trim()) {
+    const copy = buildTitleActionCopy(input);
     templates.push({
       id: 'seo_title_refresh',
       actionKey: 'seo_title_refresh',
-      title: 'Reescrever título com busca real e atributos principais',
-      summary: `Sugestão pronta de título: "${titleAfter.trim()}".`,
+      title: copy.title,
+      summary: `Sugestão pronta: "${titleAfter.trim()}". ${copy.summary}`,
       description: titleProblem?.trim()
         ? `Motivo do ajuste: ${titleProblem.trim()}`
-        : 'Há evidência concreta no diagnóstico para otimizar o título e aumentar CTR qualificado.',
+        : copy.description,
       expectedImpact: 'Mais cliques qualificados e melhor entrada no funil.',
       impact: 'high',
       priority: 'high',
@@ -916,6 +1098,11 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
     });
   }
 
+  const adsAction = buildAdsAction(input, editUrl);
+  if (adsAction) {
+    templates.push(adsAction);
+  }
+
   return templates;
 }
 
@@ -925,6 +1112,7 @@ function computeEvidenceScore(action: MvpActionItem, extra?: { confidence?: numb
   if (/\d/.test(text)) score += 12;
   if (text.toLowerCase().includes('30 dias')) score += 8;
   if (text.toLowerCase().includes('visitas') || text.toLowerCase().includes('pedidos')) score += 8;
+  if (text.toLowerCase().includes('roas') || text.toLowerCase().includes('ads') || text.toLowerCase().includes('cliques pagos')) score += 10;
   if (extra?.confidence !== undefined) {
     score += Math.max(0, Math.min(20, Math.round(extra.confidence / 5)));
   }
@@ -963,13 +1151,14 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
   const ref = listingTitle ? ` para "${listingTitle}"` : '';
   const templates: MvpActionItem[] = [];
 
-  if (visits >= 80 && (orders === 0 || (cr !== null && cr < 0.02))) {
+  if (visits >= 80 && (orders === 0 || (cr !== null && cr < 0.02)) && !hasConcreteTitleEvidence(input)) {
+    const copy = buildTitleActionCopy(input);
     templates.push({
       id: 'seo_title_refresh',
       actionKey: 'seo_title_refresh',
-      title: 'Reescrever título com busca real',
-      summary: `Com ${visits} visitas e ${orders} pedidos em 30 dias${crText ? ` (CR ${crText})` : ''}, o título precisa ficar mais aderente à intenção de compra.`,
-      description: `Atualize as primeiras 60 letras${ref} com produto, modelo e atributo principal para atrair a busca certa.`,
+      title: copy.title,
+      summary: copy.summary,
+      description: copy.description || `Atualize as primeiras 60 letras${ref} com produto, modelo e atributo principal para atrair a busca certa.`,
       expectedImpact: 'Mais cliques qualificados e melhor entrada no funil.',
       impact: 'high',
       priority: 'high',
@@ -1039,6 +1228,11 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
       suggestedActionUrl: editUrl,
       pillar: 'performance',
     });
+  }
+
+  const adsAction = buildAdsAction(input, editUrl);
+  if (adsAction) {
+    templates.push(adsAction);
   }
 
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
@@ -1154,6 +1348,18 @@ function dedupeActions(actions: MvpActionItem[]): MvpActionItem[] {
     }
 
     if (
+      action.pillar === 'ads' &&
+      (
+        haystack.includes('ads') ||
+        haystack.includes('campanha') ||
+        haystack.includes('roas') ||
+        haystack.includes('trafego pago')
+      )
+    ) {
+      return 'ads:traffic_efficiency';
+    }
+
+    if (
       action.pillar === 'midia' &&
       (
         haystack.includes('imagem') ||
@@ -1184,7 +1390,7 @@ function dedupeActions(actions: MvpActionItem[]): MvpActionItem[] {
 }
 
 export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput): MvpActionItem[] {
-  const maxItems = Math.min(15, Math.max(1, input.maxItems ?? 15));
+  const requestedMaxItems = Math.min(15, Math.max(1, input.maxItems ?? 15));
   const editUrl = buildMercadoLivreEditUrl(input.listingIdExt);
   const benchmarkUnavailable = isBenchmarkUnavailable(input.benchmark);
   const diagnosisInput = {
@@ -1341,14 +1547,25 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
       return b.impactScore - a.impactScore;
     });
 
+  const dynamicMaxItems = Math.min(
+    requestedMaxItems,
+    ranked.filter((candidate) => candidate.score >= 78 || candidate.evidenceScore >= 18).length >= 5
+      ? 5
+      : ranked.filter((candidate) => candidate.score >= 70 || candidate.evidenceScore >= 14).length >= 4
+        ? 4
+        : ranked.filter((candidate) => candidate.score >= 58 || candidate.evidenceScore >= 12).length >= 3
+          ? 3
+          : 2,
+  );
+
   const coreCandidates = ranked.filter((candidate) => candidate.source === 'core');
   const hackCandidates = ranked.filter((candidate) => candidate.source === 'hack');
-  const reserveHackSlot = hackCandidates.length > 0 && maxItems > 1 ? 1 : 0;
-  const coreLimit = Math.max(1, maxItems - reserveHackSlot);
+  const reserveHackSlot = hackCandidates.length > 0 && dynamicMaxItems > 1 ? 1 : 0;
+  const coreLimit = Math.max(1, dynamicMaxItems - reserveHackSlot);
   const selectedCandidates = [
     ...coreCandidates.slice(0, coreLimit),
-    ...hackCandidates.slice(0, maxItems - Math.min(coreCandidates.length, coreLimit)),
-  ].slice(0, maxItems);
+    ...hackCandidates.slice(0, dynamicMaxItems - Math.min(coreCandidates.length, coreLimit)),
+  ].slice(0, dynamicMaxItems);
 
   const groupedCandidates = selectedCandidates.map((candidate) => {
     const enriched = enrichActionWithOpportunityImpact(candidate.action, candidate.funnelStage, primaryBottleneck, input);
@@ -1386,7 +1603,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     .filter((action) => action.actionGroup !== 'support')
     .map((action) => ({ ...action, actionGroup: 'best_practice' as const }));
 
-  return [...immediate, ...support, ...bestPractice].slice(0, maxItems);
+  return [...immediate, ...support, ...bestPractice].slice(0, dynamicMaxItems);
 }
 
 export function buildVerdictText(input: {

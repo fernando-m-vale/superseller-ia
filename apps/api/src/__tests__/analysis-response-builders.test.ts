@@ -231,6 +231,23 @@ describe('AnalysisResponseBuilders', () => {
     expect(actions.some((action) => action.title.includes('categoria'))).toBe(true);
   });
 
+  it('não promove categoria quando falta evidência forte de mismatch real', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Kit completo premium',
+      metrics30d: { visits: 160, orders: 3, conversionRate: 0.018 },
+      dataQualityWarnings: ['quality_signals_available'],
+      analysisV21: {
+        title_fix: {
+          problem: 'O título pode ficar mais claro para busca, mas sem sinal concreto de categoria errada.',
+        },
+      },
+      maxItems: 5,
+    });
+
+    expect(actions.some((action) => action.actionKey === 'compet_category_alignment')).toBe(false);
+    expect(actions.some((action) => /categoria|classifica/i.test(action.title))).toBe(false);
+  });
+
   it('rebaixa hacks para oportunidades extras e mantém ações principais na frente', () => {
     const actions = buildDeterministicMvpActions({
       listingTitle: 'Cadeira Office Ergonômica',
@@ -336,8 +353,7 @@ describe('AnalysisResponseBuilders', () => {
 
     expect(actions.filter((action) => action.actionGroup === 'immediate').length).toBeLessThanOrEqual(3);
     expect(actions[0]?.actionGroup).toBe('immediate');
-    expect(actions.some((action) => action.actionGroup === 'support')).toBe(true);
-    expect(actions.some((action) => action.actionGroup === 'best_practice' || action.actionGroup === 'support')).toBe(true);
+    expect(actions.some((action) => action.actionGroup === 'support' || action.actionGroup === 'best_practice')).toBe(true);
     expect(actions[0]?.title.toLowerCase()).toMatch(/descrição|atribut|dúvida|duvida/);
     expect(actions[0]?.title.toLowerCase()).not.toContain('clip');
   });
@@ -451,6 +467,174 @@ describe('AnalysisResponseBuilders', () => {
 
     expect(diagnosis.primaryBottleneck).toBe('CLICK');
     expect(diagnosis.explanation).not.toContain('imagem principal pouco clara');
+  });
+
+  it('deixa o card de título mais contextual quando o problema é compatibilidade', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Refil X200 Serve em Diversos Modelos',
+      metrics30d: { visits: 42, orders: 0, conversionRate: 0 },
+      analysisV21: {
+        title_fix: {
+          after: 'Refil Purificador X200 Compatível 9 3/4 Pol',
+          problem: 'O título não deixa claro em quais modelos o refil é compatível.',
+        },
+      },
+      maxItems: 4,
+    });
+
+    expect(actions[0]?.actionKey).toBe('seo_title_refresh');
+    expect(actions[0]?.title).toContain('compatibilidade');
+    expect(`${actions[0]?.summary} ${actions[0]?.description}`).toContain('compat');
+    expect(`${actions[0]?.summary} ${actions[0]?.description}`).toContain('Refil Purificador X200 Compatível');
+  });
+
+  it('gera ação prática de Ads quando há gasto com retorno fraco', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Cadeira Office Ergonômica',
+      metrics30d: { visits: 240, orders: 2, conversionRate: 0.0083 },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A página ainda não sustenta conforto, ajuste e garantia para a decisão.',
+        },
+      },
+      adsIntelligence: {
+        status: 'available',
+        diagnosis: 'ads_spend_without_return',
+        metrics: {
+          clicks: 42,
+          spend: 180,
+          roas: 0.91,
+          ordersAttributed: 0,
+          conversionRateAds: 0.009,
+        },
+        signals: {
+          hasTrafficFromAds: true,
+          hasClicksFromAds: true,
+          hasAttributedSales: false,
+          adsEfficiencyLevel: 'moderate',
+          adsConversionHealth: 'weak',
+          adsProfitabilitySignal: 'negative',
+        },
+      },
+      rootCause: {
+        diagnosisRootCause: 'ads_traffic_low_return',
+      },
+      maxItems: 5,
+    });
+
+    const adsAction = actions.find((action) => action.actionKey === 'ads_budget_guardrail');
+    expect(adsAction).toBeTruthy();
+    expect(adsAction?.title).toMatch(/Ads|investimento|escala/);
+    expect(`${adsAction?.summary} ${adsAction?.description}`).toContain('ROAS');
+  });
+
+  it('não inventa card de Ads quando o sinal é neutro ou saudável', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Fone Bluetooth X',
+      metrics30d: { visits: 210, orders: 8, conversionRate: 0.038 },
+      adsIntelligence: {
+        status: 'available',
+        diagnosis: 'ads_healthy',
+        metrics: {
+          clicks: 35,
+          spend: 120,
+          roas: 3.8,
+          ordersAttributed: 4,
+          conversionRateAds: 0.041,
+        },
+        signals: {
+          hasTrafficFromAds: true,
+          hasClicksFromAds: true,
+          hasAttributedSales: true,
+          adsEfficiencyLevel: 'strong',
+          adsConversionHealth: 'strong',
+          adsProfitabilitySignal: 'positive',
+        },
+      },
+      maxItems: 5,
+    });
+
+    expect(actions.some((action) => action.pillar === 'ads')).toBe(false);
+  });
+
+  it('retorna menos cards quando só poucas ações têm evidência forte', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Cabo HDMI 2m 4K',
+      metrics30d: { visits: 26, orders: 0, conversionRate: 0 },
+      picturesCount: 8,
+      visualAnalysis: {
+        visual_score: 82,
+        strengths: ['Imagem principal clara e galeria suficiente para o grid.'],
+      },
+      analysisV21: {
+        title_fix: {
+          after: 'Cabo HDMI 2.1 4K 2m Ultra High Speed',
+          problem: 'O título atual é genérico e não compete por buscas específicas.',
+        },
+      },
+    });
+
+    expect(actions.length).toBeLessThanOrEqual(3);
+    expect(actions[0]?.actionKey).toBe('seo_title_refresh');
+  });
+
+  it('remove redundância entre ação de Ads e ação genérica de promoção ruim', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Tênis Corrida Pro',
+      metrics30d: { visits: 280, orders: 1, conversionRate: 0.0036 },
+      hasPromotion: true,
+      discountPercent: 35,
+      adsIntelligence: {
+        status: 'available',
+        diagnosis: 'ads_traffic_without_conversion',
+        metrics: {
+          clicks: 31,
+          spend: 160,
+          roas: 1.1,
+          ordersAttributed: 0,
+          conversionRateAds: 0.006,
+        },
+        signals: {
+          hasTrafficFromAds: true,
+          hasClicksFromAds: true,
+          hasAttributedSales: false,
+          adsEfficiencyLevel: 'moderate',
+          adsConversionHealth: 'weak',
+          adsProfitabilitySignal: 'negative',
+        },
+      },
+      maxItems: 6,
+    });
+
+    expect(actions.some((action) => action.actionKey === 'ads_budget_guardrail')).toBe(true);
+    expect(actions.some((action) => action.actionKey === 'compet_promo_validation')).toBe(false);
+  });
+
+  it('mantém compatibilidade do payload das ações na V2', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Aspirador Vertical 2 em 1',
+      metrics30d: { visits: 145, orders: 1, conversionRate: 0.0069 },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A página não responde autonomia, ruído e uso em cantos.',
+          optimized_copy: 'Bloco pronto com autonomia, ruído, bicos e perguntas frequentes.',
+        },
+      },
+      maxItems: 4,
+    });
+
+    expect(actions.length).toBeGreaterThan(0);
+    for (const action of actions) {
+      expect(action).toHaveProperty('id');
+      expect(action).toHaveProperty('actionKey');
+      expect(action).toHaveProperty('title');
+      expect(action).toHaveProperty('summary');
+      expect(action).toHaveProperty('description');
+      expect(action).toHaveProperty('expectedImpact');
+      expect(action).toHaveProperty('impact');
+      expect(action).toHaveProperty('priority');
+      expect(action).toHaveProperty('pillar');
+    }
   });
 
   it('expõe payload executável de descrição quando houver material pronto', () => {
