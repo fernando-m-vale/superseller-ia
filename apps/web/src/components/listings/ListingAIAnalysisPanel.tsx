@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ExternalLink, Flame, Image as ImageIcon, Sparkles, Target, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +12,7 @@ import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban } from './ActionKanban'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
 import { useListingActions, updateListingActionStatus, type ListingActionStatus } from '@/hooks/use-listing-actions'
+import { sanitizeSellerText } from '@/lib/ai/sanitizeSellerText'
 
 interface ListingAIAnalysisPanelProps {
   analysisV21: NormalizedAIAnalysisV21
@@ -220,6 +221,30 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
     props.critique,
   ])
 
+  const sellerVerdictText = useMemo(() => sanitizeSellerText(verdictText), [verdictText])
+
+  const VERDICT_PREVIEW_CHARS = 340
+  const shouldTruncateVerdict = sellerVerdictText.length > VERDICT_PREVIEW_CHARS
+
+  const verdictPreview = useMemo(() => {
+    if (!shouldTruncateVerdict) return sellerVerdictText
+
+    const slice = sellerVerdictText.slice(0, VERDICT_PREVIEW_CHARS)
+
+    // Preferir uma quebra “boa” (fim de frase ou linha) para evitar sensação de corte.
+    const lastNewline = slice.lastIndexOf('\n')
+    const lastSentenceEnd = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('!'), slice.lastIndexOf('?'))
+    const cutAt = Math.max(lastNewline, lastSentenceEnd)
+
+    const trimmed = cutAt > VERDICT_PREVIEW_CHARS * 0.55 ? slice.slice(0, cutAt + 1) : slice
+    return `${trimmed.trimEnd()}...`
+  }, [shouldTruncateVerdict, sellerVerdictText])
+
+  useEffect(() => {
+    // Evita estado inconsistente quando a análise chega/atualiza.
+    setVerdictExpanded(false)
+  }, [sellerVerdictText])
+
   const handleOpenEdit = () => {
     if (!editUrl) {
       toast({
@@ -335,17 +360,22 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className={`text-base leading-relaxed font-medium text-foreground whitespace-pre-wrap ${!verdictExpanded && verdictText && verdictText.length > 300 ? 'line-clamp-4' : ''}`}>
-            {verdictText || 'Veredito não disponível'}
+          <div className="text-base leading-relaxed font-medium text-foreground whitespace-pre-wrap">
+            {sellerVerdictText
+              ? verdictExpanded
+                ? sellerVerdictText
+                : verdictPreview
+              : 'Veredito não disponível'}
           </div>
-          
-          {verdictText && verdictText.length > 300 && (
+
+          {shouldTruncateVerdict && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setVerdictExpanded(!verdictExpanded)}
+              aria-expanded={verdictExpanded}
             >
-              {verdictExpanded ? 'Recolher' : 'Expandir'}
+              {verdictExpanded ? 'Ver menos' : 'Ver mais'}
             </Button>
           )}
         </CardContent>
@@ -398,10 +428,9 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
             </div>
 
             <div>
-              <p className="text-sm font-medium text-foreground">{props.adsIntelligence.summary}</p>
-              {props.adsIntelligence.source.note && (
-                <p className="mt-1 text-sm text-muted-foreground">{props.adsIntelligence.source.note}</p>
-              )}
+              <p className="text-sm font-medium text-foreground">
+                {sanitizeSellerText(props.adsIntelligence.summary)}
+              </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -437,7 +466,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
                 <ul className="space-y-2 text-sm text-muted-foreground">
                   {props.adsIntelligence.recommendations.map((recommendation) => (
                     <li key={recommendation} className="rounded-lg border p-3">
-                      {recommendation}
+                      {sanitizeSellerText(recommendation)}
                     </li>
                   ))}
                 </ul>
@@ -448,7 +477,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
                   <ul className="space-y-2 text-sm text-muted-foreground">
                     {props.adsIntelligence.opportunities.map((opportunity) => (
                       <li key={opportunity} className="rounded-lg border p-3">
-                        {opportunity}
+                        {sanitizeSellerText(opportunity)}
                       </li>
                     ))}
                   </ul>

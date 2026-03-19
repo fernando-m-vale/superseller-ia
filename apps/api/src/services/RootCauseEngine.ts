@@ -427,8 +427,12 @@ function buildCandidates(input: RootCauseEngineInput, signals: RootCauseSignalsU
     visual.contradictions.push('conversao_ja_aceitavel');
   }
   if (goodVisual) {
-    visual.score -= 18;
+    visual.score -= highVisits && lowConversion ? 28 : 18;
     visual.contradictions.push('visual_ja_forte');
+  }
+  if (goodVisual && (goodAdsCtr || highVisits)) {
+    visual.score -= 12;
+    visual.contradictions.push('visual_nao_explica_sozinho_o_gargalo');
   }
 
   const seo = get('seo_low_discovery');
@@ -578,6 +582,10 @@ function buildCandidates(input: RootCauseEngineInput, signals: RootCauseSignalsU
   if (hasAny(descriptionDiagnostic, ['nao responde', 'compat', 'beneficio', 'convinc', 'objec', 'faq'])) {
     content.score += 10;
     content.evidence.push('descricao_deixa_objecoes_abertas');
+  }
+  if (goodVisual && highVisits && lowConversion) {
+    content.score += 10;
+    content.evidence.push('visual_forte_desvia_foco_para_pagina');
   }
   if (signals.contentSignal === 'unknown') {
     content.score -= 6;

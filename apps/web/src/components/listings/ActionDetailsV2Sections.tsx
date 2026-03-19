@@ -19,6 +19,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import type { ActionDetailsV2 } from '@/types/action-details-v2'
+import { sanitizePracticalCta, sanitizeSellerText } from '@/lib/ai/sanitizeSellerText'
 
 interface ActionDetailsV2SectionsProps {
   details: ActionDetailsV2
@@ -63,7 +64,7 @@ export function ActionDetailsV2Sections({
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant="outline">{title.variation}</Badge>
                         {title.rationale && (
-                          <span className="text-xs text-muted-foreground">{title.rationale}</span>
+                          <span className="text-xs text-muted-foreground">{sanitizeSellerText(title.rationale)}</span>
                         )}
                       </div>
                       <p className="font-mono text-sm">{title.text}</p>
@@ -91,30 +92,50 @@ export function ActionDetailsV2Sections({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <FileText className="h-5 w-5 text-primary" />
-                  Template de Descrição
+                  Entrega de Descrição
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <h4 className="font-semibold mb-2">{details.artifacts.copy.descriptionTemplate.headline}</h4>
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    {details.artifacts.copy.descriptionTemplate.blocks.map((block, index) => (
-                      <p key={index} className="text-sm text-muted-foreground">
-                        {block}
-                      </p>
-                    ))}
+                    <h4 className="text-sm font-semibold">Diagnóstico curto</h4>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {sanitizeSellerText(details.artifacts.copy.descriptionTemplate.headline)}
+                    </p>
                   </div>
-                  {details.artifacts.copy.descriptionTemplate.bullets && (
-                    <ul className="list-disc list-inside mt-3 space-y-1">
-                      {details.artifacts.copy.descriptionTemplate.bullets.map((bullet, index) => (
-                        <li key={index} className="text-sm text-muted-foreground">
-                          {bullet}
-                        </li>
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Copy pronta</h4>
+                    <div className="space-y-2">
+                      {details.artifacts.copy.descriptionTemplate.blocks.map((block, index) => (
+                        <p key={index} className="text-sm text-muted-foreground">
+                          {sanitizeSellerText(block)}
+                        </p>
                       ))}
-                    </ul>
-                  )}
+                    </div>
+
+                    {details.artifacts.copy.descriptionTemplate.bullets && (
+                      <ul className="list-disc list-inside mt-2 space-y-1">
+                        {details.artifacts.copy.descriptionTemplate.bullets.map((bullet, index) => (
+                          <li key={index} className="text-sm text-muted-foreground">
+                            {sanitizeSellerText(bullet)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
                   {details.artifacts.copy.descriptionTemplate.cta && (
-                    <p className="mt-3 font-medium">{details.artifacts.copy.descriptionTemplate.cta}</p>
+                    (() => {
+                      const practicalCta = sanitizePracticalCta(details.artifacts.copy.descriptionTemplate.cta)
+                      if (!practicalCta) return null
+                      return (
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold">Aplicação prática</h4>
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{practicalCta}</p>
+                        </div>
+                      )
+                    })()
                   )}
                 </div>
                 <Button
@@ -122,19 +143,20 @@ export function ActionDetailsV2Sections({
                   onClick={() =>
                     handleCopy(
                       [
-                        details.artifacts!.copy!.descriptionTemplate!.headline,
-                        ...details.artifacts!.copy!.descriptionTemplate!.blocks,
-                        ...(details.artifacts!.copy!.descriptionTemplate!.bullets || []),
-                        details.artifacts!.copy!.descriptionTemplate!.cta || '',
+                        sanitizeSellerText(details.artifacts!.copy!.descriptionTemplate!.headline),
+                        ...details.artifacts!.copy!.descriptionTemplate!.blocks.map((b) => sanitizeSellerText(b)),
+                        ...(details.artifacts!.copy!.descriptionTemplate!.bullets || []).map((b) =>
+                          sanitizeSellerText(b),
+                        ),
                       ]
                         .filter(Boolean)
                         .join('\n\n'),
-                      'Descrição completa',
+                      'Copy pronta',
                     )
                   }
                 >
                   <Copy className="h-4 w-4 mr-2" />
-                  Copiar Descrição Completa
+                  Copiar copy pronta
                 </Button>
               </CardContent>
             </Card>
@@ -155,7 +177,7 @@ export function ActionDetailsV2Sections({
                     key={index}
                     className="flex items-start justify-between gap-3 p-2 bg-muted rounded"
                   >
-                    <span className="text-sm flex-1">{bullet}</span>
+                    <span className="text-sm flex-1">{sanitizeSellerText(bullet)}</span>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -192,7 +214,7 @@ export function ActionDetailsV2Sections({
                       <Badge variant="secondary">{kw.keyword}</Badge>
                       <span className="text-xs text-muted-foreground">({kw.placement})</span>
                       {kw.rationale && (
-                        <span className="text-xs text-muted-foreground ml-1">{kw.rationale}</span>
+                        <span className="text-xs text-muted-foreground ml-1">{sanitizeSellerText(kw.rationale)}</span>
                       )}
                     </div>
                   ))}
@@ -224,12 +246,12 @@ export function ActionDetailsV2Sections({
                     >
                       <div className="flex items-center justify-between">
                         <Badge variant="outline">Slot {slot.slotNumber}</Badge>
-                        <span className="text-xs font-medium">{slot.objective}</span>
+                        <span className="text-xs font-medium">{sanitizeSellerText(slot.objective)}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground">{slot.whatToShow}</p>
+                      <p className="text-sm text-muted-foreground">{sanitizeSellerText(slot.whatToShow)}</p>
                       {slot.overlaySuggestion && (
                         <div className="text-xs bg-yellow-50 dark:bg-yellow-950/20 p-2 rounded">
-                          <strong>Overlay:</strong> {slot.overlaySuggestion}
+                          <strong>Overlay:</strong> {sanitizeSellerText(slot.overlaySuggestion)}
                         </div>
                       )}
                     </div>
@@ -263,7 +285,7 @@ export function ActionDetailsV2Sections({
                       <Badge variant="secondary">{suggestion.expectedImpact}</Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground">{suggestion.rationale}</p>
+                  <p className="text-sm text-muted-foreground">{sanitizeSellerText(suggestion.rationale)}</p>
                 </div>
               ))}
             </div>
@@ -292,7 +314,7 @@ export function ActionDetailsV2Sections({
                   ))}
                 </div>
                 {variation.rationale && (
-                  <p className="text-xs text-muted-foreground">{variation.rationale}</p>
+                  <p className="text-xs text-muted-foreground">{sanitizeSellerText(variation.rationale)}</p>
                 )}
               </div>
             ))}
@@ -328,7 +350,7 @@ export function ActionDetailsV2Sections({
                   ))}
                 </ul>
                 {kit.rationale && (
-                  <p className="text-xs text-muted-foreground">{kit.rationale}</p>
+                  <p className="text-xs text-muted-foreground">{sanitizeSellerText(kit.rationale)}</p>
                 )}
               </div>
             ))}
@@ -350,10 +372,10 @@ export function ActionDetailsV2Sections({
               <div key={index} className="p-3 border rounded-lg">
                 <div className="font-semibold mb-1">{spec.attributeName}</div>
                 <p className="text-sm text-muted-foreground mb-2">
-                  <strong>Sugestão:</strong> {spec.suggestedValue}
+                  <strong>Sugestão:</strong> {sanitizeSellerText(spec.suggestedValue)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  <strong>Como confirmar:</strong> {spec.howToConfirm}
+                  <strong>Como confirmar:</strong> {sanitizeSellerText(spec.howToConfirm)}
                 </p>
               </div>
             ))}
@@ -380,7 +402,7 @@ export function ActionDetailsV2Sections({
                       <Badge variant="secondary">{guarantee.placement}</Badge>
                     )}
                   </div>
-                  <p className="text-sm">{guarantee.text}</p>
+                  <p className="text-sm">{sanitizeSellerText(guarantee.text)}</p>
                 </div>
                 <Button
                   variant="ghost"
@@ -413,7 +435,7 @@ export function ActionDetailsV2Sections({
               {details.requiredInputs.map((input, index) => (
                 <div key={index} className="p-2 bg-yellow-50 dark:bg-yellow-950/20 rounded">
                   <p className="text-sm font-medium">{input.field}</p>
-                  <p className="text-xs text-muted-foreground">{input.howToConfirm}</p>
+                  <p className="text-xs text-muted-foreground">{sanitizeSellerText(input.howToConfirm)}</p>
                 </div>
               ))}
             </div>

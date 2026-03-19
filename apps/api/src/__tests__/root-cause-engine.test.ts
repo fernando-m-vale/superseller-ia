@@ -176,4 +176,27 @@ describe('RootCauseEngine', () => {
     expect(['ads_traffic_low_return', 'mixed_signal', 'content_low_conversion']).toContain(result.diagnosisRootCause);
     expect(result.rootCauseConfidence).toBeLessThan(80);
   });
+
+  it('não força visual_low_ctr quando a análise visual já está forte e a página é o gargalo', () => {
+    const result = diagnoseRootCause({
+      metrics30d: { visits: 240, orders: 2, conversionRate: 0.0083, ctr: 0.014 },
+      visualAnalysis: {
+        visual_score: 86,
+        main_improvements: ['Ajuste fino de galeria, sem urgência na imagem principal'],
+      },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'Descrição não responde compatibilidade, instalação e garantia, deixando objeções abertas.',
+        },
+      },
+      adsIntelligence: {
+        status: 'available',
+        metrics: { ctr: 0.013, clicks: 41, spend: 110, roas: 1.8 },
+      },
+      dataQuality: { completenessScore: 88, visitsCoverage: { filledDays: 30, totalDays: 30 } },
+    });
+
+    expect(result.diagnosisRootCause).not.toBe('visual_low_ctr');
+    expect(['content_low_conversion', 'mixed_signal']).toContain(result.diagnosisRootCause);
+  });
 });

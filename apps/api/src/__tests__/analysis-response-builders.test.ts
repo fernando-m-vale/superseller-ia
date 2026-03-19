@@ -362,4 +362,116 @@ describe('AnalysisResponseBuilders', () => {
     expect(verdict.length).toBeLessThan(420);
     expect(verdict).not.toMatch(/fricção de conversão|oportunidade complementar|estágio do funil/i);
   });
+
+  it('não deixa mídia liderar quando a análise visual já está forte', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Notebook Gamer RTX',
+      metrics30d: { visits: 220, orders: 2, conversionRate: 0.0091 },
+      picturesCount: 7,
+      visualAnalysis: {
+        visual_score: 84,
+        strengths: ['Imagem principal forte e leitura visual boa no grid.'],
+      },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A descrição não responde autonomia, upgrade, garantia e cenário de uso.',
+          optimized_copy: 'Notebook com RTX para jogos e trabalho, com bloco de garantia, upgrade e FAQ pronto para copiar.',
+        },
+        image_plan: [{ action: 'Ajustar detalhe lateral como melhoria secundária da galeria' }],
+      },
+      rootCause: {
+        diagnosisRootCause: 'content_low_conversion',
+        primaryRecommendation: 'Reescrever descrição e FAQ antes de insistir em mídia.',
+      },
+      maxItems: 5,
+    });
+
+    expect(actions[0]?.pillar).not.toBe('midia');
+    expect(['seo_description_blocks', 'performance_conversion_funnel']).toContain(actions[0]?.actionKey);
+    expect(actions.some((action) => action.actionKey === 'midia_gallery_upgrade')).toBe(true);
+    expect(actions.find((action) => action.actionKey === 'midia_gallery_upgrade')?.actionGroup).not.toBe('immediate');
+  });
+
+  it('consolida cards redundantes de imagem em um único card principal', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Panela Antiaderente',
+      metrics30d: { visits: 140, orders: 1, conversionRate: 0.0071 },
+      picturesCount: 3,
+      analysisV21: {
+        image_plan: [
+          { action: 'Trocar imagem principal por cena de uso com alimento pronto' },
+          { action: 'Adicionar close do revestimento e do cabo' },
+        ],
+      },
+      maxItems: 6,
+    });
+
+    const mediaCards = actions.filter((action) => action.actionKey === 'midia_gallery_upgrade');
+    expect(mediaCards).toHaveLength(1);
+    expect(mediaCards[0]?.title).toBe('Atualizar imagem principal e galeria com prova visual');
+  });
+
+  it('reduz ruído de benchmark ausente sem vazar mensagem no card principal', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Aspirador Vertical 2 em 1',
+      metrics30d: { visits: 145, orders: 1, conversionRate: 0.0069 },
+      picturesCount: 5,
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A página não responde autonomia, ruído e uso em cantos.',
+          optimized_copy: 'Bloco pronto com autonomia, ruído, bicos e perguntas frequentes.',
+        },
+        price_fix: {
+          action: 'Comparar preço com benchmark da categoria',
+        },
+      },
+      benchmark: { confidence: 'unavailable', sampleSize: 0, baselineConversionRate: null },
+    });
+
+    expect(actions.some((action) => action.actionKey === 'compet_price_positioning')).toBe(false);
+    expect(actions.some((action) => /benchmark|indispon/i.test(`${action.title} ${action.summary} ${action.description}`))).toBe(false);
+  });
+
+  it('mantém clip rebaixado e não usa ausência de clip como gatilho principal', () => {
+    const diagnosis = buildFunnelBottleneckDiagnosis({
+      listingTitle: 'Copo Térmico Inox',
+      metrics30d: { visits: 118, orders: 3, conversionRate: 0.0254 },
+      picturesCount: 7,
+      mediaVerdict: { canSuggestClip: false, hasClipDetected: false },
+      visualAnalysis: {
+        visual_score: 80,
+        strengths: ['Imagem principal clara e boa leitura do produto.'],
+      },
+      analysisV21: {
+        title_fix: {
+          problem: 'O título ainda pode ficar mais específico para buscas de capacidade e material.',
+        },
+      },
+    });
+
+    expect(diagnosis.primaryBottleneck).toBe('CLICK');
+    expect(diagnosis.explanation).not.toContain('imagem principal pouco clara');
+  });
+
+  it('expõe payload executável de descrição quando houver material pronto', () => {
+    const actions = buildDeterministicMvpActions({
+      listingTitle: 'Cadeira Office Ergonômica',
+      metrics30d: { visits: 280, orders: 1, conversionRate: 0.0035 },
+      analysisV21: {
+        description_fix: {
+          diagnostic: 'A descrição ainda não explica ajuste lombar, peso suportado e garantia.',
+          optimized_copy: 'Ajuste lombar, apoio de braços, peso suportado e garantia em copy pronta para copiar.',
+        },
+      },
+      rootCause: {
+        diagnosisRootCause: 'content_low_conversion',
+      },
+    });
+
+    const descriptionAction = actions.find((action) => action.actionKey === 'seo_description_blocks');
+    expect(descriptionAction?.title).toBe('Aplicar descrição pronta com benefícios, prova e FAQ');
+    expect(descriptionAction?.executionPayload?.diagnostic).toContain('ajuste lombar');
+    expect(descriptionAction?.executionPayload?.readyCopy).toContain('copy pronta');
+    expect(descriptionAction?.executionPayload?.practicalApplication).toContain('FAQ');
+  });
 });

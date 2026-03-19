@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { ComponentProps } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -31,6 +32,8 @@ import type { ListingActionStatus } from '@/hooks/use-listing-actions'
 import { useToast } from '@/hooks/use-toast'
 import { ActionDetailsV2Sections } from './ActionDetailsV2Sections'
 import type { ActionDetailsV2 } from '@/types/action-details-v2'
+import { BenchmarkPanel } from '@/components/ai/BenchmarkPanel'
+import { isMeaningfulJsonObject, sanitizeSellerText } from '@/lib/ai/sanitizeSellerText'
 
 interface ActionDetailsModalProps {
   open: boolean
@@ -163,9 +166,8 @@ export function ActionDetailsModal({
   }
 
   const modalTitle = isClipText(actionTitle) ? 'Detalhes da ação' : actionTitle
-  const modalDescription = isClipText(actionTitle) || isClipText(actionDescription)
-    ? 'Esta ação está temporariamente oculta na experiência.'
-    : actionDescription
+  const isClipAction = isClipText(actionTitle) || isClipText(actionDescription)
+  const modalDescription = isClipAction ? 'Esta ação está temporariamente oculta na experiência.' : actionDescription
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -251,49 +253,15 @@ export function ActionDetailsModal({
         )}
 
         {/* Content V2 */}
-        {!isLoading && !error && !isGenerating && isV2 && v2Data && (
+        {!isLoading && !error && !isGenerating && isV2 && v2Data && !isClipAction && (
           <div className="space-y-6">
-            {/* Por que importa */}
-            {v2Data.whyThisMatters && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-primary" />
-                    Por que isso importa
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{v2Data.whyThisMatters}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Como fazer */}
-            {v2Data.howToSteps && v2Data.howToSteps.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    Como fazer
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                    {v2Data.howToSteps.map((step, idx) => (
-                      <li key={idx}>{step}</li>
-                    ))}
-                  </ol>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Checklist */}
+            {/* Fazer agora */}
             {v2Data.doThisNow && v2Data.doThisNow.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
-                    Checklist
+                    Fazer agora
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -301,10 +269,55 @@ export function ActionDetailsModal({
                     {v2Data.doThisNow.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>{item}</span>
+                        <span>{sanitizeSellerText(item)}</span>
                       </li>
                     ))}
                   </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Melhorias de suporte */}
+            {v2Data.howToSteps && v2Data.howToSteps.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    Melhorias de suporte
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    {(() => {
+                      const hasGalleryPlan = Boolean(v2Data.artifacts?.media?.galleryPlan?.length)
+                      const filtered = hasGalleryPlan
+                        ? v2Data.howToSteps.filter(
+                            (step) =>
+                              !/^\s*Imagem\s+\d+[:.-]/i.test(step) &&
+                              !/slot\s+\d+/i.test(step) &&
+                              !/plano de galeria/i.test(step),
+                          )
+                        : v2Data.howToSteps
+
+                      const stepsToRender = filtered.length >= 3 ? filtered : v2Data.howToSteps
+                      return stepsToRender.map((step, idx) => <li key={idx}>{sanitizeSellerText(step)}</li>)
+                    })()}
+                  </ol>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Boas práticas */}
+            {v2Data.whyThisMatters && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-primary" />
+                    Boas práticas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{sanitizeSellerText(v2Data.whyThisMatters)}</p>
                 </CardContent>
               </Card>
             )}
@@ -316,83 +329,75 @@ export function ActionDetailsModal({
               copiedText={copiedText}
             />
 
-            {/* Benchmark */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  Benchmark
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {v2Data.benchmark?.available === false ? (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Benchmark indisponível para esta ação.
-                      {v2Data.benchmark.notes && (
-                        <p className="mt-2 text-sm text-muted-foreground">{v2Data.benchmark.notes}</p>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                ) : v2Data.benchmark?.data ? (
-                  <div className="text-sm text-muted-foreground">
-                    <pre className="whitespace-pre-wrap bg-muted p-3 rounded">
-                      {JSON.stringify(v2Data.benchmark.data, null, 2)}
-                    </pre>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Dados de benchmark não disponíveis.</p>
-                )}
-              </CardContent>
-            </Card>
+            {/* Benchmark (evitar ruído visual) */}
+            {(() => {
+              const bench = v2Data.benchmark
+              const notes = sanitizeSellerText(bench?.notes || '')
+              const hasNotes = notes.trim().length > 0
+              const hasData = isMeaningfulJsonObject(bench?.data)
+
+              const shouldShow = bench?.available === false ? hasNotes : hasNotes || hasData
+              if (!shouldShow) return null
+
+              const data = bench?.data as unknown
+              const dataObj = data && typeof data === 'object' ? (data as Record<string, unknown>) : null
+              const looksLikeBenchmarkPanel =
+                dataObj !== null &&
+                'benchmarkSummary' in dataObj &&
+                'youWinHere' in dataObj
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-primary" />
+                      Benchmark
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {bench?.available === false ? (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{hasNotes ? notes : 'Benchmark indisponível para esta ação.'}</AlertDescription>
+                      </Alert>
+                    ) : looksLikeBenchmarkPanel ? (
+                      <BenchmarkPanel
+                        benchmark={
+                          dataObj as unknown as ComponentProps<typeof BenchmarkPanel>['benchmark']
+                        }
+                      />
+                    ) : hasNotes ? (
+                      <p className="text-sm text-muted-foreground">{notes}</p>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              )
+            })()}
+          </div>
+        )}
+
+        {/* Clip/Vídeo (conteúdo secundário) */}
+        {!isLoading && !error && !isGenerating && isClipAction && (
+          <div className="space-y-6">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Esta ação é focada em clip/vídeo e foi movida para segundo plano para não atrapalhar as prioridades principais.
+              </AlertDescription>
+            </Alert>
           </div>
         )}
 
         {/* Content V1 (fallback) */}
-        {!isLoading && !error && !isGenerating && !isV2 && v1Data && (
+        {!isLoading && !error && !isGenerating && !isV2 && v1Data && !isClipAction && (
           <div className="space-y-6">
-            {/* Por que importa */}
-            {v1Data.whyThisMatters && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-primary" />
-                    Por que isso importa
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{v1Data.whyThisMatters}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Como fazer */}
-            {v1Data.howToSteps && v1Data.howToSteps.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Target className="h-4 w-4 text-primary" />
-                    Como fazer
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                    {v1Data.howToSteps.map((step, idx) => (
-                      <li key={idx}>{step}</li>
-                    ))}
-                  </ol>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Checklist */}
+            {/* Fazer agora */}
             {v1Data.doThisNow && v1Data.doThisNow.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
-                    Checklist
+                    Fazer agora
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -400,10 +405,44 @@ export function ActionDetailsModal({
                     {v1Data.doThisNow.map((item, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-                        <span>{item}</span>
+                        <span>{sanitizeSellerText(item)}</span>
                       </li>
                     ))}
                   </ul>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Melhorias de suporte */}
+            {v1Data.howToSteps && v1Data.howToSteps.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    Melhorias de suporte
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    {v1Data.howToSteps.map((step, idx) => (
+                      <li key={idx}>{sanitizeSellerText(step)}</li>
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Boas práticas */}
+            {v1Data.whyThisMatters && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-primary" />
+                    Boas práticas
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{sanitizeSellerText(v1Data.whyThisMatters)}</p>
                 </CardContent>
               </Card>
             )}
@@ -503,36 +542,35 @@ export function ActionDetailsModal({
               </Card>
             )}
 
-            {/* Benchmark */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-primary" />
-                  Benchmark
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {v1Data.benchmark?.available === false ? (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Benchmark indisponível para esta ação.
-                      {v1Data.benchmark.notes && (
-                        <p className="mt-2 text-sm text-muted-foreground">{v1Data.benchmark.notes}</p>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                ) : v1Data.benchmark?.data ? (
-                  <div className="text-sm text-muted-foreground">
-                    <pre className="whitespace-pre-wrap bg-muted p-3 rounded">
-                      {JSON.stringify(v1Data.benchmark.data, null, 2)}
-                    </pre>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Dados de benchmark não disponíveis.</p>
-                )}
-              </CardContent>
-            </Card>
+            {/* Benchmark (evitar ruído) */}
+            {(() => {
+              const bench = v1Data.benchmark
+              const notes = sanitizeSellerText(bench?.notes || '')
+              const hasNotes = notes.trim().length > 0
+
+              if (!bench || !hasNotes) return null
+
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-primary" />
+                      Benchmark
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {bench.available === false ? (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{notes}</AlertDescription>
+                      </Alert>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{notes}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })()}
           </div>
         )}
 

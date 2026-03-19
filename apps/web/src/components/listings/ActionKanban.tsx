@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle, Clock, ExternalLink, Info } from 'lucide-react'
 import type { ListingActionStatus } from '@/hooks/use-listing-actions'
 import { ActionDetailsModal } from './ActionDetailsModal'
+import { sanitizeSellerText } from '@/lib/ai/sanitizeSellerText'
 
 export type ActionStatus = ListingActionStatus
 
@@ -33,6 +34,43 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
   const [changingStatus, setChangingStatus] = useState<Set<string>>(new Set())
   const [detailsModalOpen, setDetailsModalOpen] = useState(false)
   const [selectedActionId, setSelectedActionId] = useState<string | null>(null)
+
+  const isClipActionText = (value?: string | null) => /clip|video|vídeo/i.test(String(value || ''))
+
+  type ExecutionPayloadLike = {
+    diagnostic?: string
+    readyCopy?: string
+    copyableVersion?: string
+    practicalApplication?: string
+  }
+
+  const parseExecutionPayloadFromDescription = (description: string): ExecutionPayloadLike | null => {
+    const raw = description?.trim()
+    if (!raw) return null
+
+    // Caso venha embutido como JSON na coluna `description` (por compatibilidade).
+    if (!raw.startsWith('{') || !raw.endsWith('}')) return null
+
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (!parsed || typeof parsed !== 'object') return null
+
+      const obj = parsed as Record<string, unknown>
+      const payload =
+        (obj.executionPayload as ExecutionPayloadLike | undefined) ??
+        (obj as ExecutionPayloadLike | undefined)
+
+      const hasAny =
+        Boolean(payload?.diagnostic) ||
+        Boolean(payload?.readyCopy) ||
+        Boolean(payload?.copyableVersion) ||
+        Boolean(payload?.practicalApplication)
+
+      return hasAny ? payload ?? null : null
+    } catch {
+      return null
+    }
+  }
 
   const handleStatusChange = async (actionId: string, newStatus: ActionStatus) => {
     setChangingStatus(prev => new Set(prev).add(actionId))
@@ -95,10 +133,24 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
     const isLoading = changingStatus.has(action.id)
     const hasLink = action.suggestedActionUrl || editUrl
     const selectedAction = selectedActionId === action.id ? action : null
+    const isClipAction = isClipActionText(action.title) || isClipActionText(action.description)
+    const execPayload = parseExecutionPayloadFromDescription(action.description)
+
+    const diagnosticText = execPayload?.diagnostic ? sanitizeSellerText(execPayload.diagnostic) : null
+    const practicalApplicationText = execPayload?.practicalApplication
+      ? sanitizeSellerText(execPayload.practicalApplication)
+      : null
+    const readyCopyText = execPayload?.readyCopy
+      ? sanitizeSellerText(execPayload.readyCopy)
+      : execPayload?.copyableVersion
+        ? sanitizeSellerText(execPayload.copyableVersion)
+        : null
+
+    const safeDescription = sanitizeSellerText(action.description)
 
     return (
       <>
-        <Card className="p-4 space-y-3">
+        <Card className={`p-4 space-y-3 ${isClipAction ? 'opacity-95' : ''}`}>
           <div>
             <div className="flex items-start justify-between gap-2 mb-1">
               <h4 className="font-semibold text-sm flex-1">{action.title}</h4>
@@ -112,7 +164,27 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
                 Ver detalhes
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground line-clamp-2">{action.description}</p>
+            {execPayload ? (
+              <div className="space-y-1">
+                {diagnosticText && (
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Diagnóstico:</strong> {diagnosticText}
+                  </p>
+                )}
+                {readyCopyText && (
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    <strong>Copy pronta:</strong> {readyCopyText}
+                  </p>
+                )}
+                {practicalApplicationText && (
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    <strong>Aplicação prática:</strong> {practicalApplicationText}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground line-clamp-2">{safeDescription}</p>
+            )}
           </div>
 
           {/* Chips */}
@@ -130,7 +202,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
           </div>
           
           <div className="flex flex-col gap-2">
-            {hasLink && action.status === 'A_IMPLEMENTAR' && (
+            {hasLink && action.status === 'A_IMPLEMENTAR' && !isClipAction && (
               <Button
                 variant="default"
                 size="sm"
@@ -144,6 +216,11 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
                 <ExternalLink className="h-3 w-3 mr-2" />
                 APLICAR AGORA
               </Button>
+            )}
+            {hasLink && action.status === 'A_IMPLEMENTAR' && isClipAction && (
+              <p className="text-xs text-muted-foreground">
+                Esta ação de vídeo/clip foi mantida fora do fluxo principal.
+              </p>
             )}
             
             {action.status === 'A_IMPLEMENTAR' && (

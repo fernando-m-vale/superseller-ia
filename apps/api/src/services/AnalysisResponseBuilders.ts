@@ -10,6 +10,12 @@ export interface MvpActionItem {
   title: string;
   summary: string;
   description: string;
+  executionPayload?: {
+    diagnostic?: string;
+    readyCopy?: string;
+    copyableVersion?: string;
+    practicalApplication?: string;
+  };
   expectedImpact: string;
   impactEstimate?: string;
   impactReason?: string;
@@ -68,6 +74,12 @@ export interface DeterministicMvpActionsInput {
   hasPromotion?: boolean | null;
   discountPercent?: number | null;
   mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  visualAnalysis?: {
+    visual_score?: number | null;
+    strengths?: string[] | null;
+    opportunities?: string[] | null;
+    main_improvements?: string[] | null;
+  } | null;
   dataQualityWarnings?: string[] | null;
   seoSuggestions?: {
     suggestedTitle?: string | null;
@@ -115,6 +127,61 @@ function textHasAny(haystack: string, needles: string[]): boolean {
   return needles.some((needle) => haystack.includes(needle));
 }
 
+function summarizeText(value?: string | null, maxLength = 220): string {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
+function hasStrongVisualEvidence(
+  visualAnalysis?: DeterministicMvpActionsInput['visualAnalysis'],
+  mediaVerdict?: DeterministicMvpActionsInput['mediaVerdict'],
+): boolean {
+  const visualScore = visualAnalysis?.visual_score ?? null;
+  const strongSignals = [
+    ...(visualAnalysis?.strengths || []),
+    ...(visualAnalysis?.opportunities || []),
+    ...(visualAnalysis?.main_improvements || []),
+  ]
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
+
+  const visualLooksStrong =
+    typeof visualScore === 'number' && visualScore >= 72;
+  const explicitStrength =
+    strongSignals.some((signal) =>
+      textHasAny(signal, ['forte', 'boa', 'bom', 'consistente', 'adequad', 'atrativ', 'clara', 'profission'])
+    ) &&
+    !strongSignals.some((signal) =>
+      textHasAny(signal, ['trocar capa', 'imagem principal', 'hero', 'foto 1', 'imagem 1', 'galeria fraca'])
+    );
+
+  return visualLooksStrong || explicitStrength;
+}
+
+function hasRobustMediaCounterEvidence(input: {
+  picturesCount?: number | null;
+  analysisV21?: DeterministicMvpActionsInput['analysisV21'];
+}): boolean {
+  const picturesCount = input.picturesCount ?? 0;
+  const imagePlan = normalizeText((input.analysisV21?.image_plan || []).map((step) => step?.action || '').join(' '));
+
+  return (
+    (picturesCount > 0 && picturesCount < 4) ||
+    textHasAny(imagePlan, ['trocar imagem principal', 'trocar capa', 'imagem 1', 'foto 1', 'hero']) ||
+    textHasAny(imagePlan, ['sem contexto', 'sem uso', 'produto isolado'])
+  );
+}
+
+function shouldDemoteMediaAction(input: DeterministicMvpActionsInput, action: MvpActionItem): boolean {
+  if (action.pillar !== 'midia') return false;
+  if (!hasStrongVisualEvidence(input.visualAnalysis, input.mediaVerdict)) return false;
+  return !hasRobustMediaCounterEvidence({
+    picturesCount: input.picturesCount,
+    analysisV21: input.analysisV21,
+  });
+}
+
 function inferDominantFailure(input: {
   stage: FunnelStage;
   listingTitle?: string | null;
@@ -123,6 +190,7 @@ function inferDominantFailure(input: {
   hasPromotion?: boolean | null;
   discountPercent?: number | null;
   mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  visualAnalysis?: DeterministicMvpActionsInput['visualAnalysis'];
   dataQualityWarnings?: string[] | null;
   analysisV21?: {
     title_fix?: { problem?: string | null } | null;
@@ -168,9 +236,11 @@ function inferDominantFailure(input: {
 
   if (input.stage === 'CLICK') {
     if (
-      (picturesCount > 0 && picturesCount < 5) ||
-      textHasAny(imagePlan, ['capa', 'principal', 'hero', 'imagem 1', 'foto 1']) ||
-      input.mediaVerdict?.hasClipDetected === false
+      !hasStrongVisualEvidence(input.visualAnalysis, input.mediaVerdict) &&
+      (
+        (picturesCount > 0 && picturesCount < 5) ||
+        textHasAny(imagePlan, ['capa', 'principal', 'hero', 'imagem 1', 'foto 1'])
+      )
     ) {
       return 'imagem principal pouco clara';
     }
@@ -688,9 +758,9 @@ function buildMandatoryActionsForFailure(
 
   if (failure === 'imagem principal pouco clara') {
     return [{
-      id: 'midia_primary_image_revision',
-      actionKey: 'midia_primary_image_revision',
-      title: 'Revisar imagem principal e prova visual do anúncio',
+      id: 'midia_gallery_upgrade',
+      actionKey: 'midia_gallery_upgrade',
+      title: 'Atualizar imagem principal e galeria com prova visual',
       summary: 'O veredito sinaliza atrito visual logo na leitura inicial da oferta.',
       description: firstImageAction || 'Atualizar capa, contexto de uso e diferenciais visuais para melhorar clique e confiança.',
       expectedImpact: 'Mais clique qualificado e menor fricção na comparação.',
@@ -794,14 +864,20 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
   }
 
   if (optimizedCopy && optimizedCopy.trim()) {
+    const trimmedCopy = optimizedCopy.trim();
+    const trimmedDiagnostic = descriptionDiagnostic?.trim() || 'A página ainda não sustenta diferenciais, aplicação e resposta às objeções principais.';
     templates.push({
       id: 'seo_description_blocks',
       actionKey: 'seo_description_blocks',
-      title: 'Reescrever descrição com benefícios e dúvidas respondidas',
-      summary: 'Existe copy otimizada pronta no diagnóstico para reaproveitar imediatamente.',
-      description: descriptionDiagnostic?.trim()
-        ? descriptionDiagnostic.trim()
-        : 'Aplicar blocos da descrição otimizada tende a reduzir objeções e melhorar conversão.',
+      title: 'Aplicar descrição pronta com benefícios, prova e FAQ',
+      summary: `Diagnóstico curto: ${summarizeText(trimmedDiagnostic, 120)}`,
+      description: `Copy pronta para publicar: ${summarizeText(trimmedCopy, 280)}`,
+      executionPayload: {
+        diagnostic: trimmedDiagnostic,
+        readyCopy: trimmedCopy,
+        copyableVersion: trimmedCopy,
+        practicalApplication: 'Usar a copy como base da descrição principal e abrir um bloco final de FAQ com compatibilidade, uso e garantia.',
+      },
       expectedImpact: 'Mais clareza de oferta e menor fricção na decisão de compra.',
       impact: 'high',
       priority: 'high',
@@ -814,7 +890,7 @@ function buildEvidenceTemplates(input: DeterministicMvpActionsInput, editUrl: st
     templates.push({
       id: 'midia_gallery_upgrade',
       actionKey: 'midia_gallery_upgrade',
-      title: 'Melhorar imagens com prova de uso e diferenciais',
+      title: 'Atualizar imagem principal e galeria com prova visual',
       summary: `Plano concreto disponível com ${imagePlan.length} prioridades de imagem.`,
       description: imagePlan.map((step, index) => `${index + 1}. ${step.action?.trim()}`).join(' '),
       expectedImpact: 'Melhor prova visual e aumento de conversão.',
@@ -906,7 +982,7 @@ function buildTemplates(input: DeterministicMvpActionsInput, editUrl: string | n
     templates.push({
       id: 'midia_gallery_upgrade',
       actionKey: 'midia_gallery_upgrade',
-      title: 'Completar galeria com prova visual',
+      title: 'Atualizar imagem principal e galeria com prova visual',
       summary: `Hoje o anúncio tem ${picturesCount} imagens. Aumentar para 8+ com contexto de uso tende a reduzir dúvida pré-compra.`,
       description: 'Adicionar imagem principal mais forte, foto de contexto, close técnico e prova visual do principal diferencial.',
       expectedImpact: 'Menor fricção na decisão e melhora de conversão.',
@@ -1016,7 +1092,12 @@ function assignActionGroup(
   stage: FunnelStage,
   primaryBottleneck: FunnelStage,
   rootCause?: Partial<RootCauseDiagnosis> | null,
+  input?: DeterministicMvpActionsInput,
 ): ActionGroup {
+  if (input && shouldDemoteMediaAction(input, action)) {
+    return 'support';
+  }
+
   const matchScore = scoreActionForRootCause(action, rootCause?.diagnosisRootCause);
   const highPriority = action.priority === 'high';
   const hasRootCause = Boolean(rootCause?.diagnosisRootCause);
@@ -1062,6 +1143,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     hasPromotion: input.hasPromotion,
     discountPercent: input.discountPercent,
     mediaVerdict: input.mediaVerdict,
+    visualAnalysis: input.visualAnalysis,
     dataQualityWarnings: input.dataQualityWarnings,
     analysisV21: input.analysisV21,
     benchmark: input.benchmark,
@@ -1112,6 +1194,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
     let penalties = 0;
     if (isGenericText(`${normalizedAction.summary} ${normalizedAction.description}`)) penalties += 20;
     if (benchmarkUnavailable && isBenchmarkDependent(normalizedAction)) penalties += 12;
+    if (shouldDemoteMediaAction(input, normalizedAction)) penalties += 28;
     penalties += extra?.hardPenalty ?? 0;
 
     const stageScore = getFunnelStageWeight(funnelStage);
@@ -1222,7 +1305,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
       ...candidate,
       action: {
         ...enriched,
-        actionGroup: assignActionGroup(enriched, candidate.funnelStage, primaryBottleneck, input.rootCause),
+        actionGroup: assignActionGroup(enriched, candidate.funnelStage, primaryBottleneck, input.rootCause, input),
         rootCauseCode: input.rootCause?.diagnosisRootCause,
       },
     };
@@ -1354,6 +1437,7 @@ export function buildFunnelBottleneckDiagnosis(input: {
   hasPromotion?: boolean | null;
   discountPercent?: number | null;
   mediaVerdict?: { canSuggestClip?: boolean | null; hasClipDetected?: boolean | null };
+  visualAnalysis?: DeterministicMvpActionsInput['visualAnalysis'];
   dataQualityWarnings?: string[] | null;
   analysisV21?: {
     title_fix?: { problem?: string | null } | null;
@@ -1387,6 +1471,7 @@ export function buildFunnelBottleneckDiagnosis(input: {
     hasPromotion: input.hasPromotion,
     discountPercent: input.discountPercent,
     mediaVerdict: input.mediaVerdict,
+    visualAnalysis: input.visualAnalysis,
     dataQualityWarnings: input.dataQualityWarnings,
     analysisV21: input.analysisV21,
     benchmark: input.benchmark,

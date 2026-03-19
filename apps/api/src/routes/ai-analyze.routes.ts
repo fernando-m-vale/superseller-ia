@@ -1672,6 +1672,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
                 hasClipDetected: mediaVerdict?.hasClipDetected,
               },
+              visualAnalysis,
               dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
               analysisV21,
               seoSuggestions: {
@@ -1723,6 +1724,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 canSuggestClip: mediaVerdict?.canSuggestClip,
                 hasClipDetected: mediaVerdict?.hasClipDetected,
               },
+              visualAnalysis,
               dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
               analysisV21,
               seoSuggestions: {
@@ -1755,6 +1757,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               orders: result.score.metrics_30d.orders,
               conversionRate: result.score.metrics_30d.conversionRate,
             },
+            visualAnalysis,
           });
           responseData.executionRoadmap = buildExecutionRoadmap({
             bottleneckDiagnosis: responseData.funnelDiagnosis,
@@ -1805,6 +1808,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            visualAnalysis,
             dataQualityWarnings: mergeListingWarnings(result.dataQuality?.warnings, listing),
             analysisV21,
             seoSuggestions: {
@@ -2418,6 +2422,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            visualAnalysis: cacheVisualAnalysis,
             dataQualityWarnings: mergeListingWarnings(
               ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
               listing,
@@ -2469,6 +2474,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            visualAnalysis: cacheVisualAnalysis,
             dataQualityWarnings: mergeListingWarnings(
               ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
               listing,
@@ -2501,6 +2507,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             orders: scoreResult.metrics_30d.orders,
             conversionRate: scoreResult.metrics_30d.conversionRate,
           },
+          visualAnalysis: cacheVisualAnalysis,
         });
         cacheResponseData.executionRoadmap = buildExecutionRoadmap({
           bottleneckDiagnosis: cacheResponseData.funnelDiagnosis,
@@ -3282,6 +3289,7 @@ if (enableAIPing) {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            visualAnalysis: latestVisualAnalysis,
             dataQualityWarnings: mergeListingWarnings(
               ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
               listing,
@@ -3323,6 +3331,7 @@ if (enableAIPing) {
               canSuggestClip: mediaVerdict?.canSuggestClip,
               hasClipDetected: mediaVerdict?.hasClipDetected,
             },
+            visualAnalysis: latestVisualAnalysis,
             dataQualityWarnings: mergeListingWarnings(
               ((cachedResult.analysis as Record<string, unknown> | undefined)?.dataQuality as Record<string, unknown> | undefined)?.warnings as string[] | undefined,
               listing,
@@ -3362,6 +3371,7 @@ if (enableAIPing) {
             orders: scoreResult.metrics_30d.orders,
             conversionRate: scoreResult.metrics_30d.conversionRate,
           },
+          visualAnalysis: latestVisualAnalysis,
         });
         responseData.executionRoadmap = buildExecutionRoadmap({
           bottleneckDiagnosis: responseData.funnelDiagnosis,
