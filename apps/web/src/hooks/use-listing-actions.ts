@@ -17,6 +17,12 @@ export interface ListingActionItem {
   actionKey: string
   title: string
   description: string
+  executionPayload?: {
+    diagnostic?: string
+    readyCopy?: string
+    copyableVersion?: string
+    practicalApplication?: string
+  } | null
   expectedImpact?: string | null
   priority?: string | null
   status: ListingActionStatus

@@ -806,6 +806,7 @@ model ListingAction {
   actionKey      String
   title          String
   description    String
+  executionPayload Json?               @map("execution_payload")
   expectedImpact String?
   priority       String?
   status         ActionStatus          @default(A_IMPLEMENTAR)

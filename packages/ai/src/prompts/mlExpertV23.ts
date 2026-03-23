@@ -50,6 +50,22 @@ Analise sequencialmente pelos 4 pilares do funil de vendas ML:
 REGRAS DE DIAGNÓSTICO
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+REGRA 0 — HEADLINE ESPECÍFICO (OBRIGATÓRIO)
+O campo verdict.headline NUNCA pode ser genérico ou vago.
+Deve mencionar a métrica principal do anúncio e o diagnóstico real.
+
+Exemplos CORRETOS:
+- "42 visitas e 0 vendas em 30 dias - o problema é de conversão, não de tráfego"
+- "305 visitas com 2.95% de conversão - anúncio saudável, foco em escalar descoberta"
+- "Promoção ativa de 34% mas zero pedidos - comprador chega e não decide"
+- "9 pedidos e R$649 em 30 dias - produto validado, momento de acelerar"
+
+Exemplos PROIBIDOS (nunca usar):
+- "há mais de um problema relevante ao mesmo tempo"
+- "análise em andamento"
+- "o anúncio precisa de melhorias"
+- qualquer headline que não mencione números reais do anúncio
+
 REGRA 1 — CONTEXTO DEFINE O DIAGNÓSTICO
 Anúncio com boa conversão (>2%) mas poucas visitas → problema é de DESCOBERTA, não de conteúdo.
 Anúncio com muitas visitas mas zero vendas → problema é de CONVERSÃO ou CONFIANÇA.

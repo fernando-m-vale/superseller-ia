@@ -111,12 +111,8 @@ async function persistListingActionsBatch(
         listingId,
         actionKey: hack.actionKey || hack.id || `${batchId}:${hack.title}`,
         title: hack.title as string,
-        description: executionPayload
-          ? JSON.stringify({
-              description: hack.description || hack.summary || '',
-              executionPayload,
-            })
-          : (hack.summary || hack.description || '') as string,
+        description: (hack.description || hack.summary || '') as string,
+        executionPayload: executionPayload ?? Prisma.JsonNull,
         expectedImpact: hack.impact || hack.estimatedImpact || null,
         priority: hack.priority || null,
         batchId,

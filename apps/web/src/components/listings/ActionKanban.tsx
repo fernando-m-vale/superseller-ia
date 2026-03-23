@@ -16,6 +16,12 @@ export interface ActionItem {
   actionKey?: string
   title: string
   description: string
+  executionPayload?: {
+    diagnostic?: string
+    readyCopy?: string
+    copyableVersion?: string
+    practicalApplication?: string
+  } | null
   status: ActionStatus
   priority?: string | null
   expectedImpact?: string | null
@@ -134,7 +140,7 @@ export function ActionKanban({ actions, onStatusChange, editUrl, listingId }: Ac
     const hasLink = action.suggestedActionUrl || editUrl
     const selectedAction = selectedActionId === action.id ? action : null
     const isClipAction = isClipActionText(action.title) || isClipActionText(action.description)
-    const execPayload = parseExecutionPayloadFromDescription(action.description)
+    const execPayload = action.executionPayload ?? parseExecutionPayloadFromDescription(action.description)
 
     const diagnosticText = execPayload?.diagnostic ? sanitizeSellerText(execPayload.diagnostic) : null
     const practicalApplicationText = execPayload?.practicalApplication

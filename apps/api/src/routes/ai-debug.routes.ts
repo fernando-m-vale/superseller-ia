@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { authGuard } from '../plugins/auth';
 import { OpenAIService } from '../services/OpenAIService';
 import { IAScoreService } from '../services/IAScoreService';
+import { getPromptVersion } from '../utils/prompt-version';
 
 const prisma = new PrismaClient();
 
@@ -110,8 +111,7 @@ export const aiDebugRoutes: FastifyPluginCallback = (app, _, done) => {
           pricingSource = 'reference_prices';
         }
 
-        // Prompt version configurável via env
-        const promptVersion = process.env.AI_PROMPT_VERSION || 'ml-expert-v21';
+        const promptVersion = getPromptVersion();
 
         // Montar resposta sanitizada
         const response = {
@@ -128,8 +128,10 @@ export const aiDebugRoutes: FastifyPluginCallback = (app, _, done) => {
 
           listing: {
             title: listing.title,
+            description: inputV21.listing.description || undefined,
             status: listing.status,
             categoryId: listing.category || undefined,
+            categoryName: inputV21.listing.category_name || undefined,
             picturesCount: listing.pictures_count || undefined,
             picturesUrlsSample: picturesUrlsSample.length > 0 ? picturesUrlsSample : undefined,
             hasClips: listing.has_clips,
@@ -150,7 +152,10 @@ export const aiDebugRoutes: FastifyPluginCallback = (app, _, done) => {
             revenue: scoreResult.metrics_30d.revenue,
             conversionRate: scoreResult.metrics_30d.conversionRate,
             ctr: scoreResult.metrics_30d.ctr || undefined,
+            trend: inputV21.performance.trend || undefined,
           },
+          ads: inputV21.ads || null,
+          visualScore: inputV21.visualScore ?? null,
 
           dataQuality: {
             missing: inputV21.dataQuality.warnings.filter(w => w.includes('indisponível') || w.includes('não encontrado')),
