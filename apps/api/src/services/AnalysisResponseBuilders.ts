@@ -1620,7 +1620,7 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
 }
 
 export function buildVerdictText(input: {
-  rawVerdict?: string | null;
+  rawVerdict?: unknown;
   metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null };
   hasPromotion?: boolean | null;
   discountPercent?: number | null;
@@ -1643,9 +1643,12 @@ export function buildVerdictText(input: {
   } | null;
   rootCause?: Partial<RootCauseDiagnosis> | null;
 }): string {
-  const raw = (input.rawVerdict || '').trim();
-  if (raw.length >= 280) {
-    return raw;
+  const raw = typeof input.rawVerdict === 'string'
+    ? input.rawVerdict
+    : JSON.stringify(input.rawVerdict ?? '');
+  const verdict = raw.trim();
+  if (verdict.length >= 280) {
+    return verdict;
   }
 
   const visits = input.metrics30d?.visits ?? 0;

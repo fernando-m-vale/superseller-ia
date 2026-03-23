@@ -72,6 +72,11 @@ const AnalyzeQuerySchema = z.object({
   debugPrices: z.enum(['true', 'false']).optional().transform(v => v === 'true'),
 });
 
+const AnalyzeBodySchema = z.object({
+  force: z.boolean().optional(),
+  force_refresh: z.boolean().optional(),
+}).passthrough();
+
 async function persistListingActionsBatch(
   listingId: string,
   growthHacks: Array<{
@@ -132,33 +137,24 @@ function applyV23AnalysisFields(
   target: Record<string, any>,
   analysisV21?: AIAnalysisResultExpert | null,
 ): void {
-  if (!analysisV21) return;
-
-  const verdict = typeof analysisV21.verdict === 'object' && analysisV21.verdict
+  const verdict = typeof analysisV21?.verdict === 'object' && analysisV21.verdict
     ? analysisV21.verdict
     : null;
 
-  if (analysisV21.performanceSignal || verdict?.performanceSignal) {
-    target.performanceSignal = analysisV21.performanceSignal || verdict?.performanceSignal;
-  }
+  target.performanceSignal = analysisV21?.performanceSignal ?? verdict?.performanceSignal ?? null;
+  target.verdict = analysisV21?.verdict ?? null;
 
   if (verdict?.whatIsWorking) {
     target.whatIsWorking = verdict.whatIsWorking;
   }
 
-  if (analysisV21.funnelAnalysis) {
-    target.funnelAnalysis = analysisV21.funnelAnalysis;
-  }
+  target.funnelAnalysis = analysisV21?.funnelAnalysis ?? null;
+  target.potentialGain = analysisV21?.potentialGain ?? null;
+  target.executionRoadmap = analysisV21?.executionRoadmap?.length
+    ? analysisV21.executionRoadmap
+    : target.executionRoadmap ?? null;
 
-  if (analysisV21.potentialGain) {
-    target.potentialGain = analysisV21.potentialGain;
-  }
-
-  if (analysisV21.executionRoadmap?.length) {
-    target.executionRoadmap = analysisV21.executionRoadmap;
-  }
-
-  if (Array.isArray(analysisV21.growthHacks) && analysisV21.growthHacks.length > 0) {
+  if (Array.isArray(analysisV21?.growthHacks) && analysisV21.growthHacks.length > 0) {
     target.growthHacks = analysisV21.growthHacks.map((hack) => ({
       ...hack,
       title: hack.title || hack.summary || 'Ação recomendada',
@@ -174,9 +170,8 @@ function applyV23AnalysisFields(
     }));
   }
 
-  if (analysisV21.adsIntelligence) {
-    target.adsIntelligenceRecommendation = analysisV21.adsIntelligence;
-  }
+  target.adsIntelligence = analysisV21?.adsIntelligence ?? target.adsIntelligence ?? null;
+  target.adsIntelligenceRecommendation = analysisV21?.adsIntelligence ?? target.adsIntelligenceRecommendation ?? null;
 }
 
 /**
@@ -443,10 +438,10 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
-  app.post<{ Params: { listingId: string }; Querystring: { forceRefresh?: string } }>(
+  app.post<{ Params: { listingId: string }; Querystring: { forceRefresh?: string }; Body: z.infer<typeof AnalyzeBodySchema> }>(
     '/analyze/:listingId',
     { preHandler: authGuard },
-    async (request: FastifyRequest<{ Params: { listingId: string }; Querystring: { forceRefresh?: string } }>, reply: FastifyReply) => {
+    async (request: FastifyRequest<{ Params: { listingId: string }; Querystring: { forceRefresh?: string }; Body: z.infer<typeof AnalyzeBodySchema> }>, reply: FastifyReply) => {
       // Declarar variáveis de contexto uma vez no topo do handler
       const { tenantId, userId, requestId } = request as RequestWithAuth & { requestId?: string };
 
@@ -460,8 +455,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
 
         const params = AnalyzeParamsSchema.parse(request.params);
         const query = AnalyzeQuerySchema.parse(request.query);
+        const body = AnalyzeBodySchema.parse(request.body ?? {});
         const { listingId } = params;
-        const forceRefresh = query.forceRefresh ?? false;
+        const forceRefresh = query.forceRefresh === true || body.force === true || body.force_refresh === true;
 
         // Garante dados frescos (máx 24h) antes de analisar
         const _freshnessResult = await ensureListingFreshness(listingId, tenantId)
