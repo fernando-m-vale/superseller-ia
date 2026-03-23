@@ -18,7 +18,7 @@ const ML_API_BASE = 'https://api.mercadolibre.com';
  * Função helper para disparar sync completo após reconexão
  * Executa de forma assíncrona (fire-and-forget) para não bloquear a resposta
  */
-async function triggerFullSync(tenantId: string): Promise<void> {
+export async function triggerFullSync(tenantId: string): Promise<void> {
   try {
     // Log estruturado: início do sync full
     console.log(`[ML-SYNC-FULL] Iniciando sync completo tenantId=${tenantId}`);
@@ -41,6 +41,7 @@ async function triggerFullSync(tenantId: string): Promise<void> {
     // Log do erro mas não propaga para não afetar o callback
     const errorMsg = error instanceof Error ? error.message : 'Erro desconhecido';
     console.error(`[ML-SYNC-FULL] Erro ao executar sync completo tenantId=${tenantId} error=${errorMsg}`, error);
+    throw error;
   }
 }
 

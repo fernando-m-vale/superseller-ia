@@ -9,11 +9,13 @@ import { Card } from '@/components/ui/card'
 import { useAIAnalyze } from '@/hooks/use-ai-analyze'
 import { ListingAIAnalysisPanel } from './ListingAIAnalysisPanel'
 import type { Listing } from '@/hooks/use-listings'
+import { InactiveListingRefreshButton } from '@/components/listings/InactiveListingRefreshButton'
 
 interface ListingAccordionRowProps {
   listing: Listing
   isExpanded: boolean
   onToggle: () => void
+  onRefreshSuccess: () => void
 }
 
 function getAnalysisStatus(
@@ -76,7 +78,7 @@ function formatPrice(price: number | null | undefined): string {
   return `R$ ${Number(price).toFixed(2)}`
 }
 
-export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAccordionRowProps) {
+export function ListingAccordionRow({ listing, isExpanded, onToggle, onRefreshSuccess }: ListingAccordionRowProps) {
   const {
     data: aiAnalysis,
     isLoading: aiLoading,
@@ -236,6 +238,18 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle }: ListingAc
         <TableRow>
           <TableCell colSpan={7} className="p-0">
             <div className="border-t bg-muted/30">
+              {listing.status !== 'active' && listing.listingIdExt && (
+                <div className="flex items-center gap-2 px-4 pt-4">
+                  <span className="text-xs text-muted-foreground">
+                    Anúncio inativo, pausado ou removido: refresh manual disponível.
+                  </span>
+                  <InactiveListingRefreshButton
+                    listingExtId={listing.listingIdExt}
+                    listingTitle={listing.title}
+                    onRefreshSuccess={onRefreshSuccess}
+                  />
+                </div>
+              )}
               {aiLoading && !aiAnalysis?.analysisV21 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />

@@ -15,6 +15,7 @@ import { internalJobsRoutes } from './routes/internal-jobs.routes';
 import { internalDebugRoutes } from './routes/internal-debug.routes';
 import { clipsDebugRoutes } from './routes/clips-debug.routes';
 import { metaRoutes } from './routes/meta.routes';
+import { syncSchedulerRoutes } from './routes/sync-scheduler';
 import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
@@ -68,6 +69,7 @@ async function main() {
     // Alias /api/v1/ads -> /api/v1/listings (compatibilidade com frontend)
     await app.register(listingsRoutes, { prefix: '/api/v1/ads' });
     await app.register(syncRoutes, { prefix: '/api/v1/sync' });
+    await app.register(syncSchedulerRoutes, { prefix: '/api/v1/sync' });
     await app.register(recommendationsRoutes, { prefix: '/api/v1/recommendations' });
     // Registrar meta primeiro (sem conflito)
     await app.register(metaRoutes, { prefix: '/api/v1' });

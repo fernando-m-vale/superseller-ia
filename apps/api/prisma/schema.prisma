@@ -206,6 +206,7 @@ model MarketplaceConnection {
   access_token        String
   refresh_token       String?
   expires_at          DateTime?
+  last_synced_at      DateTime?
   status              ConnectionStatus
   last_error_code     String? // Código do último erro HTTP (ex: "401", "403")
   last_error_at       DateTime? // Quando ocorreu o último erro

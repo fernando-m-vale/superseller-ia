@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
+import { triggerLoginSyncIfNeeded } from '../lib/sync-on-login';
 
 const prisma = new PrismaClient();
 
@@ -132,6 +133,13 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
         JWT_SECRET,
         { expiresIn: REFRESH_TOKEN_EXPIRES_IN }
       );
+
+      // Sync em background após login — 1x por dia por tenant
+      const _apiBaseUrl = process.env.INTERNAL_API_URL ?? 'http://localhost:3001'
+      const _serviceToken = process.env.SCHEDULER_SERVICE_TOKEN ?? ''
+      if (_serviceToken) {
+        triggerLoginSyncIfNeeded(user.tenant_id, _apiBaseUrl, _serviceToken)
+      }
 
       return reply.send({
         user: {

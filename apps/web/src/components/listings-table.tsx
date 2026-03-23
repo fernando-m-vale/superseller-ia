@@ -189,6 +189,9 @@ export function ListingsTable() {
                       listing={listing}
                       isExpanded={expandedListingId === listing.id}
                       onToggle={() => handleRowToggle(listing.id)}
+                      onRefreshSuccess={() => {
+                        refetch()
+                      }}
                     />
                   ))
                 )}

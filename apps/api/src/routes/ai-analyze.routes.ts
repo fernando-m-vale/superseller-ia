@@ -40,6 +40,7 @@ import { VisualAnalysisOrchestrator } from '../services/visual/VisualAnalysisOrc
 import { VisualAnalysisRepository } from '../services/visual/VisualAnalysisRepository';
 import { attachAdsIntelligenceToPayload } from '../services/ads/attachAdsIntelligence';
 import { enrichAnalyzeResponseWithConsultingIntelligence } from '../services/AnalyzeConsultingEnricher';
+import { ensureListingFreshness } from '../lib/freshness-check';
 
 const prisma = new PrismaClient();
 const visualAnalysisOrchestrator = new VisualAnalysisOrchestrator(
@@ -390,6 +391,16 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const query = AnalyzeQuerySchema.parse(request.query);
         const { listingId } = params;
         const forceRefresh = query.forceRefresh ?? false;
+
+        // Garante dados frescos (máx 24h) antes de analisar
+        const _freshnessResult = await ensureListingFreshness(listingId, tenantId)
+        if (_freshnessResult.refreshed) {
+          request.log.info(`[Analyze] Dados atualizados antes da análise: ${listingId}`)
+        }
+        if (_freshnessResult.error && !_freshnessResult.skipped) {
+          request.log.warn(`[Analyze] Refresh falhou, prosseguindo: ${_freshnessResult.error}`)
+        }
+
         analysisStatusTracker.setStatus(tenantId, listingId, 'generating');
         // Debug controlado: calcular uma única vez no topo do handler para evitar TS2451
         // Considera tanto query param (?debugPrices=true) quanto env var (DEBUG_ML_PRICES=true)
