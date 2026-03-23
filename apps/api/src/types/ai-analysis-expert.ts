@@ -1,93 +1,143 @@
 /**
  * AI Analysis Result - Mercado Livre Expert
- * 
- * Formato especialista focado em ações diretas e implementáveis.
- * Versão ml-expert-v1: consultor sênior especialista em Mercado Livre.
+ *
+ * Contrato do prompt especialista. Mantém compatibilidade com respostas antigas,
+ * mas aceita o schema completo da Recommendation Engine V2 (ml-expert-v23).
  */
 
 import { z } from 'zod';
 
-/**
- * Schema para análise de título com correção
- */
-export const TitleFixExpertSchema = z.object({
-  problem: z.string().describe('Onde o título atual falha para o algoritmo do Mercado Livre'),
-  impact: z.string().describe('Qual sinal algorítmico está sendo perdido'),
-  before: z.string().describe('Título atual exatamente como está no anúncio'),
-  after: z.string().describe('Título otimizado pronto para copiar e colar'),
+const PromptVersionSchema = z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22', 'ml-expert-v22', 'ml-expert-v23']);
+
+const LegacyTitleFixSchema = z.object({
+  problem: z.string(),
+  impact: z.string(),
+  before: z.string(),
+  after: z.string(),
+}).optional();
+
+const LegacyImagePlanItemSchema = z.object({
+  image: z.number(),
+  action: z.string(),
 });
 
-export type TitleFixExpert = z.infer<typeof TitleFixExpertSchema>;
+const LegacyDescriptionFixSchema = z.object({
+  diagnostic: z.string(),
+  optimized_copy: z.string(),
+}).optional();
 
-/**
- * Schema para plano de imagens
- */
-export const ImagePlanItemExpertSchema = z.object({
-  image: z.number().describe('Número da imagem (1, 2, 3, etc)'),
-  action: z.string().describe('O que essa imagem deve mostrar para converter melhor'),
-});
+const LegacyPriceFixSchema = z.object({
+  diagnostic: z.string(),
+  action: z.string(),
+}).optional();
 
-export type ImagePlanItemExpert = z.infer<typeof ImagePlanItemExpertSchema>;
+const LegacyAlgorithmHackSchema = z.object({
+  hack: z.string(),
+  how_to_apply: z.string(),
+  signal_impacted: z.string(),
+}).passthrough();
 
-/**
- * Schema para correção de descrição
- */
-export const DescriptionFixExpertSchema = z.object({
-  diagnostic: z.string().describe('Problema real da descrição atual'),
-  optimized_copy: z.string().describe('Descrição completa pronta para colar no Mercado Livre'),
-});
+const ScoreBreakdownV23Schema = z.object({
+  descoberta: z.number(),
+  clique: z.number(),
+  conversao: z.number(),
+  crescimento: z.number(),
+}).partial().optional();
 
-export type DescriptionFixExpert = z.infer<typeof DescriptionFixExpertSchema>;
+const VerdictV23Schema = z.object({
+  headline: z.string().optional(),
+  diagnosis: z.string().optional(),
+  whatIsWorking: z.string().optional(),
+  rootCause: z.string().optional(),
+  rootCauseCode: z.string().optional(),
+  performanceSignal: z.enum(['EXCELENTE', 'BOM', 'ATENCAO', 'CRITICO']).optional(),
+}).partial().optional();
 
-/**
- * Schema para correção de preço
- */
-export const PriceFixExpertSchema = z.object({
-  diagnostic: z.string().describe('Avaliação do preço considerando preço final e promoções'),
-  action: z.string().describe('O que fazer com preço/promoção'),
-});
+const FunnelStageV23Schema = z.object({
+  score: z.number().optional(),
+  status: z.enum(['ok', 'atencao', 'critico']).optional(),
+  insight: z.string().optional(),
+}).partial();
 
-export type PriceFixExpert = z.infer<typeof PriceFixExpertSchema>;
+const FunnelAnalysisV23Schema = z.object({
+  descoberta: FunnelStageV23Schema.optional(),
+  clique: FunnelStageV23Schema.optional(),
+  conversao: FunnelStageV23Schema.optional(),
+  crescimento: FunnelStageV23Schema.optional(),
+}).partial().optional();
 
-/**
- * Schema para hack algorítmico
- */
-export const AlgorithmHackExpertSchema = z.object({
-  hack: z.string().describe('Nome curto do hack'),
-  how_to_apply: z.string().describe('Como executar no Mercado Livre'),
-  signal_impacted: z.string().describe('Sinal algorítmico impactado'),
-});
+const PotentialGainV23Schema = z.object({
+  estimatedVisitsIncrease: z.string().optional(),
+  estimatedConversionIncrease: z.string().optional(),
+  estimatedRevenueIncrease: z.string().optional(),
+  confidence: z.enum(['alta', 'media', 'baixa']).optional(),
+}).partial().optional();
 
-export type AlgorithmHackExpert = z.infer<typeof AlgorithmHackExpertSchema>;
+const GrowthHackV23Schema = z.object({
+  id: z.string(),
+  actionKey: z.string().optional(),
+  pillar: z.enum(['seo', 'midia', 'preco', 'ads', 'confianca', 'crescimento']).optional(),
+  funnelStage: z.enum(['DESCOBERTA', 'CLIQUE', 'CONVERSAO', 'CRESCIMENTO']).optional(),
+  priority: z.enum(['high', 'medium', 'low']).optional(),
+  impact: z.enum(['high', 'medium', 'low']).optional(),
+  effort: z.enum(['low', 'medium', 'high']).optional(),
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  description: z.string().optional(),
+  readyCopy: z.string().optional(),
+  expectedImpact: z.string().optional(),
+  impactReason: z.string().optional(),
+  actionGroup: z.enum(['immediate', 'support', 'optional']).optional(),
+  rootCauseCode: z.string().optional(),
+}).passthrough();
 
-/**
- * Schema completo da análise especialista
- */
+const AdsIntelligenceV23Schema = z.object({
+  status: z.enum(['available', 'unavailable', 'no_campaign']).optional(),
+  summary: z.string().optional(),
+  recommendation: z.string().optional(),
+}).partial().optional();
+
+const ExecutionRoadmapStepV23Schema = z.object({
+  stepNumber: z.number(),
+  actionId: z.string().optional(),
+  actionTitle: z.string().optional(),
+  reason: z.string().optional(),
+  expectedImpact: z.string().optional(),
+}).passthrough();
+
 export const AIAnalysisResultExpertSchema = z.object({
-  verdict: z.string().describe('Frase curta, direta e incômoda sobre o anúncio'),
-  title_fix: TitleFixExpertSchema,
-  image_plan: z.array(ImagePlanItemExpertSchema).describe('Plano de imagens (mínimo 3)'),
-  description_fix: DescriptionFixExpertSchema,
-  price_fix: PriceFixExpertSchema,
-  algorithm_hacks: z.array(AlgorithmHackExpertSchema).describe('Hacks algorítmicos do Mercado Livre'),
-  final_action_plan: z.array(z.string()).describe('Ações concretas ordenadas por prioridade'),
+  score: z.number().optional(),
+  scoreBreakdown: ScoreBreakdownV23Schema,
+  performanceSignal: z.enum(['EXCELENTE', 'BOM', 'ATENCAO', 'CRITICO']).optional(),
+  verdict: z.union([z.string(), VerdictV23Schema]).optional(),
+  funnelAnalysis: FunnelAnalysisV23Schema,
+  potentialGain: PotentialGainV23Schema,
+  growthHacks: z.array(GrowthHackV23Schema).optional(),
+  adsIntelligence: AdsIntelligenceV23Schema,
+  executionRoadmap: z.array(ExecutionRoadmapStepV23Schema).optional(),
+
+  // Campos legados preservados
+  title_fix: LegacyTitleFixSchema,
+  image_plan: z.array(LegacyImagePlanItemSchema).optional(),
+  description_fix: LegacyDescriptionFixSchema,
+  price_fix: LegacyPriceFixSchema,
+  algorithm_hacks: z.array(LegacyAlgorithmHackSchema).optional(),
+  final_action_plan: z.array(z.string()).optional(),
+
   meta: z.object({
-    version: z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22']),
+    version: PromptVersionSchema,
     model: z.string(),
     analyzed_at: z.string(),
-    prompt_version: z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22']),
+    prompt_version: PromptVersionSchema,
     processing_time_ms: z.number().optional(),
   }),
-});
+}).passthrough();
 
 export type AIAnalysisResultExpert = z.infer<typeof AIAnalysisResultExpertSchema>;
 
-/**
- * Parse e valida resposta da IA
- */
 export function parseAIResponseExpert(
   rawResponse: unknown,
-  listingData: {
+  _listingData: {
     title: string;
     price_base: number;
     price_final: number;
@@ -98,25 +148,33 @@ export function parseAIResponseExpert(
   }
 ): { success: true; data: AIAnalysisResultExpert } | { success: false; error: z.ZodError } {
   try {
-    // Enriquecer resposta com meta se necessário
+    const raw = (rawResponse ?? {}) as Record<string, unknown>;
+    const existingMeta = (raw.meta ?? {}) as Record<string, unknown>;
+    const verdict = raw.verdict;
+    const normalizedPerformanceSignal =
+      typeof raw.performanceSignal === 'string'
+        ? raw.performanceSignal
+        : verdict && typeof verdict === 'object' && typeof (verdict as Record<string, unknown>).performanceSignal === 'string'
+          ? (verdict as Record<string, unknown>).performanceSignal
+          : undefined;
+
     const enriched = {
-      ...(rawResponse as Record<string, unknown>),
+      ...raw,
+      performanceSignal: normalizedPerformanceSignal,
       meta: {
-        ...((rawResponse as Record<string, unknown>).meta as Record<string, unknown> || {}),
-        version: 'ml-expert-v1' as const,
-        model: 'gpt-4o',
-        analyzed_at: new Date().toISOString(),
-        prompt_version: 'ml-expert-v1' as const,
+        ...existingMeta,
+        version: 'ml-expert-v23' as const,
+        model: typeof existingMeta.model === 'string' ? existingMeta.model : 'gpt-4o',
+        analyzed_at: typeof existingMeta.analyzed_at === 'string' ? existingMeta.analyzed_at : new Date().toISOString(),
+        prompt_version: 'ml-expert-v23' as const,
       },
     };
 
     const result = AIAnalysisResultExpertSchema.safeParse(enriched);
-    
     if (result.success) {
       return { success: true, data: result.data };
-    } else {
-      return { success: false, error: result.error };
     }
+    return { success: false, error: result.error };
   } catch (error) {
     return {
       success: false,
@@ -125,9 +183,6 @@ export function parseAIResponseExpert(
   }
 }
 
-/**
- * Cria análise fallback em caso de erro
- */
 export function createFallbackAnalysisExpert(
   errorMessage: string,
   listingData: {
@@ -141,33 +196,68 @@ export function createFallbackAnalysisExpert(
   }
 ): AIAnalysisResultExpert {
   return {
-    verdict: `Erro ao analisar anúncio: ${errorMessage}`,
-    title_fix: {
-      problem: 'Não foi possível analisar o título devido a erro na análise',
-      impact: 'Análise indisponível',
-      before: listingData.title,
-      after: listingData.title,
+    score: 0,
+    scoreBreakdown: {
+      descoberta: 0,
+      clique: 0,
+      conversao: 0,
+      crescimento: 0,
     },
-    image_plan: [
-      { image: 1, action: 'Análise indisponível' },
-      { image: 2, action: 'Análise indisponível' },
-      { image: 3, action: 'Análise indisponível' },
+    performanceSignal: 'ATENCAO',
+    verdict: {
+      headline: `Erro ao analisar anúncio: ${errorMessage}`,
+      diagnosis: 'A análise automática não pôde ser concluída.',
+      whatIsWorking: 'Dados insuficientes para identificar pontos fortes com segurança.',
+      rootCause: 'Falha na geração da análise.',
+      rootCauseCode: 'healthy_maintain',
+    },
+    funnelAnalysis: {
+      descoberta: { score: 0, status: 'atencao', insight: 'Análise indisponível.' },
+      clique: { score: 0, status: 'atencao', insight: 'Análise indisponível.' },
+      conversao: { score: 0, status: 'atencao', insight: 'Análise indisponível.' },
+      crescimento: { score: 0, status: 'atencao', insight: 'Análise indisponível.' },
+    },
+    potentialGain: {
+      estimatedVisitsIncrease: 'Indisponível',
+      estimatedConversionIncrease: 'Indisponível',
+      estimatedRevenueIncrease: 'Indisponível',
+      confidence: 'baixa',
+    },
+    growthHacks: [
+      {
+        id: 'retry_analysis',
+        actionKey: 'maintain_monitor',
+        pillar: 'crescimento',
+        funnelStage: 'CRESCIMENTO',
+        priority: 'low',
+        impact: 'low',
+        effort: 'low',
+        title: 'Reprocessar análise',
+        summary: 'A análise falhou e precisa ser gerada novamente.',
+        description: `Erro ao analisar "${listingData.title}". Gere a análise novamente após validar os dados do anúncio.`,
+        expectedImpact: 'Restabelecer diagnóstico',
+        actionGroup: 'support',
+        rootCauseCode: 'healthy_maintain',
+      },
     ],
-    description_fix: {
-      diagnostic: 'Análise indisponível devido a erro',
-      optimized_copy: 'Análise indisponível',
+    adsIntelligence: {
+      status: 'unavailable',
+      summary: 'Dados de ads indisponíveis.',
     },
-    price_fix: {
-      diagnostic: 'Análise indisponível',
-      action: 'Verifique os dados do anúncio',
-    },
-    algorithm_hacks: [],
-    final_action_plan: ['Verificar dados do anúncio', 'Tentar novamente a análise'],
+    executionRoadmap: [
+      {
+        stepNumber: 1,
+        actionId: 'retry_analysis',
+        actionTitle: 'Reprocessar análise',
+        reason: 'Sem análise válida não há evidência suficiente para recomendar ações.',
+        expectedImpact: 'Restabelecer o diagnóstico',
+      },
+    ],
     meta: {
-      version: 'ml-expert-v21',
+      version: 'ml-expert-v23',
       model: 'gpt-4o',
       analyzed_at: new Date().toISOString(),
-      prompt_version: 'ml-expert-v21',
+      prompt_version: 'ml-expert-v23',
     },
   };
 }

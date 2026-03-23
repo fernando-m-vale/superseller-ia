@@ -76,12 +76,20 @@ async function persistListingActionsBatch(
   listingId: string,
   growthHacks: Array<{
     id?: string;
+    actionKey?: string;
     title?: string;
     summary?: string;
     description?: string;
     impact?: string;
     estimatedImpact?: string;
     priority?: string;
+    executionPayload?: {
+      diagnostic?: string;
+      readyCopy?: string;
+      copyableVersion?: string;
+      practicalApplication?: string;
+    };
+    readyCopy?: string;
   }>,
 ): Promise<string> {
   const batchId = randomUUID();
@@ -89,15 +97,31 @@ async function persistListingActionsBatch(
   const actionsToCreate = growthHacks
     .filter((hack) => Boolean(hack?.title && (hack?.summary || hack?.description)))
     .slice(0, 15)
-    .map((hack) => ({
-      listingId,
-      actionKey: hack.id || `${batchId}:${hack.title}`,
-      title: hack.title as string,
-      description: (hack.summary || hack.description || '') as string,
-      expectedImpact: hack.impact || hack.estimatedImpact || null,
-      priority: hack.priority || null,
-      batchId,
-    }));
+    .map((hack) => {
+      const executionPayload = hack.executionPayload || (
+        hack.readyCopy
+          ? {
+              readyCopy: hack.readyCopy,
+              diagnostic: hack.summary || hack.description || undefined,
+            }
+          : undefined
+      );
+
+      return {
+        listingId,
+        actionKey: hack.actionKey || hack.id || `${batchId}:${hack.title}`,
+        title: hack.title as string,
+        description: executionPayload
+          ? JSON.stringify({
+              description: hack.description || hack.summary || '',
+              executionPayload,
+            })
+          : (hack.summary || hack.description || '') as string,
+        expectedImpact: hack.impact || hack.estimatedImpact || null,
+        priority: hack.priority || null,
+        batchId,
+      };
+    });
 
   if (actionsToCreate.length > 0) {
     await prisma.listingAction.createMany({
@@ -106,6 +130,57 @@ async function persistListingActionsBatch(
   }
 
   return batchId;
+}
+
+function applyV23AnalysisFields(
+  target: Record<string, any>,
+  analysisV21?: AIAnalysisResultExpert | null,
+): void {
+  if (!analysisV21) return;
+
+  const verdict = typeof analysisV21.verdict === 'object' && analysisV21.verdict
+    ? analysisV21.verdict
+    : null;
+
+  if (analysisV21.performanceSignal || verdict?.performanceSignal) {
+    target.performanceSignal = analysisV21.performanceSignal || verdict?.performanceSignal;
+  }
+
+  if (verdict?.whatIsWorking) {
+    target.whatIsWorking = verdict.whatIsWorking;
+  }
+
+  if (analysisV21.funnelAnalysis) {
+    target.funnelAnalysis = analysisV21.funnelAnalysis;
+  }
+
+  if (analysisV21.potentialGain) {
+    target.potentialGain = analysisV21.potentialGain;
+  }
+
+  if (analysisV21.executionRoadmap?.length) {
+    target.executionRoadmap = analysisV21.executionRoadmap;
+  }
+
+  if (Array.isArray(analysisV21.growthHacks) && analysisV21.growthHacks.length > 0) {
+    target.growthHacks = analysisV21.growthHacks.map((hack) => ({
+      ...hack,
+      title: hack.title || hack.summary || 'Ação recomendada',
+      summary: hack.summary || hack.description || '',
+      description: hack.description || hack.summary || '',
+      executionPayload: hack.readyCopy
+        ? {
+            diagnostic: hack.summary || hack.description || undefined,
+            readyCopy: hack.readyCopy,
+          }
+        : undefined,
+      estimatedImpact: hack.expectedImpact,
+    }));
+  }
+
+  if (analysisV21.adsIntelligence) {
+    target.adsIntelligenceRecommendation = analysisV21.adsIntelligence;
+  }
 }
 
 /**
@@ -818,7 +893,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 listingIdExt: listing.listing_id_ext,
                 promptVersion: analysisV21.meta.prompt_version,
                 analyzedAt: analysisV21.meta.analyzed_at,
-                verdict: analysisV21.verdict?.substring(0, 50),
+                verdict: typeof analysisV21.verdict === 'string'
+                  ? analysisV21.verdict.substring(0, 50)
+                  : analysisV21.verdict?.headline?.substring(0, 50),
                 hasTitleFix: !!analysisV21.title_fix,
                 hasImagePlan: !!analysisV21.image_plan?.length,
                 hasDescriptionFix: !!analysisV21.description_fix,
@@ -852,11 +929,13 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             result = {
               analysis: {
                 score: scoreResult.score.final,
-                critique: analysisV21.verdict,
-                growthHacks: [], // Expert não usa growthHacks
+                critique: typeof analysisV21.verdict === 'string'
+                  ? analysisV21.verdict
+                  : analysisV21.verdict?.diagnosis || analysisV21.verdict?.headline || '',
+                growthHacks: analysisV21.growthHacks || [],
                 seoSuggestions: {
-                  suggestedTitle: analysisV21.title_fix.after,
-                  titleRationale: analysisV21.title_fix.problem,
+                  suggestedTitle: analysisV21.title_fix?.after || '',
+                  titleRationale: analysisV21.title_fix?.problem || '',
                   suggestedDescriptionPoints: [],
                   keywords: [],
                 },
@@ -1493,6 +1572,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // SEMPRE incluir Expert se disponível (obrigatório) — sanitizar antes de enviar
             if (analysisV21) {
               responseData.analysisV21 = sanitizeExpertAnalysis(analysisV21);
+              applyV23AnalysisFields(responseData, responseData.analysisV21);
               
               // Normalizar meta.prompt_version e meta.version para garantir consistência
               if (responseData.analysisV21.meta) {
@@ -1515,7 +1595,9 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                 listingIdExt: listing.listing_id_ext,
                 promptVersion: PROMPT_VERSION,
                 analyzedAt: responseData.analysisV21.meta?.analyzed_at || analysisV21.meta?.analyzed_at,
-                verdict: analysisV21.verdict?.substring(0, 50),
+                verdict: typeof analysisV21.verdict === 'string'
+                  ? analysisV21.verdict.substring(0, 50)
+                  : analysisV21.verdict?.headline?.substring(0, 50),
               },
               'Including Expert analysis in response'
             );
@@ -1802,6 +1884,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           });
 
           await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
+          if (responseData.adsIntelligenceRecommendation?.status && responseData.adsIntelligenceRecommendation.status !== 'available') {
+            responseData.adsIntelligence = {
+              ...(responseData.adsIntelligence || {}),
+              status: responseData.adsIntelligenceRecommendation.status,
+              summary: responseData.adsIntelligenceRecommendation.summary || responseData.adsIntelligence?.summary || '',
+              recommendation: responseData.adsIntelligenceRecommendation.recommendation,
+            };
+          }
           enrichAnalyzeResponseWithConsultingIntelligence(responseData, { listing });
           responseData.growthHacks = buildDeterministicMvpActions({
             listingIdExt: listing.listing_id_ext,
@@ -2237,6 +2327,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Incluir Expert se disponível no cache — sanitizar antes de enviar
         if (cachedResult.analysisV21) {
           cacheResponseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
+          applyV23AnalysisFields(cacheResponseData, cacheResponseData.analysisV21);
           
               // Normalizar meta.prompt_version e meta.version também no cache
               if (cacheResponseData.analysisV21?.meta) {
@@ -2557,6 +2648,14 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         });
 
         await attachAdsIntelligenceToPayload(cacheResponseData, tenantId, listingId, request.log);
+        if (cacheResponseData.adsIntelligenceRecommendation?.status && cacheResponseData.adsIntelligenceRecommendation.status !== 'available') {
+          cacheResponseData.adsIntelligence = {
+            ...(cacheResponseData.adsIntelligence || {}),
+            status: cacheResponseData.adsIntelligenceRecommendation.status,
+            summary: cacheResponseData.adsIntelligenceRecommendation.summary || cacheResponseData.adsIntelligence?.summary || '',
+            recommendation: cacheResponseData.adsIntelligenceRecommendation.recommendation,
+          };
+        }
         enrichAnalyzeResponseWithConsultingIntelligence(cacheResponseData, { listing });
         cacheResponseData.growthHacks = buildDeterministicMvpActions({
           listingIdExt: listing.listing_id_ext,
@@ -3371,6 +3470,7 @@ if (enableAIPing) {
         // Incluir Expert se disponível
         if (cachedResult.analysisV21) {
           responseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
+          applyV23AnalysisFields(responseData, responseData.analysisV21);
           if (responseData.analysisV21?.meta) {
             responseData.analysisV21.meta.prompt_version = PROMPT_VERSION as any;
             responseData.analysisV21.meta.version = PROMPT_VERSION as any;
@@ -3421,6 +3521,14 @@ if (enableAIPing) {
         });
 
         await attachAdsIntelligenceToPayload(responseData, tenantId, listingId, request.log);
+        if (responseData.adsIntelligenceRecommendation?.status && responseData.adsIntelligenceRecommendation.status !== 'available') {
+          responseData.adsIntelligence = {
+            ...(responseData.adsIntelligence || {}),
+            status: responseData.adsIntelligenceRecommendation.status,
+            summary: responseData.adsIntelligenceRecommendation.summary || responseData.adsIntelligence?.summary || '',
+            recommendation: responseData.adsIntelligenceRecommendation.recommendation,
+          };
+        }
         enrichAnalyzeResponseWithConsultingIntelligence(responseData, { listing });
         responseData.growthHacks = buildDeterministicMvpActions({
           listingIdExt: listing.listing_id_ext,

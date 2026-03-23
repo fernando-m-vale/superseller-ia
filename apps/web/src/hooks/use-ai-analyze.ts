@@ -7,7 +7,7 @@ import type { AIAnalysisResultV21 } from '@/types/ai-analysis-v21'
 import type { NormalizedAIAnalysisResponse } from '@/lib/ai/normalizeAiAnalyze'
 
 export interface AdsIntelligencePayload {
-  status: 'available' | 'partial' | 'unavailable'
+  status: 'available' | 'partial' | 'unavailable' | 'no_campaign'
   adsScore: number | null
   summary: string
   diagnosis: string
@@ -33,6 +33,7 @@ export interface AdsIntelligencePayload {
   recommendations: string[]
   opportunities: string[]
   analyzedAt: string
+  recommendation?: string
   source: {
     provider: string
     integration: string
@@ -61,6 +62,18 @@ interface AIAnalysisApiResponse {
     performance?: string
     seo?: string
     competitividade?: string
+    estimatedVisitsIncrease?: string
+    estimatedConversionIncrease?: string
+    estimatedRevenueIncrease?: string
+    confidence?: 'alta' | 'media' | 'baixa'
+  }
+  performanceSignal?: 'EXCELENTE' | 'BOM' | 'ATENCAO' | 'CRITICO'
+  whatIsWorking?: string
+  funnelAnalysis?: {
+    descoberta?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    clique?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    conversao?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    crescimento?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
   }
   critique: string
   growthHacks?: Array<{
@@ -278,7 +291,14 @@ export interface AIAnalysisResponse {
     performance?: string
     seo?: string
     competitividade?: string
+    estimatedVisitsIncrease?: string
+    estimatedConversionIncrease?: string
+    estimatedRevenueIncrease?: string
+    confidence?: 'alta' | 'media' | 'baixa'
   }
+  performanceSignal?: 'EXCELENTE' | 'BOM' | 'ATENCAO' | 'CRITICO'
+  whatIsWorking?: string
+  funnelAnalysis?: AIAnalysisApiResponse['funnelAnalysis']
   critique: string
   growthHacks?: Array<{
     id: string
@@ -486,6 +506,9 @@ function adaptAIAnalysisResponse(apiResponse: AIAnalysisApiResponse): AIAnalysis
     critique: apiResponse.critique || '',
     growthHacks: apiResponse.growthHacks || [],
     growthHacksMeta: apiResponse.growthHacksMeta,
+    performanceSignal: apiResponse.performanceSignal,
+    whatIsWorking: apiResponse.whatIsWorking,
+    funnelAnalysis: apiResponse.funnelAnalysis,
     seoSuggestions: seo
       ? {
           title: seo.suggestedTitle || '',

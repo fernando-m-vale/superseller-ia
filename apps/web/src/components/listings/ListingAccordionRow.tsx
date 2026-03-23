@@ -281,6 +281,7 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle, onRefreshSu
                   listingTitle={listing.title}
                   listingPrice={listing.price}
                   critique={aiAnalysis.critique}
+                  potentialGain={aiAnalysis.potentialGain}
                   dataQuality={aiAnalysis.dataQuality}
                   metrics30d={aiAnalysis.metrics30d}
                   listingPriceBase={listing.priceBase}
@@ -294,6 +295,9 @@ export function ListingAccordionRow({ listing, isExpanded, onToggle, onRefreshSu
                   generatedContent={aiAnalysis.generatedContent}
                   growthHacks={aiAnalysis.growthHacks}
                   growthHacksMeta={aiAnalysis.growthHacksMeta}
+                  performanceSignal={aiAnalysis.performanceSignal}
+                  whatIsWorking={aiAnalysis.whatIsWorking}
+                  funnelAnalysis={aiAnalysis.funnelAnalysis}
                   funnelDiagnosis={aiAnalysis.funnelDiagnosis}
                   executionRoadmap={aiAnalysis.executionRoadmap}
                   visualScore={aiAnalysis.visualScore}

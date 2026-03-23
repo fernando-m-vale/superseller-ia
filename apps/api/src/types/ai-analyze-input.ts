@@ -105,6 +105,17 @@ export interface AIAnalyzeInputPerformance {
   orders: number;
   revenue: number | null;
   conversionRate: number | null;
+  trend?: {
+    visitsPctChange: number | null;
+    ordersPctChange: number | null;
+    revenuePctChange: number | null;
+    isGrowing: boolean;
+    previousPeriod: {
+      visits: number;
+      orders: number;
+      revenue: number;
+    };
+  };
   impressions?: number;
   clicks?: number;
   ctr?: number | null;
@@ -156,9 +167,46 @@ export interface AIAnalyzeInputV1 {
  */
 export interface AIAnalyzeInputV21 {
   meta: AIAnalyzeInputMeta;
-  listing: AIAnalyzeInputListingV21;
+  listing: AIAnalyzeInputListingV21 & {
+    category_name?: string | null;
+    attributes?: {
+      filled: string[];
+      missing: string[];
+      completenessScore: number;
+      warnings: string[];
+    };
+  };
   media: AIAnalyzeInputMedia;
   performance: AIAnalyzeInputPerformance;
-  dataQuality: AIAnalyzeInputDataQualityV21;
+  dataQuality: AIAnalyzeInputDataQualityV21 & {
+    missingAttributes?: string[];
+    dataCompleteness?: number;
+  };
+  pricing?: {
+    price: number;
+    priceFinal: number;
+    originalPrice: number | null;
+    hasPromotion: boolean;
+    discountPercent: number;
+    freeShipping: boolean | null;
+    fullEligible: boolean | null;
+  };
+  sellerContext?: {
+    reputationLevel?: string | null;
+    isMercadoLider?: boolean;
+    totalSales?: number | null;
+  };
+  visualScore?: number | null;
+  ads?: {
+    impressions: number | null;
+    clicks: number | null;
+    ctr: number | null;
+    cpc: number | null;
+    spend: number | null;
+    revenueAttributed: number | null;
+    roas: number | null;
+    ordersAttributed: number | null;
+    adsEfficiency: 'excellent' | 'good' | 'breakeven' | 'losing' | null;
+  } | null;
   personalization?: ListingPersonalizationContext;
 }

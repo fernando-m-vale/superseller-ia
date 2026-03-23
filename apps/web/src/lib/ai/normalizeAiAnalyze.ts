@@ -18,6 +18,26 @@ export type GeneratedContent = AIAnalysisResponse['generatedContent']
  */
 export interface NormalizedAIAnalysisV21 {
   verdict: string
+  performanceSignal?: 'EXCELENTE' | 'BOM' | 'ATENCAO' | 'CRITICO'
+  verdictDetails?: {
+    headline?: string
+    diagnosis?: string
+    whatIsWorking?: string
+    rootCause?: string
+    rootCauseCode?: string
+  }
+  funnelAnalysis?: {
+    descoberta?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    clique?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    conversao?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    crescimento?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+  }
+  potentialGain?: {
+    estimatedVisitsIncrease?: string
+    estimatedConversionIncrease?: string
+    estimatedRevenueIncrease?: string
+    confidence?: 'alta' | 'media' | 'baixa'
+  }
   titleFix?: {
     problem: string
     impact: string
@@ -42,6 +62,28 @@ export interface NormalizedAIAnalysisV21 {
     signalImpacted: string
   }>
   finalActionPlan?: string[]
+  growthHacks?: Array<{
+    id: string
+    title?: string
+    summary?: string
+    description?: string
+    readyCopy?: string
+    expectedImpact?: string
+    actionGroup?: 'immediate' | 'support' | 'optional'
+    rootCauseCode?: string
+  }>
+  adsIntelligence?: {
+    status?: 'available' | 'unavailable' | 'no_campaign'
+    summary?: string
+    recommendation?: string
+  }
+  executionRoadmap?: Array<{
+    stepNumber: number
+    actionId?: string
+    actionTitle?: string
+    reason?: string
+    expectedImpact?: string
+  }>
   meta?: {
     version: string
     model: string
@@ -115,6 +157,9 @@ export interface NormalizedAIAnalysisResponse extends Omit<AIAnalysisResponse, '
   benchmarkInsights?: AIAnalysisResponse['benchmarkInsights']
   // Generated Content (Dia 05) - conteúdo pronto para copy/paste
   generatedContent?: AIAnalysisResponse['generatedContent']
+  performanceSignal?: AIAnalysisResponse['performanceSignal']
+  whatIsWorking?: AIAnalysisResponse['whatIsWorking']
+  funnelAnalysis?: AIAnalysisResponse['funnelAnalysis']
   // Promo estruturado (HOTFIX P0)
   promo?: AIAnalysisResponse['promo']
   // DIA 06.2: Preços normalizados para garantir consistência
@@ -215,8 +260,26 @@ function normalizeAnalysisV21(raw: unknown): NormalizedAIAnalysisV21 | undefined
   const algorithmHacksRaw = rawObj.algorithm_hacks as Array<Record<string, unknown>> | undefined
   const metaRaw = rawObj.meta as Record<string, unknown> | undefined
 
+  const rawVerdict = rawObj.verdict
+  const verdictObject = rawVerdict && typeof rawVerdict === 'object'
+    ? rawVerdict as Record<string, unknown>
+    : undefined
+
   return {
-    verdict: (rawObj.verdict as string) || '',
+    verdict: typeof rawVerdict === 'string'
+      ? rawVerdict
+      : String(verdictObject?.diagnosis || verdictObject?.headline || ''),
+    performanceSignal: (rawObj.performanceSignal as NormalizedAIAnalysisV21['performanceSignal'])
+      || (verdictObject?.performanceSignal as NormalizedAIAnalysisV21['performanceSignal']),
+    verdictDetails: verdictObject ? {
+      headline: (verdictObject.headline as string) || undefined,
+      diagnosis: (verdictObject.diagnosis as string) || undefined,
+      whatIsWorking: (verdictObject.whatIsWorking as string) || undefined,
+      rootCause: (verdictObject.rootCause as string) || undefined,
+      rootCauseCode: (verdictObject.rootCauseCode as string) || undefined,
+    } : undefined,
+    funnelAnalysis: rawObj.funnelAnalysis as NormalizedAIAnalysisV21['funnelAnalysis'],
+    potentialGain: rawObj.potentialGain as NormalizedAIAnalysisV21['potentialGain'],
     titleFix: titleFixRaw ? {
       problem: (titleFixRaw.problem as string) || '',
       impact: (titleFixRaw.impact as string) || '',
@@ -241,6 +304,9 @@ function normalizeAnalysisV21(raw: unknown): NormalizedAIAnalysisV21 | undefined
       signalImpacted: (hack.signal_impacted as string) || '',
     })) || (rawObj.algorithmHacks as NormalizedAIAnalysisV21['algorithmHacks']),
     finalActionPlan: (rawObj.final_action_plan as string[]) || (rawObj.finalActionPlan as string[]),
+    growthHacks: rawObj.growthHacks as NormalizedAIAnalysisV21['growthHacks'],
+    adsIntelligence: rawObj.adsIntelligence as NormalizedAIAnalysisV21['adsIntelligence'],
+    executionRoadmap: rawObj.executionRoadmap as NormalizedAIAnalysisV21['executionRoadmap'],
     meta: metaRaw ? {
       version: (metaRaw.version as string) || '',
       model: (metaRaw.model as string) || '',
@@ -370,6 +436,9 @@ export function normalizeAiAnalyzeResponse(
     // Propagar benchmarkInsights, generatedContent, promo e appliedActions (Dia 05 + HOTFIX P0 + Dia 06)
     benchmarkInsights: response.benchmarkInsights,
     generatedContent: response.generatedContent,
+    performanceSignal: response.performanceSignal,
+    whatIsWorking: response.whatIsWorking,
+    funnelAnalysis: response.funnelAnalysis,
     promo: response.promo,
     pricingNormalized: response.pricingNormalized,
     appliedActions: response.appliedActions,

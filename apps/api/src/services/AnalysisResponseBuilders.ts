@@ -60,12 +60,22 @@ export interface DeterministicMvpActionsInput {
   picturesCount?: number | null;
   hackActions?: Array<{
     id?: string;
+    actionKey?: string;
     title?: string;
     summary?: string;
     description?: string;
     impact?: string;
     estimatedImpact?: string;
+    expectedImpact?: string;
     priority?: string;
+    executionPayload?: {
+      diagnostic?: string;
+      readyCopy?: string;
+      copyableVersion?: string;
+      practicalApplication?: string;
+    };
+    actionGroup?: ActionGroup | 'optional';
+    rootCauseCode?: RootCauseDiagnosis['diagnosisRootCause'];
     confidence?: number;
     evidence?: string[];
     suggestedActionUrl?: string | null;
@@ -1502,15 +1512,18 @@ export function buildDeterministicMvpActions(input: DeterministicMvpActionsInput
       decorateHackAsExtra(
       {
         id,
-        actionKey: id,
+        actionKey: String(rawHack.actionKey || id),
         title,
         summary: description,
         description,
-        expectedImpact: String(rawHack.impact || rawHack.estimatedImpact || 'Ganho incremental de conversão').trim(),
+        executionPayload: rawHack.executionPayload,
+        expectedImpact: String(rawHack.expectedImpact || rawHack.estimatedImpact || rawHack.impact || 'Ganho incremental de conversão').trim(),
         impact: normalizeImpact(String(rawHack.impact || 'medium')),
         priority: normalizePriority(String(rawHack.priority || rawHack.impact || 'medium')),
         suggestedActionUrl: rawHack.suggestedActionUrl ?? editUrl,
         pillar,
+        actionGroup: rawHack.actionGroup === 'optional' ? 'best_practice' : rawHack.actionGroup,
+        rootCauseCode: rawHack.rootCauseCode,
       }),
       {
         confidence: rawHack.confidence,

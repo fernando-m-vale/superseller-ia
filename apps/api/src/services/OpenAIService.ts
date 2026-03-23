@@ -40,6 +40,11 @@ import {
   systemPrompt as mlExpertV22SystemPrompt,
   buildMLExpertV22UserPrompt,
 } from '@superseller/ai/prompts/mlExpertV22';
+import {
+  promptVersion as mlExpertV23Version,
+  systemPrompt as mlExpertV23SystemPrompt,
+  buildMLExpertV23UserPrompt,
+} from '@superseller/ai/prompts/mlExpertV23';
 import { sanitizeExpertAnalysis } from '@superseller/core';
 import { getCategoryBreadcrumb } from './CategoryBreadcrumbService';
 import {
@@ -52,6 +57,19 @@ const prisma = new PrismaClient();
 // Prompt version - usar fonte única de verdade
 import { getPromptVersion } from '../utils/prompt-version';
 const AI_PROMPT_VERSION = getPromptVersion();
+
+function calculatePctChange(current: number, previous: number): number | null {
+  if (previous === 0) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+function calculateAdsEfficiency(roas: number | null): 'excellent' | 'good' | 'breakeven' | 'losing' | null {
+  if (roas === null) return null;
+  if (roas >= 3) return 'excellent';
+  if (roas >= 1.5) return 'good';
+  if (roas >= 1) return 'breakeven';
+  return 'losing';
+}
 
 export interface ListingAnalysisInput {
   id: string;
@@ -972,6 +990,146 @@ export class OpenAIService {
       stock: v1Input.listing.stock,
     });
 
+    const [metrics60d, adsMetrics, latestVisualAnalysis] = await Promise.all([
+      prisma.listingMetricsDaily.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          listing_id: listingId,
+          date: {
+            gte: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+          },
+        },
+        orderBy: {
+          date: 'desc',
+        },
+      }).catch(() => []),
+      prisma.listingAdsMetricsDaily.findMany({
+        where: {
+          tenant_id: this.tenantId,
+          listing_id: listingId,
+          date: {
+            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          },
+        },
+        orderBy: {
+          date: 'desc',
+        },
+      }).catch(() => []),
+      prisma.listingVisualAnalysis.findFirst({
+        where: {
+          tenant_id: this.tenantId,
+          listing_id: listingId,
+        },
+        orderBy: {
+          analyzed_at: 'desc',
+        },
+      }).catch(() => null),
+    ]);
+
+    const recentMetrics = metrics60d.filter((metric) => metric.date >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+    const previousMetrics = metrics60d.filter((metric) => {
+      const metricDate = metric.date.getTime();
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
+      return metricDate >= sixtyDaysAgo && metricDate < thirtyDaysAgo;
+    });
+
+    const sumMetricBlock = (items: typeof metrics60d) => items.reduce(
+      (acc, item) => ({
+        visits: acc.visits + (item.visits ?? 0),
+        orders: acc.orders + (item.orders ?? 0),
+        revenue: acc.revenue + Number(item.gmv ?? 0),
+      }),
+      { visits: 0, orders: 0, revenue: 0 },
+    );
+
+    const recentSummary = sumMetricBlock(recentMetrics);
+    const previousSummary = sumMetricBlock(previousMetrics);
+
+    const adsAggregate = adsMetrics.reduce(
+      (acc, item) => {
+        acc.impressions += item.impressions ?? 0;
+        acc.clicks += item.clicks ?? 0;
+        acc.spend += Number(item.spend ?? 0);
+        acc.revenueAttributed += Number(item.revenue_attributed ?? 0);
+        acc.ordersAttributed += item.orders_attributed ?? 0;
+        if (item.ctr !== null) {
+          acc.ctrSum += Number(item.ctr);
+          acc.ctrCount += 1;
+        }
+        if (item.cpc !== null) {
+          acc.cpcSum += Number(item.cpc);
+          acc.cpcCount += 1;
+        }
+        if (item.roas !== null) {
+          acc.roasSum += Number(item.roas);
+          acc.roasCount += 1;
+        }
+        return acc;
+      },
+      {
+        impressions: 0,
+        clicks: 0,
+        spend: 0,
+        revenueAttributed: 0,
+        ordersAttributed: 0,
+        ctrSum: 0,
+        ctrCount: 0,
+        cpcSum: 0,
+        cpcCount: 0,
+        roasSum: 0,
+        roasCount: 0,
+      },
+    );
+
+    const adsBlock = adsMetrics.length > 0
+      ? {
+          impressions: adsAggregate.impressions,
+          clicks: adsAggregate.clicks,
+          ctr: adsAggregate.ctrCount > 0 ? adsAggregate.ctrSum / adsAggregate.ctrCount : null,
+          cpc: adsAggregate.cpcCount > 0 ? adsAggregate.cpcSum / adsAggregate.cpcCount : null,
+          spend: adsAggregate.spend,
+          revenueAttributed: adsAggregate.revenueAttributed,
+          roas: adsAggregate.roasCount > 0 ? adsAggregate.roasSum / adsAggregate.roasCount : null,
+          ordersAttributed: adsAggregate.ordersAttributed,
+          adsEfficiency: calculateAdsEfficiency(
+            adsAggregate.roasCount > 0 ? adsAggregate.roasSum / adsAggregate.roasCount : null,
+          ),
+        }
+      : null;
+
+    const attributeMissing = Array.from(new Set([
+      ...v1Input.dataQuality.missing.filter((item) => /brand|model|gtin|warranty/i.test(item)),
+      ...v1Input.dataQuality.warnings.filter((item) => /missing|unstructured/i.test(item)),
+    ]));
+    const attributeFilled = [
+      listing.brand ? `brand:${listing.brand}` : null,
+      listing.model ? `model:${listing.model}` : null,
+      listing.gtin ? `gtin:${listing.gtin}` : null,
+      listing.warranty ? `warranty:${listing.warranty}` : null,
+    ].filter((value): value is string => Boolean(value));
+    const attributeTotal = attributeFilled.length + attributeMissing.length;
+    const attributeCompleteness = attributeTotal > 0
+      ? Math.round((attributeFilled.length / attributeTotal) * 100)
+      : 0;
+    const reputationJson = (listing.reputation_json ?? {}) as Record<string, unknown>;
+    const sellerReputationLevel =
+      typeof reputationJson.level_id === 'string'
+        ? reputationJson.level_id
+        : typeof reputationJson.reputation_level === 'string'
+          ? reputationJson.reputation_level
+          : null;
+    const sellerTotalSales =
+      typeof reputationJson.total_sales === 'number'
+        ? reputationJson.total_sales
+        : typeof reputationJson.transactions_total === 'number'
+          ? reputationJson.transactions_total
+          : null;
+    const isMercadoLider =
+      Boolean(reputationJson.is_mercado_lider)
+      || Boolean(reputationJson.mercado_lider)
+      || Boolean(reputationJson.is_mercadolider);
+
     return {
       meta: v1Input.meta,
       listing: {
@@ -1024,13 +1182,47 @@ export class OpenAIService {
           moderation_status: listing.moderation_status ?? null,
           moderation_sub_status: listing.moderation_sub_status ?? null,
         },
+        category_name: categoryLabel,
+        attributes: {
+          filled: attributeFilled.slice(0, 10),
+          missing: attributeMissing.slice(0, 10),
+          completenessScore: attributeCompleteness,
+          warnings: attributeMissing.length > 5 ? ['Muitos atributos faltando ou não estruturados.'] : [],
+        },
       },
       media: v1Input.media,
-      performance: v1Input.performance,
+      performance: {
+        ...v1Input.performance,
+        trend: {
+          visitsPctChange: calculatePctChange(recentSummary.visits, previousSummary.visits),
+          ordersPctChange: calculatePctChange(recentSummary.orders, previousSummary.orders),
+          revenuePctChange: calculatePctChange(recentSummary.revenue, previousSummary.revenue),
+          isGrowing: recentSummary.orders > previousSummary.orders,
+          previousPeriod: previousSummary,
+        },
+      },
       dataQuality: {
         ...v1Input.dataQuality,
         visits_status: visitsStatus,
+        missingAttributes: attributeMissing.slice(0, 10),
+        dataCompleteness: attributeCompleteness,
       },
+      pricing: {
+        price: Number(listing.price),
+        priceFinal,
+        originalPrice: listing.original_price ? Number(listing.original_price) : null,
+        hasPromotion,
+        discountPercent: discountPercent ?? 0,
+        freeShipping: listing.is_free_shipping ?? null,
+        fullEligible: listing.is_full_eligible ?? null,
+      },
+      sellerContext: {
+        reputationLevel: sellerReputationLevel,
+        isMercadoLider,
+        totalSales: sellerTotalSales,
+      },
+      visualScore: latestVisualAnalysis?.visual_score ?? null,
+      ads: adsBlock,
       personalization,
     };
   }
@@ -1078,6 +1270,10 @@ export class OpenAIService {
       promptVersion = mlSalesV22Version;
       systemPrompt = mlSalesV22SystemPrompt;
       buildUserPrompt = buildMLSalesV22UserPrompt;
+    } else if (AI_PROMPT_VERSION === 'ml-expert-v23') {
+      promptVersion = mlExpertV23Version;
+      systemPrompt = mlExpertV23SystemPrompt;
+      buildUserPrompt = buildMLExpertV23UserPrompt as typeof buildMLExpertV21UserPrompt;
     } else if (AI_PROMPT_VERSION === 'ml-expert-v22') {
       promptVersion = mlExpertV22Version;
       systemPrompt = mlExpertV22SystemPrompt;
@@ -1127,7 +1323,7 @@ export class OpenAIService {
       console.log('[OPENAI-SERVICE-EXPERT] Raw response received', {
         requestId,
         listingId: input.meta.listingId,
-        promptVersion: 'ml-expert-v1',
+        promptVersion,
         model: response.model,
         contentLength: content.length,
         contentPreview: contentPreview.replace(/token|api[_-]?key|secret|password/gi, '[REDACTED]'),
@@ -1193,81 +1389,92 @@ export class OpenAIService {
       let qualityIssues: string[] = [];
       if (parseResult.success) {
         const data = parseResult.data;
-        
-        // Validar description_fix.optimized_copy (>= 900 chars para V2.1)
-        if (data.description_fix?.optimized_copy) {
-          const descLength = data.description_fix.optimized_copy.length;
-          const minLength = 900;
-          if (descLength < minLength) {
-            qualityIssues.push(`description_fix.optimized_copy muito curto (${descLength} chars, mínimo ${minLength})`);
+
+        if (AI_PROMPT_VERSION === 'ml-expert-v23') {
+          if (!data.performanceSignal) {
+            qualityIssues.push('performanceSignal ausente');
           }
-        }
-        
-        // Validar title_fix.after (55-60 chars para V2.1)
-        if (data.title_fix?.after) {
-          const titleLength = data.title_fix.after.length;
-          if (titleLength < 45) {
-            qualityIssues.push(`title_fix.after muito curto (${titleLength} chars, mínimo 45)`);
+          if (!Array.isArray(data.growthHacks) || data.growthHacks.length < 1 || data.growthHacks.length > 4) {
+            qualityIssues.push('growthHacks deve ter entre 1 e 4 ações');
           }
-          // Verificar se contém keyword principal (primeiras 2 palavras do título original)
-          const titleWords = input.listing.title.split(/\s+/).slice(0, 2).join(' ').toLowerCase();
-          if (!data.title_fix.after.toLowerCase().includes(titleWords.toLowerCase())) {
-            qualityIssues.push(`title_fix.after não contém keyword principal do título original`);
+          if (!data.funnelAnalysis) {
+            qualityIssues.push('funnelAnalysis ausente');
           }
-        }
-        
-        // Validar final_action_plan (mínimo 7 para V2.1, exatamente 7 para V2.2)
-        if (data.final_action_plan) {
-          if (AI_PROMPT_VERSION === 'ml-sales-v22') {
-            if (data.final_action_plan.length !== 7) {
-              qualityIssues.push(`final_action_plan deve ter exatamente 7 itens (D0-D6), mas tem ${data.final_action_plan.length}`);
+          const verdictObject = data.verdict && typeof data.verdict === 'object' ? data.verdict : null;
+          if (!verdictObject || !verdictObject.whatIsWorking) {
+            qualityIssues.push('verdict.whatIsWorking ausente');
+          }
+          if (!data.executionRoadmap || data.executionRoadmap.length === 0) {
+            qualityIssues.push('executionRoadmap ausente');
+          }
+        } else {
+          if (data.description_fix?.optimized_copy) {
+            const descLength = data.description_fix.optimized_copy.length;
+            const minLength = 900;
+            if (descLength < minLength) {
+              qualityIssues.push(`description_fix.optimized_copy muito curto (${descLength} chars, mínimo ${minLength})`);
             }
-          } else {
-            if (data.final_action_plan.length < 7) {
+          }
+
+          if (data.title_fix?.after) {
+            const titleLength = data.title_fix.after.length;
+            if (titleLength < 45) {
+              qualityIssues.push(`title_fix.after muito curto (${titleLength} chars, mínimo 45)`);
+            }
+            const titleWords = input.listing.title.split(/\s+/).slice(0, 2).join(' ').toLowerCase();
+            if (!data.title_fix.after.toLowerCase().includes(titleWords.toLowerCase())) {
+              qualityIssues.push('title_fix.after não contém keyword principal do título original');
+            }
+          }
+
+          if (data.final_action_plan) {
+            if (AI_PROMPT_VERSION === 'ml-sales-v22') {
+              if (data.final_action_plan.length !== 7) {
+                qualityIssues.push(`final_action_plan deve ter exatamente 7 itens (D0-D6), mas tem ${data.final_action_plan.length}`);
+              }
+            } else if (data.final_action_plan.length < 7) {
               qualityIssues.push(`final_action_plan tem apenas ${data.final_action_plan.length} ações (mínimo 7)`);
             }
           }
-        }
-        
-        // Validar image_plan (min(6, pictures_count) quando pictures_count >= 6)
-        if (data.image_plan && input.media.imageCount >= 6) {
-          const expectedCount = Math.min(6, input.media.imageCount);
-          if (data.image_plan.length < expectedCount) {
-            qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
-          }
-        } else if (data.image_plan && input.media.imageCount >= 4) {
-          const expectedCount = Math.min(4, input.media.imageCount);
-          if (data.image_plan.length < expectedCount) {
-            qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
-          }
-        }
 
-        // Validar promoção: se hasPromotion=true, DEVE citar originalPrice e priceFinal
-        if (input.listing.has_promotion && input.listing.price_base && input.listing.price_final) {
-          const priceFixText = (data.price_fix?.action || data.price_fix?.diagnostic || '').toLowerCase();
-          const originalPriceStr = input.listing.price_base.toFixed(2);
-          const priceFinalStr = input.listing.price_final.toFixed(2);
-          const discountPercent = input.listing.discount_percent;
-          
-          // Verificar se menciona valores (pode ser "60" ou "R$ 60" ou "60.00")
-          const originalPriceNum = input.listing.price_base;
-          const priceFinalNum = input.listing.price_final;
-          
-          const mentionsOriginalPrice = priceFixText.includes(originalPriceStr) || 
-                                       priceFixText.includes(originalPriceNum.toString()) ||
-                                       priceFixText.includes(originalPriceNum.toFixed(0)) ||
-                                       (priceFixText.includes('original') && priceFixText.includes(originalPriceStr.split('.')[0]));
-          const mentionsPriceFinal = priceFixText.includes(priceFinalStr) || 
-                                    priceFixText.includes(priceFinalNum.toString()) ||
-                                    priceFixText.includes(priceFinalNum.toFixed(0)) ||
-                                    (priceFixText.includes('promo') && priceFixText.includes(priceFinalStr.split('.')[0]));
-          
-          if (!mentionsOriginalPrice || !mentionsPriceFinal) {
-            qualityIssues.push(`price_fix não menciona valores de promoção (originalPrice=${originalPriceStr}, priceFinal=${priceFinalStr})`);
+          if (data.image_plan && input.media.imageCount >= 6) {
+            const expectedCount = Math.min(6, input.media.imageCount);
+            if (data.image_plan.length < expectedCount) {
+              qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
+            }
+          } else if (data.image_plan && input.media.imageCount >= 4) {
+            const expectedCount = Math.min(4, input.media.imageCount);
+            if (data.image_plan.length < expectedCount) {
+              qualityIssues.push(`image_plan tem apenas ${data.image_plan.length} itens (esperado ${expectedCount} para ${input.media.imageCount} imagens)`);
+            }
           }
-          
-          if (discountPercent && !priceFixText.includes(discountPercent.toString()) && !priceFixText.includes('%')) {
-            qualityIssues.push(`price_fix não menciona desconto percentual (${discountPercent}%)`);
+
+          if (input.listing.has_promotion && input.listing.price_base && input.listing.price_final) {
+            const priceFixText = (data.price_fix?.action || data.price_fix?.diagnostic || '').toLowerCase();
+            const originalPriceStr = input.listing.price_base.toFixed(2);
+            const priceFinalStr = input.listing.price_final.toFixed(2);
+            const discountPercent = input.listing.discount_percent;
+            const originalPriceNum = input.listing.price_base;
+            const priceFinalNum = input.listing.price_final;
+
+            const mentionsOriginalPrice =
+              priceFixText.includes(originalPriceStr)
+              || priceFixText.includes(originalPriceNum.toString())
+              || priceFixText.includes(originalPriceNum.toFixed(0))
+              || (priceFixText.includes('original') && priceFixText.includes(originalPriceStr.split('.')[0]));
+            const mentionsPriceFinal =
+              priceFixText.includes(priceFinalStr)
+              || priceFixText.includes(priceFinalNum.toString())
+              || priceFixText.includes(priceFinalNum.toFixed(0))
+              || (priceFixText.includes('promo') && priceFixText.includes(priceFinalStr.split('.')[0]));
+
+            if (!mentionsOriginalPrice || !mentionsPriceFinal) {
+              qualityIssues.push(`price_fix não menciona valores de promoção (originalPrice=${originalPriceStr}, priceFinal=${priceFinalStr})`);
+            }
+
+            if (discountPercent && !priceFixText.includes(discountPercent.toString()) && !priceFixText.includes('%')) {
+              qualityIssues.push(`price_fix não menciona desconto percentual (${discountPercent}%)`);
+            }
           }
         }
 
@@ -1393,7 +1600,7 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
           const retryResponse = await this.client.chat.completions.create({
             model: 'gpt-4o',
             messages: [
-              { role: 'system', content: SYSTEM_PROMPT_EXPERT },
+              { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt },
               { role: 'assistant', content: content }, // Contexto da resposta anterior
               { role: 'user', content: retryPrompt },
@@ -1438,15 +1645,26 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
           let retryQualityIssues: string[] = [];
           if (retryParseResult.success) {
             const retryData = retryParseResult.data;
-            
-            if (retryData.description_fix?.optimized_copy && retryData.description_fix.optimized_copy.length < 600) {
-              retryQualityIssues.push(`description_fix.optimized_copy ainda muito curto (${retryData.description_fix.optimized_copy.length} chars)`);
-            }
-            if (retryData.title_fix?.after && retryData.title_fix.after.length < 45) {
-              retryQualityIssues.push(`title_fix.after ainda muito curto (${retryData.title_fix.after.length} chars)`);
-            }
-            if (retryData.final_action_plan && retryData.final_action_plan.length < 5) {
-              retryQualityIssues.push(`final_action_plan ainda tem apenas ${retryData.final_action_plan.length} ações`);
+            if (AI_PROMPT_VERSION === 'ml-expert-v23') {
+              if (!retryData.performanceSignal) {
+                retryQualityIssues.push('performanceSignal ausente no retry');
+              }
+              if (!retryData.funnelAnalysis) {
+                retryQualityIssues.push('funnelAnalysis ausente no retry');
+              }
+              if (!retryData.executionRoadmap?.length) {
+                retryQualityIssues.push('executionRoadmap ausente no retry');
+              }
+            } else {
+              if (retryData.description_fix?.optimized_copy && retryData.description_fix.optimized_copy.length < 600) {
+                retryQualityIssues.push(`description_fix.optimized_copy ainda muito curto (${retryData.description_fix.optimized_copy.length} chars)`);
+              }
+              if (retryData.title_fix?.after && retryData.title_fix.after.length < 45) {
+                retryQualityIssues.push(`title_fix.after ainda muito curto (${retryData.title_fix.after.length} chars)`);
+              }
+              if (retryData.final_action_plan && retryData.final_action_plan.length < 5) {
+                retryQualityIssues.push(`final_action_plan ainda tem apenas ${retryData.final_action_plan.length} ações`);
+              }
             }
           }
 

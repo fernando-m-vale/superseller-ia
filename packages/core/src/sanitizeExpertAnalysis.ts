@@ -1,7 +1,13 @@
 import { sanitizeMlText } from './sanitizeMlText';
 
 export interface ExpertAnalysisFields {
-  verdict?: string;
+  verdict?: string | {
+    headline?: string;
+    diagnosis?: string;
+    whatIsWorking?: string;
+    rootCause?: string;
+    rootCauseCode?: string;
+  };
   title_fix?: {
     problem?: string;
     impact?: string;
@@ -25,6 +31,13 @@ export interface ExpertAnalysisFields {
     how_to_apply?: string;
     signal_impacted?: string;
   }>;
+  growthHacks?: Array<{
+    title?: string;
+    summary?: string;
+    description?: string;
+    readyCopy?: string;
+    impactReason?: string;
+  }>;
   final_action_plan?: string[];
   meta?: Record<string, unknown>;
 }
@@ -34,8 +47,16 @@ export function sanitizeExpertAnalysis<T extends ExpertAnalysisFields>(analysis:
 
   const result = { ...analysis };
 
-  if (result.verdict) {
+  if (typeof result.verdict === 'string' && result.verdict) {
     result.verdict = sanitizeMlText(result.verdict);
+  } else if (result.verdict && typeof result.verdict === 'object') {
+    result.verdict = {
+      ...result.verdict,
+      headline: result.verdict.headline ? sanitizeMlText(result.verdict.headline) : result.verdict.headline,
+      diagnosis: result.verdict.diagnosis ? sanitizeMlText(result.verdict.diagnosis) : result.verdict.diagnosis,
+      whatIsWorking: result.verdict.whatIsWorking ? sanitizeMlText(result.verdict.whatIsWorking) : result.verdict.whatIsWorking,
+      rootCause: result.verdict.rootCause ? sanitizeMlText(result.verdict.rootCause) : result.verdict.rootCause,
+    };
   }
 
   if (result.title_fix) {
@@ -89,6 +110,17 @@ export function sanitizeExpertAnalysis<T extends ExpertAnalysisFields>(analysis:
 
   if (result.final_action_plan) {
     result.final_action_plan = result.final_action_plan.map(item => sanitizeMlText(item));
+  }
+
+  if (result.growthHacks) {
+    result.growthHacks = result.growthHacks.map((hack) => ({
+      ...hack,
+      title: hack.title ? sanitizeMlText(hack.title) : hack.title,
+      summary: hack.summary ? sanitizeMlText(hack.summary) : hack.summary,
+      description: hack.description ? sanitizeMlText(hack.description) : hack.description,
+      readyCopy: hack.readyCopy ? sanitizeMlText(hack.readyCopy) : hack.readyCopy,
+      impactReason: hack.impactReason ? sanitizeMlText(hack.impactReason) : hack.impactReason,
+    }));
   }
 
   return result;

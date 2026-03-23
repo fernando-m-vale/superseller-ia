@@ -607,6 +607,10 @@ export function applyPersonalizationToExpertAnalysis(
   input: AIAnalyzeInputV21,
   analysis: AIAnalysisResultExpert
 ): AIAnalysisResultExpert {
+  if (!analysis.title_fix || !analysis.description_fix) {
+    return analysis;
+  }
+
   const context = input.personalization || buildListingPersonalizationContext({
     title: input.listing.title,
     description: input.listing.description,

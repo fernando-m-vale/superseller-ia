@@ -92,6 +92,25 @@ interface ListingAIAnalysisPanelProps {
   isRegenerating?: boolean
   score?: number
   critique?: string
+  potentialGain?: {
+    cadastro?: string
+    midia?: string
+    performance?: string
+    seo?: string
+    competitividade?: string
+    estimatedVisitsIncrease?: string
+    estimatedConversionIncrease?: string
+    estimatedRevenueIncrease?: string
+    confidence?: 'alta' | 'media' | 'baixa'
+  }
+  performanceSignal?: 'EXCELENTE' | 'BOM' | 'ATENCAO' | 'CRITICO'
+  whatIsWorking?: string
+  funnelAnalysis?: {
+    descoberta?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    clique?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    conversao?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+    crescimento?: { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }
+  }
   // DIA 10: verdictText completo gerado pelo backend (fonte única de verdade)
   verdictText?: string
   funnelDiagnosis?: {
@@ -181,6 +200,16 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       expectedGains,
     }
   }, [props.funnelDiagnosis, props.executionRoadmap, pendingActions])
+
+  const funnelAnalysisEntries = useMemo(() => {
+    if (!props.funnelAnalysis) return []
+    return [
+      ['Descoberta', props.funnelAnalysis.descoberta],
+      ['Clique', props.funnelAnalysis.clique],
+      ['Conversão', props.funnelAnalysis.conversao],
+      ['Crescimento', props.funnelAnalysis.crescimento],
+    ].filter((entry): entry is [string, { score?: number; status?: 'ok' | 'atencao' | 'critico'; insight?: string }] => Boolean(entry[1]))
+  }, [props.funnelAnalysis])
 
   const formatVisualImpact = (impact: string) => {
     const normalized = impact.trim()
@@ -287,6 +316,11 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       ? 'text-amber-700 bg-amber-50 border-amber-200'
       : 'text-slate-700 bg-slate-50 border-slate-200'
 
+  const showPositiveLead = props.performanceSignal === 'EXCELENTE' || props.performanceSignal === 'BOM'
+  const normalizedWhatIsWorking = props.whatIsWorking?.trim()
+    || props.analysisV21?.verdictDetails?.whatIsWorking?.trim()
+    || ''
+
   return (
     <div className="space-y-6 p-6 bg-background">
       {/* Header com resumo e ações */}
@@ -346,6 +380,19 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </Card>
       )}
 
+      {showPositiveLead && normalizedWhatIsWorking && (
+        <Card className="border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <CardContent className="pt-6">
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+              O que já está funcionando
+            </p>
+            <p className="mt-2 text-sm text-emerald-900 dark:text-emerald-100">
+              {sanitizeSellerText(normalizedWhatIsWorking)}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* A) VEREDITO DIRETO (primeiro) */}
       <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 shadow-lg">
         <CardHeader className="pb-4">
@@ -381,7 +428,7 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </CardContent>
       </Card>
 
-      {props.adsIntelligence && (
+      {props.adsIntelligence && props.adsIntelligence.status !== 'unavailable' && props.adsIntelligence.status !== 'no_campaign' && (
         <Card className="border border-primary/20">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-4">
@@ -566,7 +613,27 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       )}
 
       {/* B) DIAGNÓSTICO DE FUNIL */}
-      {props.funnelDiagnosis && (
+      {funnelAnalysisEntries.length > 0 ? (
+        <Card className="border border-primary/30 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Diagnóstico do funil</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {funnelAnalysisEntries.map(([label, stage]) => (
+              <div key={label} className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{label}</p>
+                  <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {stage.status || '—'}
+                  </span>
+                </div>
+                <p className="mt-1 text-2xl font-semibold">{stage.score ?? '—'}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{stage.insight || 'Sem insight disponível.'}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : props.funnelDiagnosis && (
         <Card className="border border-primary/30 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Diagnóstico do funil</CardTitle>
@@ -589,7 +656,30 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       )}
 
       {/* C) GANHO POTENCIAL DA RODADA */}
-      {roundOpportunity && (
+      {props.potentialGain?.estimatedVisitsIncrease || props.potentialGain?.estimatedConversionIncrease || props.potentialGain?.estimatedRevenueIncrease ? (
+        <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Ganho potencial da rodada</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border bg-background/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Visitas</p>
+              <p className="mt-1 text-lg font-semibold">{props.potentialGain.estimatedVisitsIncrease || '—'}</p>
+            </div>
+            <div className="rounded-lg border bg-background/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conversão</p>
+              <p className="mt-1 text-lg font-semibold">{props.potentialGain.estimatedConversionIncrease || '—'}</p>
+            </div>
+            <div className="rounded-lg border bg-background/60 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Receita</p>
+              <p className="mt-1 text-lg font-semibold">{props.potentialGain.estimatedRevenueIncrease || '—'}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Confiança: {props.potentialGain.confidence || '—'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : roundOpportunity && (
         <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Ganho potencial da rodada</CardTitle>
