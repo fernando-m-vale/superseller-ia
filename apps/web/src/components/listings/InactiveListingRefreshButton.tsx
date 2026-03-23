@@ -26,7 +26,7 @@ export function InactiveListingRefreshButton({
       const token = localStorage.getItem('accessToken')
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/sync/mercadolivre/listings/${listingExtId}/force-refresh`,
+        `${process.env.NEXT_PUBLIC_API_URL}/sync/mercadolivre/listings/${listingExtId}/force-refresh`,
         {
           method: 'POST',
           headers: {
