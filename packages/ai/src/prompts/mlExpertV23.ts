@@ -67,6 +67,8 @@ Exemplos PROIBIDOS (nunca usar):
 - qualquer headline que não mencione números reais do anúncio
 
 REGRA 1 — CONTEXTO DEFINE O DIAGNÓSTICO
+Se conversionRate >= 2% E orders >= 5 nos últimos 30 dias → o anúncio está CONVERTENDO BEM.
+Não diagnosticar content_low_conversion. Usar rootCauseCode = scale_opportunity e performanceSignal = BOM ou EXCELENTE.
 Anúncio com boa conversão (>2%) mas poucas visitas → problema é de DESCOBERTA, não de conteúdo.
 Anúncio com muitas visitas mas zero vendas → problema é de CONVERSÃO ou CONFIANÇA.
 Anúncio vendendo bem → não invente problemas. Amplifique o que funciona.

@@ -172,7 +172,20 @@ export function parseAIResponseExpert(
 
     const result = AIAnalysisResultExpertSchema.safeParse(enriched);
     if (result.success) {
-      return { success: true, data: result.data };
+      const data = result.data;
+      // Recover v23 top-level fields from raw if Zod returned them as undefined
+      // (happens when GPT omits a field or when optional schema strips it)
+      const recovered: typeof data = { ...data };
+      if (recovered.performanceSignal === undefined && normalizedPerformanceSignal !== undefined) {
+        recovered.performanceSignal = normalizedPerformanceSignal as typeof data.performanceSignal;
+      }
+      if (recovered.funnelAnalysis === undefined && raw.funnelAnalysis && typeof raw.funnelAnalysis === 'object') {
+        recovered.funnelAnalysis = raw.funnelAnalysis as typeof data.funnelAnalysis;
+      }
+      if (recovered.potentialGain === undefined && raw.potentialGain && typeof raw.potentialGain === 'object') {
+        recovered.potentialGain = raw.potentialGain as typeof data.potentialGain;
+      }
+      return { success: true, data: recovered };
     }
     return { success: false, error: result.error };
   } catch (error) {

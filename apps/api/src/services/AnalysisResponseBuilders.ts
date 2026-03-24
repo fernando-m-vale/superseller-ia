@@ -1643,9 +1643,19 @@ export function buildVerdictText(input: {
   } | null;
   rootCause?: Partial<RootCauseDiagnosis> | null;
 }): string {
-  const raw = typeof input.rawVerdict === 'string'
-    ? input.rawVerdict
-    : JSON.stringify(input.rawVerdict ?? '');
+  let raw: string;
+  if (typeof input.rawVerdict === 'string') {
+    raw = input.rawVerdict;
+  } else if (input.rawVerdict && typeof input.rawVerdict === 'object') {
+    // v23 verdict object: extract readable text instead of JSON.stringify
+    const v = input.rawVerdict as Record<string, unknown>;
+    const parts: string[] = [];
+    if (typeof v.headline === 'string' && v.headline) parts.push(v.headline);
+    if (typeof v.diagnosis === 'string' && v.diagnosis) parts.push(v.diagnosis);
+    raw = parts.join('\n\n') || JSON.stringify(input.rawVerdict);
+  } else {
+    raw = JSON.stringify(input.rawVerdict ?? '');
+  }
   const verdict = raw.trim();
   if (verdict.length >= 280) {
     return verdict;

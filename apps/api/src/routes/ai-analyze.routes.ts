@@ -141,15 +141,23 @@ function applyV23AnalysisFields(
     ? analysisV21.verdict
     : null;
 
-  target.performanceSignal = analysisV21?.performanceSignal ?? verdict?.performanceSignal ?? null;
-  target.verdict = analysisV21?.verdict ?? null;
+  // performanceSignal: prefer v23 root field, fall back to nested verdict.performanceSignal
+  target.performanceSignal = analysisV21?.performanceSignal
+    ?? verdict?.performanceSignal
+    ?? target.performanceSignal
+    ?? null;
+
+  // verdict: always the full v23 object when available
+  target.verdict = analysisV21?.verdict ?? target.verdict ?? null;
 
   if (verdict?.whatIsWorking) {
     target.whatIsWorking = verdict.whatIsWorking;
   }
 
-  target.funnelAnalysis = analysisV21?.funnelAnalysis ?? null;
-  target.potentialGain = analysisV21?.potentialGain ?? null;
+  // funnelAnalysis / potentialGain: use v23 value; keep existing value as fallback (never overwrite with null)
+  target.funnelAnalysis = analysisV21?.funnelAnalysis ?? target.funnelAnalysis ?? null;
+  // potentialGain: prefer v23 object {estimatedVisitsIncrease,...}; fall back to legacy IAScore object
+  target.potentialGain = analysisV21?.potentialGain ?? target.potentialGain ?? null;
   target.executionRoadmap = analysisV21?.executionRoadmap?.length
     ? analysisV21.executionRoadmap
     : target.executionRoadmap ?? null;
