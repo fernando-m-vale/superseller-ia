@@ -175,7 +175,20 @@ Retorne EXATAMENTE este JSON, sem texto antes ou depois, sem blocos de código:
       "expectedImpact": "<impacto estimado desta etapa>"
     }
   ]
-}`;
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ATENÇÃO CRÍTICA — SCHEMA OBRIGATÓRIO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+O JSON acima é OBRIGATÓRIO independente das métricas do anúncio.
+Mesmo que o anúncio tenha 0 vendas, 0 pedidos ou dados insuficientes:
+- performanceSignal DEVE ser preenchido (use "CRITICO" para 0 vendas/0 pedidos)
+- funnelAnalysis DEVE ter os 4 pilares preenchidos (descoberta, clique, conversao, crescimento)
+- verdict DEVE ser um objeto com headline, diagnosis, whatIsWorking, rootCause, rootCauseCode
+- potentialGain DEVE usar o formato {estimatedVisitsIncrease, estimatedConversionIncrease, estimatedRevenueIncrease, confidence}
+Nunca omita esses campos. Nunca retorne uma string no lugar de um objeto verdict.`;
+
 
 export interface MLExpertV23BuildUserPromptInput {
   input: unknown;

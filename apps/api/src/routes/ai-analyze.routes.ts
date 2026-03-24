@@ -136,16 +136,30 @@ async function persistListingActionsBatch(
 function applyV23AnalysisFields(
   target: Record<string, any>,
   analysisV21?: AIAnalysisResultExpert | null,
+  metrics30d?: { visits?: number | null; orders?: number | null; conversionRate?: number | null } | null,
 ): void {
   const verdict = typeof analysisV21?.verdict === 'object' && analysisV21.verdict
     ? analysisV21.verdict
     : null;
 
-  // performanceSignal: prefer v23 root field, fall back to nested verdict.performanceSignal
-  target.performanceSignal = analysisV21?.performanceSignal
-    ?? verdict?.performanceSignal
-    ?? target.performanceSignal
-    ?? null;
+  // performanceSignal: prefer v23 root field, fall back to nested verdict.performanceSignal,
+  // then infer deterministically from metrics when GPT omitted it.
+  const signalFromAnalysis = analysisV21?.performanceSignal ?? verdict?.performanceSignal ?? target.performanceSignal ?? null;
+  if (signalFromAnalysis) {
+    target.performanceSignal = signalFromAnalysis;
+  } else if (metrics30d) {
+    const orders = metrics30d.orders ?? 0;
+    const cvr = metrics30d.conversionRate ?? 0;
+    if (orders === 0) {
+      target.performanceSignal = 'CRITICO';
+    } else if (cvr >= 0.02 && orders >= 5) {
+      target.performanceSignal = 'BOM';
+    } else {
+      target.performanceSignal = 'ATENCAO';
+    }
+  } else {
+    target.performanceSignal = null;
+  }
 
   // verdict: always the full v23 object when available
   target.verdict = analysisV21?.verdict ?? target.verdict ?? null;
@@ -154,8 +168,40 @@ function applyV23AnalysisFields(
     target.whatIsWorking = verdict.whatIsWorking;
   }
 
-  // funnelAnalysis: use v23 value; keep existing value as fallback (never overwrite with null)
-  target.funnelAnalysis = analysisV21?.funnelAnalysis ?? target.funnelAnalysis ?? null;
+  // funnelAnalysis: use v23 value; fall back to metrics-derived minimal object when GPT omitted it.
+  const funnelFromAnalysis = analysisV21?.funnelAnalysis ?? target.funnelAnalysis ?? null;
+  if (funnelFromAnalysis) {
+    target.funnelAnalysis = funnelFromAnalysis;
+  } else if (metrics30d) {
+    const visits = metrics30d.visits ?? 0;
+    const orders = metrics30d.orders ?? 0;
+    target.funnelAnalysis = {
+      descoberta: {
+        score: visits > 100 ? 70 : 30,
+        status: visits > 100 ? 'ok' : 'critico',
+        insight: `${visits} visitas nos últimos 30 dias`,
+      },
+      clique: {
+        score: 50,
+        status: 'atencao',
+        insight: 'Dados de CTR insuficientes para análise precisa',
+      },
+      conversao: {
+        score: orders === 0 ? 10 : 60,
+        status: orders === 0 ? 'critico' : 'ok',
+        insight: orders === 0
+          ? 'Zero conversões — revisar conteúdo e preço'
+          : `${orders} pedidos convertidos`,
+      },
+      crescimento: {
+        score: 50,
+        status: 'atencao',
+        insight: 'Tendência em avaliação',
+      },
+    };
+  } else {
+    target.funnelAnalysis = null;
+  }
   // potentialGain: v23 object {estimatedVisitsIncrease,...} ALWAYS wins over legacy {seo, competitividade}.
   // Fall back to legacy only when v23 result has no potentialGain at all.
   const v23PotentialGain = analysisV21?.potentialGain;
@@ -1605,7 +1651,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
             // SEMPRE incluir Expert se disponível (obrigatório) — sanitizar antes de enviar
             if (analysisV21) {
               responseData.analysisV21 = sanitizeExpertAnalysis(analysisV21);
-              applyV23AnalysisFields(responseData, responseData.analysisV21);
+              applyV23AnalysisFields(responseData, responseData.analysisV21, result.score.metrics_30d);
               
               // Normalizar meta.prompt_version e meta.version para garantir consistência
               if (responseData.analysisV21.meta) {
@@ -2360,7 +2406,7 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         // Incluir Expert se disponível no cache — sanitizar antes de enviar
         if (cachedResult.analysisV21) {
           cacheResponseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
-          applyV23AnalysisFields(cacheResponseData, cacheResponseData.analysisV21);
+          applyV23AnalysisFields(cacheResponseData, cacheResponseData.analysisV21, scoreResult.metrics_30d);
           
               // Normalizar meta.prompt_version e meta.version também no cache
               if (cacheResponseData.analysisV21?.meta) {
@@ -3503,7 +3549,7 @@ if (enableAIPing) {
         // Incluir Expert se disponível
         if (cachedResult.analysisV21) {
           responseData.analysisV21 = sanitizeExpertAnalysis(cachedResult.analysisV21);
-          applyV23AnalysisFields(responseData, responseData.analysisV21);
+          applyV23AnalysisFields(responseData, responseData.analysisV21, scoreResult.metrics_30d);
           if (responseData.analysisV21?.meta) {
             responseData.analysisV21.meta.prompt_version = PROMPT_VERSION as any;
             responseData.analysisV21.meta.version = PROMPT_VERSION as any;
