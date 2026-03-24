@@ -223,32 +223,40 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
   const appliedCount = actions.filter((a) => a.status === 'IMPLEMENTADO').length
   const dismissedCount = actions.filter((a) => a.status === 'DESCARTADO').length
 
-  // DIA 10: Veredito Direto — fonte única de verdade
-  // Prioridade: props.verdictText (backend completo) > analysisV21.verdict > critique
-  // NÃO combinar múltiplas fontes para evitar duplicação
+  // Veredito Direto — headline curta e objetiva
+  // Prioridade: v23 headline > v22/v21 verdict string > verdictText legado > critique
   const verdictText = useMemo(() => {
-    // 1. Preferir verdictText do backend (texto completo, sem cortes)
-    if (props.verdictText && props.verdictText.trim().length > 0) {
-      return props.verdictText.trim()
-    }
+    // 1. v23: headline do objeto verdict (curta, direta)
+    const headline = props.analysisV21?.verdictDetails?.headline?.trim()
+    if (headline) return headline
 
-    // 2. Fallback: analysisV21.verdict (completo)
+    // 2. v22/v21: verdict como string normalizada
     const v21Verdict = props.analysisV21?.verdict?.trim() || ''
-    if (v21Verdict.length > 0) {
-      return v21Verdict
-    }
+    if (v21Verdict.length > 0) return v21Verdict
 
-    // 3. Fallback final: critique (completo)
-    if (props.critique && props.critique.trim().length > 0) {
-      return props.critique.trim()
-    }
+    // 3. legado: verdictText do backend (pode conter headline+diagnosis)
+    if (props.verdictText?.trim()) return props.verdictText.trim()
+
+    // 4. fallback final
+    if (props.critique?.trim()) return props.critique.trim()
 
     return 'Análise executiva não disponível no momento.'
   }, [
-    props.verdictText,
+    props.analysisV21?.verdictDetails?.headline,
     props.analysisV21?.verdict,
+    props.verdictText,
     props.critique,
   ])
+
+  // "Por que isso está acontecendo" — diagnosis completa do v23
+  // Prioridade: v23 diagnosis > verdictText legado (contém headline+diagnosis)
+  const diagnosisText = useMemo(() => {
+    const diagnosis = props.analysisV21?.verdictDetails?.diagnosis?.trim()
+    if (diagnosis) return diagnosis
+    // legado: verdictText já contém o texto de diagnóstico completo
+    if (props.verdictText?.trim()) return props.verdictText.trim()
+    return null
+  }, [props.analysisV21?.verdictDetails?.diagnosis, props.verdictText])
 
   const sellerVerdictText = useMemo(() => sanitizeSellerText(verdictText), [verdictText])
 
@@ -316,9 +324,10 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       ? 'text-amber-700 bg-amber-50 border-amber-200'
       : 'text-slate-700 bg-slate-50 border-slate-200'
 
-  const showPositiveLead = props.performanceSignal === 'EXCELENTE' || props.performanceSignal === 'BOM'
-  const normalizedWhatIsWorking = props.whatIsWorking?.trim()
-    || props.analysisV21?.verdictDetails?.whatIsWorking?.trim()
+  // "O que está funcionando": v23 verdictDetails > top-level whatIsWorking (legado)
+  const normalizedWhatIsWorking =
+    props.analysisV21?.verdictDetails?.whatIsWorking?.trim()
+    || props.whatIsWorking?.trim()
     || ''
 
   return (
@@ -380,11 +389,11 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </Card>
       )}
 
-      {showPositiveLead && normalizedWhatIsWorking && (
+      {normalizedWhatIsWorking && (
         <Card className="border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/20">
           <CardContent className="pt-6">
             <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
-              O que já está funcionando
+              ✅ O que está funcionando
             </p>
             <p className="mt-2 text-sm text-emerald-900 dark:text-emerald-100">
               {sanitizeSellerText(normalizedWhatIsWorking)}
@@ -427,6 +436,19 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           )}
         </CardContent>
       </Card>
+
+      {diagnosisText && (
+        <Card className="border border-muted">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Por que isso está acontecendo</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+              {sanitizeSellerText(diagnosisText)}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {props.adsIntelligence && props.adsIntelligence.status !== 'unavailable' && props.adsIntelligence.status !== 'no_campaign' && (
         <Card className="border border-primary/20">
