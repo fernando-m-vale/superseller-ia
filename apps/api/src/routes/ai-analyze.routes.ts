@@ -154,10 +154,17 @@ function applyV23AnalysisFields(
     target.whatIsWorking = verdict.whatIsWorking;
   }
 
-  // funnelAnalysis / potentialGain: use v23 value; keep existing value as fallback (never overwrite with null)
+  // funnelAnalysis: use v23 value; keep existing value as fallback (never overwrite with null)
   target.funnelAnalysis = analysisV21?.funnelAnalysis ?? target.funnelAnalysis ?? null;
-  // potentialGain: prefer v23 object {estimatedVisitsIncrease,...}; fall back to legacy IAScore object
-  target.potentialGain = analysisV21?.potentialGain ?? target.potentialGain ?? null;
+  // potentialGain: v23 object {estimatedVisitsIncrease,...} ALWAYS wins over legacy {seo, competitividade}.
+  // Fall back to legacy only when v23 result has no potentialGain at all.
+  const v23PotentialGain = analysisV21?.potentialGain;
+  const isV23Format = v23PotentialGain != null &&
+    typeof v23PotentialGain === 'object' &&
+    ('estimatedVisitsIncrease' in v23PotentialGain ||
+     'estimatedConversionIncrease' in v23PotentialGain ||
+     'estimatedRevenueIncrease' in v23PotentialGain);
+  target.potentialGain = isV23Format ? v23PotentialGain : (target.potentialGain ?? null);
   target.executionRoadmap = analysisV21?.executionRoadmap?.length
     ? analysisV21.executionRoadmap
     : target.executionRoadmap ?? null;
@@ -838,19 +845,45 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
                   );
                   cachedResult = null; // Forçar regeneração
                 } else {
-                  request.log.info(
-                    {
-                      requestId,
-                      userId,
-                      tenantId,
-                      listingId,
-                      fingerprint: fingerprint.substring(0, 16) + '...',
-                      cacheHit: true,
-                      hasV21: true,
-                      promptVersion: PROMPT_VERSION,
-                    },
-                    'AI analysis cache hit with Expert (ml-expert-v1)'
-                  );
+                  // For v23 specifically, also verify that required structured fields are present.
+                  // A cache entry can have prompt_version=ml-expert-v23 but have been saved before
+                  // performanceSignal/funnelAnalysis/potentialGain(v23) were working — regenerate in that case.
+                  if (PROMPT_VERSION === 'ml-expert-v23') {
+                    const v23a = cachedResult.analysisV21 as any;
+                    const hasV23Fields =
+                      v23a?.performanceSignal &&
+                      v23a?.funnelAnalysis &&
+                      v23a?.potentialGain?.estimatedVisitsIncrease;
+                    if (!hasV23Fields) {
+                      request.log.warn(
+                        {
+                          requestId,
+                          listingId,
+                          tenantId,
+                          hasPerformanceSignal: !!v23a?.performanceSignal,
+                          hasFunnelAnalysis: !!v23a?.funnelAnalysis,
+                          hasPotentialGainV23: !!v23a?.potentialGain?.estimatedVisitsIncrease,
+                        },
+                        'Cache hit but analysisV21 missing v23 structured fields, will regenerate'
+                      );
+                      cachedResult = null;
+                    }
+                  }
+                  if (cachedResult) {
+                    request.log.info(
+                      {
+                        requestId,
+                        userId,
+                        tenantId,
+                        listingId,
+                        fingerprint: fingerprint.substring(0, 16) + '...',
+                        cacheHit: true,
+                        hasV21: true,
+                        promptVersion: PROMPT_VERSION,
+                      },
+                      'AI analysis cache hit with Expert (ml-expert-v1)'
+                    );
+                  }
                 }
               }
             }
