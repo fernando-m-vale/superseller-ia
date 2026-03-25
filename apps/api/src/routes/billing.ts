@@ -135,8 +135,7 @@ export async function billingRoutes(app: FastifyInstance) {
 
   // POST /billing/webhook — recebe eventos do Stripe
   // ATENÇÃO: não usar authGuard aqui
-  // config.rawBody=true ativa o fastify-raw-body apenas nesta rota (global:false no plugin)
-  app.post('/webhook', { config: { rawBody: true } }, async (request, reply) => {
+  app.post('/webhook', async (request, reply) => {
     const sig = request.headers['stripe-signature'] as string;
     const rawBody = (request as any).rawBody as string | undefined;
 

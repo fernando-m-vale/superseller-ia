@@ -32,7 +32,6 @@
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "fastify": "^4.29.1",
-    "fastify-raw-body": "^5.0.0",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
     "openai": "^6.10.0",

@@ -21,14 +21,22 @@ import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
 import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
 import { billingRoutes } from './routes/billing';
-import fastifyRawBody from 'fastify-raw-body';
 
 const app = fastify({ logger: loggerConfig });
 
 app.register(cors, { origin: '*' });
 
-// Raw body para o webhook Stripe — expõe request.rawBody sem sobrescrever o JSON parser global
-app.register(fastifyRawBody, { field: 'rawBody', global: false, encoding: 'utf8', runFirst: true });
+// Captura raw body para verificação de assinatura do webhook Stripe.
+// Remove o parser padrão antes de registrar o nosso para evitar FST_ERR_CTP_ALREADY_PRESENT.
+app.removeContentTypeParser('application/json');
+app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req: any, body: Buffer, done: (err: Error | null, body?: unknown) => void) => {
+  (req as any).rawBody = body.toString('utf8');
+  try {
+    done(null, JSON.parse(body.toString('utf8')));
+  } catch (e) {
+    done(e as Error, undefined);
+  }
+});
 
 // Registrar plugin de requestId antes de outras rotas
 app.register(requestIdPlugin);
