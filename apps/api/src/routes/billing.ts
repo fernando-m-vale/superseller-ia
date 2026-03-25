@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { stripe, STRIPE_PRICES, APP_URL } from '../lib/stripe';
+import { getStripe, STRIPE_PRICES, APP_URL } from '../lib/stripe';
 import { authGuard } from '../plugins/auth';
 import { getEffectivePlan, FREE_LIMITS } from '../lib/plan-guard';
 import Stripe from 'stripe';
@@ -81,7 +81,7 @@ export async function billingRoutes(app: FastifyInstance) {
     // Criar/recuperar customer
     let customerId = tenant.stripe_customer_id;
     if (!customerId) {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: user?.email,
         metadata: { tenantId, userId },
       });
@@ -94,7 +94,7 @@ export async function billingRoutes(app: FastifyInstance) {
 
     const priceId = interval === 'year' ? STRIPE_PRICES.proAnnual : STRIPE_PRICES.proMonthly;
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -125,7 +125,7 @@ export async function billingRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'no_subscription' });
     }
 
-    const portalSession = await stripe.billingPortal.sessions.create({
+    const portalSession = await getStripe().billingPortal.sessions.create({
       customer: tenant.stripe_customer_id,
       return_url: `${APP_URL}/settings`,
     });
@@ -140,7 +140,7 @@ export async function billingRoutes(app: FastifyInstance) {
 
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(
+      event = getStripe().webhooks.constructEvent(
         (request as any).rawBody ?? JSON.stringify(request.body),
         sig,
         process.env.STRIPE_WEBHOOK_SECRET!,
@@ -178,7 +178,7 @@ async function handleStripeEvent(event: Stripe.Event, app: FastifyInstance) {
       const tenantId = session.metadata?.tenantId;
       if (!tenantId || !session.subscription) break;
       const subId = typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
-      const sub = await stripe.subscriptions.retrieve(subId);
+      const sub = await getStripe().subscriptions.retrieve(subId);
       await updateTenantFromSubscription(tenantId, sub);
       break;
     }
@@ -196,7 +196,7 @@ async function handleStripeEvent(event: Stripe.Event, app: FastifyInstance) {
       const invoice = event.data.object as Stripe.Invoice;
       const subId = getInvoiceSubscriptionId(invoice);
       if (!subId) break;
-      const sub = await stripe.subscriptions.retrieve(subId);
+      const sub = await getStripe().subscriptions.retrieve(subId);
       const tenantId = sub.metadata?.tenantId;
       if (!tenantId) break;
       await updateTenantFromSubscription(tenantId, sub);
@@ -207,7 +207,7 @@ async function handleStripeEvent(event: Stripe.Event, app: FastifyInstance) {
       const invoice = event.data.object as Stripe.Invoice;
       const subId = getInvoiceSubscriptionId(invoice);
       if (!subId) break;
-      const sub = await stripe.subscriptions.retrieve(subId);
+      const sub = await getStripe().subscriptions.retrieve(subId);
       const tenantId = sub.metadata?.tenantId;
       if (!tenantId) break;
       await prisma.tenant.updateMany({
