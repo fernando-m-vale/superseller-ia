@@ -21,25 +21,14 @@ import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
 import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
 import { billingRoutes } from './routes/billing';
+import fastifyRawBody from 'fastify-raw-body';
 
 const app = fastify({ logger: loggerConfig });
 
 app.register(cors, { origin: '*' });
 
-// CRÍTICO: Raw body parser para o webhook Stripe — deve vir ANTES do JSON parser padrão
-// Sem isso, stripe.webhooks.constructEvent() falha com 400 (assinatura inválida)
-app.addContentTypeParser(
-  'application/json',
-  { parseAs: 'buffer' },
-  (req, body, done) => {
-    (req as any).rawBody = body;
-    try {
-      done(null, JSON.parse(body.toString()));
-    } catch (e) {
-      done(e as Error, undefined);
-    }
-  },
-);
+// Raw body para o webhook Stripe — expõe request.rawBody sem sobrescrever o JSON parser global
+app.register(fastifyRawBody, { field: 'rawBody', global: false, encoding: 'utf8', runFirst: true });
 
 // Registrar plugin de requestId antes de outras rotas
 app.register(requestIdPlugin);
