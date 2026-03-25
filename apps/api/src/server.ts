@@ -28,11 +28,15 @@ app.register(cors, { origin: '*' });
 
 // Captura raw body para verificação de assinatura do webhook Stripe.
 // Remove o parser padrão antes de registrar o nosso para evitar FST_ERR_CTP_ALREADY_PRESENT.
+// Captura raw body para verificação de assinatura do webhook Stripe.
+// Remove o parser padrão antes de registrar o nosso para evitar FST_ERR_CTP_ALREADY_PRESENT.
+// Aceita body vazio (→ {}) para compatibilidade com rotas POST sem body (ex: sync routes).
 app.removeContentTypeParser('application/json');
 app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req: any, body: Buffer, done: (err: Error | null, body?: unknown) => void) => {
-  (req as any).rawBody = body.toString('utf8');
+  const raw = body?.toString('utf8') ?? '';
+  (req as any).rawBody = raw;
   try {
-    done(null, JSON.parse(body.toString('utf8')));
+    done(null, raw ? JSON.parse(raw) : {});
   } catch (e) {
     done(e as Error, undefined);
   }

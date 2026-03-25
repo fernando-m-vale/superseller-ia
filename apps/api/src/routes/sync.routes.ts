@@ -37,16 +37,6 @@ const ResyncListingsQuerySchema = z.object({
 });
 
 export const syncRoutes: FastifyPluginCallback = (app, _, done) => {
-  // Configurar para aceitar body vazio em rotas POST
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-    try {
-      const json = body ? JSON.parse(body as string) : {};
-      done(null, json);
-    } catch (err) {
-      done(null, {});
-    }
-  });
-
   /**
    * POST /api/v1/sync/mercadolivre
    * 
