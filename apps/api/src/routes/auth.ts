@@ -254,5 +254,40 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   });
 
+  // Rota: POST /api/v1/auth/onboarding — atualiza progresso do onboarding
+  app.post('/onboarding', async (req, reply) => {
+    try {
+      const authorization = req.headers.authorization;
+      if (!authorization || !authorization.startsWith('Bearer ')) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      const token = authorization.substring(7);
+      const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; tenantId: string };
+
+      const body = (req.body ?? {}) as { step?: number; completed?: boolean };
+      const data: Record<string, unknown> = {};
+      if (typeof body.step === 'number') data.onboarding_step = body.step;
+      if (typeof body.completed === 'boolean') data.onboarding_completed = body.completed;
+
+      if (Object.keys(data).length === 0) {
+        return reply.status(400).send({ error: 'Provide step or completed' });
+      }
+
+      await prisma.tenant.update({
+        where: { id: decoded.tenantId },
+        data,
+      });
+
+      return reply.send({ ok: true });
+    } catch (error) {
+      if (error instanceof jwt.JsonWebTokenError) {
+        return reply.status(401).send({ error: 'Invalid token' });
+      }
+      app.log.error(error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
   done();
 };

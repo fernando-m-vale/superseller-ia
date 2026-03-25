@@ -32,6 +32,8 @@ export const setTokens = (accessToken: string, refreshToken: string) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    // Set cookie for middleware-level auth detection (7 days, same-site lax)
+    document.cookie = `ss_auth=1; path=/; max-age=${7 * 24 * 3600}; samesite=lax`;
   }
 };
 
@@ -53,6 +55,8 @@ export const clearTokens = () => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    // Clear middleware cookie
+    document.cookie = 'ss_auth=; path=/; max-age=0';
   }
 };
 

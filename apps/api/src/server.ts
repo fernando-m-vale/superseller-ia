@@ -21,6 +21,7 @@ import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
 import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
 import { billingRoutes } from './routes/billing';
+import { waitlistRoutes } from './routes/waitlist';
 
 const app = fastify({ logger: loggerConfig });
 
@@ -100,6 +101,7 @@ async function main() {
     await app.register(internalDebugRoutes, { prefix: '/api/v1/internal/debug' });
     await app.register(clipsDebugRoutes, { prefix: '/api/v1/debug/ml' });
     await app.register(billingRoutes, { prefix: '/api/v1/billing' });
+    await app.register(waitlistRoutes, { prefix: '/api/v1/waitlist' });
 
     await app.ready();
     

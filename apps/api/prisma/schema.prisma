@@ -863,3 +863,18 @@ model ListingActionDetail {
   @@index([actionId, schemaVersion], map: "listing_action_details_actionId_schemaVersion_idx")
   @@map("listing_action_details")
 }
+
+
+model Waitlist {
+  id              Int      @id @default(autoincrement())
+  email           String   @unique
+  store_name      String?
+  store_url       String?
+  gmv_range       String?
+  listings_count  Int?
+  marketplace     String?
+  notified        Boolean  @default(false)
+  created_at      DateTime @default(now())
+
+  @@map("waitlist")
+}
