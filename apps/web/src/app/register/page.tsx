@@ -46,7 +46,7 @@ export default function RegisterPage() {
         password: data.password,
         tenantName: data.tenantName,
       });
-      router.push('/overview');
+      router.push('/onboarding');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

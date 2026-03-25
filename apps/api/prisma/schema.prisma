@@ -150,6 +150,18 @@ model Tenant {
   name       String
   created_at DateTime @default(now())
 
+  // Billing
+  plan               String    @default("free")   // "free" | "pro"
+  plan_status        String    @default("active")  // "active" | "trialing" | "past_due" | "canceled"
+  trial_ends_at      DateTime?
+  plan_expires_at    DateTime?
+  stripe_customer_id String?   @unique
+  stripe_sub_id      String?   @unique
+
+  // Onboarding
+  onboarding_completed Boolean @default(false)
+  onboarding_step      Int     @default(0)
+
   // DIA 08: Campos de sync automático (HOTFIX: timestamptz para timezone consistente)
   last_auto_sync_at     DateTime?  @db.Timestamptz(3)
   last_manual_sync_at   DateTime?  @db.Timestamptz(3)

@@ -20,10 +20,27 @@ import { TokenRefreshService } from './services/TokenRefreshService';
 import { loggerConfig } from './utils/logger-config';
 import { requestIdPlugin } from './plugins/request-id';
 import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
+import { billingRoutes } from './routes/billing';
 
 const app = fastify({ logger: loggerConfig });
 
 app.register(cors, { origin: '*' });
+
+// CRÍTICO: Raw body parser para o webhook Stripe — deve vir ANTES do JSON parser padrão
+// Sem isso, stripe.webhooks.constructEvent() falha com 400 (assinatura inválida)
+app.addContentTypeParser(
+  'application/json',
+  { parseAs: 'buffer' },
+  (req, body, done) => {
+    (req as any).rawBody = body;
+    try {
+      done(null, JSON.parse(body.toString()));
+    } catch (e) {
+      done(e as Error, undefined);
+    }
+  },
+);
+
 // Registrar plugin de requestId antes de outras rotas
 app.register(requestIdPlugin);
 
@@ -81,6 +98,7 @@ async function main() {
     await app.register(internalJobsRoutes, { prefix: '/api/v1/jobs' });
     await app.register(internalDebugRoutes, { prefix: '/api/v1/internal/debug' });
     await app.register(clipsDebugRoutes, { prefix: '/api/v1/debug/ml' });
+    await app.register(billingRoutes, { prefix: '/api/v1/billing' });
 
     await app.ready();
     

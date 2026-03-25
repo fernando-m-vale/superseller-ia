@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { triggerLoginSyncIfNeeded } from '../lib/sync-on-login';
+import { getEffectivePlan } from '../lib/plan-guard';
 
 const prisma = new PrismaClient();
 
@@ -51,10 +52,17 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
 
       const passwordHash = await bcrypt.hash(body.password, 10);
 
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
       const result = await prisma.$transaction(async (tx) => {
         const tenant = await tx.tenant.create({
           data: {
             name: body.tenantName,
+            // Reverse Trial: começa como Pro em trialing por 14 dias
+            plan: 'pro',
+            plan_status: 'trialing',
+            trial_ends_at: trialEndsAt,
           },
         });
 
@@ -179,12 +187,43 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
 
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        include: { tenant: true },
+        include: {
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              plan: true,
+              plan_status: true,
+              trial_ends_at: true,
+              onboarding_completed: true,
+              onboarding_step: true,
+            },
+          },
+        },
       });
 
       if (!user) {
         return reply.status(401).send({ error: 'User not found' });
       }
+
+      // Auto-downgrade silencioso se trial expirou
+      if (
+        user.tenant.plan_status === 'trialing' &&
+        user.tenant.trial_ends_at &&
+        user.tenant.trial_ends_at < new Date()
+      ) {
+        await prisma.tenant.update({
+          where: { id: user.tenant.id },
+          data: { plan: 'free', plan_status: 'active' },
+        });
+        user.tenant.plan = 'free';
+        user.tenant.plan_status = 'active';
+      }
+
+      const effectivePlan = getEffectivePlan(user.tenant);
+      const trialDaysLeft = user.tenant.trial_ends_at
+        ? Math.max(0, Math.ceil((new Date(user.tenant.trial_ends_at).getTime() - Date.now()) / 86400000))
+        : null;
 
       return reply.send({
         user: {
@@ -193,6 +232,17 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
           role: user.role,
           tenantId: user.tenant_id,
           tenantName: user.tenant.name,
+        },
+        billing: {
+          plan: effectivePlan,
+          planStatus: user.tenant.plan_status,
+          isTrialing: user.tenant.plan_status === 'trialing',
+          trialEndsAt: user.tenant.trial_ends_at,
+          trialDaysLeft,
+        },
+        onboarding: {
+          completed: user.tenant.onboarding_completed,
+          step: user.tenant.onboarding_step,
         },
       });
     } catch (error) {

@@ -4,22 +4,25 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { 
-  LayoutDashboard, 
-  Package, 
-  Lightbulb, 
-  Settings, 
+  LayoutDashboard,
+  Package,
+  Lightbulb,
+  Settings,
   LogOut,
   Menu,
   X,
   User,
   ChevronDown,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { clearTokens, getAccessToken } from '@/lib/auth'
 import { useAuth } from '@/hooks/use-auth'
 import { getApiBaseUrl } from '@/lib/api'
+import { TrialBanner } from '@/components/billing/TrialBanner'
+import { useBilling } from '@/hooks/use-billing'
 
 // Feature flag: Temporariamente desativado por instabilidade no backend (erro 500)
 // Para reativar, alterar para true
@@ -38,6 +41,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { data: user } = useAuth()
+  const { isFree, isTrialing, trialDaysLeft } = useBilling()
 
   const handleLogout = () => {
     clearTokens()
@@ -132,6 +136,16 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         {/* Footer */}
         <div className="px-4 py-4 border-t space-y-2 pointer-events-auto">
+          {(isFree || isTrialing) && (
+            <Link
+              href="/upgrade"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg
+                bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors"
+            >
+              <Zap className="w-4 h-4" />
+              {isTrialing ? `Pro: ${trialDaysLeft}d restantes` : 'Fazer upgrade'}
+            </Link>
+          )}
           <Button
             variant="outline"
             className="w-full justify-start gap-3"
@@ -246,6 +260,17 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="px-4 py-4 border-t space-y-2">
+          {(isFree || isTrialing) && (
+            <Link
+              href="/upgrade"
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg
+                bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors"
+            >
+              <Zap className="w-4 h-4" />
+              {isTrialing ? `Pro: ${trialDaysLeft}d restantes` : 'Fazer upgrade'}
+            </Link>
+          )}
           <Button
             variant="outline"
             className="w-full justify-start gap-3"
@@ -325,6 +350,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         {/* Page Content */}
         <main className="p-4 md:p-6 lg:p-8 w-full max-w-full overflow-x-hidden pb-20">
+          <TrialBanner />
           {children}
         </main>
       </div>

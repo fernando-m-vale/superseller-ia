@@ -41,6 +41,7 @@ import { VisualAnalysisRepository } from '../services/visual/VisualAnalysisRepos
 import { attachAdsIntelligenceToPayload } from '../services/ads/attachAdsIntelligence';
 import { enrichAnalyzeResponseWithConsultingIntelligence } from '../services/AnalyzeConsultingEnricher';
 import { ensureListingFreshness } from '../lib/freshness-check';
+import { checkFreeAnalysisLimit } from '../lib/plan-guard';
 
 const prisma = new PrismaClient();
 const visualAnalysisOrchestrator = new VisualAnalysisOrchestrator(
@@ -519,6 +520,18 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const body = AnalyzeBodySchema.parse(request.body ?? {});
         const { listingId } = params;
         const forceRefresh = query.forceRefresh === true || body.force === true || body.force_refresh === true;
+
+        // Verificar limite do plano Free antes de chamar o GPT-4o
+        const limitCheck = await checkFreeAnalysisLimit(tenantId, prisma);
+        if (!limitCheck.allowed) {
+          return reply.status(403).send({
+            error: 'plan_limit_reached',
+            message: `Você atingiu o limite de ${limitCheck.limit} análises/mês do plano gratuito.`,
+            used: limitCheck.used,
+            limit: limitCheck.limit,
+            upgradeUrl: `${process.env.APP_URL ?? 'https://app.superselleria.com.br'}/upgrade`,
+          });
+        }
 
         // Garante dados frescos (máx 24h) antes de analisar
         const _freshnessResult = await ensureListingFreshness(listingId, tenantId)
