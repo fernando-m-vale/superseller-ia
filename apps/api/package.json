@@ -8,7 +8,7 @@
     "dev": "tsx -r dotenv/config src/server.ts",
     "prebuild": "prisma generate",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/server.js",
+    "start": "prisma migrate deploy && node dist/server.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
