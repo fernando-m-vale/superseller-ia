@@ -5,7 +5,7 @@ CREATE TABLE "waitlist" (
     "store_name" TEXT,
     "store_url" TEXT,
     "gmv_range" TEXT,
-    "listings_count" INTEGER,
+    "listings_count" TEXT,
     "marketplace" TEXT,
     "notified" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

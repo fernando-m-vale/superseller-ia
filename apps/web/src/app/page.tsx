@@ -347,8 +347,8 @@ export default function LandingPage() {
                 </span>
               </div>
               <h3 className="font-bold text-lg mb-1">Pro</h3>
-              <p className="text-3xl font-bold mb-1">R$ 97<span className="text-lg font-normal opacity-80">/mês</span></p>
-              <p className="text-sm opacity-70 mb-6">ou R$ 797/ano (economize 32%)</p>
+              <p className="text-3xl font-bold mb-1">R$ 297<span className="text-lg font-normal opacity-80">/mês</span></p>
+              <p className="text-sm opacity-70 mb-6">ou R$ 247/mês no anual (R$ 2.964/ano — economize 17%)</p>
               <ul className="space-y-2 text-sm mb-6">
                 {[
                   'Análises ilimitadas',

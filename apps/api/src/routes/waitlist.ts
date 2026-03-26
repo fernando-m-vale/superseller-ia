@@ -9,7 +9,7 @@ const WaitlistSchema = z.object({
   store_name: z.string().optional(),
   store_url: z.string().url().optional().or(z.literal('')),
   gmv_range: z.string().optional(),
-  listings_count: z.number().int().positive().optional(),
+  listings_count: z.string().optional(),
   marketplace: z.string().optional(),
 });
 

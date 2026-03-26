@@ -871,7 +871,7 @@ model Waitlist {
   store_name      String?
   store_url       String?
   gmv_range       String?
-  listings_count  Int?
+  listings_count  String?
   marketplace     String?
   notified        Boolean  @default(false)
   created_at      DateTime @default(now())
