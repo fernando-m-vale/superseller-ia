@@ -26,6 +26,7 @@ resource "aws_ssm_parameter" "scheduler_service_token" {
   description = "Token de autenticação para o scheduler semanal de sync"
   type        = "SecureString"
   value       = var.scheduler_service_token
+  overwrite   = true
 
   tags = {
     Project     = "SuperSellerIA"
@@ -116,16 +117,16 @@ data "archive_file" "scheduler_lambda_zip" {
         }
 
         // 2. Chama o endpoint de sync de todos os tenants
-        console.log(`[WeeklySync] Chamando ${API_URL}/api/v1/sync/all-tenants/full`);
+        console.log(`[WeeklySync] Chamando $${API_URL}/api/v1/sync/all-tenants/full`);
         const startedAt = Date.now();
 
         let response;
         try {
-          response = await fetch(`${API_URL}/api/v1/sync/all-tenants/full`, {
+          response = await fetch(`$${API_URL}/api/v1/sync/all-tenants/full`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${serviceToken}`,
+              'Authorization': `Bearer $${serviceToken}`,
             },
             body: JSON.stringify({ source: 'eventbridge_weekly_scheduler' }),
             signal: AbortSignal.timeout(240_000), // 4 min timeout
@@ -139,8 +140,8 @@ data "archive_file" "scheduler_lambda_zip" {
 
         if (!response.ok) {
           const body = await response.text();
-          console.error(`[WeeklySync] API retornou ${response.status}:`, body);
-          throw new Error(`API error ${response.status}: ${body}`);
+          console.error(`[WeeklySync] API retornou $${response.status}:`, body);
+          throw new Error(`API error $${response.status}: $${body}`);
         }
 
         const result = await response.json();
@@ -252,11 +253,6 @@ resource "aws_scheduler_schedule" "weekly_full_sync" {
     }
   }
 
-  tags = {
-    Project     = "SuperSellerIA"
-    Environment = "production"
-    ManagedBy   = "terraform"
-  }
 }
 
 output "scheduler_lambda_arn" {

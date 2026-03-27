@@ -47,6 +47,15 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const whereClause: any = { tenant_id: tenantId };
 
+      // Filtro por conta ativa (multi-contas): null = ver todos consolidado
+      const tenantForFilter = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { active_connection_id: true },
+      });
+      if (tenantForFilter?.active_connection_id) {
+        whereClause.marketplace_connection_id = tenantForFilter.active_connection_id;
+      }
+
       // Filtro de marketplace
       if (marketplace) {
         whereClause.marketplace = marketplace as Marketplace;

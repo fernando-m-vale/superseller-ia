@@ -8,6 +8,7 @@ export const APP_URL = process.env.APP_URL ?? 'https://app.superselleria.com.br'
 export const FREE_LIMITS = {
   maxAiAnalysesPerMonth: 3,
   maxMarketplaces: 1,
+  maxConnections: 2,   // máximo de contas ML no Free
   historyDays: 7,
   autoSync: false,
   readyCopy: false,
@@ -47,6 +48,7 @@ export function getEffectivePlan(tenant: {
 }
 
 // Auto-downgrade: se trial_ends_at < now e plan_status='trialing', rebaixa para free
+// Também marca trial_used = true (anti-burla)
 export async function autoDowngradeIfTrialExpired(tenantId: string): Promise<void> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -56,9 +58,34 @@ export async function autoDowngradeIfTrialExpired(tenantId: string): Promise<voi
   if (tenant.plan_status === 'trialing' && tenant.trial_ends_at && tenant.trial_ends_at < new Date()) {
     await prisma.tenant.update({
       where: { id: tenantId },
-      data: { plan: 'free', plan_status: 'active' },
+      data: { plan: 'free', plan_status: 'active', trial_used: true },
     });
   }
+}
+
+// Verifica limite de conexões para usuários Free (Free: max 2 contas ML)
+export async function checkConnectionLimit(
+  tenantId: string,
+  prismaClient: PrismaClient,
+): Promise<{ allowed: boolean; count: number; limit: number }> {
+  const tenant = await prismaClient.tenant.findUnique({
+    where: { id: tenantId },
+    select: { plan: true, plan_status: true, trial_ends_at: true, plan_expires_at: true },
+  });
+  if (!tenant) return { allowed: false, count: 0, limit: 0 };
+
+  const effective = getEffectivePlan(tenant);
+  if (effective === 'pro') return { allowed: true, count: 0, limit: Infinity };
+
+  const count = await prismaClient.marketplaceConnection.count({
+    where: { tenant_id: tenantId },
+  });
+
+  return {
+    allowed: count < FREE_LIMITS.maxConnections,
+    count,
+    limit: FREE_LIMITS.maxConnections,
+  };
 }
 
 // Middleware — protege rotas que exigem plano Pro

@@ -1,6 +1,7 @@
 import { AuthGuard } from '@/components/AuthGuard'
 import { DashboardLayout } from '@/components/DashboardLayout'
 import { ListingsTable } from '@/components/listings-table'
+import { ViewingAllBanner } from '@/components/accounts/ViewingAllBanner'
 
 export default function ListingsPage() {
   return (
@@ -17,6 +18,9 @@ export default function ListingsPage() {
             </div>
           </div>
           
+          {/* Banner quando vendo todas as contas consolidadas */}
+          <ViewingAllBanner />
+
           {/* Tabela de anúncios */}
           <ListingsTable />
         </div>

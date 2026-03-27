@@ -23,6 +23,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { getApiBaseUrl } from '@/lib/api'
 import { TrialBanner } from '@/components/billing/TrialBanner'
 import { useBilling } from '@/hooks/use-billing'
+import { AccountSwitcher } from '@/components/accounts/AccountSwitcher'
 
 // Feature flag: Temporariamente desativado por instabilidade no backend (erro 500)
 // Para reativar, alterar para true
@@ -107,6 +108,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <h1 className="font-bold text-lg">Super Seller</h1>
             <p className="text-xs text-muted-foreground">IA Platform</p>
           </div>
+        </div>
+
+        {/* Account Switcher */}
+        <div className="px-3 py-2 border-b">
+          <AccountSwitcher />
         </div>
 
         {/* Navigation */}
@@ -234,11 +240,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
 
+        <div className="px-3 py-2 border-b">
+          <AccountSwitcher />
+        </div>
+
         <nav className="flex-1 px-4 py-4 space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon
             const isActive = pathname === item.href || pathname?.startsWith(item.href + '/')
-            
+
             return (
               <Link
                 key={item.href}

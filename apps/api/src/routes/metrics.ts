@@ -41,6 +41,15 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
         whereClause.marketplace = query.marketplace;
       }
 
+      // Filtro por conta ativa (multi-contas): null = ver todos consolidado
+      const tenantForFilter = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { active_connection_id: true },
+      });
+      if (tenantForFilter?.active_connection_id) {
+        whereClause.marketplace_connection_id = tenantForFilter.active_connection_id;
+      }
+
       // Total de listings
       const totalListings = await prisma.listing.count({ where: whereClause });
 

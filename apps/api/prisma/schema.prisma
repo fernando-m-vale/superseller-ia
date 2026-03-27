@@ -162,6 +162,12 @@ model Tenant {
   onboarding_completed Boolean @default(false)
   onboarding_step      Int     @default(0)
 
+  // Multi-contas: conta ativa selecionada pelo seller (null = ver todas consolidadas)
+  active_connection_id String?
+
+  // Anti-burla: true quando o trial foi consumido (independente de ainda estar ativo)
+  trial_used Boolean @default(false)
+
   // DIA 08: Campos de sync automático (HOTFIX: timestamptz para timezone consistente)
   last_auto_sync_at     DateTime?  @db.Timestamptz(3)
   last_manual_sync_at   DateTime?  @db.Timestamptz(3)
@@ -220,6 +226,7 @@ model MarketplaceConnection {
   expires_at          DateTime?
   last_synced_at      DateTime?
   status              ConnectionStatus
+  nickname            String? // Nome amigável da conta (ex: "Loja Principal") — vem do nickname ML
   last_error_code     String? // Código do último erro HTTP (ex: "401", "403")
   last_error_at       DateTime? // Quando ocorreu o último erro
   last_error_message  String? // Mensagem do último erro (sanitizada)

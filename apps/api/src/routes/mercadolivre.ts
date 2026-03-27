@@ -4,6 +4,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { getMercadoLivreCredentials } from '../lib/secrets';
 import { authGuard } from '../plugins/auth';
+import { checkConnectionLimit } from '../lib/plan-guard';
 import { MercadoLivreSyncService } from '../services/MercadoLivreSyncService';
 import { MercadoLivreOrdersService } from '../services/MercadoLivreOrdersService';
 import { MercadoLivreVisitsService } from '../services/MercadoLivreVisitsService';
@@ -325,6 +326,83 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         const { access_token, refresh_token, expires_in, user_id: mlUserId } = tokenResponse.data;
         const providerAccountId = String(mlUserId);
 
+        // ========== ETAPA 4b: BUSCAR NICKNAME DO ML ==========
+        let mlNickname: string | null = null;
+        try {
+          const meResponse = await axios.get(`${ML_API_BASE}/users/me`, {
+            headers: { Authorization: `Bearer ${access_token}` },
+          });
+          mlNickname = meResponse.data?.nickname ?? null;
+          app.log.info({ requestId, mlNickname }, '[ML-CALLBACK] Nickname obtido');
+        } catch (nickErr) {
+          app.log.warn({ requestId, err: nickErr }, '[ML-CALLBACK] Falha ao obter nickname (não crítico)');
+        }
+
+        // ========== ETAPA 4c: VERIFICAR LIMITE DE CONEXÕES (FREE) ==========
+        // Só verifica se não é uma reconexão de conta já existente
+        const existingForLimit = await prisma.marketplaceConnection.findFirst({
+          where: { tenant_id: tenantId, type: Marketplace.mercadolivre, provider_account_id: providerAccountId },
+        });
+        if (!existingForLimit) {
+          const limitCheck = await checkConnectionLimit(tenantId, prisma);
+          if (!limitCheck.allowed) {
+            app.log.warn({ requestId, tenantId, count: limitCheck.count }, '[ML-CALLBACK] Limite de conexões atingido');
+            return reply.redirect(
+              `${appUrl}/settings/connections?error=connection_limit&used=${limitCheck.count}&limit=${limitCheck.limit}`,
+            );
+          }
+        }
+
+        // ========== ETAPA 4d: ANTI-BURLA DO TRIAL ==========
+        // Verificar se esse seller_id do ML já consumiu trial em outro tenant
+        const connectionsWithSameAccount = await prisma.marketplaceConnection.findMany({
+          where: {
+            provider_account_id: providerAccountId,
+            type: Marketplace.mercadolivre,
+            tenant_id: { not: tenantId },
+          },
+          select: { tenant_id: true },
+        });
+
+        if (connectionsWithSameAccount.length > 0) {
+          const otherTenantIds = connectionsWithSameAccount.map(c => c.tenant_id);
+          const trialUsedTenant = await prisma.tenant.findFirst({
+            where: { id: { in: otherTenantIds }, trial_used: true },
+          });
+
+          if (trialUsedTenant) {
+            app.log.warn({ requestId, tenantId, providerAccountId }, '[ML-CALLBACK] Anti-burla: trial já usado em outro tenant');
+            // Revogar trial do tenant atual
+            await prisma.tenant.update({
+              where: { id: tenantId },
+              data: { plan: 'free', plan_status: 'active', trial_ends_at: null, trial_used: true },
+            });
+            // Ainda permite a conexão, mas avisa o usuário
+            // (a persistência continua abaixo, só redirecionamos com warning)
+          }
+        }
+
+        // Marcar trial_used = true ao conectar ML pela primeira vez (se trial ativo)
+        const currentTenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { plan_status: true, trial_used: true },
+        });
+        if (currentTenant?.plan_status === 'trialing' && !currentTenant.trial_used) {
+          await prisma.tenant.update({
+            where: { id: tenantId },
+            data: { trial_used: true },
+          });
+        }
+
+        // Verificar se deve redirecionar com warning de anti-burla
+        const tenantAfterAntiburla = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { plan: true, trial_used: true, plan_status: true },
+        });
+        const trialWasRevoked = tenantAfterAntiburla?.plan === 'free' &&
+          tenantAfterAntiburla?.trial_used === true &&
+          connectionsWithSameAccount.length > 0;
+
         // ========== ETAPA 5: PERSISTÊNCIA NO BANCO ==========
         try {
           const existingConnection = await prisma.marketplaceConnection.findFirst({
@@ -351,6 +429,8 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
                 refresh_token: refresh_token,
                 expires_at: new Date(Date.now() + expires_in * 1000),
                 status: ConnectionStatus.active,
+                // Atualizar nickname se obtido
+                ...(mlNickname ? { nickname: mlNickname } : {}),
                 // Limpar campos de erro ao reconectar
                 last_error_code: null,
                 last_error_at: null,
@@ -373,8 +453,9 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
             const newConnection = await prisma.marketplaceConnection.create({
               data: {
                 tenant_id: tenantId,
-                type: Marketplace.mercadolivre, 
+                type: Marketplace.mercadolivre,
                 provider_account_id: providerAccountId,
+                nickname: mlNickname,
                 access_token: access_token,
                 refresh_token: refresh_token,
                 expires_at: new Date(Date.now() + expires_in * 1000),
@@ -428,7 +509,10 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
           providerAccountId,
         }, '[ML-CALLBACK] Callback concluído com sucesso, redirecionando');
 
-        // Redirecionar para /overview após login bem-sucedido
+        // Redirecionar — se trial foi revogado, avisar no onboarding
+        if (trialWasRevoked) {
+          return reply.redirect(`${appUrl}/onboarding?warning=trial_already_used`);
+        }
         return reply.redirect(`${appUrl}/overview?ml_connect=success`);
 
       } catch (error) {

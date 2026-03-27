@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle, Circle, ArrowRight, Zap, TrendingUp, AlertTriangle, ChevronRight } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth';
@@ -53,8 +53,10 @@ function scoreLabel(signal?: string) {
   return signal;
 }
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const trialWarning = searchParams.get('warning') === 'trial_already_used';
   const [step, setStep] = useState<OnboardingStep>('connect');
   const [isConnected, setIsConnected] = useState(false);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -194,10 +196,23 @@ export default function OnboardingPage() {
       <div className="max-w-lg w-full">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-4 dark:bg-green-950/40 dark:text-green-400">
-            <Zap className="w-4 h-4" />
-            Trial Pro ativo — 14 dias grátis
-          </div>
+          {trialWarning ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 text-left dark:bg-amber-950/40 dark:border-amber-900">
+              <p className="font-semibold text-amber-800 mb-1 dark:text-amber-300">Trial não disponível</p>
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                Identificamos que essa conta do Mercado Livre já utilizou o trial gratuito.
+                Você pode continuar usando o plano gratuito ou fazer upgrade para o Pro.
+              </p>
+              <a href="/upgrade" className="text-sm font-medium text-amber-800 underline mt-2 block dark:text-amber-300">
+                Ver planos →
+              </a>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-4 dark:bg-green-950/40 dark:text-green-400">
+              <Zap className="w-4 h-4" />
+              Trial Pro ativo — 14 dias grátis
+            </div>
+          )}
           <h1 className="text-2xl font-bold mb-2">Vamos começar!</h1>
           <p className="text-muted-foreground">
             Em 2 minutos você vai ver o diagnóstico real dos seus anúncios.
@@ -379,5 +394,13 @@ export default function OnboardingPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingContent />
+    </Suspense>
   );
 }

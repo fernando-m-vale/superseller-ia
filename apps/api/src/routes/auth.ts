@@ -197,6 +197,7 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
               trial_ends_at: true,
               onboarding_completed: true,
               onboarding_step: true,
+              active_connection_id: true,
             },
           },
         },
@@ -214,7 +215,7 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
       ) {
         await prisma.tenant.update({
           where: { id: user.tenant.id },
-          data: { plan: 'free', plan_status: 'active' },
+          data: { plan: 'free', plan_status: 'active', trial_used: true },
         });
         user.tenant.plan = 'free';
         user.tenant.plan_status = 'active';
@@ -224,6 +225,20 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
       const trialDaysLeft = user.tenant.trial_ends_at
         ? Math.max(0, Math.ceil((new Date(user.tenant.trial_ends_at).getTime() - Date.now()) / 86400000))
         : null;
+
+      // Buscar conexões do tenant
+      const connections = await prisma.marketplaceConnection.findMany({
+        where: { tenant_id: user.tenant_id },
+        select: {
+          id: true,
+          type: true,
+          provider_account_id: true,
+          nickname: true,
+          status: true,
+          last_synced_at: true,
+        },
+        orderBy: { created_at: 'asc' },
+      });
 
       return reply.send({
         user: {
@@ -243,6 +258,12 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
         onboarding: {
           completed: user.tenant.onboarding_completed,
           step: user.tenant.onboarding_step,
+        },
+        connections: {
+          list: connections,
+          activeConnectionId: user.tenant.active_connection_id ?? null,
+          isViewingAll: user.tenant.active_connection_id === null,
+          count: connections.length,
         },
       });
     } catch (error) {

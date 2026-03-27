@@ -22,6 +22,7 @@ import { requestIdPlugin } from './plugins/request-id';
 import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
 import { billingRoutes } from './routes/billing';
 import { waitlistRoutes } from './routes/waitlist';
+import { connectionsRoutes } from './routes/connections.routes';
 
 const app = fastify({ logger: loggerConfig });
 
@@ -102,6 +103,7 @@ async function main() {
     await app.register(clipsDebugRoutes, { prefix: '/api/v1/debug/ml' });
     await app.register(billingRoutes, { prefix: '/api/v1/billing' });
     await app.register(waitlistRoutes, { prefix: '/api/v1/waitlist' });
+    await app.register(connectionsRoutes, { prefix: '/api/v1/auth' });
 
     await app.ready();
     
