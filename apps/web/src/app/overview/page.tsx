@@ -19,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useListings } from '@/hooks/use-listings';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { ImprovementTimeline } from '@/components/listings/ImprovementTimeline';
 
 function OverviewContent() {
   const router = useRouter();
@@ -656,6 +657,13 @@ function OverviewContent() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Histórico de melhorias */}
+      {listingSuggestions.data?.items && listingSuggestions.data.items.length > 0 && (
+        <ImprovementTimeline
+          listingIds={listingSuggestions.data.items.map((l: { id: string }) => l.id)}
+        />
       )}
 
       {/* Footer */}

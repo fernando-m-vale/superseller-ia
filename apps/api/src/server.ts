@@ -23,6 +23,8 @@ import { scheduleMarketplaceDataJobs } from './jobs/MarketplaceDataScheduler';
 import { billingRoutes } from './routes/billing';
 import { waitlistRoutes } from './routes/waitlist';
 import { connectionsRoutes } from './routes/connections.routes';
+import { adminRoutes } from './routes/admin';
+import { scheduleTrialEmailJob } from './jobs/TrialEmailJob';
 
 const app = fastify({ logger: loggerConfig });
 
@@ -104,6 +106,7 @@ async function main() {
     await app.register(billingRoutes, { prefix: '/api/v1/billing' });
     await app.register(waitlistRoutes, { prefix: '/api/v1/waitlist' });
     await app.register(connectionsRoutes, { prefix: '/api/v1/auth' });
+    await app.register(adminRoutes, { prefix: '/api/v1/admin' });
 
     await app.ready();
     
@@ -151,6 +154,11 @@ async function main() {
 
     // Iniciar cron job de refresh proativo de tokens (executa a cada hora)
     scheduleTokenRefresh();
+
+    // Iniciar job de emails de trial (executa a cada 24h)
+    if (process.env.RESEND_API_KEY) {
+      scheduleTrialEmailJob();
+    }
 
     // DIA 08: Iniciar JobRunner se habilitado
     if (process.env.ENABLE_JOB_RUNNER === 'true') {

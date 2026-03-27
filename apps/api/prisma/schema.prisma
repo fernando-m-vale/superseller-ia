@@ -873,15 +873,33 @@ model ListingActionDetail {
 
 
 model Waitlist {
-  id              Int      @id @default(autoincrement())
-  email           String   @unique
+  id              Int               @id @default(autoincrement())
+  email           String            @unique
   store_name      String?
   store_url       String?
   gmv_range       String?
   listings_count  String?
   marketplace     String?
-  notified        Boolean  @default(false)
-  created_at      DateTime @default(now())
+  notified        Boolean           @default(false)
+  approved        Boolean           @default(false)
+  approved_at     DateTime?
+  created_at      DateTime          @default(now())
+
+  invites         WaitlistInvite[]
 
   @@map("waitlist")
+}
+
+model WaitlistInvite {
+  id          Int       @id @default(autoincrement())
+  waitlist_id Int
+  token       String    @unique @default(uuid())
+  expires_at  DateTime
+  used        Boolean   @default(false)
+  used_at     DateTime?
+  created_at  DateTime  @default(now())
+
+  waitlist    Waitlist  @relation(fields: [waitlist_id], references: [id], onDelete: Cascade)
+
+  @@map("waitlist_invites")
 }

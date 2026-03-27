@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { triggerLoginSyncIfNeeded } from '../lib/sync-on-login';
 import { getEffectivePlan } from '../lib/plan-guard';
+import { sendWelcomeEmail } from '../lib/email';
 
 const prisma = new PrismaClient();
 
@@ -19,6 +20,7 @@ const RawRegisterSchema = z.object({
   password: z.string().min(6),
   tenantName: z.string().min(1).optional(),
   storeName: z.string().min(1).optional(),
+  inviteToken: z.string().optional(),
 }).refine((data) => data.tenantName || data.storeName, {
   message: 'tenantName or storeName is required',
   path: ['tenantName'],
@@ -29,6 +31,7 @@ const RegisterSchema = RawRegisterSchema.transform((data) => ({
   email: data.email,
   password: data.password,
   tenantName: data.tenantName ?? data.storeName!,
+  inviteToken: data.inviteToken,
 }));
 
 const LoginSchema = z.object({
@@ -48,6 +51,22 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
 
       if (existingUser) {
         return reply.status(400).send({ error: 'User already exists' });
+      }
+
+      // Validate invite token if provided
+      let inviteRecord: { id: number } | null = null;
+      if (body.inviteToken) {
+        inviteRecord = await prisma.waitlistInvite.findUnique({
+          where: { token: body.inviteToken },
+          select: { id: true, used: true, expires_at: true },
+        }) as { id: number; used: boolean; expires_at: Date } | null;
+        if (!inviteRecord) {
+          return reply.status(400).send({ error: 'Invalid invite token' });
+        }
+        const invite = inviteRecord as unknown as { id: number; used: boolean; expires_at: Date };
+        if (invite.used || invite.expires_at < new Date()) {
+          return reply.status(400).send({ error: 'Invite token expired or already used' });
+        }
       }
 
       const passwordHash = await bcrypt.hash(body.password, 10);
@@ -89,6 +108,17 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
         JWT_SECRET,
         { expiresIn: REFRESH_TOKEN_EXPIRES_IN }
       );
+
+      // Mark invite as used
+      if (inviteRecord) {
+        await prisma.waitlistInvite.update({
+          where: { id: inviteRecord.id },
+          data: { used: true, used_at: new Date() },
+        }).catch(() => {});
+      }
+
+      // Send welcome email in background (non-blocking)
+      sendWelcomeEmail(result.user.email, result.tenant.name, trialEndsAt).catch(() => {});
 
       return reply.status(201).send({
         user: {

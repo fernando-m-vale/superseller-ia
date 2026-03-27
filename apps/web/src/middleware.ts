@@ -11,9 +11,18 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Protect /register: require ?invite=TOKEN query param
+  // Admin routes (/admin/**) are exempt
+  if (pathname === '/register') {
+    const invite = request.nextUrl.searchParams.get('invite');
+    if (!invite) {
+      return NextResponse.redirect(new URL('/#lista-de-espera', request.url));
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/'],
+  matcher: ['/', '/register'],
 };

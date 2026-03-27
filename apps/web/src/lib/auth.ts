@@ -26,6 +26,7 @@ export interface RegisterCredentials {
   email: string;
   password: string;
   tenantName: string;
+  inviteToken?: string;
 }
 
 export const setTokens = (accessToken: string, refreshToken: string) => {

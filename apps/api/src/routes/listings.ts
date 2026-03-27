@@ -1105,5 +1105,61 @@ export const listingsRoutes: FastifyPluginCallback = (app, _, done) => {
     }
   );
 
+  // GET /listings/:listingId/action-impact — retorna ações aplicadas com status temporal
+  app.get<{ Params: { listingId: string } }>(
+    '/:listingId/action-impact',
+    { preHandler: authGuard },
+    async (req, reply) => {
+      try {
+        const tenantId = req.tenantId;
+        const { listingId } = req.params;
+
+        if (!tenantId) return reply.status(401).send({ error: 'Unauthorized' });
+
+        const actions = await prisma.listingAction.findMany({
+          where: {
+            listingId,
+            listing: { tenant_id: tenantId },
+            status: 'IMPLEMENTADO',
+          },
+          select: {
+            id: true,
+            actionKey: true,
+            title: true,
+            appliedAt: true,
+          },
+          orderBy: { appliedAt: 'desc' },
+        });
+
+        const now = Date.now();
+        const result = actions.map((a) => {
+          const daysSinceApplied = a.appliedAt
+            ? Math.floor((now - a.appliedAt.getTime()) / 86400000)
+            : null;
+
+          let impactStatus: 'collecting' | 'early' | 'ready' = 'collecting';
+          if (daysSinceApplied !== null) {
+            if (daysSinceApplied >= 7) impactStatus = 'ready';
+            else if (daysSinceApplied >= 3) impactStatus = 'early';
+          }
+
+          return {
+            id: a.id,
+            actionKey: a.actionKey,
+            title: a.title,
+            appliedAt: a.appliedAt,
+            daysSinceApplied,
+            impactStatus,
+          };
+        });
+
+        return reply.send({ actions: result });
+      } catch (error) {
+        app.log.error({ error }, 'Error fetching action impact');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
   done();
 };

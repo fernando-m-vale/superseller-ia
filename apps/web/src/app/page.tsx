@@ -8,6 +8,11 @@ import {
   Star, Shield, Eye, TrendingUp, Users, ChevronRight,
 } from 'lucide-react';
 
+function scrollToWaitlist(e: React.MouseEvent) {
+  e.preventDefault();
+  document.getElementById('lista-de-espera')?.scrollIntoView({ behavior: 'smooth' });
+}
+
 // ── Waitlist Form ────────────────────────────────────────────────────────────
 
 type WaitlistData = {
@@ -189,21 +194,22 @@ export default function LandingPage() {
             <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Entrar
             </Link>
-            <Link
-              href="/register"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+            <a
+              href="#lista-de-espera"
+              onClick={scrollToWaitlist}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
             >
-              Começar grátis
-            </Link>
+              Solicitar acesso
+            </a>
           </div>
         </div>
       </nav>
 
       {/* Hero */}
       <section className="max-w-4xl mx-auto px-4 pt-20 pb-16 text-center">
-        <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-6 dark:bg-green-950/40 dark:text-green-400">
+        <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-800 px-4 py-2 rounded-full text-sm font-medium mb-6 dark:bg-amber-950/40 dark:text-amber-400">
           <Zap className="w-4 h-4" />
-          14 dias grátis do Pro · Sem cartão de crédito
+          Acesso por convite · Vagas limitadas
         </div>
         <h1 className="text-4xl sm:text-5xl font-bold leading-tight mb-6">
           Veja o que está travando as suas vendas no Mercado Livre
@@ -212,19 +218,20 @@ export default function LandingPage() {
           A IA analisa seus anúncios pelo funil real e entrega diagnóstico com ações concretas — em minutos. Não em semanas.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link
-            href="/register"
-            className="bg-primary text-primary-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+          <a
+            href="#lista-de-espera"
+            onClick={scrollToWaitlist}
+            className="bg-primary text-primary-foreground px-8 py-4 rounded-xl font-semibold text-lg hover:bg-primary/90 transition-colors flex items-center gap-2 cursor-pointer"
           >
-            Criar conta grátis
+            Solicitar acesso
             <ArrowRight className="w-5 h-5" />
-          </Link>
+          </a>
           <a href="#como-funciona" className="text-muted-foreground hover:text-foreground text-sm transition-colors flex items-center gap-1">
             Ver como funciona <ChevronRight className="w-4 h-4" />
           </a>
         </div>
         <p className="text-xs text-muted-foreground mt-4">
-          14 dias grátis · Sem cartão · Cancele quando quiser
+          14 dias grátis do Pro · Sem cartão · Cancele quando quiser
         </p>
       </section>
 
@@ -332,12 +339,13 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/register"
-                className="block text-center border rounded-lg py-2 text-sm font-medium hover:bg-muted transition-colors"
+              <a
+                href="#lista-de-espera"
+                onClick={scrollToWaitlist}
+                className="block text-center border rounded-lg py-2 text-sm font-medium hover:bg-muted transition-colors cursor-pointer"
               >
-                Começar grátis
-              </Link>
+                Solicitar acesso
+              </a>
             </div>
             {/* Pro */}
             <div className="bg-primary text-primary-foreground rounded-xl p-6 relative">
@@ -364,13 +372,14 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Link
-                href="/register"
-                className="block text-center bg-white text-primary rounded-lg py-2 text-sm font-semibold hover:bg-white/90 transition-colors"
+              <a
+                href="#lista-de-espera"
+                onClick={scrollToWaitlist}
+                className="block text-center bg-white text-primary rounded-lg py-2 text-sm font-semibold hover:bg-white/90 transition-colors cursor-pointer"
               >
-                Começar trial de 14 dias →
-              </Link>
-              <p className="text-xs text-center mt-2 opacity-70">Sem cartão de crédito no trial</p>
+                Solicitar acesso →
+              </a>
+              <p className="text-xs text-center mt-2 opacity-70">14 dias grátis do Pro com convite</p>
             </div>
           </div>
         </div>
@@ -379,9 +388,9 @@ export default function LandingPage() {
       {/* Waitlist CTA */}
       <section id="lista-de-espera" className="max-w-2xl mx-auto px-4 py-20">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold mb-3">Lista de espera</h2>
+          <h2 className="text-3xl font-bold mb-3">Solicite seu acesso</h2>
           <p className="text-muted-foreground">
-            Não conseguiu uma vaga? Entre na lista e seja o primeiro a saber quando abrirmos novas vagas.
+            O acesso à SuperSeller IA é por convite. Entre na lista e avisamos assim que sua vaga abrir.
           </p>
         </div>
         <div className="bg-card border rounded-xl p-6">
@@ -393,14 +402,15 @@ export default function LandingPage() {
       <section className="bg-primary text-primary-foreground py-20">
         <div className="max-w-2xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold mb-4">Pronto para vender mais?</h2>
-          <p className="opacity-80 mb-8">14 dias grátis do Pro. Sem cartão. Cancele quando quiser.</p>
-          <Link
-            href="/register"
-            className="inline-flex items-center gap-2 bg-white text-primary px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/90 transition-colors"
+          <p className="opacity-80 mb-8">Garanta sua vaga na lista de espera e ganhe 14 dias grátis do Pro.</p>
+          <a
+            href="#lista-de-espera"
+            onClick={scrollToWaitlist}
+            className="inline-flex items-center gap-2 bg-white text-primary px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/90 transition-colors cursor-pointer"
           >
-            Criar conta grátis
+            Solicitar acesso
             <ArrowRight className="w-5 h-5" />
-          </Link>
+          </a>
         </div>
       </section>
 

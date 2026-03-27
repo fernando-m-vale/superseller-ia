@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast'
 import type { AdsIntelligencePayload } from '@/hooks/use-ai-analyze'
 import { ExecutionProgress } from './ExecutionProgress'
 import { ActionKanban } from './ActionKanban'
+import { ActionImpactCard } from './ActionImpactCard'
 import { RegenerateAnalysisModal } from './RegenerateAnalysisModal'
 import { useListingActions, updateListingActionStatus, type ListingActionStatus } from '@/hooks/use-listing-actions'
 import { sanitizeSellerText } from '@/lib/ai/sanitizeSellerText'
@@ -812,6 +813,13 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
           />
         )}
       </div>
+
+      {/* Ações aplicadas com status temporal */}
+      {props.listingId && (
+        <div className="mt-4">
+          <ActionImpactCard listingId={props.listingId} />
+        </div>
+      )}
 
       {/* Modal de Regerar Análise */}
       <RegenerateAnalysisModal
