@@ -14,6 +14,8 @@ override.tf.json
 terraform.rc
 # manter lock file (necessário)
 !.terraform.lock.hcl
+# artefatos gerados pelo Terraform (archive_file data source)
+infra/terraform/*.zip
 
 # ─────────────────────────────
 # Node / Next.js / Build
