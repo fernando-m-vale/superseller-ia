@@ -1,6 +1,15 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) {
+    const key = process.env.RESEND_API_KEY;
+    if (!key) throw new Error('RESEND_API_KEY not configured');
+    _resend = new Resend(key);
+  }
+  return _resend;
+}
+
 const FROM = process.env.RESEND_FROM ?? 'SuperSeller IA <noreply@superselleria.com.br>';
 const APP_URL = process.env.APP_URL ?? 'https://app.superselleria.com.br';
 
@@ -31,7 +40,7 @@ function btn(text: string, url: string): string {
 
 export async function sendWelcomeEmail(to: string, name: string, trialEndsAt: Date): Promise<void> {
   const days = Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000);
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `Bem-vindo à SuperSeller IA — seu trial Pro de ${days} dias começou!`,
@@ -52,7 +61,7 @@ export async function sendWelcomeEmail(to: string, name: string, trialEndsAt: Da
 
 export async function sendTrialMidpointEmail(to: string, name: string, trialEndsAt: Date): Promise<void> {
   const days = Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000);
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `${days} dias de trial restantes — continue sua jornada Pro`,
@@ -67,7 +76,7 @@ export async function sendTrialMidpointEmail(to: string, name: string, trialEnds
 
 export async function sendTrialExpiringEmail(to: string, name: string, trialEndsAt: Date): Promise<void> {
   const days = Math.ceil((trialEndsAt.getTime() - Date.now()) / 86400000);
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: `⚠️ Seu trial encerra em ${days} dia${days !== 1 ? 's' : ''} — garanta o Pro`,
@@ -81,7 +90,7 @@ export async function sendTrialExpiringEmail(to: string, name: string, trialEnds
 }
 
 export async function sendTrialExpiredEmail(to: string, name: string): Promise<void> {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: 'Seu trial encerrou — continue com o plano Pro',
@@ -95,7 +104,7 @@ export async function sendTrialExpiredEmail(to: string, name: string): Promise<v
 }
 
 export async function sendDowngradeEmail(to: string, name: string): Promise<void> {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: 'Seu plano foi alterado para gratuito',
@@ -110,7 +119,7 @@ export async function sendDowngradeEmail(to: string, name: string): Promise<void
 
 export async function sendWaitlistInviteEmail(to: string, token: string): Promise<void> {
   const registerUrl = `${APP_URL}/register?invite=${token}`;
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM,
     to,
     subject: 'Sua vaga na SuperSeller IA está disponível! 🎉',
