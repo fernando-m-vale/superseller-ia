@@ -86,6 +86,7 @@ export async function waitlistRoutes(app: FastifyInstance) {
     try {
       await sendWaitlistInviteEmail(entry.email, invite.token);
     } catch (err) {
+      console.error('Failed to send waitlist invite email:', err);
       app.log.error({ err }, 'Failed to send waitlist invite email');
     }
 

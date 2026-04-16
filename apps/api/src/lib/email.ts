@@ -10,7 +10,7 @@ function getResend(): Resend {
   return _resend;
 }
 
-const FROM = process.env.RESEND_FROM ?? 'SuperSeller IA <noreply@superselleria.com.br>';
+const FROM = process.env.RESEND_FROM ?? 'SuperSeller IA <noreply@contact.superselleria.com>';
 const APP_URL = process.env.APP_URL ?? 'https://app.superselleria.com.br';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
