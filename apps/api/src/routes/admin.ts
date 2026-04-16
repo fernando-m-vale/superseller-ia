@@ -7,14 +7,15 @@ import { sendWaitlistInviteEmail } from '../lib/email';
 
 const prisma = new PrismaClient();
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET ?? '';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? 'admin@superselleria.com.br';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
+// Read at call-time so env vars injected after module load are picked up
+function getAdminSecret(): string { return process.env.ADMIN_SECRET ?? ''; }
+function getAdminEmail(): string { return process.env.ADMIN_EMAIL ?? 'admin@superselleria.com.br'; }
+function getAdminPassword(): string { return process.env.ADMIN_PASSWORD ?? ''; }
 
 function requireAdmin(token: string | undefined): boolean {
   if (!token) return false;
   try {
-    const decoded = jwt.verify(token, ADMIN_SECRET) as { role?: string };
+    const decoded = jwt.verify(token, getAdminSecret()) as { role?: string };
     return decoded.role === 'admin';
   } catch {
     return false;
@@ -33,18 +34,22 @@ export const adminRoutes: FastifyPluginCallback = (app, _, done) => {
     if (!body.email || !body.password) {
       return reply.status(400).send({ error: 'email and password required' });
     }
-    if (body.email !== ADMIN_EMAIL) {
+    const adminEmail = getAdminEmail();
+    const adminPassword = getAdminPassword();
+    const adminSecret = getAdminSecret();
+
+    if (body.email !== adminEmail) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
-    if (!ADMIN_PASSWORD) {
+    if (!adminPassword) {
       return reply.status(500).send({ error: 'ADMIN_PASSWORD not configured' });
     }
-    const valid = await bcrypt.compare(body.password, ADMIN_PASSWORD).catch(() => false)
-      || body.password === ADMIN_PASSWORD; // plain text fallback for dev
+    const valid = await bcrypt.compare(body.password, adminPassword).catch(() => false)
+      || body.password === adminPassword; // plain text fallback for dev
     if (!valid) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
-    const token = jwt.sign({ role: 'admin' }, ADMIN_SECRET, { expiresIn: '8h' });
+    const token = jwt.sign({ role: 'admin' }, adminSecret, { expiresIn: '8h' });
     return reply.send({ token });
   });
 
