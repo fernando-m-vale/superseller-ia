@@ -191,6 +191,12 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <span className="font-bold text-lg">Super Seller IA</span>
           <div className="flex items-center gap-3">
+            <a href="#recursos" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline">
+              Recursos
+            </a>
+            <a href="#dados" className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline">
+              Dados
+            </a>
             <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Entrar
             </Link>
@@ -199,7 +205,7 @@ export default function LandingPage() {
               onClick={scrollToWaitlist}
               className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
             >
-              Solicitar acesso
+              Criar Conta
             </a>
           </div>
         </div>
@@ -236,7 +242,7 @@ export default function LandingPage() {
       </section>
 
       {/* Social proof bar */}
-      <section className="border-y bg-muted/30 py-6">
+      <section id="dados" className="border-y bg-muted/30 py-6">
         <div className="max-w-4xl mx-auto px-4 flex flex-wrap items-center justify-center gap-8 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4" />
@@ -275,7 +281,7 @@ export default function LandingPage() {
       </section>
 
       {/* Features */}
-      <section className="bg-muted/30 py-20">
+      <section id="recursos" className="bg-muted/30 py-20">
         <div className="max-w-5xl mx-auto px-4">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-3">Tudo que você precisa para vender mais</h2>
@@ -419,8 +425,8 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <span>© 2026 Super Seller IA. Todos os direitos reservados.</span>
           <div className="flex gap-4">
-            <Link href="/terms" className="hover:text-foreground transition-colors">Termos de Uso</Link>
-            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacidade</Link>
+            <Link href="/legal/terms" className="hover:text-foreground transition-colors">Termos de Uso</Link>
+            <Link href="/legal/privacy" className="hover:text-foreground transition-colors">Privacidade</Link>
             <Link href="/login" className="hover:text-foreground transition-colors">Entrar</Link>
           </div>
         </div>
