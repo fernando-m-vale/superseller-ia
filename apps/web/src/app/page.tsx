@@ -205,7 +205,7 @@ export default function LandingPage() {
               onClick={scrollToWaitlist}
               className="bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
             >
-              Criar Conta
+              Solicitar acesso
             </a>
           </div>
         </div>
@@ -362,6 +362,10 @@ export default function LandingPage() {
               </div>
               <h3 className="font-bold text-lg mb-1">Pro</h3>
               <p className="text-3xl font-bold mb-1">R$ 297<span className="text-lg font-normal opacity-80">/mês</span></p>
+              <div className="inline-flex items-center gap-1.5 bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full mb-3">
+                <CheckCircle className="w-3.5 h-3.5" />
+                14 dias grátis · Sem cartão de crédito
+              </div>
               <p className="text-sm opacity-70 mb-6">ou R$ 247/mês no anual (R$ 2.964/ano — economize 17%)</p>
               <ul className="space-y-2 text-sm mb-6">
                 {[
@@ -427,7 +431,6 @@ export default function LandingPage() {
           <div className="flex gap-4">
             <Link href="/legal/terms" className="hover:text-foreground transition-colors">Termos de Uso</Link>
             <Link href="/legal/privacy" className="hover:text-foreground transition-colors">Privacidade</Link>
-            <Link href="/login" className="hover:text-foreground transition-colors">Entrar</Link>
           </div>
         </div>
       </footer>
