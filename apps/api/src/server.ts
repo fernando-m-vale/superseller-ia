@@ -24,6 +24,7 @@ import { billingRoutes } from './routes/billing';
 import { waitlistRoutes } from './routes/waitlist';
 import { connectionsRoutes } from './routes/connections.routes';
 import { adminRoutes } from './routes/admin';
+import { usageRoutes } from './routes/usage.routes';
 import { scheduleTrialEmailJob } from './jobs/TrialEmailJob';
 
 const app = fastify({ logger: loggerConfig });
@@ -107,6 +108,7 @@ async function main() {
     await app.register(waitlistRoutes, { prefix: '/api/v1/waitlist' });
     await app.register(connectionsRoutes, { prefix: '/api/v1/auth' });
     await app.register(adminRoutes, { prefix: '/api/v1/admin' });
+    await app.register(usageRoutes, { prefix: '/api/v1/usage' });
 
     await app.ready();
     
