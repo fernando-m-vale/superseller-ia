@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import Link from 'next/link';
 import { login } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +24,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [redirectTo, setRedirectTo] = useState('/overview');
 
   // Verificar se a sessão expirou ao montar o componente
   useEffect(() => {
@@ -34,6 +34,12 @@ export default function LoginPage() {
         setSessionExpired(true);
         // Limpar a flag após exibir a mensagem
         localStorage.removeItem('auth:reason');
+      }
+      // Capture redirect destination from query param
+      const params = new URLSearchParams(window.location.search);
+      const from = params.get('from');
+      if (from && from.startsWith('/')) {
+        setRedirectTo(from);
       }
     }
   }, []);
@@ -52,7 +58,7 @@ export default function LoginPage() {
 
     try {
       await login(data);
-      router.push('/overview');
+      router.push(redirectTo);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -121,11 +127,14 @@ export default function LoginPage() {
               {isLoading ? 'Signing in...' : 'Sign in'}
             </Button>
 
-            <div className="text-center text-sm text-gray-600">
-              Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-blue-600 hover:underline">
-                Sign up
-              </Link>
+            <div className="text-center text-sm text-gray-500">
+              Não tem conta?{' '}
+              <a
+                href="https://superselleria.com.br"
+                className="text-primary hover:underline"
+              >
+                Solicite acesso
+              </a>
             </div>
           </form>
         </CardContent>

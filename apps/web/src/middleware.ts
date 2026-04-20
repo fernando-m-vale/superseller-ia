@@ -1,5 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// App routes that require authentication
+const PROTECTED_PATHS = [
+  '/overview',
+  '/listings',
+  '/onboarding',
+  '/settings',
+  '/ai',
+  '/recommendations',
+  '/upgrade',
+  '/billing',
+];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -20,9 +32,33 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Protect app routes: redirect to /login when not authenticated
+  const isProtected = PROTECTED_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p + '/'),
+  );
+  if (isProtected) {
+    const authCookie = request.cookies.get('ss_auth');
+    if (!authCookie || authCookie.value !== '1') {
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('from', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/', '/register'],
+  matcher: [
+    '/',
+    '/register',
+    '/overview/:path*',
+    '/listings/:path*',
+    '/onboarding/:path*',
+    '/settings/:path*',
+    '/ai/:path*',
+    '/recommendations/:path*',
+    '/upgrade/:path*',
+    '/billing/:path*',
+  ],
 };
