@@ -13,6 +13,11 @@ locals {
     openai_api_key       = "prod/OPENAI_API_KEY"
     internal_jobs_key    = "prod/INTERNAL_JOBS_KEY"
     use_ml_prices_for_promo = "prod/USE_ML_PRICES_FOR_PROMO"
+    admin_email             = "prod/ADMIN_EMAIL"
+    admin_password          = "prod/ADMIN_PASSWORD"
+    admin_secret            = "prod/ADMIN_SECRET"
+    resend_api_key          = "prod/RESEND_API_KEY"
+    resend_from             = "prod/RESEND_FROM"
   }
 }
 

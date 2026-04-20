@@ -133,6 +133,11 @@ resource "aws_apprunner_service" "api" {
           OPENAI_API_KEY          = data.aws_secretsmanager_secret.prod["openai_api_key"].arn
           INTERNAL_JOBS_KEY       = data.aws_secretsmanager_secret.prod["internal_jobs_key"].arn
           USE_ML_PRICES_FOR_PROMO = data.aws_secretsmanager_secret.prod["use_ml_prices_for_promo"].arn
+          ADMIN_EMAIL             = data.aws_secretsmanager_secret.prod["admin_email"].arn
+          ADMIN_PASSWORD          = data.aws_secretsmanager_secret.prod["admin_password"].arn
+          ADMIN_SECRET            = data.aws_secretsmanager_secret.prod["admin_secret"].arn
+          RESEND_API_KEY          = data.aws_secretsmanager_secret.prod["resend_api_key"].arn
+          RESEND_FROM             = data.aws_secretsmanager_secret.prod["resend_from"].arn
         }
       }
 
