@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle, Circle, ArrowRight, Zap, TrendingUp, AlertTriangle, ChevronRight } from 'lucide-react';
 import { getApiBaseUrl } from '@/lib/api';
 import { getAccessToken } from '@/lib/auth';
+import { useBilling } from '@/hooks/use-billing';
 
 type OnboardingStep = 'connect' | 'analyze' | 'result';
 const STEP_ORDER: OnboardingStep[] = ['connect', 'analyze', 'result'];
@@ -57,6 +58,7 @@ function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const trialWarning = searchParams.get('warning') === 'trial_already_used';
+  const { isTrialing, trialDaysLeft } = useBilling();
   const [step, setStep] = useState<OnboardingStep>('connect');
   const [isConnected, setIsConnected] = useState(false);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -207,12 +209,14 @@ function OnboardingContent() {
                 Ver planos →
               </a>
             </div>
-          ) : (
+          ) : isTrialing ? (
             <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-4 dark:bg-green-950/40 dark:text-green-400">
               <Zap className="w-4 h-4" />
-              Trial Pro ativo — 14 dias grátis
+              {trialDaysLeft !== null
+                ? `Trial Pro ativo — ${trialDaysLeft} dias grátis`
+                : 'Trial Pro ativo — 14 dias grátis'}
             </div>
-          )}
+          ) : null}
           <h1 className="text-2xl font-bold mb-2">Vamos começar!</h1>
           <p className="text-muted-foreground">
             Em 2 minutos você vai ver o diagnóstico real dos seus anúncios.
