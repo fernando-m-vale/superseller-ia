@@ -137,7 +137,8 @@ resource "aws_apprunner_service" "api" {
           ADMIN_PASSWORD          = data.aws_secretsmanager_secret.prod["admin_password"].arn
           ADMIN_SECRET            = data.aws_secretsmanager_secret.prod["admin_secret"].arn
           RESEND_API_KEY          = data.aws_secretsmanager_secret.prod["resend_api_key"].arn
-          RESEND_FROM             = data.aws_secretsmanager_secret.prod["resend_from"].arn
+          RESEND_FROM                  = data.aws_secretsmanager_secret.prod["resend_from"].arn
+          SCHEDULER_SERVICE_TOKEN      = data.aws_secretsmanager_secret.prod["scheduler_service_token"].arn
         }
       }
 

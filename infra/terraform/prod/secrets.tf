@@ -17,7 +17,8 @@ locals {
     admin_password          = "prod/ADMIN_PASSWORD"
     admin_secret            = "prod/ADMIN_SECRET"
     resend_api_key          = "prod/RESEND_API_KEY"
-    resend_from             = "prod/RESEND_FROM"
+    resend_from                  = "prod/RESEND_FROM"
+    scheduler_service_token      = "prod/SCHEDULER_SERVICE_TOKEN"
   }
 }
 
