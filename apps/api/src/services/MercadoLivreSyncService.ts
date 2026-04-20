@@ -712,44 +712,38 @@ export class MercadoLivreSyncService {
 
     while (true) {
       try {
-        // Usando /sites/MLB/search com seller_id (endpoint PÚBLICO - não precisa de Auth)
-        const url = `${ML_API_BASE}/sites/MLB/search`;
-        // Log estruturado: endpoint, sellerId, offset
-        console.log(`[ML-SYNC] Buscando items tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpoint=/sites/MLB/search offset=${offset}`);
+        // Endpoint autenticado: /users/:sellerId/items/search — retorna IDs diretos (strings)
+        // Mais confiável que /sites/MLB/search público, que pode ser bloqueado por PolicyAgent
+        const url = `${ML_API_BASE}/users/${this.providerAccountId}/items/search`;
+        console.log(`[ML-SYNC] Buscando items tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpoint=/users/:id/items/search offset=${offset}`);
 
         const response = await axios.get(url, {
-          // NOTA: Endpoint público - Authorization removido para evitar conflitos de escopo
-          params: {
-            seller_id: this.providerAccountId,
-            offset,
-            limit,
-          },
+          headers: { Authorization: `Bearer ${this.accessToken}` },
+          params: { offset, limit },
         });
 
         const { results, paging } = response.data;
-        
-        // Extrair IDs dos objetos de resultado
-        const itemIds = results.map((item: { id: string }) => item.id);
+
+        // /users/:id/items/search retorna IDs como strings diretamente
+        const itemIds: string[] = results.map((item: string | { id: string }) =>
+          typeof item === 'string' ? item : item.id
+        );
         allIds.push(...itemIds);
 
         // Log estruturado: progresso
         console.log(`[ML-SYNC] Progresso tenantId=${this.tenantId} sellerId=${this.providerAccountId} encontrados=${allIds.length} total=${paging.total}`);
 
-        // Proteção contra loop infinito (máximo 1000 itens via offset)
-        // A API de search tem limite de offset 1000. Para MVP, isso atende a maioria dos sellers.
         if (offset + limit >= paging.total || offset >= 1000) {
           break;
         }
 
         offset += limit;
       } catch (error) {
-        // Log estruturado: erro HTTP com status code e payload resumido
         if (axios.isAxiosError(error)) {
           const status = error.response?.status;
           const data = error.response?.data;
-          // Resumir payload (limitar tamanho para não poluir logs)
           const dataStr = data ? JSON.stringify(data).substring(0, 500) : 'no data';
-          console.error(`[ML-SYNC] Erro HTTP ML tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpoint=/sites/MLB/search statusCode=${status} payload=${dataStr}`);
+          console.error(`[ML-SYNC] Erro HTTP ML tenantId=${this.tenantId} sellerId=${this.providerAccountId} endpoint=/users/:id/items/search statusCode=${status} payload=${dataStr}`);
           throw new Error(`Erro ML ${status}: ${dataStr}`);
         }
         throw error;
