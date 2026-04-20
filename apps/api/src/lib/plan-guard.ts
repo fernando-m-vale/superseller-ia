@@ -8,7 +8,7 @@ export const APP_URL = process.env.APP_URL ?? 'https://app.superselleria.com.br'
 export const FREE_LIMITS = {
   maxAiAnalysesPerMonth: 3,
   maxMarketplaces: 1,
-  maxConnections: 2,   // máximo de contas ML no Free
+  maxConnections: 1,   // máximo de contas ML no Free
   historyDays: 7,
   autoSync: false,
   readyCopy: false,

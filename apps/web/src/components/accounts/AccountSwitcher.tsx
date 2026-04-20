@@ -2,16 +2,24 @@
 import { useState } from 'react';
 import { useConnections } from '@/hooks/use-connections';
 import { useBilling } from '@/hooks/use-billing';
-import { ChevronDown, Plus, Check, Layers, Store, Trash2 } from 'lucide-react';
+import { ChevronDown, Plus, Check, Layers, Store, Trash2, Lock } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 export function AccountSwitcher() {
   const { connections, displayName, isViewingAll, switchAccount, removeConnection, addConnection } = useConnections();
   const { isPro } = useBilling();
   const [open, setOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   if (!connections) return null;
 
-  const canAddMore = isPro || connections.count < 2;
+  const canAddMore = isPro || connections.count < 1;
 
   return (
     <div className="relative">
@@ -75,20 +83,21 @@ export function AccountSwitcher() {
           ))}
 
           <div className="border-t mt-1">
-            {canAddMore ? (
-              <button
-                onClick={() => { addConnection(); setOpen(false); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-primary hover:bg-primary/5 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Adicionar conta do Mercado Livre
-              </button>
-            ) : (
-              <div className="px-3 py-2.5 text-xs text-muted-foreground">
-                <span>Limite de 2 contas no plano Free. </span>
-                <a href="/upgrade" className="text-primary hover:underline">Fazer upgrade →</a>
-              </div>
-            )}
+            <button
+              onClick={() => {
+                if (canAddMore) {
+                  addConnection();
+                  setOpen(false);
+                } else {
+                  setOpen(false);
+                  setShowUpgradeModal(true);
+                }
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-primary hover:bg-primary/5 transition-colors"
+            >
+              {canAddMore ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+              Adicionar conta do Mercado Livre
+            </button>
           </div>
         </div>
       )}
@@ -96,6 +105,31 @@ export function AccountSwitcher() {
       {open && (
         <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
       )}
+
+      <Dialog open={showUpgradeModal} onOpenChange={setShowUpgradeModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Limite do plano gratuito</DialogTitle>
+            <DialogDescription>
+              Seu plano gratuito permite apenas 1 conta conectada. Faça upgrade para o plano Pro para conectar mais contas do Mercado Livre.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 justify-end pt-2">
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Agora não
+            </button>
+            <a
+              href="/upgrade"
+              className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              Ver planos
+            </a>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
