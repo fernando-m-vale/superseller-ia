@@ -118,7 +118,8 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
       }
 
       // Send welcome email in background (non-blocking)
-      sendWelcomeEmail(result.user.email, result.tenant.name, trialEndsAt).catch(() => {});
+      sendWelcomeEmail(result.user.email, result.tenant.name, trialEndsAt)
+        .catch(err => console.error('[Register] Welcome email failed:', err));
 
       return reply.status(201).send({
         user: {
