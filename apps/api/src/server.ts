@@ -86,7 +86,13 @@ async function main() {
     }
 
   // Rate limiting — global: false para aplicar seletivamente por rota
-  await app.register(rateLimit, { global: false });
+  await app.register(rateLimit, {
+    global: false,
+    errorResponseBuilder: (_req, context) => ({
+      error: 'too_many_requests',
+      message: `Muitas tentativas. Tente novamente em ${Math.ceil(context.ttl / 1000)} segundos.`,
+    }),
+  });
 
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });

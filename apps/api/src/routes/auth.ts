@@ -147,11 +147,6 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
       rateLimit: {
         max: 10,
         timeWindow: '1 minute',
-        keyGenerator: (req: { ip: string }) => req.ip,
-        errorResponseBuilder: () => ({
-          error: 'too_many_requests',
-          message: 'Muitas tentativas de login. Tente novamente em 1 minuto.',
-        }),
       },
     },
   }, async (req, reply) => {
