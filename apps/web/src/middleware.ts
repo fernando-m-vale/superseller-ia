@@ -52,6 +52,8 @@ export const config = {
   matcher: [
     '/',
     '/register',
+    '/forgot-password',
+    '/reset-password',
     '/overview/:path*',
     '/listings/:path*',
     '/onboarding/:path*',

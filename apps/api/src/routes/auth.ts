@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { triggerLoginSyncIfNeeded } from '../lib/sync-on-login';
 import { getEffectivePlan } from '../lib/plan-guard';
-import { sendWelcomeEmail } from '../lib/email';
+import { sendWelcomeEmail, sendPasswordResetEmail } from '../lib/email';
 
 const prisma = new PrismaClient();
 
@@ -342,6 +342,78 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
     } catch (error) {
       if (error instanceof jwt.JsonWebTokenError) {
         return reply.status(401).send({ error: 'Invalid token' });
+      }
+      app.log.error(error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  // Rota: POST /api/v1/auth/forgot-password
+  app.post('/forgot-password', async (req, reply) => {
+    try {
+      const body = z.object({ email: z.string().email() }).parse(req.body);
+
+      // Always return 200 — never reveal whether email exists
+      const user = await prisma.user.findUnique({ where: { email: body.email } });
+
+      if (user) {
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+        const resetToken = await prisma.passwordResetToken.create({
+          data: { user_id: user.id, expires_at: expiresAt },
+        });
+
+        sendPasswordResetEmail(user.email, resetToken.token)
+          .catch(err => console.error('[ForgotPassword] Email failed:', err));
+      }
+
+      return reply.send({ ok: true });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ error: 'Invalid input', details: error.errors });
+      }
+      app.log.error(error);
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  // Rota: POST /api/v1/auth/reset-password
+  app.post('/reset-password', async (req, reply) => {
+    try {
+      const body = z.object({
+        token: z.string().min(1),
+        newPassword: z.string().min(6),
+      }).parse(req.body);
+
+      const resetToken = await prisma.passwordResetToken.findUnique({
+        where: { token: body.token },
+      });
+
+      if (
+        !resetToken ||
+        resetToken.used ||
+        resetToken.expires_at < new Date()
+      ) {
+        return reply.status(400).send({ error: 'token_invalid' });
+      }
+
+      const passwordHash = await bcrypt.hash(body.newPassword, 10);
+
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: resetToken.user_id },
+          data: { password_hash: passwordHash },
+        }),
+        prisma.passwordResetToken.update({
+          where: { id: resetToken.id },
+          data: { used: true },
+        }),
+      ]);
+
+      return reply.send({ ok: true });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.status(400).send({ error: 'Invalid input', details: error.errors });
       }
       app.log.error(error);
       return reply.status(500).send({ error: 'Internal server error' });

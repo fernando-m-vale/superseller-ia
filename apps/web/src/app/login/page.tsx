@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import Link from 'next/link';
 import { login } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
+  const [passwordReset, setPasswordReset] = useState(false);
   const [redirectTo, setRedirectTo] = useState('/overview');
 
   // Verificar se a sessão expirou ao montar o componente
@@ -32,7 +34,10 @@ export default function LoginPage() {
       const reason = localStorage.getItem('auth:reason');
       if (reason === 'session_expired') {
         setSessionExpired(true);
-        // Limpar a flag após exibir a mensagem
+        localStorage.removeItem('auth:reason');
+      }
+      if (reason === 'password_reset_success') {
+        setPasswordReset(true);
         localStorage.removeItem('auth:reason');
       }
       // Capture redirect destination from query param
@@ -84,6 +89,14 @@ export default function LoginPage() {
               </AlertDescription>
             </Alert>
           )}
+          {passwordReset && (
+            <Alert className="mb-4 border-green-200 bg-green-50 text-green-800">
+              <AlertCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription>
+                Senha alterada com sucesso. Faça login com sua nova senha.
+              </AlertDescription>
+            </Alert>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium">
@@ -102,9 +115,14 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-sm font-medium">
+                  Password
+                </label>
+                <Link href="/forgot-password" className="text-xs text-gray-500 hover:text-primary">
+                  Esqueci minha senha
+                </Link>
+              </div>
               <Input
                 id="password"
                 type="password"

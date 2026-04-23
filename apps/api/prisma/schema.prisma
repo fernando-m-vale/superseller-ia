@@ -210,10 +210,25 @@ model User {
   role          UserRole
   created_at    DateTime @default(now())
 
-  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  tenant               Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  password_reset_tokens PasswordResetToken[]
 
   @@index([tenant_id])
   @@map("users")
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  token      String   @unique @default(uuid())
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@map("password_reset_tokens")
 }
 
 model MarketplaceConnection {

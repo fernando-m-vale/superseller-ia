@@ -117,6 +117,22 @@ export async function sendDowngradeEmail(to: string, name: string): Promise<void
   });
 }
 
+export async function sendPasswordResetEmail(to: string, resetToken: string): Promise<void> {
+  const resetUrl = `${APP_URL}/reset-password?token=${resetToken}`;
+  await getResend().emails.send({
+    from: FROM,
+    to,
+    subject: 'Redefinição de senha — SuperSeller IA',
+    html: baseHtml(`
+      <h1 style="font-size:22px;font-weight:700;color:#111;margin:0 0 8px">Redefinição de senha</h1>
+      <p style="color:#374151;line-height:1.6;margin:0 0 16px">Você solicitou a redefinição da sua senha. Clique no botão abaixo para criar uma nova senha.</p>
+      <p style="color:#6b7280;font-size:13px;margin:0 0 4px">Este link é válido por <strong>1 hora</strong> e pode ser usado apenas uma vez.</p>
+      ${btn('Redefinir senha →', resetUrl)}
+      <p style="color:#9ca3af;font-size:12px;margin:24px 0 0">Se você não solicitou a redefinição de senha, ignore este email — sua senha permanece a mesma.</p>
+    `),
+  });
+}
+
 export async function sendWaitlistInviteEmail(to: string, token: string): Promise<void> {
   const registerUrl = `${APP_URL}/register?invite=${token}`;
   await getResend().emails.send({
