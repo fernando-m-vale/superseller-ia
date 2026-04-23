@@ -125,6 +125,30 @@ export const adminRoutes: FastifyPluginCallback = (app, _, done) => {
     return reply.send({ ok: true, token: invite.token });
   });
 
+  // PATCH /admin/users/reset-password — reset a user's password by email
+  app.patch('/users/reset-password', async (req, reply) => {
+    if (!requireAdmin(getAdminToken(req.headers.authorization))) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+    const body = z.object({
+      email: z.string().email(),
+      password: z.string().min(6),
+    }).parse(req.body);
+
+    const passwordHash = await bcrypt.hash(body.password, 10);
+
+    const updated = await prisma.user.updateMany({
+      where: { email: body.email },
+      data: { password_hash: passwordHash },
+    });
+
+    if (updated.count === 0) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    return reply.send({ ok: true, updated: updated.count });
+  });
+
   // PATCH /admin/users/:id/plan — change tenant plan
   app.patch('/users/:id/plan', async (req, reply) => {
     if (!requireAdmin(getAdminToken(req.headers.authorization))) {
