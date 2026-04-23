@@ -1,5 +1,6 @@
 import { fastify } from 'fastify';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { env } from './config/env';
 import { authRoutes } from './routes/auth';
 import { mercadolivreRoutes } from './routes/mercadolivre';
@@ -83,6 +84,9 @@ async function main() {
     if (process.env.NODE_ENV !== 'production') {
       app.log.debug('Server starting...');
     }
+
+  // Rate limiting — global: false para aplicar seletivamente por rota
+  await app.register(rateLimit, { global: false });
 
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
