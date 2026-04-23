@@ -88,6 +88,17 @@ async function main() {
   // Rate limiting — global: false para aplicar seletivamente por rota
   await app.register(rateLimit, { global: false });
 
+  // Intercepta erros 429 do rate-limit para mensagem em português
+  app.setErrorHandler((error, _req, reply) => {
+    if (error.statusCode === 429) {
+      return reply.status(429).send({
+        error: 'too_many_requests',
+        message: 'Muitas tentativas de login. Tente novamente em 1 minuto.',
+      });
+    }
+    return reply.send(error);
+  });
+
   await app.register(authRoutes, { prefix: '/api/v1/auth' });
   await app.register(mercadolivreRoutes, { prefix: '/api/v1/auth/mercadolivre' });
   await app.register(webhookRoutes, { prefix: '/api/v1/webhooks' });
