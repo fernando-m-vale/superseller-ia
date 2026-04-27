@@ -59,7 +59,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       }
 
       const apiUrl = getApiBaseUrl()
-      const response = await fetch(`${apiUrl}/auth/mercadolivre/connect`, {
+      const response = await fetch(`${apiUrl}/auth/mercadolivre/connect?switch_account=true`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

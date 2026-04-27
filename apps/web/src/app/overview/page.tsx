@@ -40,6 +40,23 @@ function OverviewContent() {
     setMounted(true);
   }, []);
 
+  // Tratar erros de retorno do OAuth do Mercado Livre
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const mlConnect = params.get('ml_connect');
+    const mlCode = params.get('code');
+    if (mlConnect === 'error' && mlCode === 'SAME_ACCOUNT') {
+      toast({
+        title: 'Mesma conta detectada',
+        description:
+          'O Mercado Livre logou com a conta já conectada. Para adicionar uma conta diferente: abra o Mercado Livre, faça logout e logue com a nova conta antes de tentar novamente.',
+        variant: 'destructive',
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [toast]);
+
   useEffect(() => {
     if (mounted) {
       localStorage.setItem('overview-period-days', periodDays.toString());

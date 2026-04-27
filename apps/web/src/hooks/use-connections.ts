@@ -68,7 +68,7 @@ export function useConnections() {
   const addConnection = async () => {
     const token = localStorage.getItem('accessToken');
     try {
-      const r = await fetch(`${getApiBaseUrl()}/auth/mercadolivre/connect`, {
+      const r = await fetch(`${getApiBaseUrl()}/auth/mercadolivre/connect?switch_account=true`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const d = await r.json();

@@ -60,10 +60,20 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
 
       if (!userId || !tenantId) return reply.status(401).send({ error: 'Unauthorized' });
 
+      // switch_account=true: sinaliza que o usuário quer adicionar uma conta NOVA,
+      // diferente das já conectadas. O callback usará esse flag para detectar duplicatas.
+      const query = req.query as { switch_account?: string };
+      const switchAccount = query.switch_account === 'true';
+
       const credentials = await getMercadoLivreCredentials();
-      
-      const state = crypto.randomBytes(16).toString('hex');
-      const stateData = JSON.stringify({ tenantId, userId, nonce: state });
+
+      const nonce = crypto.randomBytes(16).toString('hex');
+      const stateData = JSON.stringify({
+        tenantId,
+        userId,
+        nonce,
+        ...(switchAccount ? { switch_account: true } : {}),
+      });
       const encodedState = Buffer.from(stateData).toString('base64');
 
       const authUrl = new URL(`${ML_AUTH_BASE}/authorization`);
@@ -71,7 +81,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
       authUrl.searchParams.append('client_id', credentials.clientId);
       authUrl.searchParams.append('redirect_uri', credentials.redirectUri);
       authUrl.searchParams.append('state', encodedState);
-      
+
       return reply.send({ authUrl: authUrl.toString() });
         } catch (error) {
           app.log.error({ err: error }, 'Failed to initiate Mercado Livre connection');
@@ -211,7 +221,7 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         }
 
         // ========== ETAPA 2: DECODE DO STATE ==========
-        let decodedState: { tenantId: string; userId: string; nonce: string };
+        let decodedState: { tenantId: string; userId: string; nonce: string; switch_account?: boolean };
         try {
           // Decode URI component primeiro
           const decodedStateStr = decodeURIComponent(state);
@@ -343,6 +353,18 @@ export const mercadolivreRoutes: FastifyPluginCallback = (app, _, done) => {
         const existingForLimit = await prisma.marketplaceConnection.findFirst({
           where: { tenant_id: tenantId, type: Marketplace.mercadolivre, provider_account_id: providerAccountId },
         });
+
+        // Se switch_account=true e a conta já está conectada a este tenant, barrar
+        // O ML logou com a conta já ativa no browser — orientar o usuário a trocar de conta.
+        if (decodedState.switch_account === true && existingForLimit) {
+          app.log.warn({
+            requestId,
+            tenantId,
+            providerAccountId,
+          }, '[ML-CALLBACK] switch_account: conta já conectada a este tenant');
+          return reply.redirect(`${appUrl}/overview?ml_connect=error&code=SAME_ACCOUNT`);
+        }
+
         if (!existingForLimit) {
           const limitCheck = await checkConnectionLimit(tenantId, prisma);
           if (!limitCheck.allowed) {
