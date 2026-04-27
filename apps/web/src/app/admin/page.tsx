@@ -40,6 +40,14 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [approving, setApproving] = useState<number | null>(null);
 
+  // Filtros — Usuários
+  const [userQuery, setUserQuery] = useState('');
+  const [planFilter, setPlanFilter] = useState<'all' | 'free' | 'pro' | 'trialing'>('all');
+
+  // Filtros — Waitlist
+  const [waitlistQuery, setWaitlistQuery] = useState('');
+  const [waitlistStatus, setWaitlistStatus] = useState<'all' | 'pending' | 'approved'>('all');
+
   const getToken = () => {
     if (typeof window !== 'undefined') return localStorage.getItem('admin_token');
     return null;
@@ -110,6 +118,26 @@ export default function AdminPage() {
     }
   };
 
+  // Filtragem client-side
+  const filteredUsers = users.filter((u) => {
+    const matchEmail = u.email.toLowerCase().includes(userQuery.toLowerCase());
+    const matchPlan =
+      planFilter === 'all' ||
+      (planFilter === 'trialing' && u.tenant.plan_status === 'trialing') ||
+      (planFilter === 'pro' && u.tenant.plan === 'pro' && u.tenant.plan_status !== 'trialing') ||
+      (planFilter === 'free' && u.tenant.plan === 'free');
+    return matchEmail && matchPlan;
+  });
+
+  const filteredWaitlist = waitlist.filter((e) => {
+    const matchEmail = e.email.toLowerCase().includes(waitlistQuery.toLowerCase());
+    const matchStatus =
+      waitlistStatus === 'all' ||
+      (waitlistStatus === 'pending' && !e.approved) ||
+      (waitlistStatus === 'approved' && e.approved);
+    return matchEmail && matchStatus;
+  });
+
   if (loading) return <div className="p-8 text-muted-foreground">Carregando...</div>;
 
   return (
@@ -141,110 +169,197 @@ export default function AdminPage() {
         </div>
 
         {tab === 'users' && (
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">E-mail</th>
-                  <th className="text-left px-4 py-3 font-medium">Loja</th>
-                  <th className="text-left px-4 py-3 font-medium">Plano</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 font-medium">Criado</th>
-                  <th className="text-left px-4 py-3 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">{u.email}</td>
-                    <td className="px-4 py-3">{u.tenant.name}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
-                        u.tenant.plan === 'pro' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {u.tenant.plan}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{u.tenant.plan_status}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(u.tenant.created_at).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        {u.tenant.plan === 'free' ? (
-                          <button
-                            onClick={() => changePlan(u.tenant.id, 'pro')}
-                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                          >
-                            → Pro
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => changePlan(u.tenant.id, 'free')}
-                            className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300"
-                          >
-                            → Free
-                          </button>
-                        )}
-                      </div>
-                    </td>
+          <div className="space-y-4">
+            {/* Filtros — Usuários */}
+            <div className="flex flex-wrap gap-3 items-center">
+              <input
+                type="text"
+                placeholder="Buscar por email..."
+                value={userQuery}
+                onChange={(e) => setUserQuery(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <select
+                value={planFilter}
+                onChange={(e) => setPlanFilter(e.target.value as typeof planFilter)}
+                className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="all">Todos os planos</option>
+                <option value="free">Free</option>
+                <option value="pro">Pro (ativo)</option>
+                <option value="trialing">Trial</option>
+              </select>
+              {(userQuery || planFilter !== 'all') && (
+                <button
+                  onClick={() => { setUserQuery(''); setPlanFilter('all'); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">
+                {filteredUsers.length} de {users.length} usuários
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium">E-mail</th>
+                    <th className="text-left px-4 py-3 font-medium">Loja</th>
+                    <th className="text-left px-4 py-3 font-medium">Plano</th>
+                    <th className="text-left px-4 py-3 font-medium">Status</th>
+                    <th className="text-left px-4 py-3 font-medium">Criado</th>
+                    <th className="text-left px-4 py-3 font-medium">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y">
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                        Nenhum usuário encontrado para os filtros aplicados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <tr key={u.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">{u.email}</td>
+                        <td className="px-4 py-3">{u.tenant.name}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+                            u.tenant.plan_status === 'trialing'
+                              ? 'bg-purple-100 text-purple-800'
+                              : u.tenant.plan === 'pro'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {u.tenant.plan_status === 'trialing' ? 'trial' : u.tenant.plan}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{u.tenant.plan_status}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {new Date(u.tenant.created_at).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            {u.tenant.plan === 'free' ? (
+                              <button
+                                onClick={() => changePlan(u.tenant.id, 'pro')}
+                                className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                              >
+                                → Pro
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => changePlan(u.tenant.id, 'free')}
+                                className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300"
+                              >
+                                → Free
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
         {tab === 'waitlist' && (
-          <div className="bg-white rounded-xl border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">E-mail</th>
-                  <th className="text-left px-4 py-3 font-medium">Loja</th>
-                  <th className="text-left px-4 py-3 font-medium">GMV</th>
-                  <th className="text-left px-4 py-3 font-medium">Marketplace</th>
-                  <th className="text-left px-4 py-3 font-medium">Criado</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 font-medium">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {waitlist.map((e) => (
-                  <tr key={e.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">{e.email}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{e.store_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{e.gmv_range ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{e.marketplace ?? '—'}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(e.created_at).toLocaleDateString('pt-BR')}
-                    </td>
-                    <td className="px-4 py-3">
-                      {e.approved ? (
-                        <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                          Aprovado
-                        </span>
-                      ) : (
-                        <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                          Pendente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {!e.approved && (
-                        <button
-                          onClick={() => approveWaitlist(e.id)}
-                          disabled={approving === e.id}
-                          className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-60"
-                        >
-                          {approving === e.id ? '...' : 'Aprovar + Convidar'}
-                        </button>
-                      )}
-                    </td>
+          <div className="space-y-4">
+            {/* Filtros — Waitlist */}
+            <div className="flex flex-wrap gap-3 items-center">
+              <input
+                type="text"
+                placeholder="Buscar por email..."
+                value={waitlistQuery}
+                onChange={(e) => setWaitlistQuery(e.target.value)}
+                className="border rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <select
+                value={waitlistStatus}
+                onChange={(e) => setWaitlistStatus(e.target.value as typeof waitlistStatus)}
+                className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="all">Todos os status</option>
+                <option value="pending">Pendente</option>
+                <option value="approved">Aprovado</option>
+              </select>
+              {(waitlistQuery || waitlistStatus !== 'all') && (
+                <button
+                  onClick={() => { setWaitlistQuery(''); setWaitlistStatus('all'); }}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
+              <span className="text-xs text-muted-foreground ml-auto">
+                {filteredWaitlist.length} de {waitlist.length} entradas
+              </span>
+            </div>
+
+            <div className="bg-white rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium">E-mail</th>
+                    <th className="text-left px-4 py-3 font-medium">Loja</th>
+                    <th className="text-left px-4 py-3 font-medium">GMV</th>
+                    <th className="text-left px-4 py-3 font-medium">Marketplace</th>
+                    <th className="text-left px-4 py-3 font-medium">Criado</th>
+                    <th className="text-left px-4 py-3 font-medium">Status</th>
+                    <th className="text-left px-4 py-3 font-medium">Ações</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y">
+                  {filteredWaitlist.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                        Nenhuma entrada encontrada para os filtros aplicados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredWaitlist.map((e) => (
+                      <tr key={e.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">{e.email}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{e.store_name ?? '—'}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{e.gmv_range ?? '—'}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{e.marketplace ?? '—'}</td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {new Date(e.created_at).toLocaleDateString('pt-BR')}
+                        </td>
+                        <td className="px-4 py-3">
+                          {e.approved ? (
+                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                              Aprovado
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              Pendente
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {!e.approved && (
+                            <button
+                              onClick={() => approveWaitlist(e.id)}
+                              disabled={approving === e.id}
+                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-60"
+                            >
+                              {approving === e.id ? '...' : 'Aprovar + Convidar'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
