@@ -141,10 +141,10 @@ export async function checkFreeAnalysisLimit(
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
-  const used = await prismaClient.listingAction.count({
+  const used = await prismaClient.listingAIAnalysis.count({
     where: {
-      listing: { tenant_id: tenantId },
-      createdAt: { gte: startOfMonth },
+      tenant_id: tenantId,
+      created_at: { gte: startOfMonth },
     },
   });
 

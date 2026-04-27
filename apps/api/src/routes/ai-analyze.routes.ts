@@ -521,18 +521,6 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
         const { listingId } = params;
         const forceRefresh = query.forceRefresh === true || body.force === true || body.force_refresh === true;
 
-        // Verificar limite do plano Free antes de chamar o GPT-4o
-        const limitCheck = await checkFreeAnalysisLimit(tenantId, prisma);
-        if (!limitCheck.allowed) {
-          return reply.status(403).send({
-            error: 'plan_limit_reached',
-            message: `Você atingiu o limite de ${limitCheck.limit} análises/mês do plano gratuito.`,
-            used: limitCheck.used,
-            limit: limitCheck.limit,
-            upgradeUrl: `${process.env.APP_URL ?? 'https://app.superselleria.com.br'}/upgrade`,
-          });
-        }
-
         // Garante dados frescos (máx 24h) antes de analisar
         const _freshnessResult = await ensureListingFreshness(listingId, tenantId)
         if (_freshnessResult.refreshed) {
@@ -949,7 +937,55 @@ export const aiAnalyzeRoutes: FastifyPluginCallback = (app, _, done) => {
           }
         }
 
+        // Step 4.5: Proteção de 7 dias — se há análise recente (< 7 dias), usar mesmo com fingerprint diferente
+        // Evita re-análise desnecessária quando dados mudaram minimamente (ex: variação de preço)
+        if (!cachedResult && !forceRefresh) {
+          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+          const recentAnalysis = await prisma.listingAIAnalysis.findFirst({
+            where: {
+              tenant_id: tenantId,
+              listing_id: listingId,
+              period_days: PERIOD_DAYS,
+              created_at: { gte: sevenDaysAgo },
+            },
+            orderBy: { created_at: 'desc' },
+          });
+
+          if (recentAnalysis && recentAnalysis.result_json) {
+            const recentResult = recentAnalysis.result_json as unknown as CachedAnalysisResult;
+            const v23a = recentResult.analysisV21 as any;
+            // Só usar como fallback se tiver analysisV21 e campos v23 obrigatórios (quando aplicável)
+            const hasRequiredFields =
+              PROMPT_VERSION !== 'ml-expert-v23' ||
+              (v23a?.performanceSignal && v23a?.funnelAnalysis && v23a?.potentialGain?.estimatedVisitsIncrease);
+            if (recentResult.analysisV21 && hasRequiredFields) {
+              cachedResult = recentResult;
+              request.log.info({
+                requestId,
+                tenantId,
+                listingId,
+                ageDays: Math.floor((Date.now() - recentAnalysis.created_at.getTime()) / (24 * 60 * 60 * 1000)),
+                fingerprint: fingerprint.substring(0, 16) + '...',
+              }, 'Using recent analysis as fallback (< 7 days, fingerprint mismatch)');
+            }
+          }
+        }
+
         // Step 5: If cache miss or forceRefresh or cache missing V2.1, call OpenAI
+        // Verificar limite do plano Free apenas quando necessário chamar a API
+        if (!cachedResult) {
+          const limitCheck = await checkFreeAnalysisLimit(tenantId, prisma);
+          if (!limitCheck.allowed) {
+            return reply.status(403).send({
+              error: 'plan_limit_reached',
+              message: `Você atingiu o limite de ${limitCheck.limit} análises/mês do plano gratuito.`,
+              used: limitCheck.used,
+              limit: limitCheck.limit,
+              upgradeUrl: `${process.env.APP_URL ?? 'https://app.superselleria.com.br'}/upgrade`,
+            });
+          }
+        }
+
         if (!cachedResult) {
           // Usar PROMPT ESPECIALISTA (ml-expert-v1) - SEM FALLBACK
           let analysisV21: AIAnalysisResultExpert | null = null;
