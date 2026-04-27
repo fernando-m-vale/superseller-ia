@@ -124,11 +124,11 @@ export async function checkFreeAnalysisLimit(
 
   if (!tenant) return { allowed: false, used: 0, limit: 0 };
 
-  // Auto-downgrade silencioso
+  // Auto-downgrade silencioso se trial expirou
   if (tenant.plan_status === 'trialing' && tenant.trial_ends_at && tenant.trial_ends_at < new Date()) {
     await prismaClient.tenant.update({
       where: { id: tenantId },
-      data: { plan: 'free', plan_status: 'active' },
+      data: { plan: 'free', plan_status: 'active', trial_used: true },
     });
     tenant.plan = 'free';
     tenant.plan_status = 'active';

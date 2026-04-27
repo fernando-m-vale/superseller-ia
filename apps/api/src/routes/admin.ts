@@ -149,7 +149,7 @@ export const adminRoutes: FastifyPluginCallback = (app, _, done) => {
     return reply.send({ ok: true, updated: updated.count });
   });
 
-  // PATCH /admin/users/:id/plan — change tenant plan
+  // PATCH /admin/users/:id/plan — change tenant plan and trial state
   app.patch('/users/:id/plan', async (req, reply) => {
     if (!requireAdmin(getAdminToken(req.headers.authorization))) {
       return reply.status(401).send({ error: 'Unauthorized' });
@@ -158,6 +158,8 @@ export const adminRoutes: FastifyPluginCallback = (app, _, done) => {
     const body = z.object({
       plan: z.enum(['free', 'pro']),
       plan_status: z.enum(['active', 'trialing', 'past_due', 'canceled']).optional(),
+      trial_ends_at: z.string().datetime().optional().nullable(),
+      trial_used: z.boolean().optional(),
     }).parse(req.body);
 
     await prisma.tenant.update({
@@ -165,6 +167,8 @@ export const adminRoutes: FastifyPluginCallback = (app, _, done) => {
       data: {
         plan: body.plan,
         plan_status: body.plan_status ?? 'active',
+        ...(body.trial_ends_at !== undefined && { trial_ends_at: body.trial_ends_at ? new Date(body.trial_ends_at) : null }),
+        ...(body.trial_used !== undefined && { trial_used: body.trial_used }),
       },
     });
 
