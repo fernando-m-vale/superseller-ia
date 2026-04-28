@@ -7,7 +7,7 @@
 
 import { z } from 'zod';
 
-const PromptVersionSchema = z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22', 'ml-expert-v22', 'ml-expert-v23']);
+const PromptVersionSchema = z.enum(['ml-expert-v1', 'ml-expert-v21', 'ml-sales-v22', 'ml-expert-v22', 'ml-expert-v23', 'ml-seller-v24']);
 
 const LegacyTitleFixSchema = z.object({
   problem: z.string(),
@@ -188,6 +188,98 @@ export function parseAIResponseExpert(
       return { success: true, data: recovered };
     }
     return { success: false, error: result.error };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof z.ZodError ? error : new z.ZodError([]),
+    };
+  }
+}
+
+import type { MLSellerV24Response } from '@superseller/ai/prompts/mlSellerV24';
+
+/**
+ * Mapeia o output do prompt ml-seller-v24 para o shape AIAnalysisResultExpert,
+ * mantendo compatibilidade com todo o pipeline existente sem alterar o frontend.
+ */
+export function parseAIResponseSellerV24(
+  raw: unknown,
+  analyzedAt: string,
+): { success: true; data: AIAnalysisResultExpert } | { success: false; error: z.ZodError } {
+  try {
+    const v24 = raw as MLSellerV24Response;
+
+    const situationToSignal: Record<string, 'EXCELENTE' | 'BOM' | 'ATENCAO' | 'CRITICO'> = {
+      good: 'BOM',
+      medium: 'ATENCAO',
+      short: 'CRITICO',
+    };
+
+    const impactMap: Record<string, 'high' | 'medium' | 'low'> = {
+      alto: 'high',
+      médio: 'medium',
+      baixo: 'low',
+    };
+
+    const effortMap: Record<string, 'low' | 'medium' | 'high'> = {
+      '5 minutos': 'low',
+      '30 minutos': 'medium',
+      'algumas horas': 'high',
+    };
+
+    const growthHacks = (v24.top_actions ?? []).map((action, i) => ({
+      id: `v24_action_${i + 1}`,
+      actionKey: i === 0 ? 'seo_title' : i === 1 ? 'seo_description' : 'maintain_monitor',
+      pillar: 'seo' as const,
+      funnelStage: 'DESCOBERTA' as const,
+      priority: (impactMap[action.impact] ?? 'medium') as 'high' | 'medium' | 'low',
+      impact: (impactMap[action.impact] ?? 'medium') as 'high' | 'medium' | 'low',
+      effort: (effortMap[action.effort] ?? 'medium') as 'low' | 'medium' | 'high',
+      title: action.action,
+      summary: action.why_it_matters,
+      description: action.what_to_do,
+      expectedImpact: action.why_it_matters,
+      actionGroup: (i === 0 ? 'immediate' : 'support') as 'immediate' | 'support' | 'optional',
+    }));
+
+    const result: AIAnalysisResultExpert = {
+      score: undefined,
+      performanceSignal: situationToSignal[v24.verdict?.situation ?? 'medium'] ?? 'ATENCAO',
+      verdict: {
+        headline: v24.verdict?.headline ?? '',
+        diagnosis: v24.verdict?.priority_action ?? '',
+        whatIsWorking: v24.whats_working ?? '',
+        rootCause: v24.verdict?.priority_action ?? '',
+        rootCauseCode: v24.verdict?.situation === 'good' ? 'scale_opportunity' : 'seo_gap',
+      },
+      title_fix: v24.title_analysis ? {
+        problem: v24.title_analysis.problem,
+        impact: 'high',
+        before: v24.title_analysis.current_title,
+        after: v24.title_analysis.suggested_title,
+      } : undefined,
+      description_fix: v24.description_analysis ? {
+        diagnostic: v24.description_analysis.problem,
+        optimized_copy: v24.description_analysis.suggested_description,
+      } : undefined,
+      growthHacks,
+      adsIntelligence: { status: 'unavailable' },
+      executionRoadmap: growthHacks.slice(0, 3).map((h, i) => ({
+        stepNumber: i + 1,
+        actionId: h.id,
+        actionTitle: h.title,
+        reason: h.summary,
+        expectedImpact: h.expectedImpact,
+      })),
+      meta: {
+        version: 'ml-seller-v24' as 'ml-expert-v23',
+        model: 'gpt-4o',
+        analyzed_at: analyzedAt,
+        prompt_version: 'ml-seller-v24' as 'ml-expert-v23',
+      },
+    };
+
+    return { success: true, data: result };
   } catch (error) {
     return {
       success: false,

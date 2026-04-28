@@ -21,6 +21,7 @@ import {
 import {
   type AIAnalysisResultExpert,
   parseAIResponseExpert,
+  parseAIResponseSellerV24,
   createFallbackAnalysisExpert
 } from '../types/ai-analysis-expert';
 import { IAScoreService, IAScoreResult } from './IAScoreService';
@@ -45,6 +46,11 @@ import {
   systemPrompt as mlExpertV23SystemPrompt,
   buildMLExpertV23UserPrompt,
 } from '@superseller/ai/prompts/mlExpertV23';
+import {
+  promptVersion as mlSellerV24Version,
+  systemPrompt as mlSellerV24SystemPrompt,
+  buildMLSellerV24UserPrompt,
+} from '@superseller/ai/prompts/mlSellerV24';
 import { sanitizeExpertAnalysis } from '@superseller/core';
 import { getCategoryBreadcrumb } from './CategoryBreadcrumbService';
 import {
@@ -1266,7 +1272,11 @@ export class OpenAIService {
     let systemPrompt: string;
     let buildUserPrompt: typeof buildMLExpertV21UserPrompt;
 
-    if (AI_PROMPT_VERSION === 'ml-sales-v22') {
+    if (AI_PROMPT_VERSION === 'ml-seller-v24') {
+      promptVersion = mlSellerV24Version;
+      systemPrompt = mlSellerV24SystemPrompt;
+      buildUserPrompt = buildMLSellerV24UserPrompt as typeof buildMLExpertV21UserPrompt;
+    } else if (AI_PROMPT_VERSION === 'ml-sales-v22') {
       promptVersion = mlSalesV22Version;
       systemPrompt = mlSalesV22SystemPrompt;
       buildUserPrompt = buildMLSalesV22UserPrompt;
@@ -1371,26 +1381,34 @@ export class OpenAIService {
         }
       }
 
-      // Validate with Zod
-      const parseResult = parseAIResponseExpert(
-        rawResponse,
-        {
-          title: input.listing.title,
-          price_base: input.listing.price_base,
-          price_final: input.listing.price_final,
-          has_promotion: input.listing.has_promotion,
-          discount_percent: input.listing.discount_percent,
-          pictures_count: input.media.imageCount,
-          description_length: input.listing.description_length,
-        }
-      );
+      // Validate with Zod — v24 uses its own mapper
+      const parseResult = AI_PROMPT_VERSION === 'ml-seller-v24'
+        ? parseAIResponseSellerV24(rawResponse, new Date().toISOString())
+        : parseAIResponseExpert(
+            rawResponse,
+            {
+              title: input.listing.title,
+              price_base: input.listing.price_base,
+              price_final: input.listing.price_final,
+              has_promotion: input.listing.has_promotion,
+              discount_percent: input.listing.discount_percent,
+              pictures_count: input.media.imageCount,
+              description_length: input.listing.description_length,
+            }
+          );
 
       // Validar qualidade do conteúdo (hard constraints)
       let qualityIssues: string[] = [];
       if (parseResult.success) {
         const data = parseResult.data;
 
-        if (AI_PROMPT_VERSION === 'ml-expert-v23') {
+        if (AI_PROMPT_VERSION === 'ml-seller-v24') {
+          // v24 mapper already validates structure; just check minimal fields
+          if (!data.performanceSignal) qualityIssues.push('performanceSignal ausente');
+          if (!Array.isArray(data.growthHacks) || data.growthHacks.length === 0) {
+            qualityIssues.push('top_actions ausente no output v24');
+          }
+        } else if (AI_PROMPT_VERSION === 'ml-expert-v23') {
           if (!data.performanceSignal) {
             qualityIssues.push('performanceSignal ausente');
           }
@@ -1628,7 +1646,9 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
             }
           }
 
-          const retryParseResult = parseAIResponseExpert(
+          const retryParseResult = AI_PROMPT_VERSION === 'ml-seller-v24'
+            ? parseAIResponseSellerV24(retryRawResponse, new Date().toISOString())
+            : parseAIResponseExpert(
             retryRawResponse,
             {
               title: input.listing.title,
@@ -1645,7 +1665,9 @@ Retorne SOMENTE este JSON, sem nada antes ou depois.`;
           let retryQualityIssues: string[] = [];
           if (retryParseResult.success) {
             const retryData = retryParseResult.data;
-            if (AI_PROMPT_VERSION === 'ml-expert-v23') {
+            if (AI_PROMPT_VERSION === 'ml-seller-v24') {
+              if (!retryData.performanceSignal) retryQualityIssues.push('performanceSignal ausente no retry v24');
+            } else if (AI_PROMPT_VERSION === 'ml-expert-v23') {
               if (!retryData.performanceSignal) {
                 retryQualityIssues.push('performanceSignal ausente no retry');
               }
