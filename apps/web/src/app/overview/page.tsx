@@ -40,13 +40,20 @@ function OverviewContent() {
     setMounted(true);
   }, []);
 
-  // Tratar erros de retorno do OAuth do Mercado Livre
+  // Tratar retornos do OAuth do Mercado Livre (?ml_connect=success|error)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const mlConnect = params.get('ml_connect');
     const mlCode = params.get('code');
-    if (mlConnect === 'error' && mlCode === 'SAME_ACCOUNT') {
+
+    if (mlConnect === 'success') {
+      toast({
+        title: 'Conta conectada com sucesso!',
+        description: 'Os anúncios serão sincronizados em instantes.',
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (mlConnect === 'error' && mlCode === 'SAME_ACCOUNT') {
       toast({
         title: 'Mesma conta detectada',
         description:
