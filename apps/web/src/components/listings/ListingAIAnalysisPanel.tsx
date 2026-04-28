@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ExternalLink, Flame, Image as ImageIcon, Sparkles, Target, TrendingUp } from 'lucide-react'
+import { AlertTriangle, Copy, ExternalLink, Flame, Image as ImageIcon, Sparkles, Target, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { NormalizedAIAnalysisV21, NormalizedBenchmarkInsights, GeneratedContent, NormalizedVisualAnalysis } from '@/lib/ai/normalizeAiAnalyze'
@@ -438,6 +438,65 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
         </CardContent>
       </Card>
 
+      {props.analysisV21.titleFix && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Título do anúncio</CardTitle>
+            {props.analysisV21.titleFix.problem && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {sanitizeSellerText(props.analysisV21.titleFix.problem)}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Atual</p>
+                <p className="text-sm">{props.analysisV21.titleFix.before}</p>
+              </div>
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-2">Sugestão</p>
+                <p className="text-sm font-medium">{props.analysisV21.titleFix.after}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {props.analysisV21.descriptionFix && (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Descrição otimizada</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(props.analysisV21.descriptionFix!.optimizedCopy).then(() => {
+                    toast({ title: 'Copiado!', description: 'Descrição copiada para a área de transferência.', duration: 2000 })
+                  })
+                }}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copiar
+              </Button>
+            </div>
+            {props.analysisV21.descriptionFix.diagnostic && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {sanitizeSellerText(props.analysisV21.descriptionFix.diagnostic)}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border bg-muted/20 p-4 max-h-64 overflow-y-auto">
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                {props.analysisV21.descriptionFix.optimizedCopy}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {diagnosisText && (
         <Card className="border border-muted">
           <CardHeader className="pb-3">
@@ -679,12 +738,12 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
       )}
 
       {/* C) GANHO POTENCIAL DA RODADA */}
-      {props.potentialGain?.estimatedVisitsIncrease || props.potentialGain?.estimatedConversionIncrease || props.potentialGain?.estimatedRevenueIncrease ? (
+      {props.potentialGain?.estimatedVisitsIncrease || props.potentialGain?.estimatedConversionIncrease ? (
         <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Ganho potencial da rodada</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-3">
+          <CardContent className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border bg-background/60 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Visitas</p>
               <p className="mt-1 text-lg font-semibold">{props.potentialGain.estimatedVisitsIncrease || '—'}</p>
@@ -692,13 +751,11 @@ export function ListingAIAnalysisPanel(props: ListingAIAnalysisPanelProps) {
             <div className="rounded-lg border bg-background/60 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Conversão</p>
               <p className="mt-1 text-lg font-semibold">{props.potentialGain.estimatedConversionIncrease || '—'}</p>
-            </div>
-            <div className="rounded-lg border bg-background/60 p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Receita</p>
-              <p className="mt-1 text-lg font-semibold">{props.potentialGain.estimatedRevenueIncrease || '—'}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Confiança: {props.potentialGain.confidence || '—'}
-              </p>
+              {props.potentialGain.confidence && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Confiança: {props.potentialGain.confidence}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

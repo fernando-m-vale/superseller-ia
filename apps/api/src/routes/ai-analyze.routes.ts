@@ -3162,6 +3162,18 @@ if (enableAIPing) {
           });
         }
 
+        if (latestAnalysis.prompt_version && latestAnalysis.prompt_version !== PROMPT_VERSION) {
+          request.log.info(
+            { listingId, tenantId, storedVersion: latestAnalysis.prompt_version, currentVersion: PROMPT_VERSION },
+            'GET latest: prompt_version mismatch, returning 404 to trigger regeneration'
+          );
+          return reply.status(404).send({
+            error: 'Not Found',
+            message: 'Análise gerada com prompt desatualizado',
+            available: false,
+          });
+        }
+
         // Buscar listing para construir resposta completa
         const listing = await prisma.listing.findFirst({
           where: {
