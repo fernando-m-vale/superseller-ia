@@ -116,6 +116,13 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
       app.log.info(`[METRICS] Buscando métricas para tenant ${tenantId}, período ${periodDays} dias, range: ${dayStrings[0]} até ${dayStrings[dayStrings.length - 1]}`);
 
       // Buscar métricas diárias do período (já agregadas por dia)
+      // Filtro de listing: combina marketplace e conta ativa (multi-contas)
+      const listingFilter: Record<string, unknown> = {};
+      if (query.marketplace) listingFilter.marketplace = query.marketplace;
+      if (tenantForFilter?.active_connection_id) {
+        listingFilter.marketplace_connection_id = tenantForFilter.active_connection_id;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const metricsWhereClause: any = {
         tenant_id: tenantId,
@@ -123,9 +130,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
           gte: dateFromUtc,
           lte: dateToUtc,
         },
-        ...(query.marketplace ? {
-          listing: { marketplace: query.marketplace },
-        } : {}),
+        ...(Object.keys(listingFilter).length > 0 ? { listing: listingFilter } : {}),
       };
 
       const dailyMetrics = await prisma.listingMetricsDaily.findMany({
@@ -190,9 +195,7 @@ export const metricsRoutes: FastifyPluginCallback = (app, _, done) => {
             gte: dateFromUtc,
             lte: dateToUtc,
           },
-          ...(query.marketplace ? {
-            listing: { marketplace: query.marketplace },
-          } : {}),
+          ...(Object.keys(listingFilter).length > 0 ? { listing: listingFilter } : {}),
         },
         _sum: {
           gmv: true,
