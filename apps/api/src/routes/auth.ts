@@ -278,6 +278,13 @@ export const authRoutes: FastifyPluginCallback = (app, _, done) => {
         orderBy: { created_at: 'asc' },
       });
 
+      // Auto-sync em background ao abrir o app — 1x por dia por tenant
+      const _apiBaseUrl = process.env.INTERNAL_API_URL ?? 'http://localhost:3001'
+      const _serviceToken = process.env.SCHEDULER_SERVICE_TOKEN ?? ''
+      if (_serviceToken) {
+        triggerLoginSyncIfNeeded(user.tenant_id, _apiBaseUrl, _serviceToken)
+      }
+
       return reply.send({
         user: {
           id: user.id,
